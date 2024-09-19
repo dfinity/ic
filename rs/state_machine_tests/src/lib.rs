@@ -20,6 +20,7 @@ use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, Ingr
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
+use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
     batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
@@ -525,8 +526,13 @@ impl IngressPool for PocketIngressPool {
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
         self
     }
+
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         unimplemented!("PocketIngressPool has no unvalidated pool")
+    }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
     }
 }
 
@@ -567,12 +573,13 @@ impl PocketIngressPool {
             validated: btreemap![],
         }
     }
+
     /// Pushes a received ingress message into the pool.
-    fn push(&mut self, m: SignedIngress, timestamp: Time) {
+    fn push(&mut self, m: SignedIngress, timestamp: Time, peer_id: NodeId) {
         self.validated.insert(
             IngressMessageId::new(m.expiry_time(), m.id()),
             ValidatedIngressArtifact {
-                msg: m.into(),
+                msg: IngressPoolObject::new(peer_id, m),
                 timestamp,
             },
         );
@@ -1345,10 +1352,7 @@ impl StateMachine {
                 }
             })
             .collect();
-        self.canister_http_pool
-            .write()
-            .unwrap()
-            .apply_changes(changeset);
+        self.canister_http_pool.write().unwrap().apply(changeset);
         let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
         if let Some(ref query_stats) = query_stats {
             self.query_stats_payload_builder.purge(query_stats);
@@ -2021,7 +2025,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
         Ok(message_id)
     }
 
@@ -2032,7 +2036,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
     pub fn mock_canister_http_response(
@@ -2064,7 +2068,7 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
-            self.canister_http_pool.write().unwrap().apply_changes(vec![
+            self.canister_http_pool.write().unwrap().apply(vec![
                 CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
             ]);
         }

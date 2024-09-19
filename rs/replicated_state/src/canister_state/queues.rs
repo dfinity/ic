@@ -24,6 +24,7 @@ use ic_types::messages::{
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
@@ -358,44 +359,41 @@ impl CanisterQueues {
         self.ingress_queue.filter_messages(filter)
     }
 
-    /// Pushes a canister-to-canister message into the induction pool.
+    /// Enqueues a canister-to-canister message into the induction pool.
     ///
-    /// If the message is a `Request` this will also reserve a slot in the
-    /// corresponding output queue for the eventual response.
+    /// If the message is a `Request` and is enqueued successfully, this will also
+    /// reserve a slot in the corresponding output queue for the eventual response.
     ///
-    /// If the message is a `Response` the protocol will have already reserved a
-    /// slot for it, so the push should not fail due to the input queue being full
-    /// (although an error may be returned in case of a bug in the upper layers).
+    /// If the message is a `Response`, `SystemState` will have already checked for
+    /// a matching callback:
     ///
-    /// Adds the sender to the appropriate input schedule (local or remote), if not
-    /// already there.
+    ///  * If this is a guaranteed `Response`, the protocol should have reserved a
+    ///    slot for it, so the push should not fail for lack of one (although an
+    ///    error may be returned in case of a bug in the upper layers).
+    ///  * If this is a best-effort `Response`, a slot is available and no duplicate
+    ///    (time out) response is already enqueued, it is enqueued.
+    ///  * If this is a best-effort `Response` and a duplicate (time out) response
+    ///    is already enqueued (which is implicitly true when no slot is available),
+    ///    the response is silently dropped and `Ok(())` is returned.
+    ///
+    /// If the message was enqueued, adds the sender to the appropriate input
+    /// schedule (local or remote), if not already there.
     ///
     /// # Errors
     ///
-    /// If pushing fails, returns the provided message along with a
-    /// `StateError`:
+    /// If pushing fails, returns the provided message along with a `StateError`:
     ///
-    ///  * `QueueFull` if pushing a `Request` and the corresponding input or
-    ///    output queues are full.
+    ///  * `QueueFull` if pushing a `Request` and the corresponding input or output
+    ///    queues are full.
     ///
-    ///  * `NonMatchingResponse` if pushing a `Response` and the corresponding input
-    ///    queue does not have a reserved slot; or this is a duplicate guaranteed
-    ///    response.
+    ///  * `NonMatchingResponse` if pushing a guaranteed `Response` and the
+    ///    corresponding input queue does not have a reserved slot; or it is a
+    ///    duplicate.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
-        fn non_matching_response(message: &str, response: &Response) -> StateError {
-            StateError::NonMatchingResponse {
-                err_str: message.to_string(),
-                originator: response.originator,
-                callback_id: response.originator_reply_callback,
-                respondent: response.respondent,
-                deadline: response.deadline,
-            }
-        }
-
         let sender = msg.sender();
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
@@ -420,15 +418,17 @@ impl CanisterQueues {
                             .insert(response.originator_reply_callback)
                         {
                             debug_assert_eq!(Ok(()), self.test_invariants());
-                            // This is a critical error for guaranteed responses.
                             if response.deadline == NO_DEADLINE {
+                                // This is a critical error for a guaranteed response.
                                 return Err((
-                                    non_matching_response("Duplicate response", response),
+                                    StateError::non_matching_response(
+                                        "Duplicate response",
+                                        response,
+                                    ),
                                     msg,
                                 ));
                             } else {
-                                // But is OK for best-effort responses (if we already generated a timeout response).
-                                // Silently ignore the response.
+                                // But it's OK for a best-effort response. Silently drop it.
                                 return Ok(());
                             }
                         }
@@ -437,10 +437,23 @@ impl CanisterQueues {
 
                     // Queue does not exist or has no reserved slot for this response.
                     _ => {
-                        return Err((
-                            non_matching_response("No reserved response slot", response),
-                            msg,
-                        ));
+                        if response.deadline == NO_DEADLINE {
+                            // Critical error for a guaranteed response.
+                            return Err((
+                                StateError::non_matching_response(
+                                    "No reserved response slot",
+                                    response,
+                                ),
+                                msg,
+                            ));
+                        } else {
+                            // This must be a duplicate best-effort response (since `SystemState` has
+                            // aleady checked for a matching callback). Silently drop it.
+                            debug_assert!(self
+                                .callbacks_with_enqueued_response
+                                .contains(&response.originator_reply_callback));
+                            return Ok(());
+                        }
                     }
                 }
             }
@@ -555,8 +568,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map(|(input_queue, _)| input_queue.len() != 0)
-                .unwrap_or(false)
+                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
@@ -656,7 +668,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(
+    //
+    // NOTE: DO NOT CHANGE THE VISIBILITY OF THIS METHOD. IT IS ONLY SUPPOSED TO BE
+    // CALLED FOR CANISTERS (I.E. NOT FOR THE SUBNET QUEUES).
+    pub(super) fn push_output_request(
         &mut self,
         request: Arc<Request>,
         time: Time,
@@ -918,8 +933,11 @@ impl CanisterQueues {
             self.pool = MessagePool::default();
             self.input_schedule = InputSchedule::default();
 
-            // Trust but verify. Ensure that everything is actually set to default.
-            debug_assert_eq!(CanisterQueues::default(), *self);
+            // Trust but verify. Ensure that the `CanisterQueues` now encodes to zero bytes.
+            debug_assert_eq!(
+                0,
+                pb_queues::CanisterQueues::from(self as &Self).encoded_len()
+            );
         }
     }
 

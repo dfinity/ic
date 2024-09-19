@@ -6,19 +6,21 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
         Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,
+        install_code::CanisterInstallMode,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
         },
         manage_neuron_response::Command as CommandResponse,
         neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NnsFunction,
+        InstallCode, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
         Proposal,
     },
 };
@@ -179,9 +181,12 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
                 summary: "proposal 1".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Vec::new(),
+                action: Some(proposal::Action::InstallCode(InstallCode {
+                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                    wasm_module: Some(vec![1, 2, 3]),
+                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                    arg: Some(vec![4, 5, 6]),
+                    skip_stopping_before_installing: None,
                 })),
                 ..Default::default()
             },

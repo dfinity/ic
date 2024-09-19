@@ -1,9 +1,8 @@
-use super::{PrincipalId, PrincipalIdError, SubnetId};
+use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::de::Error;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].
@@ -57,12 +56,16 @@ impl CanisterId {
         self.0
     }
 
-    /// No validation is performed on `principal_id` to check that it actually
-    /// comes from a `CanisterId`.
+    /// Converts WITHOUT any validation.
+    ///
+    /// If you want validation, use try_from_principal_id. Do NOT use
+    /// CanisterId::try_from, because it lies: it does not actually return Err
+    /// when the input is invalid.
     pub const fn unchecked_from_principal(principal_id: PrincipalId) -> Self {
         Self(principal_id)
     }
 
+    // Keep this consistent with try_from_principal_id.
     pub const fn from_u64(val: u64) -> Self {
         // It is important to use big endian here to ensure that the generated
         // `PrincipalId`s still maintain ordering.
@@ -90,6 +93,43 @@ impl CanisterId {
 
         Self(PrincipalId::new_opaque_from_array(data, blob_length))
     }
+
+    /// Converts from PrincipalId.
+    ///
+    /// The problem with CanisterId::try_from(principal_id) is that it lies.
+    //
+    // Keep this consistent with from_u64.
+    pub fn try_from_principal_id(principal_id: PrincipalId) -> Result<Self, CanisterIdError> {
+        // Must be opaque.
+        if principal_id.class() != Ok(PrincipalIdClass::Opaque) {
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Principal ID {} is of class {:?} (not Opaque).",
+                principal_id,
+                principal_id.class(),
+            )));
+        }
+
+        // Must be of length 10.
+        let raw = principal_id.as_slice();
+        if raw.len() != 10 {
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Principal ID {} consists of {} bytes (not 10).",
+                principal_id,
+                raw.len(),
+            )));
+        }
+
+        // Byte 8 (penultimate) must be 0x01.
+        if raw[8] != 0x01 {
+            return Err(CanisterIdError::InvalidPrincipalId(format!(
+                "Byte 8 (9th) of Principal ID {} is not 0x01: {}",
+                principal_id,
+                hex::encode(raw),
+            )));
+        }
+
+        Ok(CanisterId(principal_id))
+    }
 }
 
 impl AsRef<PrincipalId> for CanisterId {
@@ -110,6 +150,12 @@ impl fmt::Display for CanisterId {
     }
 }
 
+/// Warning: This LIES: it does not return Err when the input is invalid. In
+/// fact, this ALWAYS returns Ok.
+///
+/// We cannot simply "fix" this, because there are callers who rely on the
+/// "always Ok (even when invalid)" behavior. (E.g. they might immediately call
+/// unwrap, and assume that it never panics.)
 impl TryFrom<PrincipalId> for CanisterId {
     type Error = CanisterIdError;
 
@@ -214,3 +260,6 @@ impl From<CanisterId> for Principal {
         principal_id.into()
     }
 }
+
+#[cfg(test)]
+mod tests;

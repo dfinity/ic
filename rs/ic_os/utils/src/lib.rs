@@ -4,8 +4,6 @@ use std::process::Command;
 
 use anyhow::{bail, Result};
 
-pub mod deployment;
-
 /// Systemd requires ip addresses to be specified with the prefix length
 pub fn to_cidr(ipv6_address: Ipv6Addr, prefix_length: u8) -> String {
     format!("{}/{}", ipv6_address, prefix_length)

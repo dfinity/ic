@@ -282,6 +282,18 @@ impl StateError {
             }
         }
     }
+
+    /// Creates a `StateError::CanisterNotFound` variant with the given error
+    /// mnessage for the given `Response`.
+    pub fn non_matching_response(err_str: impl ToString, response: &Response) -> Self {
+        Self::NonMatchingResponse {
+            err_str: err_str.to_string(),
+            originator: response.originator,
+            callback_id: response.originator_reply_callback,
+            respondent: response.respondent,
+            deadline: response.deadline,
+        }
+    }
 }
 
 impl std::error::Error for StateError {}
@@ -314,13 +326,13 @@ impl std::fmt::Display for StateError {
             ),
             StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
-                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
+                "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
                 callback_id, err_str, originator, respondent, Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
                     f,
-                    "Bitcoin: Attempted to push a response for callback id {} without an in-flight corresponding request",
+                    "Bitcoin: Attempted to push a response for callback ID {} without an in-flight corresponding request",
                     callback_id
                 )
             }
@@ -460,7 +472,7 @@ impl ReplicatedState {
     }
 
     /// Insert the canister state into the replicated state. If a canister
-    /// already exists for the given canister id, it will be replaced. It is the
+    /// already exists for the given canister ID, it will be replaced. It is the
     /// responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
@@ -707,14 +719,17 @@ impl ReplicatedState {
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
-        let input_queue_type = if msg.sender().get_ref() == self.metadata.own_subnet_id.get_ref()
-            || self.canister_states.contains_key(&msg.sender())
+        let sender = msg.sender();
+        let input_queue_type = if sender.get_ref() == self.metadata.own_subnet_id.get_ref()
+            || self.canister_states.contains_key(&sender)
         {
             InputQueueType::LocalSubnet
         } else {
             InputQueueType::RemoteSubnet
         };
-        match self.canister_state_mut(&msg.receiver()) {
+
+        let receiver = msg.receiver();
+        match self.canister_state_mut(&receiver) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
                 subnet_available_memory,
@@ -723,17 +738,26 @@ impl ReplicatedState {
             ),
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
-                if msg.receiver().get_ref() == subnet_id {
-                    // TODO(MR-523) Assert that this is a request; else check for a matching `Callback`.
-                    push_input(
-                        &mut self.subnet_queues,
-                        msg,
-                        subnet_available_memory,
-                        own_subnet_type,
-                        input_queue_type,
-                    )
+                if receiver.get_ref() == subnet_id {
+                    match &msg {
+                        RequestOrResponse::Request(_) => push_input(
+                            &mut self.subnet_queues,
+                            msg,
+                            subnet_available_memory,
+                            own_subnet_type,
+                            input_queue_type,
+                        ),
+
+                        RequestOrResponse::Response(response) => Err((
+                            StateError::non_matching_response(
+                                "Management canister does not accept canister responses",
+                                response,
+                            ),
+                            msg,
+                        )),
+                    }
                 } else {
-                    Err((StateError::CanisterNotFound(msg.receiver()), msg))
+                    Err((StateError::CanisterNotFound(receiver), msg))
                 }
             }
         }

@@ -11,8 +11,8 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/types/base_types",
+    "@crate_index//:candid",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -23,7 +23,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "canisters",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nervous_system_canisters",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",

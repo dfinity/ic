@@ -723,10 +723,10 @@ impl Validator {
     }
 
     /// Invoke each artifact validation function in order.
-    /// Return the first non-empty [ChangeSet] as returned by a function.
-    /// Otherwise return an empty [ChangeSet] if all functions return
+    /// Return the first non-empty [Mutations] as returned by a function.
+    /// Otherwise return an empty [Mutations] if all functions return
     /// empty.
-    pub fn on_state_change(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    pub fn on_state_change(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         trace!(self.log, "on_state_change");
         let validate_finalization = || self.validate_finalizations(pool_reader);
         let validate_notarization = || self.validate_notarizations(pool_reader);
@@ -741,7 +741,7 @@ impl Validator {
         let validate_catch_up_package_shares =
             || self.validate_catch_up_package_shares(pool_reader);
         let validate_equivocation_proofs = || self.validate_equivocation_proofs(pool_reader);
-        let calls: [&'_ dyn Fn() -> ChangeSet; 12] = [
+        let calls: [&'_ dyn Fn() -> Mutations; 12] = [
             &|| self.call_with_metrics("Finalization", validate_finalization),
             &|| self.call_with_metrics("Notarization", validate_notarization),
             &|| self.call_with_metrics("BlockProposal", validate_blocks),
@@ -758,9 +758,9 @@ impl Validator {
         self.schedule.call_next(&calls)
     }
 
-    fn call_with_metrics<F>(&self, sub_component: &str, validator_fn: F) -> ChangeSet
+    fn call_with_metrics<F>(&self, sub_component: &str, validator_fn: F) -> Mutations
     where
-        F: FnOnce() -> ChangeSet,
+        F: FnOnce() -> Mutations,
     {
         let _timer = self
             .metrics
@@ -787,12 +787,12 @@ impl Validator {
         )
     }
 
-    /// Return a `ChangeSet` of `Finalization`s. See `validate_notary_issued`
+    /// Return a `Mutations` of `Finalization`s. See `validate_notary_issued`
     /// for details about exactly what is checked.
-    fn validate_finalizations(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_finalizations(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().finalization().max_height() {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
 
         let range = HeightRange::new(pool_reader.get_finalized_height().increment(), max_height);
@@ -802,15 +802,15 @@ impl Validator {
             .finalization()
             .get_by_height_range(range);
 
-        let change_set: ChangeSet = finalizations
+        let change_set: Mutations = finalizations
             .filter_map(|finalization| self.validate_notary_issued(pool_reader, finalization))
             .collect();
         self.dedup_change_actions("finalization", change_set)
     }
 
-    /// Return a `ChangeSet` of `FinalizationShare`s. See
+    /// Return a `Mutations` of `FinalizationShare`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_finalization_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_finalization_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -818,7 +818,7 @@ impl Validator {
             .max_height()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
 
         let range = HeightRange::new(pool_reader.get_finalized_height().increment(), max_height);
@@ -833,12 +833,12 @@ impl Validator {
             .collect()
     }
 
-    /// Return a `ChangeSet` of `Notarization`s. See
+    /// Return a `Mutations` of `Notarization`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_notarizations(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_notarizations(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().notarization().max_height() {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
 
         let range = HeightRange::new(pool_reader.get_finalized_height().increment(), max_height);
@@ -848,15 +848,15 @@ impl Validator {
             .notarization()
             .get_by_height_range(range);
 
-        let change_set: ChangeSet = notarizations
+        let change_set: Mutations = notarizations
             .filter_map(|notarization| self.validate_notary_issued(pool_reader, notarization))
             .collect();
         self.dedup_change_actions("notarization", change_set)
     }
 
-    /// Return a `ChangeSet` of `NotarizationShare`s. See
+    /// Return a `Mutations` of `NotarizationShare`s. See
     /// `validate_notary_issued` for details about exactly what is checked.
-    fn validate_notarization_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_notarization_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -864,7 +864,7 @@ impl Validator {
             .max_height()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
 
         let range = HeightRange::new(pool_reader.get_finalized_height().increment(), max_height);
@@ -928,10 +928,10 @@ impl Validator {
         }
     }
 
-    /// Return a `ChangeSet` containing status updates concerning any currently
+    /// Return a `Mutations` containing status updates concerning any currently
     /// unvalidated blocks that can now be marked valid or invalid. See
     /// `check_block_validity`.
-    fn validate_blocks(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_blocks(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let mut change_set = Vec::new();
 
         let notarization_height = pool_reader.get_notarized_height();
@@ -1320,12 +1320,12 @@ impl Validator {
         ret
     }
 
-    /// Return a `ChangeSet` of `RandomBeacon` artifacts. Check the validity of RandomBeacons of
+    /// Return a `Mutations` of `RandomBeacon` artifacts. Check the validity of RandomBeacons of
     /// the next height against the random beacon tip. This consists of checking whether each beacon:
     /// * points to the random beacon tip as its parent,
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_beacons(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_beacons(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         // Only a single height is validated, per round.
@@ -1352,20 +1352,20 @@ impl Validator {
             .collect()
     }
 
-    /// Return a `ChangeSet` of `RandomBeaconShare` artifacts. Check the validity of RandomBeaconShares of
+    /// Return a `Mutations` of `RandomBeaconShare` artifacts. Check the validity of RandomBeaconShares of
     /// the next height against the random beacon tip. This consists of checking whether each share:
     /// * points to the random beacon tip as its parent,
     /// * not more than threshold shares have already been validated for each height
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_beacon_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_beacon_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let last_beacon = pool_reader.get_random_beacon_tip();
         let last_hash: CryptoHashOf<RandomBeacon> = ic_types::crypto::crypto_hash(&last_beacon);
         let next_height = last_beacon.content.height().increment();
 
         // Since the parent beacon is required to be already validated, only a single
         // height is checked.
-        let change_set: ChangeSet = pool_reader
+        let change_set: Mutations = pool_reader
             .pool()
             .unvalidated()
             .random_beacon_share()
@@ -1395,15 +1395,15 @@ impl Validator {
         change_set
     }
 
-    /// Return a `ChangeSet` of `RandomTape` artifacts. Check the validity of RandomTape
+    /// Return a `Mutations` of `RandomTape` artifacts. Check the validity of RandomTape
     /// artifacts. This function checks whether each RandomTapeContent
     /// * has non-zero height,
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_tapes(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_tapes(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader.pool().unvalidated().random_tape().max_height() {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
         // Since we only need tape values when a height is also finalized, we don't
         // need to look beyond finalized height.
@@ -1441,13 +1441,13 @@ impl Validator {
             .collect()
     }
 
-    /// Return a `ChangeSet` of `RandomTapeShare` artifacts. Check the validity of RandomTapeShare
+    /// Return a `Mutations` of `RandomTapeShare` artifacts. Check the validity of RandomTapeShare
     /// artifacts. This function checks whether each RandomTapeContent
     /// * has non-zero height,
     /// * not more than threshold shares have already been validated for each height
     /// * is signed by member(s) of the threshold group,
     /// * has a valid signature.
-    fn validate_tape_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_tape_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let max_height = match pool_reader
             .pool()
             .unvalidated()
@@ -1455,7 +1455,7 @@ impl Validator {
             .max_height()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
         // Since we only need tape values when a height is also finalized, we don't
         // need to look beyond finalized height.
@@ -1466,7 +1466,7 @@ impl Validator {
             max_height.min(finalized_height.increment()),
         );
 
-        let change_set: ChangeSet = pool_reader
+        let change_set: Mutations = pool_reader
             .pool()
             .unvalidated()
             .random_tape_share()
@@ -1501,10 +1501,10 @@ impl Validator {
         change_set
     }
 
-    /// Return a `ChangeSet` of `CatchUpPackage` artifacts.
+    /// Return a `Mutations` of `CatchUpPackage` artifacts.
     /// The validity of a CatchUpPackage only depends on its signature
     /// and signer, which must match a known threshold key.
-    fn validate_catch_up_packages(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_catch_up_packages(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let catch_up_height = pool_reader.get_catch_up_height();
         let max_height = match pool_reader
             .pool()
@@ -1513,7 +1513,7 @@ impl Validator {
             .max_height()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
         let range = HeightRange::new(catch_up_height.increment(), max_height);
 
@@ -1546,10 +1546,10 @@ impl Validator {
             .collect()
     }
 
-    /// Return a `ChangeSet` of `CatchUpPackageShare` artifacts.  This consists
+    /// Return a `Mutations` of `CatchUpPackageShare` artifacts.  This consists
     /// of checking whether each share is signed by member(s) of the threshold
     /// group, and has a valid signature.
-    fn validate_catch_up_package_shares(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_catch_up_package_shares(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let catch_up_height = pool_reader.get_catch_up_height();
         let max_height = match pool_reader
             .pool()
@@ -1558,7 +1558,7 @@ impl Validator {
             .max_height()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
         let range = HeightRange::new(catch_up_height.increment(), max_height);
 
@@ -1684,11 +1684,11 @@ impl Validator {
         Ok(block)
     }
 
-    /// Return a `ChangeSet` of `EquivocationProof` artifacts. This consists
+    /// Return a `Mutations` of `EquivocationProof` artifacts. This consists
     /// of checking that both signatures are valid signatures of the two
     /// derived block metadata instances, that the subnet is identical to
     /// our current subnet, and that the signer was a blockmaker at that height.
-    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> ChangeSet {
+    fn validate_equivocation_proofs(&self, pool_reader: &PoolReader<'_>) -> Mutations {
         let finalized_height = pool_reader.get_finalized_height();
         let range = match pool_reader
             .pool()
@@ -1697,7 +1697,7 @@ impl Validator {
             .height_range()
         {
             Some(height) => height,
-            None => return ChangeSet::new(),
+            None => return Mutations::new(),
         };
 
         let range_to_validate = HeightRange::new(finalized_height.increment(), range.max);
@@ -1748,8 +1748,8 @@ impl Validator {
             .collect()
     }
 
-    fn dedup_change_actions(&self, name: &str, actions: ChangeSet) -> ChangeSet {
-        let mut change_set = ChangeSet::new();
+    fn dedup_change_actions(&self, name: &str, actions: Mutations) -> Mutations {
+        let mut change_set = Mutations::new();
         for action in actions {
             change_set.dedup_push(action).unwrap_or_else(|action| {
                 self.metrics
@@ -2349,7 +2349,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomBeacon(beacon_2))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // share_3 now validates
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -2445,7 +2445,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Insert random tape at height 4, check if it is ignored
             let content = RandomTapeContent::new(Height::from(4));
@@ -2468,7 +2468,7 @@ pub mod test {
             );
 
             // Accept changes
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Set expected batch height to height 4, check if tape_3 is ignored
             let content = RandomTapeContent::new(Height::from(3));
@@ -2713,7 +2713,7 @@ pub mod test {
                 .unwrap();
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&valid_results, &test_block);
-            pool.apply_changes(valid_results);
+            pool.apply(valid_results);
 
             let rank = Rank(0);
             let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
@@ -2791,7 +2791,7 @@ pub mod test {
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_invalid(&results, &test_block);
-            pool.apply_changes(results);
+            pool.apply(results);
 
             // Construct a block with a registry version that is higher than any we
             // currently recognize. This should yield an empty change set
@@ -2856,7 +2856,7 @@ pub mod test {
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(results, ChangeSet::new());
+            assert_eq!(results, Mutations::new());
 
             // Try validate again, it should succeed, because certified_height has caught up
             // Make sure to set the correct time for validation
@@ -2909,7 +2909,7 @@ pub mod test {
             test_block.update_content();
             pool.insert_unvalidated(test_block.clone());
             let results = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(results, ChangeSet::new());
+            assert_eq!(results, Mutations::new());
 
             // when we advance the time, it should be validated
             time_source.set_time(block_time).unwrap();
@@ -2923,7 +2923,7 @@ pub mod test {
 
             // after we finalize a block with time `block_time`, the validator should reject
             // a child block with a smaller time
-            pool.apply_changes(results);
+            pool.apply(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -3022,14 +3022,14 @@ pub mod test {
             pool.insert_unvalidated(notarization_0);
             pool.insert_unvalidated(notarization_1);
 
-            // Only one notarization is emitted in the ChangeSet.
+            // Only one notarization is emitted in the Mutations.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
             assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
@@ -3037,7 +3037,7 @@ pub mod test {
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Finally, changeset should be empty.
             assert!(validator
@@ -3076,14 +3076,14 @@ pub mod test {
             pool.insert_unvalidated(finalization_0);
             pool.insert_unvalidated(finalization_1);
 
-            // Only one finalization is emitted in the ChangeSet.
+            // Only one finalization is emitted in the Mutations.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
             );
             assert_eq!(changeset.len(), 1);
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Next run does not consider the extra Finalization.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -3308,7 +3308,7 @@ pub mod test {
                 )),
             );
 
-            pool.apply_changes(results);
+            pool.apply(results);
             pool.notarize(&test_block);
             pool.finalize(&test_block);
             pool.insert_validated(pool.make_next_beacon());
@@ -3412,7 +3412,7 @@ pub mod test {
                     ChangeAction::MoveToValidated(block.into_message())
                 ]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
         })
     }
 
@@ -3686,7 +3686,7 @@ pub mod test {
                     ConsensusMessage::BlockProposal(_)
                 )]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             let mut second_block = block.clone();
             second_block.content.as_mut().context.time += Duration::from_nanos(1);
@@ -3702,7 +3702,7 @@ pub mod test {
                     timestamp: _,
                 })] if &e.hash1 == second_block.content.get_hash() && &e.hash2 == block.content.get_hash()
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Make sure we create exactly one equivocation proof for a
             // combination of height and rank.
@@ -3850,7 +3850,7 @@ pub mod test {
                     timestamp: _,
                 })]
             );
-            pool.apply_changes(changeset);
+            pool.apply(changeset);
 
             // Now that rank 1 is disqualified, we should be able to validate
             // a rank 2 block.

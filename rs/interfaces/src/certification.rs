@@ -8,7 +8,7 @@ use ic_types::{
 use std::collections::HashSet;
 
 /// Contains all possible change actions applicable to the certification pool.
-pub type ChangeSet = Vec<ChangeAction>;
+pub type Mutations = Vec<ChangeAction>;
 
 /// Change actions applicable to the certification pool.
 #[derive(Eq, PartialEq, Debug)]
