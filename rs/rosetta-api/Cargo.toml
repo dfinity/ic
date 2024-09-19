@@ -51,6 +51,8 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

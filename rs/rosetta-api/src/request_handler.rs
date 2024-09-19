@@ -8,25 +8,22 @@ mod construction_preprocess;
 mod construction_submit;
 
 use crate::{
-    convert,
-    convert::{from_model_account_identifier, neuron_account_from_public_key},
+    convert::{self, neuron_account_from_public_key},
     errors::{ApiError, Details},
     ledger_client::{
         list_known_neurons_response::ListKnownNeuronsResponse,
         pending_proposals_response::PendingProposalsResponse,
         proposal_info_response::ProposalInfoResponse, LedgerAccess,
     },
-    models,
     models::{
-        amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
+        self, amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
         AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
         BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
         NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
-        NeuronSubaccountComponents, OperationStatus, Operator, PartialBlockIdentifier,
+        NeuronSubaccountComponents, OperationStatus, PartialBlockIdentifier,
         QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
     },
-    request_types::GetProposalInfo,
-    transaction_id::TransactionIdentifier,
+    request_types::{GetProposalInfo, STATUS_COMPLETED},
     API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
 };
 use ic_ledger_canister_blocks_synchronizer::{
@@ -633,226 +630,204 @@ impl RosettaRequestHandler {
         Ok(network_status)
     }
 
-    async fn get_blocks_range(
-        &self,
-        max_block: Option<u64>,
-        offset: usize,
-        limit: usize,
-    ) -> Result<SearchTransactionsResponse, ApiError> {
-        let blocks = self.ledger.read_blocks().await;
-
-        // Note: the Rosetta API specifies that the transactions should be sorted from
-        // the most recent to oldest: https://www.rosetta-api.org/docs/models/SearchTransactionsResponse.html.
-        // This means that query offset is computed from the end of the search
-        // result.
-        //
-        // Let's look at an example: max_block = 3, offset = 2, limit = 2
-        //
-        //                                    max_block
-        //                                    V
-        // +---------+--------------+---------+---------+
-        // | Block 1 |    Block 2   | Block 3 | Block 4 |
-        // |----+----+----+----+----+----+----+----+----|
-        // | T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | <- Transactions
-        // |----+----+----+----+----+----+----+----+----|
-        // | ** |    | ** | ** |    | ** | ** | ** | ** | <- ** = matches the criteria
-        // |  4 |    |  3 |  2 |    |  1 |  0 |    |    | <- Offsets
-        //           ^---------^
-        //           Select these transactions
-        //
-        // Currently, we only support "match all" search criteria, and each block only
-        // contains one transaction. We only need to compute block range
-        // correctly to produce the requested transaction range.
-
-        let last_idx = blocks
-            .get_latest_verified_hashed_block()
-            .map_err(ApiError::from)?
-            .index;
-        let mut first_idx = blocks
-            .get_first_verified_hashed_block()
-            .map_err(ApiError::from)?
-            .index;
-        first_idx = if first_idx == 1 { 0 } else { first_idx };
-        let max_block = max_block.unwrap_or(last_idx);
-        let end = max_block
-            .checked_sub(offset as u64)
-            .ok_or_else(|| ApiError::invalid_request("max_block < offset"))?
-            .saturating_add(1);
-        let start = end.saturating_sub(limit as u64).max(first_idx);
-
-        let block_range = blocks
-            .get_hashed_block_range(start..end)
-            .map_err(ApiError::from)?;
-        let mut txs: Vec<BlockTransaction> = Vec::new();
-
-        for hb in block_range.into_iter().rev() {
-            txs.push(BlockTransaction {
-                block_identifier: convert::block_id(&hb)?,
-                transaction: convert::hashed_block_to_rosetta_core_transaction(
-                    &hb,
-                    self.ledger.token_symbol(),
-                )?,
-            });
-        }
-
-        let next_offset = if start == first_idx {
-            None
-        } else {
-            Some((max_block - start + 1) as i64)
-        };
-
-        Ok(SearchTransactionsResponse {
-            transactions: txs,
-            total_count: (end - first_idx) as i64,
-            next_offset,
-        })
-    }
-
     /// Search for a transaction given its hash
     pub async fn search_transactions(
         &self,
-        msg: models::SearchTransactionsRequest,
+        request: models::SearchTransactionsRequest,
     ) -> Result<SearchTransactionsResponse, ApiError> {
-        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        verify_network_id(
+            self.ledger.ledger_canister_id(),
+            &request.network_identifier,
+        )?;
 
-        if let Some(Operator::Or) = msg.operator {
-            return Err(ApiError::invalid_request("Operator OR not supported"));
+        if request.coin_identifier.is_some() {
+            return Err(ApiError::invalid_request(
+                "Coin identifier not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.coin_identifier.is_some() {
-            return Err(ApiError::invalid_request("coin_identifier not supported"));
+        if request.status.is_some() {
+            return Err(ApiError::invalid_request(
+                "Status not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.currency.is_some() {
-            return Err(ApiError::invalid_request("currency not supported"));
+        if request.operator.is_some() {
+            return Err(ApiError::invalid_request(
+                "Operator not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.status.is_some() {
-            return Err(ApiError::invalid_request("status not supported"));
+        if request.address.is_some() {
+            return Err(ApiError::invalid_request(
+                "Address not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.type_.is_some() {
-            return Err(ApiError::invalid_request("type not supported"));
+        if request.success.is_some() {
+            return Err(ApiError::invalid_request(
+                "Successful only not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.address.is_some() {
-            return Err(ApiError::invalid_request("address not supported"));
+        if request.currency.is_some() {
+            return Err(ApiError::invalid_request(
+                "Currency not supported in search/transactions endpoint".to_owned(),
+            ));
         }
 
-        if msg.success.is_some() {
-            return Err(ApiError::invalid_request("success not supported"));
-        }
+        let block_storage = self.ledger.read_blocks().await;
 
-        let max_block = match msg.max_block {
-            Some(x) => Some(
-                u64::try_from(x)
-                    .map_err(|e| ApiError::invalid_request(format!("Invalid max_block: {}", e)))?,
-            ),
-            None => None,
-        };
+        let block_with_highest_block_index = block_storage
+            .get_latest_verified_hashed_block()
+            .map_err(|e| ApiError::InvalidBlockId(false, format!("{:?}", e).into()))?;
 
-        let offset = match msg.offset {
-            Some(x) => usize::try_from(x)
-                .map_err(|e| ApiError::invalid_request(format!("Invalid offset: {}", e)))?,
-            None => 0,
-        };
-
-        let limit = match msg.limit {
-            Some(x) => usize::try_from(x)
-                .map_err(|e| ApiError::invalid_request(format!("Invalid limit: {}", e)))?,
-            None => usize::MAX,
-        };
-        let limit = std::cmp::min(limit, MAX_SEARCH_LIMIT);
-
-        if msg.transaction_identifier.is_none() && msg.account_identifier.is_none() {
-            return self.get_blocks_range(max_block, offset, limit).await;
-        }
-
-        let blocks = self.ledger.read_blocks().await;
-
-        let last_idx = blocks.get_latest_verified_hashed_block()?.index;
-
-        let mut heights = Vec::new();
-        let mut total_count = 0;
-
-        if let Some(tid) = &msg.transaction_identifier {
-            if msg.account_identifier.is_some() {
-                return Err(ApiError::invalid_request(
-                    "Only one of transaction_identitier and account_identifier should be populated",
-                ));
-            }
-
-            let tid = ic_ledger_hash_of::HashOf::try_from(&TransactionIdentifier(tid.clone()))
-                .map_err(|_| {
-                    ApiError::InvalidTransactionId(
-                        false,
-                        Details::from(format!(
-                            "Could not calculate hash of transaction identifier: {:?}",
-                            tid
-                        )),
-                    )
-                })?;
-
-            if let Ok(indices) = blocks.get_block_idxs_by_transaction_hash(&tid) {
-                for idx in indices {
-                    heights.push(idx);
-                    total_count += 1;
-                }
-            }
-        }
-
-        let mut next_offset = None;
-
-        if let Some(aid) = &msg.account_identifier {
-            let acc = from_model_account_identifier(aid)
-                .map_err(|e| ApiError::InvalidAccountId(false, e.into()))?;
-
-            let hist = blocks.get_account_balance_history(&acc, max_block)?;
-            heights = hist
-                .iter()
-                .map(|(h, _)| *h)
-                .rev()
-                .filter(|h| *h <= last_idx)
-                .skip(offset)
-                .collect();
-
-            let cnt = offset
-                .checked_add(heights.len())
-                .ok_or_else(|| ApiError::internal_error("total count overflow"))?;
-            total_count = i64::try_from(cnt).map_err(|e| {
-                ApiError::internal_error(format!("Total count does not fit in i64: {}", e))
+        let max_block: u64 = request
+            .max_block
+            .unwrap_or(block_with_highest_block_index.index as i64)
+            .try_into()
+            .map_err(|err| {
+                ApiError::invalid_request(format!("Max block has to be a valid u64: {}", err))
             })?;
 
-            if heights.len() > limit {
-                let next = offset
-                    .checked_add(limit)
-                    .ok_or_else(|| ApiError::internal_error("offset + limit overflow"))?;
-                next_offset = Some(i64::try_from(next).map_err(|e| {
-                    ApiError::internal_error(format!("Next offset cannot fit in i64: {}", e))
-                })?);
-            }
-            heights.truncate(limit);
+        let limit: u64 = request
+            .limit
+            .unwrap_or(MAX_SEARCH_LIMIT as i64)
+            .try_into()
+            .map_err(|err| {
+                ApiError::invalid_request(format!("Limit has to be a valid u64: {}", err))
+            })?;
+
+        let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
+            ApiError::invalid_request(format!("Offset has to be a valid u64: {}", err))
+        })?;
+
+        if max_block < offset {
+            return Err(ApiError::invalid_request(
+                "Max block has to be greater than or equal to offset".to_owned(),
+            ));
         }
 
-        let mut txs: Vec<BlockTransaction> = Vec::new();
-        for i in heights {
-            if i <= last_idx {
-                let hb = blocks.get_hashed_block(&i)?;
-                txs.push(BlockTransaction {
-                    block_identifier: convert::block_id(&hb)?,
-                    transaction: convert::hashed_block_to_rosetta_core_transaction(
-                        &hb,
-                        self.ledger.token_symbol(),
-                    )?,
+        let operation_type = request.type_;
+
+        let account_id = request
+            .account_identifier
+            .map(|acc| {
+                icp_ledger::AccountIdentifier::try_from(acc).map_err(|err| {
+                    ApiError::invalid_request(format!(
+                        "Account identifier has to be a valid AccountIdentifier: {}",
+                        err
+                    ))
+                })
+            })
+            .transpose()?;
+
+        let start_idx = max_block.min(block_with_highest_block_index.index.saturating_sub(offset));
+
+        if limit == 0 {
+            return Ok(SearchTransactionsResponse {
+                total_count: 0,
+                transactions: vec![],
+                next_offset: Some(offset as i64),
+            });
+        }
+
+        // Base query to fetch the blocks
+        let mut command = String::from(
+            "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp
+                   FROM blocks WHERE block_idx <= :max_block_idx ",
+        );
+        let mut parameters: Vec<(&str, Box<dyn rusqlite::ToSql>)> = Vec::new();
+
+        parameters.push((":max_block_idx", Box::new(start_idx)));
+
+        if let Some(transaction_identifier) = request.transaction_identifier.clone() {
+            command.push_str("AND tx_hash = :tx_hash ");
+            let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
+                .map_err(|err| {
+                    ApiError::invalid_request(format!(
+                        "Transaction identifier hash has to be a valid ByteBuf: {}",
+                        err
+                    ))
+                })?
+                .as_slice()
+                .to_vec();
+            parameters.push((":tx_hash", Box::new(tx_hash)));
+        }
+
+        if let Some(operation_type) = operation_type {
+            command.push_str("AND operation_type = :operation_type ");
+            parameters.push((":operation_type", Box::new(operation_type)));
+        }
+
+        if let Some(account) = account_id {
+            command.push_str("AND (from_account = :account_id OR to_account = :account_id OR spender_account = :account_id) ");
+            parameters.push((":account_id", Box::new(account.to_hex())));
+        }
+
+        command.push_str("ORDER BY block_idx DESC ");
+
+        command.push_str("LIMIT :limit ");
+        parameters.push((":limit", Box::new(limit)));
+
+        let blocks = block_storage
+            .get_blocks_by_custom_query(
+                command,
+                parameters
+                    .iter()
+                    .map(|(key, param)| {
+                        let param_ref: &dyn rusqlite::ToSql = param.as_ref();
+                        (key.to_owned(), param_ref)
+                    })
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )
+            .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {:?}", e)))?;
+
+        let mut transactions = vec![];
+        for block in blocks.clone().into_iter() {
+            let rosetta_core_block = self.hashed_block_to_rosetta_core_block(block).await?;
+            for transaction in rosetta_core_block.transactions.into_iter() {
+                transactions.push(BlockTransaction {
+                    block_identifier: rosetta_core_block.block_identifier.clone(),
+                    transaction,
                 });
-            } else {
-                return Err(ApiError::InvalidBlockId(true, Default::default()));
             }
         }
+
+        transactions.iter_mut().for_each(|tx| {
+            tx.transaction.operations.iter_mut().for_each(|op| {
+                op.status = Some(STATUS_COMPLETED.to_string());
+            })
+        });
+
+        // Sort the transactions by block index in descending order
+        transactions.sort_by(|a, b| b.block_identifier.index.cmp(&a.block_identifier.index));
+
+        // Is rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
+        let last_traversed_block_index = blocks.iter().map(|block| block.index).min().unwrap_or(0);
+        let num_fetched_transactions = transactions.len();
+
         Ok(SearchTransactionsResponse {
-            transactions: txs,
-            total_count,
-            next_offset,
+            total_count: num_fetched_transactions as i64,
+            transactions,
+            // If the traversion of transactions has reached the genesis block we can stop traversing
+            next_offset: if last_traversed_block_index == 0 {
+                None
+            } else {
+                // If the transaction hash was provided it means we only want to fetch that transaction
+                // If the number of transactions that match the transactionidentifier is less than the limit we can stop traversing --> All transactions with that hash have been fetched
+                if request.transaction_identifier.is_some()
+                    && num_fetched_transactions < limit as usize
+                {
+                    None
+                } else {
+                    Some(
+                        max_block.saturating_sub(last_traversed_block_index.saturating_sub(1))
+                            as i64,
+                    )
+                }
+            },
         })
     }
 
