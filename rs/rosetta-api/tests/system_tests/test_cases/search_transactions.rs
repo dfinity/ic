@@ -212,15 +212,16 @@ fn test_search_transactions_by_index() {
                                 .build();
                         search_transactions_request.limit = Some(1);
 
-                        // If we only search for one transaction at a time we should get the same result as if we search for all transactions
+                        // If we always only retrieve a single transaction we should be able to traverse through all transactions in the blockchain
                         let response = traverse_all_transactions(
                             &env.rosetta_client,
                             search_transactions_request.clone(),
                         )
                         .await;
 
-                        assert_eq!(response.len(), 1);
-                        assert_eq!(response, result.transactions);
+                        assert_eq!(response.len(), args_with_caller.len());
+                        // Make sure all transactions are unique
+                        assert_eq!(response.len(), response.into_iter().collect::<HashSet<_>>().len());
                     }
                 });
                 Ok(())
