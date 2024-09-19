@@ -145,9 +145,7 @@ fn canister_init() {
     println!(
         "{}canister_init: Initializing with: {}",
         LOG_PREFIX,
-        clamp_debug_len(
-            &init_payload,
-            /* max_len = */ 2000)
+        clamp_debug_len(&init_payload, /* max_len = */ 2000)
     );
     let registry = registry_mut();
 

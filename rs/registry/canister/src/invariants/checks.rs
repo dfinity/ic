@@ -63,7 +63,8 @@ impl Registry {
                     .iter()
                     .map(RegistryMutation::to_string)
                     .collect::<Vec<_>>()),
-                /* max_len = */ 2000)
+                /* max_len = */ 2000
+            )
         );
 
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);
