@@ -295,7 +295,7 @@ fn test_search_transactions_by_account() {
                                 search_transactions_request.clone(),
                             )
                             .await;
-                            assert!(result.into_iter().all(|block_transaction| {
+                            assert!(result.clone().into_iter().all(|block_transaction| {
                                 block_transaction.transaction.operations.into_iter().any(
                                     |operation| {
                                         operation.account
@@ -303,6 +303,11 @@ fn test_search_transactions_by_account() {
                                     },
                                 )
                             }));
+                            // Make sure every fetched transaction is unique
+                            assert_eq!(
+                                result.len(),
+                                result.into_iter().collect::<HashSet<_>>().len()
+                            );
                         }
 
                         search_transactions_request.account_identifier = Some(
@@ -374,7 +379,7 @@ fn test_search_transactions_by_operation_type() {
                                 search_transactions_request.clone(),
                             )
                             .await;
-                            assert!(result.into_iter().all(|block_transaction| {
+                            assert!(result.clone().into_iter().all(|block_transaction| {
                                 block_transaction.transaction.operations.into_iter().any(
                                     |operation| {
                                         operation.type_
@@ -382,6 +387,12 @@ fn test_search_transactions_by_operation_type() {
                                     },
                                 )
                             }));
+
+                            // Make sure every fetched transaction is unique
+                            assert_eq!(
+                                result.len(),
+                                result.into_iter().collect::<HashSet<_>>().len()
+                            );
                         }
 
                         search_transactions_request.type_ = Some("INVALID_OPERATION".to_string());
