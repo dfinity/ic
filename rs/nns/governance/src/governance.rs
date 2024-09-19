@@ -68,13 +68,11 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::api::spawn;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-#[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::println;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -1490,7 +1488,7 @@ pub trait Environment: Send + Sync {
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
 
-    /// Basically, the same as dfn_core::api::call.
+    /// Basically, the same as ic_cdk::api::call_raw.
     async fn call_canister_method(
         &self,
         target: CanisterId,
@@ -1520,6 +1518,12 @@ struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     fn drop(&mut self) {
         if self.retain {
+            return;
+        }
+        // To retain behavior from dfn_core implementation of 'call', we do not
+        // unlock the neuron if we are recovering from a trap. ic_cdk::api::call
+        // always cleans up, so we have to check this.
+        if ic_cdk::api::call::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
