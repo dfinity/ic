@@ -49,19 +49,26 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     /*
      * To derive our bounds, we consider a worst-case scenario in which we have
      * notarizations (or finalizations) for d rounds above the i-th summary
-     * height, without having a CUP for it yet. In this case, we keep all
-     * artifacts from the (i-1)-th interval, including a minimum chain length
-     * of `e` from the (i-2)-th interval.
+     * height, without having a CUP for it yet. That means we have artifacts from
+     * potentially three consecutive DKG intervals. The below diagram shows a
+     * section of the blockchain for such a scenario.
      *
-     *       [B] Ordinary blocks                             notarized/finalized
-     *       [S] Summary blocks                                   height
-     *                                                              |
+     *       [B] Ordinary blocks          [h0...h3] Labeled heights
+     *       [S] Summary blocks
+     *
+     *  <--  interval i-2 --|---  interval i-1  ---|-- interval i  --->
+     *
+     *      h0              h1                      h2              h3
      *  ..-[B]-[B]-...-[B]-[S]-[B]-[B]-...-[B]-[B]-[S]-[B]-...-[B]-[B] <- chain tip
      *      |           |   |                   |   |               |
      *      +- minimum -+   +-- DKG interval ---+   +- d+1 heights -+
-     *      |chain length           (k)                             |
-     *      |    (e)                                                |
-     *      +--------------- l = e + k + (d + 1) -------------------+
+     *       chain length           (k)
+     *           (e)
+     *
+     *   h0 = lowest height at which we may still retain artifacts
+     *   h1 = highest CUP height we have locally (worst-case)
+     *   h2 = pending CUP height
+     *   h3 = notarized or finalized height
      *
      * In the above scenario, assuming `d` is equal to the maximum notarization/CUP
      * gap, nodes will refuse to notarize any further blocks. So `l` is the maximum
@@ -73,11 +80,11 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     // we can have one CUP for every time a full DKG interval fits into e.
     let cups = 2 + e / k;
     ArtifactCounts {
-        // We keep at most l finalized block proposals, as well as f+1
-        // non-finalized blocks for every height in the d rounds.
-        block_proposals: (l + 1) + (d + 1) * f,
+        // We keep (f + 1) blocks for every height in range (h2, h3] (=d), and
+        // one finalized block per height in range [h0, h2] (=l-d).
+        block_proposals: (f + 1) * d + (l - d),
         // The same bounds apply for block proposals and notarizations.
-        notarizations: (l + 1) + (d + 1) * f,
+        notarizations: (f + 1) * d + (l - d),
         // There can only be one finalization at every height. In the worst
         // case, the chain tip is a finalized block, in which case our upper
         // bound for finalizations is l.
