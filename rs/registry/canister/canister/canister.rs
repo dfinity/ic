@@ -6,6 +6,7 @@ use dfn_core::{
 };
 use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
+use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -143,7 +144,10 @@ fn canister_init() {
             .expect("The init argument for the registry canister must be a Candid-encoded RegistryCanisterInitPayload.");
     println!(
         "{}canister_init: Initializing with: {}",
-        LOG_PREFIX, init_payload
+        LOG_PREFIX,
+        clamp_debug_len(
+            &init_payload,
+            /* max_len = */ 2000)
     );
     let registry = registry_mut();
 
