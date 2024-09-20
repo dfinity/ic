@@ -154,7 +154,7 @@ struct CanisterEnv {
     time_warp: GovTimeWarp,
 }
 
-fn time_u64_nanos() -> u64 {
+fn now_nanoseconds() -> u64 {
     if cfg!(target_arch = "wasm32") {
         ic_cdk::api::time()
     } else {
@@ -165,6 +165,10 @@ fn time_u64_nanos() -> u64 {
             .try_into()
             .expect("Failed to convert time to u64")
     }
+}
+
+fn now_seconds() -> u64 {
+    Duration::from_nanos(now_nanoseconds()).as_secs()
 }
 
 impl CanisterEnv {
@@ -180,7 +184,7 @@ impl CanisterEnv {
             // the PRNG, but that wouldn't help much since after inception the pseudo-random
             // numbers could be predicted.
             rng: {
-                let now_nanos = Duration::from_nanos(time_u64_nanos()).as_nanos();
+                let now_nanos = Duration::from_nanos(now_nanoseconds()).as_nanos();
                 let mut seed = [0u8; 32];
                 seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
                 seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
@@ -195,8 +199,7 @@ impl CanisterEnv {
 #[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
-        self.time_warp
-            .apply(Duration::from_nanos(time_u64_nanos()).as_secs())
+        self.time_warp.apply(now_seconds())
     }
 
     fn set_time_warp(&mut self, new_time_warp: GovTimeWarp) {
@@ -327,8 +330,7 @@ fn panic_with_probability(probability: f64, message: &str) {
     // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
     // state, which makes sure that the next time still panics, unless some other operation modifies
     // the `rng` successfully, such as spawning a neuron.
-    let now_seconds = Duration::from_nanos(time_u64_nanos()).as_secs();
-    let random = ChaCha20Rng::seed_from_u64(now_seconds).next_u64();
+    let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
     let should_panic = (random as f64) / (u64::MAX as f64) < probability;
     if should_panic {
         panic!("{}", message);

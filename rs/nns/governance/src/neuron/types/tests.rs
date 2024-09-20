@@ -3,6 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
 };
+use ic_cdk::println;
 
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_stable_structures::Storable;
@@ -317,7 +318,7 @@ fn increase_dissolve_delay_sets_age_correctly_for_dissolved_neurons() {
     ];
 
     for dissolve_state_and_age in cases {
-        ic_cdk::println!("Testing case {:?}", dissolve_state_and_age);
+        println!("Testing case {:?}", dissolve_state_and_age);
         test_increase_dissolve_delay_by_1_on_dissolved_neuron(dissolve_state_and_age);
     }
 }

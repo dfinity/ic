@@ -1521,9 +1521,10 @@ impl Drop for LedgerUpdateLock {
         if self.retain {
             return;
         }
-        // To retain behavior from dfn_core implementation of 'call', we do not
-        // unlock the neuron if we are recovering from a trap. ic_cdk::api::call
-        // always cleans up, so we have to check this.
+        // In the case of a panic, the state of the ledger account representing the neuron's stake
+        // may be inconsistent with the internal state of governance.  In that case,
+        // we want to prevent further operations with that neuron until the issue can be
+        // investigated and resolved, which will require code changes.
         if ic_cdk::api::call::is_recovering_from_trap() {
             return;
         }

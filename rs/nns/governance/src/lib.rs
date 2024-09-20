@@ -244,24 +244,21 @@ impl IcClock {
     }
 }
 
-fn time_u64_nanos() -> u64 {
-    if cfg!(target_arch = "wasm32") {
-        ic_cdk::api::time()
+fn now_seconds() -> u64 {
+    let duration = if cfg!(target_arch = "wasm32") {
+        Duration::from_nanos(ic_cdk::api::time())
     } else {
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("Failed to get time since epoch")
-            .as_nanos()
-            .try_into()
-            .expect("Failed to convert time to u64")
-    }
+    };
+    duration.as_secs()
 }
 
 impl Clock for IcClock {
     fn now(&self) -> u64 {
         // Step 1: Read the real time.
-
-        let real_timestamp_seconds = Duration::from_nanos(time_u64_nanos()).as_secs();
+        let real_timestamp_seconds = now_seconds();
 
         // Step 2: Apply time warp.
         let TimeWarp { delta_s } = self.time_warp;
