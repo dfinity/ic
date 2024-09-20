@@ -799,7 +799,6 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            OnLowWasmMemoryHookStatus::default(),
         )
     }
 
@@ -810,7 +809,6 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self {
             canister_id,
@@ -836,7 +834,7 @@ impl SystemState {
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::from(0),
-            on_low_wasm_memory_hook_status,
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
         }
     }
 
@@ -966,7 +964,6 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         )
     }
 
