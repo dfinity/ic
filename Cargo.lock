@@ -6699,7 +6699,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-consensus",
  "ic-consensus-mocks",
  "ic-crypto-prng",
  "ic-interfaces",
@@ -9694,6 +9693,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-initial-supply"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-base-types",
+ "ic-nervous-system-runtime",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [
@@ -10380,6 +10393,7 @@ version = "0.0.1"
 dependencies = [
  "ic-base-types",
  "ic-config",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
@@ -11595,14 +11609,15 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.13.5",
  "ic-nervous-system-common",
+ "ic-nervous-system-initial-supply",
  "ic-nervous-system-runtime",
- "ic-nervous-system-string",
  "ic-nns-constants",
  "ic-sns-swap-proto-library",
  "icrc-ledger-types",
  "lazy_static",
  "maplit",
  "mockall 0.13.0",
+ "num-traits",
  "rust_decimal",
  "tokio",
 ]
@@ -17541,6 +17556,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-string",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",

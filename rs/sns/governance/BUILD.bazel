@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -168,7 +168,7 @@ rust_canister(
 
 rust_test(
     name = "governance_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],

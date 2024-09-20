@@ -900,6 +900,13 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
             .map(|x| x.max)
             .unwrap_or(min);
         let min_block_proposal_height = min;
+        let max_equivocation_proof_height = self
+            .validated
+            .equivocation_proof()
+            .height_range()
+            .map(|x| x.max)
+            .unwrap_or(min);
+        let min_equivocation_proof_height = min;
 
         // Because random tape & shares do not come in a consecutive sequence, we
         // compute a custom iterator through their height range to either return
@@ -1008,6 +1015,15 @@ impl ValidatedPoolReader<ConsensusMessage> for ConsensusPoolImpl {
                         .get_by_height_range(HeightRange {
                             min: min_block_proposal_height,
                             max: max_block_proposal_height,
+                        })
+                        .map(|x| x.into_message()),
+                )
+                .chain(
+                    self.validated
+                        .equivocation_proof()
+                        .get_by_height_range(HeightRange {
+                            min: min_equivocation_proof_height,
+                            max: max_equivocation_proof_height,
                         })
                         .map(|x| x.into_message()),
                 )

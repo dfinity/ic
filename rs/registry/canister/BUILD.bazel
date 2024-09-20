@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/string",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -100,8 +101,8 @@ ALIASES = {}
 
 LIB_SRCS = glob(
     [
-        "gen/**",
-        "src/**",
+        "gen/**/*.rs",
+        "src/**/*.rs",
     ],
     exclude = ["**/*tests*/**"],
 )

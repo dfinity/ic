@@ -63,7 +63,7 @@ cargo_build_script(
 
 rust_library(
     name = "cmc",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "cycles_minting_canister",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -73,7 +73,7 @@ rust_library(
 
 rust_canister(
     name = "cycles-minting-canister",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":cmc.did",
