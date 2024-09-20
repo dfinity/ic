@@ -225,7 +225,7 @@ pub fn start_server(
         // offloading the computation to an event loop here we directly access the shared state.
         blockchain_state.clone(),
         blockchain_manager_tx,
-        &metrics_registry,
+        metrics_registry,
     );
 
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
