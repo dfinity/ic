@@ -34,7 +34,7 @@ use ic_replicated_state::{
         execution_state::Memory,
         system_state::{
             wasm_chunk_store::{self, WasmChunkStore},
-            CyclesUseCase, OnLowWasmMemoryHookStatus, ReservationError,
+            CyclesUseCase, ReservationError,
         },
         NextExecution,
     },
