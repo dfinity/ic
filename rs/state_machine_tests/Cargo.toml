@@ -17,7 +17,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
@@ -79,4 +79,4 @@ wat = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
-proptest = "1.0"
+proptest = { workspace = true }

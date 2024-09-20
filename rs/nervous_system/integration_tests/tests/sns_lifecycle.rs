@@ -1,3 +1,4 @@
+use crate::sns::root::get_sns_canisters_summary;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use canister_test::Wasm;
@@ -27,6 +28,7 @@ use ic_sns_governance::{
     pb::v1::{self as sns_pb, NeuronPermissionType},
 };
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
+use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
     pb::v1::{
         new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
@@ -52,7 +54,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 struct DirectParticipantConfig {
     pub use_ticketing_system: bool,
 }
@@ -1270,7 +1272,6 @@ fn test_sns_lifecycle(
                 nns_proposal_id
             );
         };
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         neurons_fund_audit_info
             .final_neurons_fund_participation
             .unwrap()
@@ -1280,10 +1281,7 @@ fn test_sns_lifecycle(
             .into_iter()
             .map(|neurons_fund_neuron_portion| {
                 (
-                    neurons_fund_neuron_portion
-                        .controller
-                        .or(neurons_fund_neuron_portion.hotkey_principal)
-                        .unwrap(),
+                    neurons_fund_neuron_portion.controller.unwrap(),
                     neurons_fund_neuron_portion,
                 )
             })
@@ -1738,7 +1736,6 @@ fn test_sns_lifecycle(
             );
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
-        #[allow(deprecated)] // TODO(NNS1-3198): remove once hotkey_principal is removed
         let mut final_neurons_fund_participation: BTreeMap<PrincipalId, Vec<u64>> =
             neurons_fund_audit_info
                 .final_neurons_fund_participation
@@ -1750,10 +1747,7 @@ fn test_sns_lifecycle(
                 .fold(
                     BTreeMap::new(),
                     |mut neuron_portions_per_controller, neuron_portion| {
-                        let controller_principal_id = neuron_portion
-                            .controller
-                            .or(neuron_portion.hotkey_principal)
-                            .unwrap();
+                        let controller_principal_id = neuron_portion.controller.unwrap();
                         let amount_icp_e8s = neuron_portion.amount_icp_e8s.unwrap();
                         neuron_portions_per_controller
                             .entry(controller_principal_id)
@@ -1869,6 +1863,63 @@ fn test_sns_lifecycle(
 
             assert_eq!(controllers, expected_new_controllers);
         }
+    }
+
+    // Ensure that the archive canister is spawned and can be found through SNS Root.
+    sns::ensure_archive_canister_is_spawned_or_panic(
+        &pocket_ic,
+        sns_governance_canister_id,
+        sns_ledger_canister_id,
+    );
+    // SNS Root polls archives every 24 hours, so we need to advance time to trigger the polling.
+    pocket_ic.advance_time(Duration::from_secs(24 * 60 * 60));
+    pocket_ic.tick();
+    let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+    assert!(
+        !response.archives_canister_summaries().is_empty(),
+        "No archives found from get_sns_canisters_summary response: {:#?}",
+        response
+    );
+
+    // Check that the SNS framework canister settings are as expected
+    {
+        // get SNS canisters summary
+        let sns_canisters_summary = get_sns_canisters_summary(&pocket_ic, sns_root_canister_id);
+        fn get_wasm_memory_limit(summary: Option<CanisterSummary>) -> u64 {
+            u64::try_from(
+                summary
+                    .unwrap()
+                    .status
+                    .unwrap()
+                    .settings
+                    .wasm_memory_limit
+                    .unwrap()
+                    .0,
+            )
+            .unwrap()
+        }
+        // Governance should have a higher memory limit
+        assert_eq!(
+            get_wasm_memory_limit(sns_canisters_summary.governance),
+            4 * 1024 * 1024 * 1024,
+        );
+        // Other canisters should have a lower memory limit
+        assert_eq!(
+            get_wasm_memory_limit(sns_canisters_summary.root),
+            3 * 1024 * 1024 * 1024,
+        );
+        assert_eq!(
+            get_wasm_memory_limit(sns_canisters_summary.swap),
+            3 * 1024 * 1024 * 1024,
+        );
+        assert_eq!(
+            get_wasm_memory_limit(sns_canisters_summary.ledger),
+            3 * 1024 * 1024 * 1024,
+        );
+        assert_eq!(
+            get_wasm_memory_limit(sns_canisters_summary.index),
+            3 * 1024 * 1024 * 1024,
+        );
     }
 }
 

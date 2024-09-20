@@ -72,7 +72,7 @@ pub enum QueryExecutionType {
 /// This enum indicates whether execution of a non-replicated query
 /// should keep track of the state or not.
 #[doc(hidden)]
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum NonReplicatedQueryKind {
     Stateful { call_origin: CallOrigin },
     Pure { caller: PrincipalId },

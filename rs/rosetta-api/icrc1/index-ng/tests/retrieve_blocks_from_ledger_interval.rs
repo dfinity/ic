@@ -114,18 +114,18 @@ fn should_install_and_upgrade_with_valid_values() {
 
 #[test]
 fn should_install_and_upgrade_without_build_index_interval_field_set() {
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     enum OldIndexArg {
         Init(OldInitArg),
         Upgrade(OldUpgradeArg),
     }
 
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     struct OldInitArg {
         pub ledger_id: Principal,
     }
 
-    #[derive(CandidType, Debug, Deserialize, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     struct OldUpgradeArg {
         pub ledger_id: Option<Principal>,
     }

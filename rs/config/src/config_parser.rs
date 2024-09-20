@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// ConfigSource specifies source of a serialized configuration file.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ConfigSource {
     /// Use the hard-coded default configuration.
     Default,
@@ -120,7 +120,7 @@ mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
 
-    #[derive(PartialEq, Debug, Default, Serialize, Deserialize)]
+    #[derive(PartialEq, Debug, Default, Deserialize, Serialize)]
     struct KV {
         key: String,
         value: String,

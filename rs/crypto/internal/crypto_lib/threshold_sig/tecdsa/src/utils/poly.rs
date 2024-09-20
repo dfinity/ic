@@ -282,7 +282,7 @@ impl Polynomial {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub enum CommitmentOpening {
     Simple(EccScalar),
     Pedersen(EccScalar, EccScalar),
@@ -378,7 +378,7 @@ impl TryFrom<&IDkgOpening> for CommitmentOpening {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub enum CommitmentOpeningBytes {
     Simple(EccScalarBytes),
     Pedersen(EccScalarBytes, EccScalarBytes),
@@ -403,7 +403,7 @@ impl TryFrom<&CommitmentOpening> for CommitmentOpeningBytes {
 }
 
 /// A simple (discrete log) commitment to a polynomial
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SimpleCommitment {
     pub points: Vec<EccPoint>,
 }
@@ -465,7 +465,7 @@ impl SimpleCommitment {
 }
 
 /// A Pederson commitment to a polynomial
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PedersenCommitment {
     pub points: Vec<EccPoint>,
 }
@@ -532,14 +532,14 @@ impl PedersenCommitment {
 }
 
 /// The type of a commitment to a polynomial
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum PolynomialCommitmentType {
     Simple,
     Pedersen,
 }
 
 /// Some type of commitment to a polynomial
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum PolynomialCommitment {
     Simple(SimpleCommitment),
     Pedersen(PedersenCommitment),

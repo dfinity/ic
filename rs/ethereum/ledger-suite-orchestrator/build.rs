@@ -13,7 +13,7 @@ fn main() {
             Some(wasm_path) => PathBuf::from(wasm_path),
             None => cargo_manifest_dir
                 // This is a hack.
-                // Cargo is called on CI via gitlab-ci/src/rust_lint/lint.sh.
+                // Cargo is called on CI via ci/src/rust_lint/lint.sh.
                 // The included WASMS binary for ledger, index and archive canisters are built by BAZEL tasks
                 // which would need here to be somehow spawned by Cargo. To avoid this, we just use a wasm binary that
                 // happens to be already checked-in in the repo.

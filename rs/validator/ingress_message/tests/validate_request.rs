@@ -1873,7 +1873,7 @@ fn random_user_key_pairs<R: Rng + CryptoRng>(
 }
 
 fn max_ingress_expiry_at(current_time: Time) -> Time {
-    use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+    use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
     current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
 }
 

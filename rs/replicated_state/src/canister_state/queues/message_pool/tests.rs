@@ -1,5 +1,3 @@
-use crate::canister_state::queues::QueueOp;
-
 use super::*;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
@@ -96,55 +94,6 @@ fn test_insert_outbound_request_deadline_rounding() {
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
     assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
-}
-
-#[test]
-fn test_replace_inbound_timeout_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-    let id = placeholder.id();
-    assert_eq!(Kind::Response, id.kind());
-    assert_eq!(Context::Inbound, id.context());
-    assert_eq!(Class::BestEffort, id.class());
-    assert_eq!(0, pool.len());
-    assert_eq!(None, pool.get(id));
-
-    // Replace the placeholder with a best-effort response.
-    let msg: RequestOrResponse = response(time(5)).into();
-    pool.replace_inbound_timeout_response(placeholder, msg.clone());
-    assert_eq!(1, pool.len());
-    assert_eq!(Some(&response(time(5)).into()), pool.get(id));
-
-    // Response is in load shedding queue, but not in deadline queue.
-    assert!(pool.expire_messages(time(u32::MAX).into()).is_empty());
-    assert_eq!(Some((id, msg)), pool.shed_largest_message());
-    assert_eq!(0, pool.len());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_request() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a request.
-    pool.replace_inbound_timeout_response(placeholder, request(NO_DEADLINE).into());
-}
-
-#[test]
-#[should_panic(expected = "Message must be a best-effort response")]
-fn test_replace_guaranteed_response() {
-    let mut pool = MessagePool::default();
-
-    // Create a placeholder for a timeout response.
-    let placeholder = pool.insert_inbound_timeout_response();
-
-    // Replace the placeholder with a guaranteed response.
-    pool.replace_inbound_timeout_response(placeholder, response(NO_DEADLINE).into());
 }
 
 #[test]
@@ -892,6 +841,12 @@ pub(crate) fn new_request_message_id(generator: u64, class: Class) -> Id {
 /// Generates an `Id` for an inbound response.
 pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Response, Context::Inbound, class, generator)
+}
+
+#[derive(PartialEq, Eq)]
+enum QueueOp {
+    Push,
+    Pop,
 }
 
 /// Fixture for validating updates to the message stats. Relies on a parallel

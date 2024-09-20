@@ -12,7 +12,7 @@ const SUPPORTED_SUBNET_TYPES: [SubnetType; 2] =
     [SubnetType::Application, SubnetType::VerifiedApplication];
 
 /// The argument for the `prepare_canister_migration` update call.
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct PrepareCanisterMigrationPayload {
     /// The list of canister ID ranges to be added into canister migrations.
     pub canister_id_ranges: Vec<CanisterIdRange>,
@@ -275,8 +275,10 @@ mod tests {
         let (mutate_request, source_node_ids_and_dkg_pks) =
             prepare_registry_with_nodes(1, source_subnet.nodes_count);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
-        let (mutate_request, destination_node_ids_and_dkg_pks) =
-            prepare_registry_with_nodes(2, destination_subnet.nodes_count);
+        let (mutate_request, destination_node_ids_and_dkg_pks) = prepare_registry_with_nodes(
+            1 + source_subnet.nodes_count as u8,
+            destination_subnet.nodes_count,
+        );
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         // Add subnets to the registry

@@ -86,13 +86,6 @@ type CreateCanisterError = variant {
     // The reason why creating a canister failed.
     create_error : text;
   };
-  RefundFailed : record {
-    // The reason why creating a canister failed.
-    create_error : text;
-
-    // The reason why refunding cycles failed.
-    refund_error : text;
-  };
 };
 
 type NotifyError = variant {
@@ -241,6 +234,8 @@ service : (opt CyclesCanisterInitPayload) -> {
   // Returns the mapping from principals to subnets in which they are authorized
   // to create canisters.
   get_principals_authorized_to_create_canisters_to_subnets : () -> (PrincipalsAuthorizedToCreateCanistersToSubnetsResponse) query;
+
+  get_default_subnets: () -> (vec principal) query;
 
   get_build_metadata : () -> (text) query;
 };

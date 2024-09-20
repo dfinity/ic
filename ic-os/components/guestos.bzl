@@ -47,6 +47,7 @@ component_files = {
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
     # misc
+    Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/serial-getty@/guestos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",

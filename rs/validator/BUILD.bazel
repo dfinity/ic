@@ -4,11 +4,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/constants",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/sha2",
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tree_hash",
+    "//rs/limits",
     "//rs/types/types",
     "@crate_index//:hex",
     "@crate_index//:thiserror",

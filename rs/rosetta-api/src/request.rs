@@ -21,7 +21,7 @@ pub mod transaction_results;
 /// sans the `operation_identifier`, and `FEE` Operations.
 /// Multiple `Request`s can be converted to `Operation`s via the
 /// `TransactionBuilder`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum Request {
     /// Contains `Send`, `Mint`, `Approve` and `Burn` operations.

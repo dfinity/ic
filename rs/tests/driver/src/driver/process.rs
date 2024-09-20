@@ -116,7 +116,7 @@ impl Process {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ChannelName {
     StdOut,
     StdErr,

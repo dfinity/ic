@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:itertools",
+    "@crate_index//:pcre2",
+    "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+    "@crate_index//:indoc",
+]
+
+rust_library(
+    name = "partition_tools",
+    srcs = glob(["src/**/*.rs"]),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "partition_tools_test",
+    crate = ":partition_tools",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

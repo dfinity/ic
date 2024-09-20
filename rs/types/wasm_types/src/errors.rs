@@ -1,5 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+/// Create a link to this section of the Execution Errors documentation.
+pub fn doc_ref(section: &str) -> String {
+    format!(
+        "http://internetcomputer.org/docs/current/references/execution-errors#{}",
+        section
+    )
+}
+
 pub enum ErrorHelp {
     UserError {
         suggestion: String,
@@ -26,7 +34,7 @@ pub trait AsErrorHelp {
 }
 
 /// Represents an error that can happen when parsing or encoding a Wasm module
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmError(String);
 
 impl WasmError {
@@ -43,7 +51,7 @@ impl std::fmt::Display for WasmError {
 }
 
 /// Different errors that be returned by `validate_wasm_binary`
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum WasmValidationError {
     /// wasmtime::Module::validate() failed
     WasmtimeValidation(String),
@@ -55,8 +63,12 @@ pub enum WasmValidationError {
     InvalidImportSection(String),
     /// Module contains an invalid export section
     InvalidExportSection(String),
-    /// Module contains an invalid export section caused by a user error.
-    UserInvalidExportSection(String),
+    /// Same function name is exported multiple times (with different types).
+    DuplicateExport { name: String },
+    /// There are too many exports defined in the module.
+    TooManyExports { defined: usize, allowed: usize },
+    /// The total length of exported function names is too large.
+    ExportedNamesTooLong { total_length: usize, allowed: usize },
     /// Module contains an invalid data section
     InvalidDataSection(String),
     /// Module contains an invalid custom section
@@ -107,8 +119,32 @@ impl std::fmt::Display for WasmValidationError {
             Self::InvalidExportSection(err) => {
                 write!(f, "Wasm module has an invalid export section. {err}")
             }
-            Self::UserInvalidExportSection(err) => {
-                write!(f, "Wasm module has an invalid export section. {}", err)
+            Self::DuplicateExport { name } => {
+                write!(
+                    f,
+                    "Duplicate function '{name}' exported multiple times \
+                    with different call types: update, query, or composite_query."
+                )
+            }
+            Self::TooManyExports { defined, allowed } => {
+                write!(
+                    f,
+                    "The number of exported functions called \
+                    `canister_update <name>`, `canister_query <name>`, or \
+                    `canister_composite_query <name>` is {defined} which exceeds {allowed}."
+                )
+            }
+            Self::ExportedNamesTooLong {
+                total_length,
+                allowed,
+            } => {
+                write!(
+                    f,
+                    "The sum of `<name>` lengths in exported \
+                    functions called `canister_update <name>`, `canister_query <name>`, \
+                    or `canister_composite_query <name>` is {total_length} which exceeds \
+                    the allowed limit of {allowed}."
+                )
             }
             Self::InvalidDataSection(err) => {
                 write!(f, "Wasm module has an invalid data section. {err}")
@@ -185,22 +221,61 @@ impl AsErrorHelp for WasmValidationError {
             | WasmValidationError::InvalidGlobalSection(_)
             | WasmValidationError::UnsupportedWasmInstruction { .. }
             | WasmValidationError::TooManyCustomSections { .. } => ErrorHelp::ToolchainError,
-            WasmValidationError::UserInvalidExportSection(_)
-            | WasmValidationError::TooManyFunctions { .. }
-            | WasmValidationError::TooManyGlobals { .. }
-            | WasmValidationError::FunctionComplexityTooHigh { .. }
-            | WasmValidationError::FunctionTooLarge { .. }
-            | WasmValidationError::CodeSectionTooLarge { .. }
-            | WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
-                suggestion: "".to_string(),
-                doc_link: "".to_string(),
+            WasmValidationError::DuplicateExport { name } => ErrorHelp::UserError {
+                suggestion: format!(
+                    "Try defining different versions of the function for each \
+                call type, e.g. `{name}_update`, `{name}_query`, etc."
+                ),
+                doc_link: doc_ref("wasm-module-duplicate-exports"),
+            },
+            WasmValidationError::TooManyExports { .. } => ErrorHelp::UserError {
+                suggestion: "Try combining multiple endpoints into a single endpoint.".to_string(),
+                doc_link: doc_ref("wasm-module-exports-too-many-methods"),
+            },
+            WasmValidationError::ExportedNamesTooLong { .. } => ErrorHelp::UserError {
+                suggestion: "Try using shorter method names.".to_string(),
+                doc_link: doc_ref("wasm-module-sum-of-exported-name-lengths-too-large"),
+            },
+            WasmValidationError::TooManyFunctions { .. } => ErrorHelp::UserError {
+                suggestion: "Try spliting this canister into multiple canisters.".to_string(),
+                doc_link: doc_ref("wasm-module-too-many-functions"),
+            },
+            WasmValidationError::TooManyGlobals { .. } => ErrorHelp::UserError {
+                suggestion: "Try collecting multiple globals into a single \
+                structured which can be stored on the heap."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-many-globals"),
+            },
+            WasmValidationError::FunctionComplexityTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-complexity-too-high"),
+            },
+            WasmValidationError::FunctionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try breaking large functions up into multiple \
+                smaller functions."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-function-too-large"),
+            },
+            WasmValidationError::CodeSectionTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module code section using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-code-section-too-large"),
+            },
+            WasmValidationError::ModuleTooLarge { .. } => ErrorHelp::UserError {
+                suggestion: "Try shrinking the module using tools like \
+                `ic-wasm` or splitting the logic across multiple canisters."
+                    .to_string(),
+                doc_link: doc_ref("wasm-module-too-large"),
             },
         }
     }
 }
 
 /// Different errors that can be returned by `instrument`
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum WasmInstrumentationError {
     /// Failure in deserialization the wasm module
     WasmDeserializeError(WasmError),
@@ -255,7 +330,7 @@ impl AsErrorHelp for WasmInstrumentationError {
 }
 
 /// Different errors that be returned by the Wasm engine
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum WasmEngineError {
     FailedToInitializeEngine,
     FailedToInstantiateModule(String),

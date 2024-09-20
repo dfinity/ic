@@ -567,7 +567,6 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
         .block
         .unwrap();
     env.rosetta.wait_until_synced_up_to(1).await.unwrap();
-    println!("synced up to 2");
     // Enabling Rosetta Blocks Mode should not change blocks before
     // the first rosetta index, in this case block 0
     let block0 = env

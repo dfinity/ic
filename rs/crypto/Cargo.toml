@@ -39,7 +39,7 @@ ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 rustls = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 slog = { workspace = true }
@@ -91,8 +91,8 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 k256 = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

@@ -21,11 +21,14 @@ rosetta-core = { path = "../rosetta_core" }
 serde = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+ic-crypto-secp256k1 = { path = "../../crypto/secp256k1" }
+ic-crypto-ed25519 = { path = "../../crypto/ed25519" }
+icp-ledger = { path = "../icp_ledger" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 
 [dev-dependencies]
 ic-icp-rosetta-runner = { path = "../runner" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 tempfile = { workspace = true }
 ic-ledger-test-utils = { path = "../icp_ledger/test_utils" }
-icp-ledger = { path = "../icp_ledger" }
 ic-rosetta-test-utils = { path = "../test_utils" }

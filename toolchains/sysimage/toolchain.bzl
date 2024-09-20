@@ -52,7 +52,7 @@ def _build_container_base_image_impl(ctx):
     inputs.append(ctx.file.dockerfile)
     args.extend(["--dockerfile", ctx.file.dockerfile.path])
 
-    # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
+    # Dir mounts prepared in `ci/container/container-run.sh`
     args.extend(["--tmpfs_container_sys_dir"])
 
     if ctx.attr.build_args:
@@ -130,7 +130,7 @@ def _build_container_filesystem_impl(ctx):
         args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
         args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
 
-    # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
+    # Dir mounts prepared in `ci/container/container-run.sh`
     args.extend(["--tmpfs-container-sys-dir"])
     args.extend(["--no-cache"])
 
@@ -236,7 +236,7 @@ vfat_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -305,7 +305,7 @@ fat32_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -376,11 +376,11 @@ ext4_image = _icos_build_rule(
         ),
         "_diroid": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/diroid",
+            default = "//rs/ic_os/build_tools/diroid",
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -444,11 +444,11 @@ inject_files = _icos_build_rule(
         ),
         "_inject_files": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/inject_files:inject-files",
+            default = "//rs/ic_os/build_tools/inject_files:inject-files",
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -501,7 +501,7 @@ disk_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -555,7 +555,7 @@ lvm_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )
@@ -612,7 +612,7 @@ upgrade_image = _icos_build_rule(
         ),
         "_dflate": attr.label(
             allow_files = True,
-            default = "//rs/ic_os/dflate",
+            default = "//rs/ic_os/build_tools/dflate",
         ),
     },
 )

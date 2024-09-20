@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }

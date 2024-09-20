@@ -10,7 +10,7 @@ use maplit::hashmap;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 /// Whether the neuron should be stored in heap or stable storage.
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum NeuronLocation {
     Heap,
     Stable,
@@ -38,7 +38,7 @@ impl NeuronLocation {
 }
 
 /// Whether the neuron is of a typical size or a maximum size.
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 enum NeuronSize {
     Typical,
     Maximum,

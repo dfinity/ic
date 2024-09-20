@@ -357,6 +357,10 @@ fn build_types_proto(def: &Path, out: &Path) {
         "#[allow(clippy::large_enum_variant)]",
     );
     config.type_attribute(
+        ".types.v1.StrippedConsensusMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
+    config.type_attribute(
         ".types.v1.PreSignatureInCreation",
         "#[allow(clippy::large_enum_variant)]",
     );

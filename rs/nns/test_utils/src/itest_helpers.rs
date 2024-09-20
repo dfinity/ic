@@ -703,7 +703,7 @@ where
 }
 
 /// Encapsulates different test scenarios, with different upgrade modes.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UpgradeTestingScenario {
     Never,
     Always,

@@ -74,7 +74,7 @@ fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
         .collect::<Vec<u8>>()
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct IPv4Config {
     ip_addr: String,
     gateway_ip_addr: String,
@@ -164,7 +164,7 @@ impl fmt::Display for IPv4Config {
 }
 
 /// The payload of an update request to add a new node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {
     // Raw bytes of the protobuf, but these should be PublicKey
     pub node_signing_pk: Vec<u8>,
@@ -189,13 +189,13 @@ pub struct AddNodePayload {
 }
 
 /// The payload of a request to update keys of the existing node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct UpdateNodeDirectlyPayload {
     pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
 }
 
 // The payload of a request to update the IPv4 configuration of an existing node
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpdateNodeIPv4ConfigDirectlyPayload {
     pub node_id: NodeId,
     pub ipv4_config: Option<IPv4Config>,

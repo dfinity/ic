@@ -37,6 +37,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:hex",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
@@ -91,6 +92,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
@@ -154,6 +156,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/rosetta-api/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_nextmigrationversionmemorymanager",
+            ["next-migration-version-memory-manager"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_nextmigrationversionmemorymanager",
+            [
+                "next-migration-version-memory-manager",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
@@ -177,6 +198,7 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
+            ":ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -191,6 +213,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
         },
         deps = [
             # Keep sorted.
@@ -199,6 +222,7 @@ rust_test(
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
+            "//rs/rosetta-api/icrc1/test_utils",
             "//rs/rosetta-api/ledger_canister_core",
             "//rs/rosetta-api/ledger_core",
             "//rs/rust_canisters/dfn_http_metrics",
@@ -209,11 +233,13 @@ rust_test(
             "@crate_index//:candid",
             "@crate_index//:cddl",
             "@crate_index//:hex",
+            "@crate_index//:ic-agent",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:leb128",
             "@crate_index//:num-bigint",
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
+            "@crate_index//:rand",
             "@crate_index//:serde_bytes",
         ] + extra_deps,
     )
@@ -284,6 +310,7 @@ rust_test(
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
             "@crate_index//:serde_bytes",
         ] + extra_deps,

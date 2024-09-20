@@ -86,7 +86,7 @@ enum OperationType {
     },
 }
 
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The type of operation to perform

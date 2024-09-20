@@ -4,6 +4,7 @@ set -e
 
 # Set the transient or persistent hostname.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -51,16 +52,6 @@ function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${FILE}" == "" -o "${TYPE}" == "" ]; then
         $0 --help
     fi
-}
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
 }
 
 function read_variables() {

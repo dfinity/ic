@@ -602,7 +602,7 @@ mod database_access {
     }
 }
 
-#[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct HashedBlock {
     pub block: EncodedBlock,
     pub hash: HashOf<EncodedBlock>,
@@ -644,7 +644,7 @@ impl TryFrom<&Row<'_>> for HashedBlock {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
@@ -665,7 +665,7 @@ fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
     *ba
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum RosettaBlocksMode {
     Disabled,
     Enabled { first_rosetta_block_index: u64 },

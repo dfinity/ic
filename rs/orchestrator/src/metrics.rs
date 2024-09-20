@@ -17,7 +17,7 @@ pub struct OrchestratorMetrics {
     pub critical_error_cup_deserialization_failed: IntCounter,
 }
 
-#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
 pub enum KeyRotationStatus {
     Disabled,
     TooRecent,

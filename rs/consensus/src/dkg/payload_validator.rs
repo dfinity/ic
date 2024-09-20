@@ -29,7 +29,7 @@ use prometheus::IntCounterVec;
 // is never used` warning on this enum even though we are implicitly reading them when we log the
 // enum. See https://github.com/rust-lang/rust/issues/88900
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
@@ -52,7 +52,7 @@ pub(crate) enum InvalidDkgPayloadReason {
 /// Possible failures which could occur while validating a dkg payload. They don't imply that the
 /// payload is invalid.
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum DkgPayloadValidationFailure {
     PayloadCreationFailed(PayloadCreationError),
     /// Crypto related errors.

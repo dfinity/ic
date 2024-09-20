@@ -30,7 +30,7 @@ const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct PagePtr(*mut u8);
 
 // SAFETY: All shared pages are immutable.
@@ -429,7 +429,7 @@ impl AllocationArea {
 /// due to multiple page allocators in the sandbox process sharing the same
 /// backing file.
 /// See `PageAllocatorRegistry`.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct PageAllocatorId(usize);
 
 impl Default for PageAllocatorId {
@@ -445,7 +445,7 @@ impl Default for PageAllocatorId {
 // Indicates whether the backing file is owned by the current allocator or
 // another allocator. The owner is responsible for freeing the physical memory
 // of dropped pages by punching holes in the backing file.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BackingFileOwner {
     CurrentAllocator,
     AnotherAllocator,
