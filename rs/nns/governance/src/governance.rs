@@ -117,6 +117,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
+    future::Future,
     ops::RangeInclusive,
     string::ToString,
 };
@@ -1706,6 +1707,24 @@ impl XdrConversionRatePb {
             timestamp_seconds: Some(0),
             xdr_permyriad_per_icp: Some(10_000),
         }
+    }
+}
+
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.s
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
     }
 }
 
@@ -4054,19 +4073,7 @@ impl Governance {
         //
         // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            spawn(governance.perform_action(pid, action.clone()));
-        }
-        // This is needed for tests
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            governance
-                .perform_action(pid, action.clone())
-                .now_or_never()
-                .expect("Future could not execute in non-WASM environment");
-        }
+        spawn_in_canister_env(governance.perform_action(pid, action.clone()));
     }
 
     /// Mints node provider rewards to a neuron or to a ledger account.
