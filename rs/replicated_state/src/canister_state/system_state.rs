@@ -377,7 +377,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
