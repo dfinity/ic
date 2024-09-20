@@ -236,7 +236,7 @@ pub fn start_server(
         adapter_state.clone(),
         get_successors_handler,
         transaction_manager_tx,
-        &metrics_registry,
+        metrics_registry,
     );
 
     start_main_event_loop(
@@ -246,6 +246,6 @@ pub fn start_server(
         transaction_manager_rx,
         adapter_state,
         blockchain_manager_rx,
-        &metrics_registry,
+        metrics_registry,
     );
 }
