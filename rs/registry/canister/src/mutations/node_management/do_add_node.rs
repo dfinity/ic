@@ -10,7 +10,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord},
+    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeType},
 };
 use idna::domain_to_ascii_strict;
 
@@ -75,11 +75,26 @@ impl Registry {
             ));
         }
 
-        // 3. Validate keys and get the node id
+        // 3. Get valid type if type is in request
+        let node_type = payload
+            .node_type
+            .as_ref()
+            .map(|t| {
+                try_str_to_node_type(t).map_err(|e| {
+                    format!(
+                        "{}do_add_node: Error parsing node type from payload: {}",
+                        LOG_PREFIX, e
+                    )
+                })
+            })
+            .transpose()?
+            .map(|node_type| node_type as i32);
+
+        // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
             .map_err(|err| format!("{}do_add_node: {}", LOG_PREFIX, err))?;
 
-        // 4. Validate the domain is valid
+        // 5. Validate the domain is valid
         let domain: Option<String> = payload
             .domain
             .as_ref()
@@ -93,7 +108,7 @@ impl Registry {
             })
             .transpose()?;
 
-        // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
+        // 6. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
         let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
             ipv4_config.panic_on_invalid();
             IPv4InterfaceConfig {
@@ -113,7 +128,7 @@ impl Registry {
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
-        // 6. Create the Node Record
+        // 7. Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
@@ -125,10 +140,10 @@ impl Registry {
             node_type,
         };
 
-        // 7. Insert node, public keys, and crypto keys
+        // 8. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
-        // 8. Update the Node Operator record
+        // 9. Update the Node Operator record
         node_operator_record.node_allowance -= 1;
 
         let update_node_operator_record =
@@ -136,13 +151,25 @@ impl Registry {
 
         mutations.push(update_node_operator_record);
 
-        // 9. Check invariants before applying mutations
+        // 10. Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
 
         Ok(node_id)
     }
+}
+
+// try to convert input string inot NodeType enum
+fn try_str_to_node_type(type_string: &str) -> Result<NodeType, String> {
+    Ok(match type_string {
+        "type0" => NodeType::Type0,
+        "type1" => NodeType::Type1,
+        "type2" => NodeType::Type2,
+        "type3" => NodeType::Type3,
+        "type3.1" => NodeType::Type3dot1,
+        _ => return Err(format!("Invalid node type: {}", type_string)),
+    })
 }
 
 /// Parses the ConnectionEndpoint string
@@ -302,6 +329,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
+            node_type: None,
         };
 
         (payload, node_public_keys)
@@ -340,6 +368,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
+            node_type: None,
         };
     }
 
