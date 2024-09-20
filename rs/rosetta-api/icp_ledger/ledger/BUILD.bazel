@@ -159,3 +159,15 @@ rust_ic_test(
         "@crate_index//:serde_bytes",
     ],
 )
+
+# Deploys the ledger canister to a running local replica.
+sh_binary(
+    name = "dfx_deploy",
+    srcs = ["scripts/dfx_deploy.sh"],
+    data = [
+        "dfx.json",
+        ":ledger-canister-wasm",
+        "//rs/rosetta-api/icp_ledger:ledger.did",
+    ],
+    visibility = ["//visibility:public"],
+)

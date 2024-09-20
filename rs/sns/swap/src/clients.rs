@@ -1,12 +1,12 @@
 use crate::pb::v1::{
-    CanisterCallError, ClaimSwapNeuronsRequest, SetDappControllersRequest,
-    SetDappControllersResponse, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse,
+    CanisterCallError, SetDappControllersRequest, SetDappControllersResponse,
+    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
 };
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
 use ic_sns_governance::pb::v1::{
-    ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode, SetModeResponse,
+    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
+    SetModeResponse,
 };
 
 #[async_trait]

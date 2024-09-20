@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "@crate_index//:base64",
@@ -72,7 +71,7 @@ cargo_build_script(
 
 rust_library(
     name = "common",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nervous_system_common",
     proc_macro_deps = MACRO_DEPENDENCIES,

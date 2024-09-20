@@ -558,8 +558,7 @@ fn write_overlays_and_verify_with_tempdir(
                 let mut page_map = PageMap::new_for_testing();
                 let num_pages = combined_delta
                     .max_page_index()
-                    .map(|index| index.get() + 1)
-                    .unwrap_or(0);
+                    .map_or(0, |index| index.get() + 1);
                 page_map.update(
                     combined_delta
                         .iter()

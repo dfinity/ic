@@ -62,7 +62,7 @@ use ic_nns_governance_api::{
         NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
         UpdateCanisterSettings,
     },
-    proposal_helpers::{
+    proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
@@ -3071,12 +3071,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
-        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
-
         // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result.into())
+        Ok(result)
     }
 }
 

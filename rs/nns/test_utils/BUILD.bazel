@@ -21,6 +21,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
@@ -73,7 +74,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/handlers/root/impl:root",
     "//rs/sns/governance",
     "//rs/sns/init",
-    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
@@ -84,7 +84,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/handlers/root/impl:root--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -94,7 +93,7 @@ ALIASES = {}
 rust_library(
     name = "test_utils",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_nns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -105,7 +104,7 @@ rust_library(
 rust_library(
     name = "test_utils--test_feature",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_test_utils",
