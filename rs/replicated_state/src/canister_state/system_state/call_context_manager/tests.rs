@@ -497,7 +497,7 @@ fn callback_stats() {
 }
 
 #[test]
-fn test_expired_callbacks() {
+fn test_expire_callbacks() {
     fn callback_with_deadline(deadline: CoarseTime) -> Callback {
         Callback::new(
             CallContextId::from(1),
