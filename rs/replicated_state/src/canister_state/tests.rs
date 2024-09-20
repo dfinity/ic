@@ -998,17 +998,11 @@ fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
     used_stable_memory: u64,
     used_wasm_memory: u64,
 ) -> bool {
-    let wasm_memory_limit = if let Some(wasm_memory_limit) = wasm_memory_limit {
-        wasm_memory_limit
-    } else {
-        4 * GIB
-    };
+    let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
 
-    let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
+    let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
         std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-    } else {
-        wasm_memory_limit
-    };
+    });
 
     wasm_capacity < used_wasm_memory + wasm_memory_threshold
 }
