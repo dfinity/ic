@@ -81,9 +81,12 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
     let cups = 2 + e / k;
     ArtifactCounts {
         // We keep (f + 1) blocks for every height in range (h2, h3] (=d), and
-        // one finalized block per height in range [h0, h2] (=l-d).
-        block_proposals: (f + 1) * d + (l - d),
-        // The same bounds apply for block proposals and notarizations.
+        // one finalized block per height in range [h0, h2] (=l-d). The block
+        // maker component may additionally produce a single block above the
+        // notarized height.
+        block_proposals: (f + 1) * d + (l - d) + 1,
+        // The same bounds apply for block proposals and notarizations (with
+        // the exception of the +1 extra block).
         notarizations: (f + 1) * d + (l - d),
         // There can only be one finalization at every height. In the worst
         // case, the chain tip is a finalized block, in which case our upper
@@ -182,7 +185,7 @@ mod tests {
     fn test_pool_bounds() {
         // Example for 40-node subnet w/ 499 DKG interval, assuming e=50 and d=70
         let max_counts = ArtifactCounts {
-            block_proposals: 1531,
+            block_proposals: 1532,
             notarizations: 1531,
             finalization: 621,
             random_beacon: 622,
