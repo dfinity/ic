@@ -95,12 +95,10 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // Send configs to canisters, seed the rng.
     for (index, canister) in fixture.canisters().into_iter().enumerate() {
-        fixture.replace_config(canister, config.clone()).unwrap();
+        fixture.set_config(canister, config.clone()).unwrap();
         fixture.seed_rng(canister, seeds[index]);
-        fixture
-            .replace_reply_weight(canister, reply_weight)
-            .unwrap();
-        fixture.replace_call_weight(canister, call_weight).unwrap();
+        fixture.set_reply_weight(canister, reply_weight).unwrap();
+        fixture.set_call_weight(canister, call_weight).unwrap();
     }
 
     // Start chatter on all canisters.
@@ -111,33 +109,26 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         fixture.tick();
 
         // Check message memory limits are respected.
-        let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
-        if local_memory > LOCAL_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("Chatter: local memory exceeds limit");
-        }
-        if remote_memory > REMOTE_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("Chatter: remote memory exceeds limit");
-        }
+        fixture.expect_guaranteed_response_message_memory_taken_at_most(
+            "Chatter",
+            LOCAL_MESSAGE_MEMORY_CAPACITY,
+            REMOTE_MESSAGE_MEMORY_CAPACITY,
+        )?;
     }
 
-    // Stop chatter on all canisters; stop additional downstream calls.
+    // Stop chatter on all canisters.
     fixture.stop_chatter().unwrap();
-    for canister in fixture.canisters() {
-        fixture.replace_call_weight(canister, 0).unwrap();
-    }
 
     // Keep ticking until all calls are answered.
     for counter in 0.. {
         fixture.tick();
 
         // Check message memory limits are respected.
-        let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
-        if local_memory > LOCAL_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("Shutdown: local memory exceeds limit");
-        }
-        if remote_memory > REMOTE_MESSAGE_MEMORY_CAPACITY.into() {
-            return fixture.debug_info("Shutdown: remote memory exceeds limit");
-        }
+        fixture.expect_guaranteed_response_message_memory_taken_at_most(
+            "Shutdown",
+            LOCAL_MESSAGE_MEMORY_CAPACITY,
+            REMOTE_MESSAGE_MEMORY_CAPACITY,
+        )?;
 
         if fixture
             .collect_metrics()
@@ -148,7 +139,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         }
 
         if counter > SHUTDOWN_PHASE_MAX_ROUNDS {
-            return fixture.debug_info("shutdown phase hanging");
+            return fixture.failed_with_reason("shutdown phase hanging");
         }
     }
 
@@ -157,18 +148,11 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
     // Check the system agrees on 'no hanging calls'.
     if fixture.open_call_contexts_count().values().sum::<usize>() != 0 {
-        return fixture.debug_info("found call contexts after shutdown phase");
+        return fixture.failed_with_reason("found call contexts after shutdown phase");
     }
 
-    // All memory is freed without hanging calls.
-    let (local_memory, remote_memory) = fixture.guaranteed_response_message_memory_taken();
-    if local_memory > 0.into() {
-        return fixture.debug_info("local memory not back to 0");
-    }
-    if remote_memory > 0.into() {
-        return fixture.debug_info("remote memory not back to 0");
-    }
-    Ok(())
+    // After the fact, all memory is freed and back to 0.
+    fixture.expect_guaranteed_response_message_memory_taken_at_most("Final check", 0, 0)
 }
 
 #[derive(Debug)]
@@ -306,15 +290,11 @@ impl Fixture {
         unreachable!();
     }
 
-    /// Helper function for replacing canister state elements.
+    /// Helper function for setting canister state elements; returns the current element before
+    /// setting it.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    fn replace_canister_state<T>(
-        &self,
-        method: &str,
-        canister: CanisterId,
-        item: T,
-    ) -> Result<T, ()>
+    fn set_canister_state<T>(&self, canister: CanisterId, method: &str, item: T) -> Result<T, ()>
     where
         T: candid::CandidType + for<'a> candid::Deserialize<'a>,
     {
@@ -326,40 +306,36 @@ impl Fixture {
         candid::Decode!(&reply.bytes(), Result<T, ()>).unwrap()
     }
 
-    /// Replaces the `CanisterConfig` in `canister`.
+    /// Sets the `CanisterConfig` in `canister`; returns the current config.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn replace_config(
+    pub fn set_config(
         &self,
         canister: CanisterId,
         config: CanisterConfig,
     ) -> Result<CanisterConfig, ()> {
-        self.replace_canister_state("replace_config", canister, config)
+        self.set_canister_state(canister, "set_config", config)
     }
 
-    /// Replaces the `max_calls_per_heartbeat` in `canister`.
+    /// Sets the `max_calls_per_heartbeat` in `canister`; returns the current value.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn replace_max_calls_per_heartbeat(
-        &self,
-        canister: CanisterId,
-        count: u32,
-    ) -> Result<u32, ()> {
-        self.replace_canister_state("replace_max_calls_per_heartbeat", canister, count)
+    pub fn set_max_calls_per_heartbeat(&self, canister: CanisterId, count: u32) -> Result<u32, ()> {
+        self.set_canister_state(canister, "set_max_calls_per_heartbeat", count)
     }
 
-    /// Replaces the `reply_weight` in `canister`.
+    /// Sets the `reply_weight` in `canister`; returns the current weight.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn replace_reply_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
-        self.replace_canister_state("replace_reply_weight", canister, weight)
+    pub fn set_reply_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
+        self.set_canister_state(canister, "set_reply_weight", weight)
     }
 
-    /// Replaces the `call_weight` in `canister`.
+    /// Sets the `call_weight` in `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn replace_call_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
-        self.replace_canister_state("replace_call_weight", canister, weight)
+    pub fn set_call_weight(&self, canister: CanisterId, weight: u32) -> Result<u32, ()> {
+        self.set_canister_state(canister, "set_call_weight", weight)
     }
 
     /// Seeds the `Rng` in `canister`.
@@ -375,18 +351,25 @@ impl Fixture {
     /// Sets `max_calls_per_heartbeat` on all canisters to the same value.
     pub fn start_chatter(&self, max_calls_per_heartbeat: u32) -> Result<(), ()> {
         for canister in self.canisters() {
-            self.replace_max_calls_per_heartbeat(canister, max_calls_per_heartbeat)
+            self.set_max_calls_per_heartbeat(canister, max_calls_per_heartbeat)
                 .map_err(|_| ())?;
         }
         Ok(())
     }
 
-    /// Sets `call_per_round` on all canisters to 0.
+    /// Sets `call_per_round` on all canisters to 0; sets all call weights to 0.
+    ///
+    /// This sets the total new calls made on `Self` to 0 whether they are made from the heartbeat
+    /// or recursively as a downstream call.
     pub fn stop_chatter(&self) -> Result<(), ()> {
-        self.start_chatter(0)
+        self.start_chatter(0)?;
+        for canister in self.canisters() {
+            self.set_call_weight(canister, 0)?;
+        }
+        Ok(())
     }
 
-    /// Queries the records from `canister` on the subnet `env`.
+    /// Queries the records from `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
     pub fn query_records(&self, canister: CanisterId) -> Vec<Record> {
@@ -415,6 +398,24 @@ impl Fixture {
                 .get_latest_state()
                 .guaranteed_response_message_memory_taken(),
         )
+    }
+
+    /// Checks the local and remote guaranteed response message memory taken and compares it to an
+    /// upper limit.
+    pub fn expect_guaranteed_response_message_memory_taken_at_most(
+        &self,
+        label: &str,
+        local_memory_upper_limit: u64,
+        remote_memory_upper_limit: u64,
+    ) -> Result<(), (String, DebugInfo)> {
+        let (local_memory, remote_memory) = self.guaranteed_response_message_memory_taken();
+        if local_memory > local_memory_upper_limit.into() {
+            return self.failed_with_reason(format!("{label}: local memory exceeds limit"));
+        }
+        if remote_memory > remote_memory_upper_limit.into() {
+            return self.failed_with_reason(format!("{label}: remote memory exceeds limit"));
+        }
+        Ok(())
     }
 
     /// Returns the number of open call contexts for each `canister` installed on `self`.
@@ -469,7 +470,7 @@ impl Fixture {
     }
 
     /// Returns the canister records, the latest local state and the latest remote state.
-    pub fn debug_info(&self, reason: impl Into<String>) -> Result<(), (String, DebugInfo)> {
+    pub fn failed_with_reason(&self, reason: impl Into<String>) -> Result<(), (String, DebugInfo)> {
         Err((
             reason.into(),
             DebugInfo {
@@ -485,7 +486,7 @@ impl Fixture {
     }
 }
 
-/// Returned by `Fixture::debug_info()`.
+/// Returned by `Fixture::failed_with_reason()`.
 #[allow(dead_code)]
 struct DebugInfo {
     pub records: BTreeMap<CanisterId, Vec<Record>>,

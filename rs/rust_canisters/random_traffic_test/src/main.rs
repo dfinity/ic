@@ -28,7 +28,7 @@ thread_local! {
     static RECORDS: RefCell<Vec<Record>> = RefCell::default();
 }
 
-/// Replaces an element in the `treadlocal! {}` block above.
+/// Calls `f` on a candid type taken from `arg_data()`; sends replies the result of `f`.
 fn with_candid_encoding<T, F>(f: F)
 where
     T: candid::CandidType + for<'a> serde::Deserialize<'a>,
@@ -43,29 +43,29 @@ where
     api::reply(&msg[..]);
 }
 
-/// Replaces the test config.
-#[export_name = "canister_update replace_config"]
-fn replace_config() {
+/// Sets the test config; returns the current config.
+#[export_name = "canister_update set_config"]
+fn set_config() {
     with_candid_encoding(|config: Config| CONFIG.replace(config));
 }
 
-/// Replaces the requests per round to be sent each heart beat.
-#[export_name = "canister_update replace_max_calls_per_heartbeat"]
-fn replace_max_calls_per_heartbeat() {
+/// Sets the requests per round to be sent each heart beat; returns the current value.
+#[export_name = "canister_update set_max_calls_per_heartbeat"]
+fn set_max_calls_per_heartbeat() {
     with_candid_encoding(|max_calls_per_heartbeat: u32| {
         MAX_CALLS_PER_HEARTBEAT.replace(max_calls_per_heartbeat)
     });
 }
 
-/// Replaces the reply weight.
-#[export_name = "canister_update replace_reply_weight"]
-fn replace_reply_weight() {
+/// Sets the reply weight; returns the current weight.
+#[export_name = "canister_update set_reply_weight"]
+fn set_reply_weight() {
     with_candid_encoding(|reply_weight: u32| REPLY_WEIGHT.replace(reply_weight));
 }
 
-/// Replaces the call weight.
-#[export_name = "canister_update replace_call_weight"]
-fn replace_call_weight() {
+/// Sets the call weight; returns the current weight.
+#[export_name = "canister_update set_call_weight"]
+fn set_call_weight() {
     with_candid_encoding(|call_weight: u32| CALL_WEIGHT.replace(call_weight));
 }
 
