@@ -2077,7 +2077,7 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
-            if instructions_used.unwrap_or(0.into()) > 0.into() {
+            if instructions_used.map_or(false, |instructions| instructions.get() > 0) {
                 // We only want to count the canister as executed if it used instructions.
                 executed_canister_ids.insert(new_canister.canister_id());
             }
