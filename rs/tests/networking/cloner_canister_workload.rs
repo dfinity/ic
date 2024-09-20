@@ -28,6 +28,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
+        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
@@ -43,13 +44,14 @@ const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
-const SUBNET_SIZE: usize = 42;
+const NETWORK_SIMULATION: ProductionSubnetTopology = ProductionSubnetTopology::TDB26;
+const SUBNET_SIZE: usize = 40;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(300);
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
-const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
+const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 30_000;
 const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
@@ -76,8 +78,8 @@ pub fn setup(env: TestEnv) {
 
     // Production-like resources
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)), //  512 GB
+        vcpus: Some(NrOfVCPUs::new(32)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(256071340)), //  256 GB
         boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
     };
 
@@ -116,7 +118,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
     });
     let app_subnet = top_snapshot
         .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
+        .find(|s| s.subnet_type() == SubnetType::System)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
     let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
@@ -184,6 +186,11 @@ pub fn install_cloner_canisters(env: TestEnv) {
             );
         });
     }
+
+    info!(&logger, "Step 5: Setting network latencies.");
+    env.topology_snapshot()
+        .subnets()
+        .for_each(|s| s.apply_network_settings(NETWORK_SIMULATION));
 
     // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
