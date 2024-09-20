@@ -26,6 +26,7 @@ use ic_types::messages::{
     Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
+use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
@@ -1091,16 +1092,31 @@ impl SystemState {
     /// Generates a reject response for the given callback ID with the given
     /// message.
     ///
-    /// Panics if the `CallContextManager` does not hold a callback with the given
-    /// `CallbackId`.
+    /// If the `CallContextManager` does not hold a callback with the given
+    /// `CallbackId`, generates a reject response with arbitrary values (but
+    /// matching `CallbackId`). The missing callback will generate a critical error
+    /// when the response is about to be executed, regardless.
     fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
         let call_context_manager = self.call_context_manager().unwrap();
-        let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+        let (originator, respondent, deadline) =
+            match call_context_manager.callbacks().get(&callback_id) {
+                // Populate reject responses from the callback.
+                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+
+                // This should be unreachable, but if we somehow end up here, we can populate
+                // the reject response with arbitrary values, as trying to execute it it will
+                // fail anyway and produce a critical error. This is safer than panicking.
+                None => (
+                    CanisterId::ic_00(),
+                    CanisterId::ic_00(),
+                    CoarseTime::from_secs_since_unix_epoch(1),
+                ),
+            };
 
         CanisterMessage::Response(
             Response {
-                originator: callback.originator,
-                respondent: callback.respondent,
+                originator,
+                respondent,
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
@@ -1108,7 +1124,7 @@ impl SystemState {
                     message,
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
                 )),
-                deadline: callback.deadline,
+                deadline,
             }
             .into(),
         )
