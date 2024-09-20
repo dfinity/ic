@@ -50,4 +50,59 @@ pub struct NodeRecord {
     /// If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
     #[prost(string, optional, tag = "19")]
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "NodeType", optional, tag = "20")]
+    pub node_type: ::core::option::Option<i32>,
+}
+/// The type of the node.
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum NodeType {
+    /// type0
+    Type0 = 0,
+    /// type1
+    Type1 = 1,
+    /// type2
+    Type2 = 2,
+    /// type3
+    Type3 = 3,
+    /// type3.1
+    Type3dot1 = 4,
+}
+impl NodeType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NodeType::Type0 => "NODE_TYPE_Type0",
+            NodeType::Type1 => "NODE_TYPE_Type1",
+            NodeType::Type2 => "NODE_TYPE_Type2",
+            NodeType::Type3 => "NODE_TYPE_Type3",
+            NodeType::Type3dot1 => "NODE_TYPE_Type3dot1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "NODE_TYPE_Type0" => Some(Self::Type0),
+            "NODE_TYPE_Type1" => Some(Self::Type1),
+            "NODE_TYPE_Type2" => Some(Self::Type2),
+            "NODE_TYPE_Type3" => Some(Self::Type3),
+            "NODE_TYPE_Type3dot1" => Some(Self::Type3dot1),
+            _ => None,
+        }
+    }
 }

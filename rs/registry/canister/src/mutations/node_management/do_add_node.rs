@@ -22,8 +22,7 @@ use crate::mutations::node_management::{
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
 use ic_registry_canister_api::AddNodePayload;
-use ic_types::crypto::CurrentNodePublicKeys;
-use ic_types::time::Time;
+use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
 impl Registry {
@@ -123,6 +122,7 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
+            node_type,
         };
 
         // 7. Insert node, public keys, and crypto keys
