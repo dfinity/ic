@@ -39,7 +39,7 @@ ALIASES = {}
 
 rust_library(
     name = "dfn_candid",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "dfn_candid",
     proc_macro_deps = MACRO_DEPENDENCIES,

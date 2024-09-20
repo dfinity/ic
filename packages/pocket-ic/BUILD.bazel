@@ -42,7 +42,7 @@ rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "4.0.0",
+    version = "5.0.0",
     deps = DEPENDENCIES,
 )
 
@@ -81,6 +81,21 @@ rust_test_suite(
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
         "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
         "TEST_WASM": "$(rootpath :test_canister.wasm)",
+    },
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "restart",
+    size = "medium",
+    srcs = ["tests/restart.rs"],
+    data = [
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,

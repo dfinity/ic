@@ -18,4 +18,5 @@ ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-governance = { path = "../../sns/governance" }
 serde = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }

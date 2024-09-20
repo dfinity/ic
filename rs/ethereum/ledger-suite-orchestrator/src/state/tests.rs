@@ -401,10 +401,14 @@ mod validate_config {
 
 mod schema_upgrades {
     use crate::candid::CyclesManagement;
+    use crate::scheduler::test_fixtures::{
+        cketh_ledger_suite, cketh_token_symbol, usdc, usdc_ledger_suite,
+    };
     use crate::scheduler::Task;
     use crate::state::test_fixtures::arb_state;
     use crate::state::{
-        decode, encode, Canisters, Erc20Token, LedgerSuiteVersion, ManagedCanisters, State,
+        decode, encode, Canisters, CanistersMetadata, Erc20Token, IndexCanister, LedgerCanister,
+        LedgerSuiteVersion, ManagedCanisters, State,
     };
     use candid::{Deserialize, Principal};
     use proptest::proptest;
@@ -413,13 +417,49 @@ mod schema_upgrades {
 
     #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
     pub struct ManagedCanistersPreviousVersion {
-        canisters: BTreeMap<Erc20Token, Canisters>,
+        canisters: BTreeMap<Erc20Token, CanistersPreviousVersion>,
     }
 
     impl From<ManagedCanisters> for ManagedCanistersPreviousVersion {
         fn from(value: ManagedCanisters) -> Self {
             ManagedCanistersPreviousVersion {
-                canisters: value.canisters,
+                canisters: value
+                    .canisters
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            }
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct CanistersPreviousVersion {
+        pub ledger: Option<LedgerCanister>,
+        pub index: Option<IndexCanister>,
+        pub archives: Vec<Principal>,
+        pub metadata: CanistersMetadataPreviousVersion,
+    }
+
+    impl From<Canisters> for CanistersPreviousVersion {
+        fn from(value: Canisters) -> Self {
+            CanistersPreviousVersion {
+                ledger: value.ledger,
+                index: value.index,
+                archives: value.archives,
+                metadata: value.metadata.into(),
+            }
+        }
+    }
+
+    #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+    pub struct CanistersMetadataPreviousVersion {
+        pub ckerc20_token_symbol: String,
+    }
+
+    impl From<CanistersMetadata> for CanistersMetadataPreviousVersion {
+        fn from(value: CanistersMetadata) -> Self {
+            CanistersMetadataPreviousVersion {
+                ckerc20_token_symbol: value.token_symbol,
             }
         }
     }
@@ -460,7 +500,9 @@ mod schema_upgrades {
 
     proptest! {
         #[test]
-        fn should_be_able_to_upgrade_state(state in arb_state()) {
+        fn should_be_able_to_upgrade_state(mut state in arb_state()) {
+            state.managed_canisters.canisters.insert(usdc(), usdc_ledger_suite());
+            state.managed_canisters.other_canisters.insert(cketh_token_symbol(), cketh_ledger_suite());
             let state_before_upgrade: StatePreviousVersion = state.into();
 
             let serialized_state_before_upgrade = encode(&state_before_upgrade);

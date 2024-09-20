@@ -1595,7 +1595,15 @@ fn check_block_endpoint_limits() {
         Tokens::from_e8s(1_000_000_000_000),
     );
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        ArchiveOptions {
+            trigger_threshold: MAX_BLOCKS_PER_REQUEST,
+            num_blocks_to_archive: MAX_BLOCKS_PER_REQUEST / 2,
+            ..default_archive_options()
+        },
+    );
     let index_id = install_index(env, ledger_id);
 
     for _ in 0..MAX_BLOCKS_PER_REQUEST {

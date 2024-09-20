@@ -605,7 +605,7 @@ async fn http_get(url: &str) -> Bytes {
 /// Parses a `Response` into status code and body.
 async fn parse_response(response: Response<Body>) -> (u16, Vec<u8>) {
     let status = response.status().as_u16();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    let body = hyper::body::to_bytes(response.into_body())
         .await
         .unwrap()
         .to_vec();

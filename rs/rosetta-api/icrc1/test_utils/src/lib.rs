@@ -510,7 +510,7 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
     0..100_000_000_000u64 // max is 1M ICP
 }
 
-fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
+pub fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
     prop::num::u64::ANY.prop_map(|ran| {
         let keypair = Ed25519KeyPair::generate(ran);
         BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()

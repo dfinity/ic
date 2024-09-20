@@ -29,8 +29,8 @@ use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs
 use ic_https_outcalls_adapter::CanisterHttp;
 use ic_https_outcalls_adapter_client::grpc_status_code_to_reject;
 use ic_https_outcalls_service::{
-    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_state_machine_tests::RejectCode;
 use ic_types::{
@@ -54,7 +54,7 @@ use tokio::{
 };
 use tonic::Request;
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{error, info, trace};
+use tracing::{debug, error, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -217,6 +217,7 @@ pub enum PocketIcError {
     SubnetNotFound(candid::Principal),
     RequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
+    InvalidMockCanisterHttpResponses((usize, usize)),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -283,6 +284,13 @@ impl std::fmt::Debug for OpOut {
                     f,
                     "InvalidCanisterHttpRequestId({},{:?})",
                     subnet_id, canister_http_request_id
+                )
+            }
+            OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((actual, expected))) => {
+                write!(
+                    f,
+                    "InvalidMockCanisterHttpResponses(actual={},expected={})",
+                    actual, expected
                 )
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
@@ -712,6 +720,23 @@ impl ApiState {
                 .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
         }
 
+        async fn handler_dashboard(
+            State(replica_url): State<String>,
+            bytes: Bytes,
+        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!("{}/_/dashboard", replica_url);
+            let req = Request::builder()
+                .uri(url)
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            client
+                .request(req)
+                .await
+                .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
+        }
+
         async fn handler_api_canister(
             api_version: ApiVersion,
             replica_url: String,
@@ -917,6 +942,7 @@ impl ApiState {
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") });
             let router = Router::new()
+                .route("/_/dashboard", get(handler_dashboard))
                 .nest("/api/v2", router_api_v2)
                 .nest("/api/v3", router_api_v3)
                 .fallback(
@@ -979,7 +1005,7 @@ impl ApiState {
                     .unwrap();
             }
 
-            info!("Terminating HTTP gateway.");
+            debug!("Terminating HTTP gateway.");
         });
 
         // Wait until the HTTP gateway starts listening.
@@ -1002,7 +1028,7 @@ impl ApiState {
         canister_http_request: CanisterHttpRequest,
         canister_http_adapter: &CanisterHttp,
     ) -> Result<CanisterHttpReply, (RejectCode, String)> {
-        let canister_http_request = CanisterHttpSendRequest {
+        let canister_http_request = HttpsOutcallRequest {
             url: canister_http_request.url,
             method: match canister_http_request.http_method {
                 CanisterHttpMethod::GET => HttpMethod::Get.into(),
@@ -1025,10 +1051,10 @@ impl ApiState {
         };
         let request = Request::new(canister_http_request);
         canister_http_adapter
-            .canister_http_send(request)
+            .https_outcall(request)
             .await
             .map(|adapter_response| {
-                let CanisterHttpSendResponse {
+                let HttpsOutcallResponse {
                     status,
                     headers,
                     content: body,
@@ -1097,6 +1123,7 @@ impl ApiState {
                 subnet_id,
                 request_id,
                 response,
+                additional_responses: vec![],
             };
             mock_canister_http_responses.push(mock_canister_http_response);
         }

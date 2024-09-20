@@ -1,10 +1,12 @@
+load("@aspect_bazel_lib//lib:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
-load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
+load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//rs/tests:system_tests.bzl", "oci_tar")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -67,6 +69,7 @@ DEV_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
     "//rs/crypto/ed25519",
+    "//rs/rosetta-api",
     "//rs/rosetta-api/client:ic-icp-rosetta-client",
     "//rs/rosetta-api/icp_ledger/test_utils",
     "//rs/rosetta-api/icrc1",
@@ -145,7 +148,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(
@@ -161,6 +164,7 @@ rust_test_suite_with_extra_srcs(
         "//rs/replica",
         "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
@@ -169,6 +173,7 @@ rust_test_suite_with_extra_srcs(
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     extra_srcs = glob([
         "tests/system_tests/common/*.rs",
@@ -189,42 +194,39 @@ write_file(
 )
 
 ## Create a layer with a rosetta user
-passwd_entry(
-    name = "root_user",
-    uid = 0,
-    username = "root",
-)
-
-passwd_entry(
-    name = "rosetta_user",
-    home = "/home/rosetta",
-    info = "rosetta node user",
-    uid = 1002,
-    username = "rosetta",
-)
-
-passwd_file(
+passwd(
     name = "passwd",
     entries = [
-        ":rosetta_user",
-        ":root_user",
+        dict(
+            gecos = ["root"],
+            gid = 0,
+            home = "/root",
+            shell = "/usr/bin/bash",
+            uid = 0,
+            username = "root",
+        ),
+        dict(
+            gecos = ["rosetta node user"],
+            gid = 1002,
+            home = "/home/rosetta",
+            shell = "/usr/bin/bash",
+            uid = 1002,
+            username = "rosetta",
+        ),
     ],
 )
 
 pkg_tar(
-    name = "passwd_tar",
-    srcs = [":passwd"],
-    mode = "0644",
-    package_dir = "etc",
+    name = "rosetta_image_homedir",
+    srcs = [":ic-rosetta-api"],
+    package_dir = "/home/rosetta",
 )
 
+# Create directories expected/needed by rosetta
 pkg_mkdirs(
     name = "data_dir",
-    # Unfortunately, rules_docker does not preserve the file ownership:
-    # https://github.com/bazelbuild/rules_docker/issues/1928
-    #
     # We make the /data directory rwx for everyone so that "rosetta"
-    # user could write to that directory.
+    # user can write to that directory.
     attributes = pkg_attributes(
         mode = "0777",
         user = "rosetta",
@@ -242,49 +244,63 @@ pkg_tar(
 
 ## An intermediate image with the passwd file and empty directories.
 
-container_image(
+oci_image(
     name = "rosetta_image_base",
-    base = "@rust_base//image",
+    base = "@rust_base//:rust_base",
     tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     tars = [
-        ":passwd_tar",
+        ":passwd",
         ":data_tar",
     ],
 )
 
 ## The final image we can publish.
 
-container_image(
+oci_image(
     name = "rosetta_image",
     base = ":rosetta_image_base",
-    directory = "/home/rosetta",
-    entrypoint = [
-        "/home/rosetta/ic-rosetta-api",
-    ],
-    files = [
-        ":ic-rosetta-api",
-    ],
-    ports = ["8080"],
+    entrypoint = ["/home/rosetta/ic-rosetta-api"],
     tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    tars = [":rosetta_image_homedir"],
     user = "rosetta",
     workdir = "/home/rosetta",
+)
+
+oci_tar(
+    name = "rosetta_image.tar",
+    image = ":rosetta_image",
+    repo_tags = ["rosetta:image"],
 )
 
 ## Run this target with --embed_label flag[1] to specify the image tag.
 ## [1]: https://bazel.build/reference/command-line-reference#flag--embed_label
 
-container_push(
+# Use the value of --embed_label under --stamp, otherwise use a deterministic constant
+# value to ensure cache hits for actions that depend on this.
+expand_template(
+    name = "stamped",
+    out = "_stamped.tags.txt",
+    stamp_substitutions = {"0.0.0": "{{BUILD_EMBED_LABEL}}"},
+    template = [
+        "0.0.0",
+    ],
+)
+
+# Push image with:
+#  $ bazel run //<path>:push_rosetta_image
+#
+# Usage:
+#   https://github.com/bazel-contrib/rules_oci/blob/main/docs/push.md#usage
+oci_push(
     name = "push_rosetta_image",
-    format = "Docker",
     image = ":rosetta_image",
-    registry = "index.docker.io",
-    repository = "dfinity/rosetta-api",
-    tag = "{BUILD_EMBED_LABEL}",
+    remote_tags = ":stamped",
+    repository = "docker.io/dfinity/rosetta-api",
     tags = ["manual"],
 )

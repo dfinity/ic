@@ -138,7 +138,7 @@ mod max_expected_too_few_cycles_error {
             ),
             (
                 RpcService::Custom(RpcApi {
-                    url: "https://eth-pokt.nodies.app".to_string(),
+                    url: "https://ethereum.blockpi.network/v1/rpc/public".to_string(),
                     headers: None,
                 }),
                 Err(RpcError::ProviderError(ProviderError::TooFewCycles {
