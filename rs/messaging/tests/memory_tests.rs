@@ -56,8 +56,8 @@ proptest! {
 /// For the second phase, the 'chatter' is disabled and additional rounds are executed until all
 /// calls have received a reply.
 ///
-/// Checks the guaranteed response message memory never exceeds the limit, all calls eventually
-/// receive a reply (or are rejected synchronously when attempting them), the message memory goes
+/// Checks that the guaranteed response message memory never exceeds the limit; that all calls eventually
+/// receive a reply (or were rejected synchronously when issued); and that the message memory goes
 /// back to 0 after all in-flight messages have been dealt with.
 fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     seeds: &[u64],
