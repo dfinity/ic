@@ -61,14 +61,6 @@ def image_deps(mode, _malicious = False):
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
         },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
         "prod": {
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,

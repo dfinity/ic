@@ -56,14 +56,6 @@ def image_deps(mode, _malicious = False):
             "build_args": dev_build_args,
             "file_build_arg": dev_file_build_arg,
         },
-        "local-base-dev": {
-            "build_args": dev_build_args,
-            "file_build_arg": dev_file_build_arg,
-        },
-        "local-base-prod": {
-            "build_args": prod_build_args,
-            "file_build_arg": prod_file_build_arg,
-        },
         "prod": {
             "build_args": prod_build_args,
             "file_build_arg": prod_file_build_arg,
@@ -81,14 +73,6 @@ def _custom_partitions(mode):
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_url = "https://dfinity.org"
-    elif mode == "local-base-dev":
-        guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
-        host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
-        nns_url = "https://dfinity.org"
-    elif mode == "local-base-prod":
-        guest_image = Label("//ic-os/guestos/envs/local-base-prod:disk-img.tar.zst")
-        host_image = Label("//ic-os/hostos/envs/local-base-prod:disk-img.tar.zst")
-        nns_url = "https://icp-api.io,https://icp0.io,https://ic0.app"
     elif mode == "prod":
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.zst")
