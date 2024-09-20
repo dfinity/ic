@@ -51,15 +51,12 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use blockchainmanager::BlockchainManager;
+use crate::{
+    common::BlockHeight, config::IncomingSource, router::start_main_event_loop, stream::StreamEvent,
+};
 pub use blockchainstate::BlockchainState;
-use common::BlockHeight;
-use config::IncomingSource;
 pub use get_successors_handler::GetSuccessorsHandler;
-pub use router::start_main_event_loop;
 pub use rpc_server::start_grpc_server;
-use stream::StreamEvent;
-pub use transaction_store::TransactionStore;
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
@@ -218,7 +215,7 @@ pub fn start_server(
     let adapter_state = AdapterState::new(config.idle_seconds);
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, &metrics_registry)));
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
     let get_successors_handler = GetSuccessorsHandler::new(
         &config,
         // The get successor handler should be low latency, and instead of not sharing state and
