@@ -28,7 +28,7 @@ thread_local! {
     static RECORDS: RefCell<Vec<Record>> = RefCell::default();
 }
 
-/// Calls `f` on a candid type taken from `arg_data()`; sends replies the result of `f`.
+/// Calls `f` on a candid type taken from `arg_data()`; replies the result of `f`.
 fn with_candid_encoding<T, F>(f: F)
 where
     T: candid::CandidType + for<'a> serde::Deserialize<'a>,
