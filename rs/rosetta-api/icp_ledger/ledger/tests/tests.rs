@@ -196,7 +196,6 @@ fn test_anonymous_transfers() {
     const INITIAL_BALANCE: u64 = 10_000_000;
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
-    println!("p1: {:?}", p1);
     let anon = PrincipalId::new_anonymous();
     println!("anon: {:?}", anon);
     let (env, canister_id) = setup(
