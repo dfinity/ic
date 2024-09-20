@@ -1103,7 +1103,7 @@ fn test_schnorr() {
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
     for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
-        for name in ["key_1", "test_key_1", "dfx_test_key1"] {
+        for name in ["key_1", "test_key_1", "dfx_test_key"] {
             let key_id = SchnorrKeyId {
                 algorithm,
                 name: name.to_string(),
@@ -1183,7 +1183,7 @@ fn test_ecdsa() {
     let message_hash: Vec<u8> = hasher.finalize().to_vec();
     let derivation_path = vec!["my message".as_bytes().to_vec()];
 
-    for key_id in ["key_1", "test_key_1", "dfx_test_key1"] {
+    for key_id in ["key_1", "test_key_1", "dfx_test_key"] {
         let key_id = key_id.to_string();
 
         // We get the ECDSA public key and signature via update calls to the test canister.
@@ -1244,7 +1244,7 @@ fn test_ecdsa_disabled() {
     hasher.update(message);
     let message_hash: Vec<u8> = hasher.finalize().to_vec();
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    let key_id = "dfx_test_key1".to_string();
+    let key_id = "dfx_test_key".to_string();
 
     // We attempt to get the ECDSA public key and signature via update calls to the test canister.
     let ecsda_public_key_error = update_candid::<
@@ -1260,7 +1260,7 @@ fn test_ecdsa_disabled() {
     .0
     .unwrap_err();
     assert!(ecsda_public_key_error.contains(
-        "Requested unknown threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys: []"
+        "Requested unknown threshold key: ecdsa:Secp256k1:dfx_test_key, existing keys: []"
     ));
 
     let ecdsa_signature_err =
@@ -1273,7 +1273,7 @@ fn test_ecdsa_disabled() {
         .unwrap()
         .0
         .unwrap_err();
-    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key1, existing keys with signing enabled: []"));
+    assert!(ecdsa_signature_err.contains("Requested unknown or signing disabled threshold key: ecdsa:Secp256k1:dfx_test_key, existing keys with signing enabled: []"));
 }
 
 #[test]

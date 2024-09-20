@@ -268,7 +268,7 @@ docker run -d -u $(id -u) \
     --rm -v /home/admin/rosetta/{port}/data:/data \
     --rm -v /home/admin/rosetta/{port}/logs:/home/rosetta/log \
     --name rosetta-{port} \
-    bazel/rs/rosetta-api:rosetta_image \
+    rosetta:image \
     --blockchain \"{}\" \
     --ic-url \"{}\" \
     --canister-id {} \

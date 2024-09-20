@@ -12,6 +12,7 @@ use crate::canister_state::system_state::{
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
+use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
@@ -42,6 +43,7 @@ use strum::IntoEnumIterator;
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
     RequestBuilder::default()
@@ -52,11 +54,12 @@ fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
         .into()
 }
 
-fn default_input_response(callback_id: CallbackId) -> Response {
+fn default_input_response(callback_id: CallbackId, deadline: CoarseTime) -> Response {
     ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
+        .deadline(deadline)
         .build()
 }
 
@@ -92,7 +95,7 @@ impl CanisterStateFixture {
         }
     }
 
-    fn make_callback(&mut self) -> CallbackId {
+    fn make_callback(&mut self, deadline: CoarseTime) -> CallbackId {
         let call_context_id = self
             .canister_state
             .system_state
@@ -118,7 +121,7 @@ impl CanisterStateFixture {
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
-                NO_DEADLINE,
+                deadline,
             ))
     }
 
@@ -159,12 +162,32 @@ fn canister_state_push_input_request_success() {
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
+    // Request was enqueued.
+    assert!(fixture.canister_state.has_input());
 }
 
 #[test]
-fn canister_state_push_input_response_no_reserved_slot() {
+fn canister_state_push_input_response_success() {
     let mut fixture = CanisterStateFixture::new();
-    let response = default_input_response(fixture.make_callback());
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
+    // Pushing input response should succeed.
+    let response = default_input_response(fixture.make_callback(NO_DEADLINE), NO_DEADLINE).into();
+    fixture
+        .push_input(
+            response,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    // Response was enqueued.
+    assert!(fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_guaranteed_response_no_reserved_slot() {
+    let mut fixture = CanisterStateFixture::new();
+    let response = default_input_response(fixture.make_callback(NO_DEADLINE), NO_DEADLINE);
     assert_eq!(
         Err((
             StateError::non_matching_response("No reserved response slot", &response),
@@ -176,15 +199,68 @@ fn canister_state_push_input_response_no_reserved_slot() {
             InputQueueType::RemoteSubnet
         ),
     );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
 }
 
 #[test]
-fn canister_state_push_input_response_success() {
+fn canister_state_push_input_best_effort_response_no_reserved_slot() {
     let mut fixture = CanisterStateFixture::new();
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
-    // Pushing input response should succeed.
-    let response = default_input_response(fixture.make_callback()).into();
+    let response = default_input_response(fixture.make_callback(SOME_DEADLINE), SOME_DEADLINE);
+    // Push a matching response into the slot.
+    fixture
+        .push_input(
+            response.clone().into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    // Pushing a second best-effort response without a reserved slot should fail
+    // silently.
+    fixture
+        .push_input(
+            response.clone().into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+    // Only one response was enqueued.
+    assert_eq!(
+        Some(CanisterMessage::Response(response.into())),
+        fixture.canister_state.pop_input()
+    );
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_guaranteed_response_no_matching_callback() {
+    let mut fixture = CanisterStateFixture::new();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
+    // Pushing an input response with a mismatched callback should fail.
+    let response = default_input_response(CallbackId::from(1), NO_DEADLINE).into();
+    assert_matches!(
+        fixture.push_input(
+            response,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet
+        ),
+        Err((StateError::NonMatchingResponse { .. }, _))
+    );
+
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_best_effort_response_no_matching_callback() {
+    let mut fixture = CanisterStateFixture::new();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
+    // Push a best-effort input response with a nonexistent callback.
+    let response = default_input_response(CallbackId::from(1), SOME_DEADLINE).into();
     fixture
         .push_input(
             response,
@@ -192,6 +268,47 @@ fn canister_state_push_input_response_success() {
             InputQueueType::RemoteSubnet,
         )
         .unwrap();
+
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_guaranteed_response_mismatched_callback() {
+    let mut fixture = CanisterStateFixture::new();
+    let response = default_input_response(fixture.make_callback(SOME_DEADLINE), NO_DEADLINE);
+    assert_matches!(
+        fixture.push_input(
+            response.clone().into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet
+        ),
+        Err((
+            StateError::NonMatchingResponse { err_str, .. },
+            r,
+        )) if err_str.contains("invalid details") && r == response.into()
+    );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_best_effort_response_mismatched_callback() {
+    let mut fixture = CanisterStateFixture::new();
+    let response = default_input_response(fixture.make_callback(NO_DEADLINE), SOME_DEADLINE);
+    assert_matches!(
+        fixture.push_input(
+            response.clone().into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet
+        ),
+        Err((
+            StateError::NonMatchingResponse { err_str, .. },
+            r,
+        )) if err_str.contains("invalid details") && r == response.into()
+    );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
 }
 
 #[test]
@@ -275,7 +392,7 @@ fn system_subnet_local_push_input_request_ignores_subnet_memory() {
 #[test]
 fn application_subnet_push_input_best_effort_request_ignores_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
-        CoarseTime::from_secs_since_unix_epoch(1),
+        SOME_DEADLINE,
         -13,
         SubnetType::Application,
         InputQueueType::RemoteSubnet,
@@ -286,7 +403,7 @@ fn application_subnet_push_input_best_effort_request_ignores_subnet_memory() {
 #[test]
 fn system_subnet_push_input_best_effort_request_ignores_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
-        CoarseTime::from_secs_since_unix_epoch(1),
+        SOME_DEADLINE,
         -13,
         SubnetType::System,
         InputQueueType::RemoteSubnet,
@@ -444,7 +561,8 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 
     // Reserve a slot in the input queue.
     fixture.with_input_slot_reservation();
-    let response: RequestOrResponse = default_input_response(fixture.make_callback()).into();
+    let response: RequestOrResponse =
+        default_input_response(fixture.make_callback(NO_DEADLINE), NO_DEADLINE).into();
 
     let mut subnet_available_memory = -13;
     fixture
