@@ -292,7 +292,7 @@ impl InternalHttpQueryHandler {
 
 // TODO(EXC-1678): remove after release.
 /// Feature flag to enable/disable allowed viewers for canister log visibility.
-const ALLOWED_VIEWERS_ENABLED: bool = false;
+const ALLOWED_VIEWERS_ENABLED: bool = true;
 
 fn fetch_canister_logs(
     sender: PrincipalId,
