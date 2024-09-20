@@ -94,12 +94,24 @@ fn choose_receiver() -> Option<CanisterId> {
     })
 }
 
-/// Wrapper to generate a random `u32` from one of the ranges in `Config`.
-fn gen_range<F>(f: F) -> u32
-where
-    F: FnOnce(&Config) -> RangeInclusive<u32>,
-{
-    CONFIG.with_borrow(|config| RNG.with_borrow_mut(|rng| rng.gen_range(f(config))))
+/// Generates a random u32 contained in `range`.
+fn gen_range(range: RangeInclusive<u32>) -> u32 {
+    RNG.with_borrow_mut(|rng| rng.gen_range(range))
+}
+
+/// Returns the call bytes range as defined in `CONFIG`.
+fn call_bytes_range() -> RangeInclusive<u32> {
+    CONFIG.with_borrow(|config| config.call_bytes_min..=config.call_bytes_max)
+}
+
+/// Returns the reply bytes range as defined in `CONFIG`.
+fn reply_bytes_range() -> RangeInclusive<u32> {
+    CONFIG.with_borrow(|config| config.reply_bytes_min..=config.reply_bytes_max)
+}
+
+/// Returns the instructions count range as defined in `CONFIG`.
+fn instructions_count_range() -> RangeInclusive<u32> {
+    CONFIG.with_borrow(|config| config.instructions_count_min..=config.instructions_count_max)
 }
 
 /// Attemps to call a randomly chosen `receiver` with a random payload size. Records calls
@@ -111,7 +123,7 @@ where
 /// because we could otherwise get stuck attempting new calls indefinitely.
 fn try_call(on_response: impl FnOnce() + Copy + 'static) -> Result<(), ()> {
     let receiver = choose_receiver().ok_or(())?;
-    let payload_bytes = gen_range(|config| config.call_bytes_min..=config.call_bytes_max);
+    let payload_bytes = gen_range(call_bytes_range());
 
     // Insert a new call record at the back of `RECORDS`; returns the `index` of the new element at
     // the back.
@@ -183,9 +195,8 @@ fn handle_call() {
     // one response despite potentially multiple downstream calls, something that doesn't matter for
     // the heartbeat where calls are not awaited because the heartbeat can't give a response anyway.
     if should_reply_now() || try_call(handle_call).is_err() {
-        let payload_bytes = gen_range(|config| config.reply_bytes_min..=config.reply_bytes_max);
-        let instructions_count =
-            gen_range(|config| config.instructions_count_min..=config.instructions_count_max);
+        let payload_bytes = gen_range(reply_bytes_range());
+        let instructions_count = gen_range(instructions_count_range());
 
         // Do some thinking.
         let counts = api::performance_counter(0) + instructions_count as u64;
