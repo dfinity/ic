@@ -22,6 +22,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/init",
+    "//rs/nns/sns-wasm/api",
     "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/canister",

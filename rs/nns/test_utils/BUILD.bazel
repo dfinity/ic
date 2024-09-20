@@ -25,6 +25,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
+    "//rs/nns/sns-wasm/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
