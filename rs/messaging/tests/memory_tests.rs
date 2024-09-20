@@ -54,7 +54,7 @@ proptest! {
 /// 'chatter' enabled, i.e. the installed canisters are making random calls (including downstream calls).
 ///
 /// For the second phase, the 'chatter' is disabled and additional rounds are executed until all
-/// hanging calls have received a reply.
+/// calls have received a reply.
 ///
 /// Checks the guaranteed response message memory never exceeds the limit, all calls eventually
 /// receive a reply (or are rejected synchronously when attempting them), the message memory goes
