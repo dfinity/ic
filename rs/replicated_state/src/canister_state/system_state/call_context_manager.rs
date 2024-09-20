@@ -806,19 +806,21 @@ impl CallContextManager {
         })
     }
 
-    /// Returns the IDs of all best-effort callbacks whose deadlines have expired
-    /// since the previous call to this method, given the current time.
+    /// Expires (i.e. removes from the set of unexpired callbacks, with no change to
+    /// the callback itself) and returns the IDs of all best-effort callbacks whose
+    /// deadlines have expired since the previous call to this method, given the
+    /// current time.
     ///
-    /// Note: A given callback will be returned at most once by this function.
+    /// Note: A given callback ID will be returned at most once by this function.
     #[allow(dead_code)]
-    pub(super) fn expired_callbacks(
-        &mut self,
-        now: CoarseTime,
-    ) -> impl Iterator<Item = CallbackId> {
+    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
-        let mut expired_callbacks = self.unexpired_callbacks.split_off(&(now, MIN_CALLBACK_ID));
-        std::mem::swap(&mut self.unexpired_callbacks, &mut expired_callbacks);
+        // Unfortunate two-step splitting off of the expired callbacks.
+        let unexpired_callbacks = self.unexpired_callbacks.split_off(&(now, MIN_CALLBACK_ID));
+        let expired_callbacks =
+            std::mem::replace(&mut self.unexpired_callbacks, unexpired_callbacks);
+
         expired_callbacks
             .into_iter()
             .map(|(_, callback_id)| callback_id)

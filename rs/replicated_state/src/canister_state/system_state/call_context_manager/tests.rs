@@ -529,17 +529,17 @@ fn test_expired_callbacks() {
     assert_eq!(5, ccm.callbacks().len());
 
     // No callbacks expire at deadline 1.
-    assert_eq!(0, ccm.expired_callbacks(deadline_1).count());
+    assert_eq!(0, ccm.expire_callbacks(deadline_1).count());
 
     // Expire all callbacks with deadlines before 3.
     assert_eq!(
         vec![callback_1, callback_1b],
-        ccm.expired_callbacks(deadline_3).collect::<Vec<_>>()
+        ccm.expire_callbacks(deadline_3).collect::<Vec<_>>()
     );
     // The callbacks are still in place, expiration doesn't actually touch them.
     assert_eq!(5, ccm.callbacks().len());
     // And making the same call is a no-op.
-    assert_eq!(0, ccm.expired_callbacks(deadline_3).count());
+    assert_eq!(0, ccm.expire_callbacks(deadline_3).count());
 
     // Unregister one of the expired callbacks.
     ccm.unregister_callback(callback_1);
@@ -556,7 +556,7 @@ fn test_expired_callbacks() {
     // 2; in order of their expiration times).
     assert_eq!(
         vec![callback_2, callback_4],
-        ccm.expired_callbacks(deadline_5).collect::<Vec<_>>()
+        ccm.expire_callbacks(deadline_5).collect::<Vec<_>>()
     );
     // 3 + 1 callbacks left.
     assert_eq!(4, ccm.callbacks().len());
@@ -783,7 +783,7 @@ fn roundtrip_encode() {
     // Expire the first callback.
     assert_eq!(
         vec![callback_1],
-        ccm.expired_callbacks(deadline_2).collect::<Vec<_>>()
+        ccm.expire_callbacks(deadline_2).collect::<Vec<_>>()
     );
 
     let encoded: pb::CallContextManager = (&ccm).into();
