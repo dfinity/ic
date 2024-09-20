@@ -204,6 +204,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.confg.allowed_viewers_feature,
                     );
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
@@ -290,14 +291,11 @@ impl InternalHttpQueryHandler {
     }
 }
 
-// TODO(EXC-1678): remove after release.
-/// Feature flag to enable/disable allowed viewers for canister log visibility.
-const ALLOWED_VIEWERS_ENABLED: bool = true;
-
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
+    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -309,7 +307,7 @@ fn fetch_canister_logs(
 
     let log_visibility = match canister.log_visibility() {
         // If the feature is disabled override `AllowedViewers` with default value.
-        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
             &LogVisibilityV2::default()
         }
         other => other,
