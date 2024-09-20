@@ -1,5 +1,5 @@
 {
-  "checksum": "fd9eb489c0f6ca72fa72926e5dae2912f046890fdf3dbe3468c8ee3cf268861f",
+  "checksum": "9be604938b28cc1864e445f2b7f02298de2fb39fba4f882e6da05a6677150a5d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10325,14 +10325,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.1.4": {
+    "canbench 0.1.6": {
       "name": "canbench",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.1.4/download",
-          "sha256": "4d8c8fd8ae281a318392d1e724428ad9d93f0a1f06ed61a2f5e97f6c957c821c"
+          "url": "https://static.crates.io/crates/canbench/0.1.6/download",
+          "sha256": "aecd4be2f49ce16c76bccb351a639cf32fd396039dd3c8e20dc156c66ff6752f"
         }
       },
       "targets": [
@@ -10369,7 +10369,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.1.4",
+              "id": "canbench-rs 0.1.6",
               "target": "canbench_rs"
             },
             {
@@ -10393,7 +10393,7 @@
               "target": "hex"
             },
             {
-              "id": "pocket-ic 3.1.0",
+              "id": "pocket-ic 4.0.0",
               "target": "pocket_ic"
             },
             {
@@ -10428,7 +10428,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10436,14 +10436,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.1.4": {
+    "canbench-rs 0.1.6": {
       "name": "canbench-rs",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.1.4/download",
-          "sha256": "53574f268dbe23dc83f891a4751b118a6ba927c8bc92e839ff108f3aaf151aa9"
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.6/download",
+          "sha256": "74799b36a6c2bd4493a52e18d6130de06590ddd0aef4d2b5fae49ea0c918a244"
         }
       },
       "targets": [
@@ -10486,13 +10486,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.1.4",
+              "id": "canbench-rs-macros 0.1.6",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10500,14 +10500,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.1.4": {
+    "canbench-rs-macros 0.1.6": {
       "name": "canbench-rs-macros",
-      "version": "0.1.4",
+      "version": "0.1.6",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.4/download",
-          "sha256": "d454906c77138a3802a7a680259cca7c006e9b268ba6905f7f4f2b8b74293fa4"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.6/download",
+          "sha256": "d774a421d3ce35bc6957d5611cba7e3ba66cd455a915d2ccf5b0e69d746299b1"
         }
       },
       "targets": [
@@ -10547,7 +10547,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.4"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -17866,11 +17866,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.1.4",
+              "id": "canbench 0.1.6",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.1.4",
+              "id": "canbench-rs 0.1.6",
               "target": "canbench_rs"
             },
             {
@@ -46852,14 +46852,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pocket-ic 3.1.0": {
+    "pocket-ic 4.0.0": {
       "name": "pocket-ic",
-      "version": "3.1.0",
+      "version": "4.0.0",
       "package_url": "https://github.com/dfinity/ic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pocket-ic/3.1.0/download",
-          "sha256": "f9765eeff77b8750cf6258eaeea237b96607cd770aa3d4003f021924192b7e4e"
+          "url": "https://static.crates.io/crates/pocket-ic/4.0.0/download",
+          "sha256": "629f46b7ab8a8d2fee02220ef8e99ae552c7e220117efa1ce0882ff09c8fb038"
         }
       },
       "targets": [
@@ -46920,6 +46920,14 @@
               "target": "serde_json"
             },
             {
+              "id": "sha2 0.10.8",
+              "target": "sha2"
+            },
+            {
+              "id": "tokio 1.40.0",
+              "target": "tokio"
+            },
+            {
               "id": "tracing 0.1.40",
               "target": "tracing"
             },
@@ -46935,16 +46943,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.81",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "3.1.0"
+        "version": "4.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -77722,7 +77721,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.1.4",
+    "canbench 0.1.6",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -78860,8 +78859,8 @@
     "byteorder 1.5.0",
     "bytes 1.7.1",
     "cached 0.49.2",
-    "canbench 0.1.4",
-    "canbench-rs 0.1.4",
+    "canbench 0.1.6",
+    "canbench-rs 0.1.6",
     "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
