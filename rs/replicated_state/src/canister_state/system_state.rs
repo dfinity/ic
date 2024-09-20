@@ -430,25 +430,23 @@ impl OnLowWasmMemoryHookStatus {
         // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
         // limit is ignored for query methods, response callback handlers,
         // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit = if let Some(limit) = wasm_memory_limit {
-            limit
-        } else {
-            NumBytes::new(4 * 1024 * 1024 * 1024)
-        };
+        let wasm_memory_limit =
+            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
 
         // If the canister has memory allocation, then it maximum allowed Wasm memory
         // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
-            debug_assert!(
-                used_stable_memory <= memory_allocation,
-                "Used stable memory: {:?}, is larger than memory allocation: {:?}.",
-                used_stable_memory,
-                memory_allocation
-            );
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-        } else {
-            wasm_memory_limit
-        };
+        let wasm_capacity = memory_allocation.map_or_else(
+            || wasm_memory_limit,
+            |memory_allocation| {
+                debug_assert!(
+                    used_stable_memory <= memory_allocation,
+                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
+                    used_stable_memory,
+                    memory_allocation
+                );
+                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            },
+        );
 
         // Conceptually we can think that the remaining Wasm memory is
         // equal to `wasm_capacity - used_wasm_memory` and that should
