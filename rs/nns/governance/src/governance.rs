@@ -1,5 +1,5 @@
 use crate::{
-    are_set_visibility_proposals_enabled, decoder_config, enable_new_canister_management_topics,
+    are_set_visibility_proposals_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -63,10 +63,7 @@ use crate::{
         StopOrStartCanister, Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Visibility,
         Vote, WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
-    proposals::{
-        call_canister::CallCanister,
-        create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
-    },
+    proposals::call_canister::CallCanister,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -76,7 +73,6 @@ use dfn_core::api::spawn;
 use dfn_core::println;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -92,7 +88,10 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::subnet_rental::SubnetRentalRequest;
+use ic_nns_governance_api::{
+    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem, proposal_validation,
+    subnet_rental::SubnetRentalRequest,
+};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -128,16 +127,6 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
-// The limits on NNS proposal title len (in bytes).
-const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
-const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
-// Proposal validation
-// 30000 B
-const PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
-// 2048 characters
-const PROPOSAL_URL_CHAR_MAX: usize = 2048;
-// 10 characters
-const PROPOSAL_URL_CHAR_MIN: usize = 10;
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
@@ -296,21 +285,18 @@ impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPortionPb {
             controller: Some(neuron.controller),
             is_capped: Some(neuron.is_capped),
             hotkeys: neuron.hotkeys,
-            hotkey_principal: Some(neuron.controller),
         }
     }
 }
 
 impl From<NeuronsFundNeuronPortion> for NeuronsFundNeuronPb {
     fn from(neuron: NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)] // TODO(NNS1-3198): Remove once hotkey_principal is removed
         Self {
             nns_neuron_id: Some(neuron.id.id),
             amount_icp_e8s: Some(neuron.amount_icp_e8s),
             controller: Some(neuron.controller),
             hotkeys: Some(Principals::from(neuron.hotkeys.clone())),
             is_capped: Some(neuron.is_capped),
-            hotkey_principal: Some(neuron.controller.to_string()),
         }
     }
 }
@@ -413,6 +399,7 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::ReviseElectedGuestosVersions
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
@@ -610,7 +597,7 @@ impl NnsFunction {
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
             NnsFunction::ReviseElectedGuestosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_replica_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_guestos_versions")
             }
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
@@ -637,12 +624,10 @@ impl NnsFunction {
                 ));
             }
             NnsFunction::ReviseElectedHostosVersions => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
             }
             NnsFunction::DeployHostosToSomeNodes => {
-                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
-                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+                (REGISTRY_CANISTER_ID, "deploy_hostos_to_some_nodes")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
@@ -683,9 +668,6 @@ impl NnsFunction {
             NnsFunction::ChangeSubnetTypeAssignment => {
                 (CYCLES_MINTING_CANISTER_ID, "change_subnet_type_assignment")
             }
-            NnsFunction::UpdateAllowedPrincipals => {
-                (SNS_WASM_CANISTER_ID, "update_allowed_principals")
-            }
             NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
             }
@@ -693,7 +675,9 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateAllowedPrincipals => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
@@ -716,10 +700,10 @@ impl NnsFunction {
                     ),
                 ));
             }
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
-                // TODO[NNS1-3000]: Rename Registry API for consistency.
-                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
-            }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
+                REGISTRY_CANISTER_ID,
+                "deploy_guestos_to_some_api_boundary_nodes",
+            ),
             NnsFunction::DeployGuestosToAllUnassignedNodes => (
                 REGISTRY_CANISTER_ID,
                 "deploy_guestos_to_all_unassigned_nodes",
@@ -817,9 +801,9 @@ impl Proposal {
                             NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
+                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateNodesHostosVersion
                             | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
                             NnsFunction::BlessReplicaVersion
@@ -832,20 +816,10 @@ impl Proposal {
                             NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::HardResetNnsRootToVersion
-                            | NnsFunction::BitcoinSetConfig => {
-                                if enable_new_canister_management_topics() {
-                                    Topic::ProtocolCanisterManagement
-                                } else {
-                                    Topic::NetworkCanisterManagement
-                                }
-                            }
+                            | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
                             NnsFunction::AddSnsWasm
                             | NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                                if enable_new_canister_management_topics() {
-                                    Topic::ServiceNervousSystemManagement
-                                } else {
-                                    Topic::NetworkCanisterManagement
-                                }
+                                Topic::ServiceNervousSystemManagement
                             }
                         }
                     } else {
@@ -972,6 +946,10 @@ impl Action {
                     None => false,
                 }
             }
+            Action::InstallCode(install_code) => install_code.allowed_when_resources_are_low(),
+            Action::UpdateCanisterSettings(update_canister_settings) => {
+                update_canister_settings.allowed_when_resources_are_low()
+            }
             _ => false,
         }
     }
@@ -997,11 +975,6 @@ impl Action {
                     execute_nns_function.payload.clear();
                 }
                 Action::ExecuteNnsFunction(execute_nns_function)
-            }
-            Action::InstallCode(mut install_code) => {
-                install_code.wasm_module = None;
-                install_code.arg = None;
-                Action::InstallCode(install_code)
             }
             action => action,
         }
@@ -1517,7 +1490,7 @@ pub trait Environment: Send + Sync {
 
     /// Basically, the same as dfn_core::api::call.
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -3298,16 +3271,12 @@ impl Governance {
 
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
-        let child_controller = &disburse_to_neuron
-            .new_controller
-            .as_ref()
-            .ok_or_else(|| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "Must specify a new controller for disburse to neuron.",
-                )
-            })?
-            .clone();
+        let child_controller = disburse_to_neuron.new_controller.ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Must specify a new controller for disburse to neuron.",
+            )
+        })?;
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount();
@@ -3316,14 +3285,10 @@ impl Governance {
         // the owner on the ledger. There is no need to length-prefix the
         // principal since the nonce is constant length, and so there is no risk
         // of ambiguity.
-        let to_subaccount = Subaccount({
-            let mut state = Sha256::new();
-            state.write(&[0x0c]);
-            state.write(b"neuron-split");
-            state.write(child_controller.as_slice());
-            state.write(&disburse_to_neuron.nonce.to_be_bytes());
-            state.finish()
-        });
+        let to_subaccount = Subaccount(ledger::compute_neuron_disburse_subaccount_bytes(
+            child_controller,
+            disburse_to_neuron.nonce,
+        ));
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -3358,7 +3323,7 @@ impl Governance {
         let child_neuron = NeuronBuilder::new(
             child_nid,
             to_subaccount,
-            *child_controller,
+            child_controller,
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds: created_timestamp_seconds,
@@ -3698,11 +3663,7 @@ impl Governance {
         let proposal = if multi_query {
             if let Some(
                 proposal @ Proposal {
-                    action:
-                        Some(
-                            proposal::Action::ExecuteNnsFunction(_)
-                            | proposal::Action::InstallCode(_),
-                        ),
+                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
                     ..
                 },
             ) = data.proposal.clone()
@@ -4678,6 +4639,17 @@ impl Governance {
         }
     }
 
+    async fn create_service_nervous_system(
+        &mut self,
+        proposal_id: u64,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+    ) {
+        let result = self
+            .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
     async fn do_create_service_nervous_system(
         &mut self,
         proposal_id: u64,
@@ -4711,61 +4683,99 @@ impl Governance {
                 (NeuronsFundSnapshot::empty(), None)
             };
 
-        let executed_create_service_nervous_system_proposal =
-            ExecutedCreateServiceNervousSystemProposal {
-                current_timestamp_seconds,
-                create_service_nervous_system: create_service_nervous_system.clone(),
-                proposal_id: proposal_id.id,
-                random_swap_start_time: self.randomly_pick_swap_start(),
-                neurons_fund_participation_constraints,
-            };
+        let random_swap_start_time = self.randomly_pick_swap_start();
+        let create_service_nervous_system = create_service_nervous_system.clone();
 
         self.execute_create_service_nervous_system_proposal(
-            executed_create_service_nervous_system_proposal,
+            create_service_nervous_system,
+            neurons_fund_participation_constraints,
+            current_timestamp_seconds,
+            proposal_id,
+            random_swap_start_time,
             initial_neurons_fund_participation_snapshot,
         )
         .await
     }
 
-    async fn create_service_nervous_system(
-        &mut self,
-        proposal_id: u64,
-        create_service_nervous_system: &CreateServiceNervousSystem,
-    ) {
-        let result = self
-            .do_create_service_nervous_system(proposal_id, create_service_nervous_system)
-            .await;
-        self.set_proposal_execution_status(proposal_id, result);
+    // This function is public as it is used in various tests, also outside this crate.
+    fn make_sns_init_payload(
+        create_service_nervous_system: CreateServiceNervousSystem,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
+        current_timestamp_seconds: u64,
+        proposal_id: ProposalId,
+        random_swap_start_time: GlobalTimeOfDay,
+    ) -> Result<SnsInitPayload, String> {
+        let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) = {
+            let start_time = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.start_time);
+
+            let duration = create_service_nervous_system
+                .swap_parameters
+                .as_ref()
+                .and_then(|swap_parameters| swap_parameters.duration);
+
+            CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                start_time.unwrap_or(random_swap_start_time),
+                duration.unwrap_or_default(),
+                current_timestamp_seconds,
+            )
+        }?;
+
+        let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            create_service_nervous_system,
+        ))?;
+
+        Ok(SnsInitPayload {
+            neurons_fund_participation_constraints,
+            nns_proposal_id: Some(proposal_id.id),
+            swap_start_timestamp_seconds: Some(swap_start_timestamp_seconds),
+            swap_due_timestamp_seconds: Some(swap_due_timestamp_seconds),
+            ..sns_init_payload
+        })
     }
 
     async fn execute_create_service_nervous_system_proposal(
         &mut self,
-        executed_create_service_nervous_system_proposal: ExecutedCreateServiceNervousSystemProposal,
+        create_service_nervous_system: CreateServiceNervousSystem,
+        neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
+        current_timestamp_seconds: u64,
+        proposal_id: ProposalId,
+        random_swap_start_time: GlobalTimeOfDay,
         initial_neurons_fund_participation_snapshot: NeuronsFundSnapshot,
     ) -> Result<(), GovernanceError> {
-        let is_start_time_unspecified = executed_create_service_nervous_system_proposal
-            .create_service_nervous_system
+        let is_start_time_unspecified = create_service_nervous_system
             .swap_parameters
             .as_ref()
             .map(|swap_parameters| swap_parameters.start_time.is_none())
             .unwrap_or(false);
 
-        // Step 1: Convert proposal into main request object.
-        let sns_init_payload =
-            match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal.clone())
-            {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "Failed to convert ExecutedCreateServiceNervousSystemProposal \
-                            to SnsInitPayload: {}",
-                            err,
-                        ),
-                    ))
-                }
-            };
+        // Step 1.1: Convert proposal into SnsInitPayload.
+        let sns_init_payload = Self::make_sns_init_payload(
+            create_service_nervous_system,
+            neurons_fund_participation_constraints,
+            current_timestamp_seconds,
+            proposal_id,
+            random_swap_start_time,
+        )
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!(
+                    "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload: {}",
+                    err,
+                ),
+            )
+        })?;
+
+        // Step 1.2: Validate the SnsInitPayload.
+        sns_init_payload.validate_post_execution().map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Failed to validate SnsInitPayload: {}", err),
+            )
+        })?;
 
         // If the test configuration is active (implying we are not running in
         // production), and the start time has not been specified,
@@ -4785,9 +4795,7 @@ impl Governance {
             println!(
                 "{}The swap's start time for proposal {:?} is unspecified, \
                 so a random time of {:?} will be used.",
-                LOG_PREFIX,
-                executed_create_service_nervous_system_proposal.proposal_id,
-                executed_create_service_nervous_system_proposal.random_swap_start_time
+                LOG_PREFIX, proposal_id, random_swap_start_time,
             );
         }
 
@@ -4798,10 +4806,6 @@ impl Governance {
             call_deploy_new_sns(&mut self.env, sns_init_payload).await;
 
         // Step 3: React to response from deploy_new_sns (Ok or Err).
-
-        let proposal_id = ProposalId {
-            id: executed_create_service_nervous_system_proposal.proposal_id,
-        };
 
         // Step 3.1: If the call was not successful, issue refunds (and then, return).
         if let Err(ref mut err) = &mut deploy_new_sns_response {
@@ -4963,7 +4967,9 @@ impl Governance {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }
 
-        validate_user_submitted_proposal_fields(proposal)?;
+        proposal_validation::validate_user_submitted_proposal_fields(
+            &ic_nns_governance_api::pb::v1::Proposal::from(proposal.clone()),
+        )?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
@@ -4991,10 +4997,12 @@ impl Governance {
             | Action::ApproveGenesisKyc(_)
             | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
-            | Action::SetDefaultFollowees(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
 
+            Action::SetDefaultFollowees(obsolete_action) => {
+                Self::validate_obsolete_proposal_action(obsolete_action)
+            }
             Action::SetSnsTokenSwapOpenTimeWindow(obsolete_action) => {
                 Self::validate_obsolete_proposal_action(obsolete_action)
             }
@@ -5170,7 +5178,9 @@ impl Governance {
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> Result<(), GovernanceError> {
         // Must be able to convert to a valid SnsInitPayload.
-        let conversion_result = SnsInitPayload::try_from(create_service_nervous_system.clone());
+        let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            create_service_nervous_system.clone(),
+        ));
         if let Err(err) = conversion_result {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
@@ -8017,74 +8027,6 @@ async fn call_deploy_new_sns(
     }
 }
 
-/// Validates the user submitted proposal fields.
-pub fn validate_user_submitted_proposal_fields(proposal: &Proposal) -> Result<(), String> {
-    validate_proposal_title(&proposal.title)?;
-    validate_proposal_summary(&proposal.summary)?;
-    validate_proposal_url(&proposal.url)?;
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. proposal must have a title.
-///   2. title len (bytes, not characters) is between min and max.
-pub fn validate_proposal_title(title: &Option<String>) -> Result<(), String> {
-    // Require that proposal has a title.
-    let len = title.as_ref().ok_or("Proposal lacks a title")?.len();
-
-    // Require that title is not too short.
-    if len < PROPOSAL_TITLE_BYTES_MIN {
-        return Err(format!(
-            "Proposal title is too short (must be at least {} bytes)",
-            PROPOSAL_TITLE_BYTES_MIN,
-        ));
-    }
-
-    // Require that title is not too long.
-    if len > PROPOSAL_TITLE_BYTES_MAX {
-        return Err(format!(
-            "Proposal title is too long (can be at most {} bytes)",
-            PROPOSAL_TITLE_BYTES_MAX,
-        ));
-    }
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. summary len (bytes, not characters) is below the max.
-pub fn validate_proposal_summary(summary: &str) -> Result<(), String> {
-    if summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
-        return Err(format!(
-            "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
-            PROPOSAL_SUMMARY_BYTES_MAX,
-            summary.len(),
-        ));
-    }
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. If a url is provided, it is between the max and min
-///   2. If a url is specified, it must be from the list of allowed domains.
-pub fn validate_proposal_url(url: &str) -> Result<(), String> {
-    // An empty string will fail validation as it is not a valid url,
-    // but it's fine for us.
-    if !url.is_empty() {
-        ic_nervous_system_common::validate_proposal_url(
-            url,
-            PROPOSAL_URL_CHAR_MIN,
-            PROPOSAL_URL_CHAR_MAX,
-            "Proposal url",
-            Some(vec!["forum.dfinity.org"]),
-        )?
-    }
-
-    Ok(())
-}
-
 fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
     if motion.motion_text.len() > PROPOSAL_MOTION_TEXT_BYTES_MAX {
         return Err(GovernanceError::new_with_message(
@@ -8249,7 +8191,7 @@ impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }

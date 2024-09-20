@@ -26,7 +26,7 @@ pub struct AppState {
     pub metadata: Metadata,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Metadata {
     pub symbol: String,
     pub decimals: u8,

@@ -8,7 +8,7 @@ use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::{
     encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
 };
-use ic_ledger_suite_orchestrator::state::read_state;
+use ic_ledger_suite_orchestrator::state::{read_state, TokenId};
 use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
 
@@ -18,20 +18,42 @@ mod dashboard;
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
-    read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
+    let token_id = TokenId::from(contract);
+    read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
 
 #[query]
 fn get_orchestrator_info() -> OrchestratorInfo {
-    read_state(|s| OrchestratorInfo {
-        managed_canisters: s
-            .managed_canisters_iter()
-            .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
-            .collect(),
-        cycles_management: s.cycles_management().clone(),
-        more_controller_ids: s.more_controller_ids().to_vec(),
-        minter_id: s.minter_id().cloned(),
-        ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
+    read_state(|s| {
+        let (erc20_canisters, other_canisters): (Vec<_>, Vec<_>) = s
+            .all_managed_canisters_iter()
+            .partition(|(token_id, _canisters)| match token_id {
+                TokenId::Erc20(_) => true,
+                TokenId::Other(_) => false,
+            });
+        OrchestratorInfo {
+            managed_canisters: erc20_canisters
+                .into_iter()
+                .map(|(token_id, canisters)| {
+                    (token_id.into_erc20_unchecked(), canisters.clone()).into()
+                })
+                .collect(),
+            cycles_management: s.cycles_management().clone(),
+            more_controller_ids: s.more_controller_ids().to_vec(),
+            minter_id: s.minter_id().cloned(),
+            ledger_suite_version: s.ledger_suite_version().cloned().map(|v| v.into()),
+            managed_pre_existing_ledger_suites: {
+                let canisters: Vec<_> = other_canisters
+                    .into_iter()
+                    .map(|(_token_id, canisters)| canisters.clone().into())
+                    .collect();
+                if canisters.is_empty() {
+                    None
+                } else {
+                    Some(canisters)
+                }
+            },
+        }
     })
 }
 
@@ -194,7 +216,7 @@ fn http_request(
                 read_state(|s| {
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_ledgers",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .filter(|(_erc20, canisters)| canisters.ledger.is_some())
                             .count() as f64,
                         "Total count of ckERC20 ledgers managed by the orchestrator.",
@@ -202,7 +224,7 @@ fn http_request(
 
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_indexes",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .filter(|(_erc20, canisters)| canisters.index.is_some())
                             .count() as f64,
                         "Total count of ckERC20 indexes managed by the orchestrator.",
@@ -210,7 +232,7 @@ fn http_request(
 
                     w.encode_counter(
                         "ledger_suite_orchestrator_managed_archives",
-                        s.managed_canisters_iter()
+                        s.all_managed_canisters_iter()
                             .flat_map(|(_erc20, canisters)| &canisters.archives)
                             .count() as f64,
                         "Total count of ckERC20 archives managed by the orchestrator.",

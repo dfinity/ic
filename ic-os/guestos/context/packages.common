@@ -5,13 +5,14 @@
 # image only.
 
 # Need kernel to boot anything
-linux-image-virtual-hwe-20.04
+linux-image-virtual-hwe-24.04
 initramfs-tools
 
 # Need systemd for boot process
 systemd
 systemd-sysv
 systemd-journal-remote
+systemd-resolved
 
 # Third-party services we will be running
 chrony

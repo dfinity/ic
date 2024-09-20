@@ -8,7 +8,7 @@ use super::{id::ExecId, structs::SandboxExecOutput};
 // (used by the sandbox) as well as the expected replies.
 
 // Notify controller that a canister run has finished.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionFinishedRequest {
     // Id for this run, as set up by controller.
     pub exec_id: ExecId,
@@ -16,24 +16,24 @@ pub struct ExecutionFinishedRequest {
     pub exec_output: SandboxExecOutput,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionFinishedReply {}
 
 // Notify controller that a canister run is paused.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionPausedRequest {
     pub exec_id: ExecId,
     pub slice: SliceExecutionOutput,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExecutionPausedReply {}
 
 /// We reply to the replica controller that either the execution was
 /// finished or the request failed, or request a system call or a log
 /// to be applied.
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Request {
     ExecutionFinished(ExecutionFinishedRequest),
     ExecutionPaused(ExecutionPausedRequest),
@@ -47,7 +47,7 @@ impl EnumerateInnerFileDescriptors for Request {
 /// We reply to the replica controller that either the execution was
 /// finished or the request failed.
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum Reply {
     ExecutionFinished(ExecutionFinishedReply),
     ExecutionPaused(ExecutionPausedReply),

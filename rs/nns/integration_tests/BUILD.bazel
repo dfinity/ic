@@ -41,6 +41,7 @@ BASE_DEPENDENCIES = [
         "//rs/crypto",
         "//rs/crypto/sha2",
         "//rs/nervous_system/root",
+        "//rs/nns/constants",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -84,7 +85,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//rs/nns/constants",
         "//rs/nns/test_utils",
         "//rs/nns/gtc",
     ],
@@ -102,7 +102,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//rs/nns/constants:constants--test_feature",
         "//rs/nns/test_utils:test_utils--test_feature",
         "//rs/nns/gtc:gtc--test_feature",
     ],
@@ -123,8 +122,13 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_utils",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
+    "@crate_index//:ic-cbor",
+    "@crate_index//:ic-certificate-verification",
+    "@crate_index//:ic-certification",
+    "@crate_index//:serde_cbor",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -356,10 +360,7 @@ rust_ic_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# This test has tag "manual", which means it only runs when you explicitly specify it. In addition,
-# this requires a couple of environment variables.
-#
-# To run this test,
+# Run this test as follows:
 #
 #     bazel \
 #         test \

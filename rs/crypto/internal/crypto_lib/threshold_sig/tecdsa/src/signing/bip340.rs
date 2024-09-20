@@ -128,7 +128,7 @@ impl RerandomizedPresignature {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThresholdBip340SignatureShareInternal {
     s: EccScalar,
 }
@@ -267,10 +267,10 @@ impl ThresholdBip340SignatureShareInternal {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ThresholdBip340SignatureShareInternalSerializationError(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThresholdBip340CombinedSignatureInternal {
     r: EccPoint,
     s: EccScalar,

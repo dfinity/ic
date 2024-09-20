@@ -4,6 +4,7 @@ set -e
 
 # Start the GuestOS virtual machine.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -31,16 +32,6 @@ done
 
 # Set arguments if undefined
 CONFIG="${CONFIG:=/var/lib/libvirt/guestos.xml}"
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function define_guestos() {
     if [ "$(virsh list --all | grep 'guestos')" ]; then

@@ -107,7 +107,7 @@ fn setup_sns(
     let new_dapp_wasm_hash = &ic_crypto_sha2::Sha256::hash(&new_dapp_wasm);
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     assert_eq!(status.memory_allocation(), 2 << 30);
@@ -160,7 +160,7 @@ fn test_upgrade_canister_proposal_is_successful() {
     }
 
     let status = state_machine
-        .canister_status_as(dapp_canister_id.get(), dapp_canister_id)
+        .canister_status_as(canister_ids.root_canister_id.get(), dapp_canister_id)
         .unwrap()
         .unwrap();
     // Assert that memory allocation is not changed.

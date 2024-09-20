@@ -110,7 +110,7 @@ impl CMC for StubCMC {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ExpectedCallCanisterMethodCallArguments {
     target: CanisterId,
     method_name: String,
@@ -214,7 +214,7 @@ impl Environment for MockEnvironment {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

@@ -4,8 +4,8 @@ use crate::{
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
         InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
         SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
-        UpgradePath as StableUpgradePath,
+        StableCanisterState, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
+        UpgradePath as UpgradePathPb,
     },
     sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
     stable_memory::SnsWasmStableMemory,
@@ -14,7 +14,7 @@ use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha2::Sha256;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::HashMap,
     convert::TryFrom,
     fmt::{Display, Write},
     str::FromStr,
@@ -182,48 +182,54 @@ impl TryFrom<SnsCanisterIds> for ic_sns_init::SnsCanisterIds {
 
 impl<M: StableMemory + Clone + Default> From<StableCanisterState> for SnsWasmCanister<M> {
     fn from(stable_canister_state: StableCanisterState) -> Self {
-        let wasm_indexes: BTreeMap<[u8; 32], SnsWasmStableIndex> = stable_canister_state
-            .wasm_indexes
+        let StableCanisterState {
+            wasm_indexes,
+            upgrade_path,
+            sns_subnet_ids,
+            deployed_sns_list,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
+        } = stable_canister_state;
+
+        let wasm_indexes = wasm_indexes
             .into_iter()
             .map(|index| (vec_to_hash(index.hash.clone()).unwrap(), index))
             .collect();
-
-        let stable_upgrade_path = stable_canister_state.upgrade_path.unwrap_or_default();
-
-        let upgrade_path = stable_upgrade_path.into();
-
-        let sns_subnet_ids = stable_canister_state
-            .sns_subnet_ids
-            .into_iter()
-            .map(|id| id.into())
-            .collect();
+        let stable_upgrade_path = upgrade_path.unwrap_or_default();
+        let upgrade_path = UpgradePath::from(stable_upgrade_path);
+        let sns_subnet_ids = sns_subnet_ids.into_iter().map(|id| id.into()).collect();
+        let stable_memory = SnsWasmStableMemory::<M>::default();
 
         SnsWasmCanister {
             wasm_indexes,
             sns_subnet_ids,
-            deployed_sns_list: stable_canister_state.deployed_sns_list,
+            stable_memory,
+            deployed_sns_list,
             upgrade_path,
-            stable_memory: SnsWasmStableMemory::<M>::default(),
-            access_controls_enabled: stable_canister_state.access_controls_enabled,
-            allowed_principals: stable_canister_state.allowed_principals,
-            nns_proposal_to_deployed_sns: stable_canister_state.nns_proposal_to_deployed_sns,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
         }
     }
 }
 
 impl<M: StableMemory + Clone + Default> From<SnsWasmCanister<M>> for StableCanisterState {
     fn from(state: SnsWasmCanister<M>) -> StableCanisterState {
-        let wasm_indexes = state.wasm_indexes.values().cloned().collect();
-        let sns_subnet_ids = state
-            .sns_subnet_ids
-            .into_iter()
-            .map(|id| id.get())
-            .collect();
-        let deployed_sns_list = state.deployed_sns_list;
-        let upgrade_path = Some(state.upgrade_path.into());
-        let access_controls_enabled = state.access_controls_enabled;
-        let allowed_principals = state.allowed_principals;
-        let nns_proposal_to_deployed_sns = state.nns_proposal_to_deployed_sns;
+        let SnsWasmCanister::<M> {
+            wasm_indexes,
+            sns_subnet_ids,
+            deployed_sns_list,
+            upgrade_path,
+            access_controls_enabled,
+            allowed_principals,
+            nns_proposal_to_deployed_sns,
+            stable_memory: _,
+        } = state;
+
+        let wasm_indexes = wasm_indexes.into_values().collect();
+        let sns_subnet_ids = sns_subnet_ids.into_iter().map(|id| id.get()).collect();
+        let upgrade_path = Some(UpgradePathPb::from(upgrade_path));
 
         StableCanisterState {
             wasm_indexes,

@@ -2,7 +2,7 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
@@ -31,13 +31,13 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
-    ops::{Deref, RangeBounds},
+    ops::Deref,
 };
 
 pub mod metrics;
 pub(crate) use metrics::NeuronMetrics;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
     NeuronNotFound {
         neuron_id: NeuronId,
@@ -188,7 +188,7 @@ dyn_clone::clone_trait_object!(PracticalClock);
 impl PracticalClock for IcClock {}
 
 /// This structure represents a whole Neuron's Fund neuron.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,
@@ -687,21 +687,6 @@ impl NeuronStore {
 
     fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
         self.heap_neurons.values()
-    }
-
-    /// Returns Neurons in heap starting with the first one whose ID is >= begin.
-    ///
-    /// The len of the result is at most limit. It is also maximal; that is, if the return value has
-    /// len < limit, then the caller can assume that there are no more Neurons.
-    pub fn range_heap_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
-    where
-        R: RangeBounds<NeuronId>,
-    {
-        let range = neuron_id_range_to_u64_range(&range);
-
-        self.heap_neurons
-            .range(range)
-            .map(|(_id, neuron)| neuron.clone())
     }
 
     /// Internal - map over neurons after filtering

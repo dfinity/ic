@@ -13,7 +13,7 @@ use std::{
 };
 pub trait LocalStore: LocalStoreWriter + LocalStoreReader {}
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct KeyMutation {
     /// The key of the entry.
     pub key: String,

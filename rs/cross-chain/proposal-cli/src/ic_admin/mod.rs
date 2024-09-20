@@ -6,9 +6,9 @@ use crate::proposal::ProposalTemplate;
 use askama::Template;
 use candid::Principal;
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf, StripPrefixError};
 
-#[derive(Debug, Clone, Args)]
+#[derive(Clone, Debug, Args)]
 pub struct IcAdminArgs {
     /// Use an HSM to sign calls.
     #[clap(long)]
@@ -62,6 +62,7 @@ impl IcAdminArgs {
             wasm_module_path: generated_files.wasm.to_string_lossy().to_string(),
             wasm_module_sha256: proposal.compressed_wasm_hash().clone(),
             arg: generated_files.arg.to_string_lossy().to_string(),
+            arg_sha256: proposal.args_sha256_hex(),
             summary_file: generated_files.summary.to_string_lossy().to_string(),
         }
         .render()
@@ -73,6 +74,16 @@ pub struct ProposalFiles {
     pub wasm: PathBuf,
     pub arg: PathBuf,
     pub summary: PathBuf,
+}
+
+impl ProposalFiles {
+    pub fn strip_prefix(self, base: &Path) -> Result<Self, StripPrefixError> {
+        Ok(Self {
+            wasm: self.wasm.strip_prefix(base)?.to_path_buf(),
+            arg: self.arg.strip_prefix(base)?.to_path_buf(),
+            summary: self.summary.strip_prefix(base)?.to_path_buf(),
+        })
+    }
 }
 
 #[derive(Template)]
@@ -100,6 +111,9 @@ pub struct IcAdminTemplate {
     /// The path to a binary file containing the initialization or upgrade args of the
     /// canister.
     pub arg: String,
+
+    /// The sha256 of the arg binary file.
+    pub arg_sha256: String,
 
     /// A file containing a human-readable summary of the proposal content.
     pub summary_file: String,

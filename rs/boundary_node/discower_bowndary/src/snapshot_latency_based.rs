@@ -21,7 +21,7 @@ struct WeightedNode {
     weight: f64,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct LatencyBasedSnapshot {
     weighted_nodes: Vec<WeightedNode>,
     existing_nodes: HashSet<String>,

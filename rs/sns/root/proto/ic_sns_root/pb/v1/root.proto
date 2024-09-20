@@ -33,10 +33,6 @@ message SnsRootCanister {
   // CanisterIds of the archives of the SNS Ledger blocks.
   repeated ic_base_types.pb.v1.PrincipalId archive_canister_ids = 5;
 
-  // The timestamp of the latest poll for archives of the ledger canister,
-  // in seconds since the Unix epoch.
-  optional uint64 latest_ledger_archive_poll_timestamp_seconds = 6;
-
   // Required.
   //
   // The SNS Index canister ID
@@ -45,6 +41,11 @@ message SnsRootCanister {
   // True if the SNS is running in testflight mode. Then additional
   // controllers beyond SNS root are allowed when registering a dapp.
   bool testflight = 8;
+
+  reserved "updated_framework_canisters_memory_limit";
+  reserved 9;
+  reserved "latest_ledger_archive_poll_timestamp_seconds";
+  reserved 6;
 }
 
 message RegisterDappCanisterRequest {

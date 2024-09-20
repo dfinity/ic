@@ -19,7 +19,7 @@ pub mod bls12_381 {
     /// # Interoperability
     /// - The IETF draft does not specify a serialisation for this:
     ///   https://datatracker.ietf.org/doc/draft-irtf-cfrg-bls-signature/>
-    #[derive(Copy, Clone, PartialEq, Eq, Hash)]
+    #[derive(Copy, Clone, Eq, PartialEq, Hash)]
     pub struct FrBytes(pub [u8; FrBytes::SIZE]);
     crate::derive_serde!(FrBytes, FrBytes::SIZE);
     impl FrBytes {

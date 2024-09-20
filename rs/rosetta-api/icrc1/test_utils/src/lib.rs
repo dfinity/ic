@@ -1,8 +1,8 @@
 use candid::{Nat, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
-use ic_crypto_ecdsa_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
+use ic_crypto_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
@@ -393,7 +393,7 @@ impl ArgWithCaller {
     }
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug, Default)]
 struct TransactionsAndBalances {
     transactions: Vec<ArgWithCaller>,
     balances: HashMap<Account, u64>,
@@ -510,7 +510,7 @@ fn amount_strategy() -> impl Strategy<Value = u64> {
     0..100_000_000_000u64 // max is 1M ICP
 }
 
-fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
+pub fn basic_identity_strategy() -> impl Strategy<Value = BasicIdentity> {
     prop::num::u64::ANY.prop_map(|ran| {
         let keypair = Ed25519KeyPair::generate(ran);
         BasicIdentity::from_pem(keypair.to_pem().as_bytes()).unwrap()

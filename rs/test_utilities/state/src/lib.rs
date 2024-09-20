@@ -564,7 +564,6 @@ impl Default for ExecutionStateBuilder {
         ExecutionStateBuilder {
             execution_state: ExecutionState {
                 canister_root: "NOT_USED".into(),
-                session_nonce: None,
                 wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
                 wasm_memory: Memory::new_for_testing(),
                 stable_memory: Memory::new_for_testing(),

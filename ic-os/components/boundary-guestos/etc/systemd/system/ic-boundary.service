@@ -26,6 +26,7 @@ ExecStart=/bin/bash -c ' \
         --disable-latency-routing \
         --retry-update-call \
         --rate-limit-per-second-per-subnet "1000" \
+        --http-client-count "8" \
         ${MAX_CONCURRENCY:+ --max-concurrency "${MAX_CONCURRENCY}"} \
         ${SHED_EWMA_PARAM:+ --shed-ewma-param "${SHED_EWMA_PARAM}"} \
         ${CACHE_SIZE:+ --cache-size-bytes "${CACHE_SIZE}"} \

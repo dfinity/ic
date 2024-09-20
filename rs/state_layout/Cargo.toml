@@ -32,4 +32,4 @@ ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 itertools = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }

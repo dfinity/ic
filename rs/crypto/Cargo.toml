@@ -15,8 +15,9 @@ ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-crypto-ecdsa-secp256k1 = { path = "ecdsa_secp256k1" }
+ic-crypto-secp256k1 = { path = "secp256k1" }
 ic-crypto-ecdsa-secp256r1 = { path = "ecdsa_secp256r1" }
+ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-interfaces-sig-verification = { path = "interfaces/sig_verification" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
@@ -38,7 +39,7 @@ ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 rustls = { workspace = true, features = ["std"] }
 serde = { workspace = true }
 slog = { workspace = true }
@@ -51,7 +52,6 @@ tokio = { workspace = true }
 assert_matches = { workspace = true }
 criterion = { workspace = true }
 ic-certification-test-utils = { path = "../certification/test-utils" }
-ic-crypto-ed25519 = { path = "ed25519" }
 ic-crypto-for-verification-only = { path = "for_verification_only" }
 ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
@@ -91,8 +91,8 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 k256 = { workspace = true }
 maplit = "1.0.2"
 mockall = { workspace = true }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

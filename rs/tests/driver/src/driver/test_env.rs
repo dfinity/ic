@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_registry_local_registry::LocalRegistry;
 use ic_sys::fs::{sync_path, write_atomically};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -11,6 +12,7 @@ use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::pot_dsl::TestPath;
@@ -170,6 +172,17 @@ impl TestEnv {
         };
         path.set_extension(new_ext);
         path
+    }
+
+    pub fn get_registry(&self) -> anyhow::Result<Arc<LocalRegistry>> {
+        let local_store_path = self
+            .prep_dir("")
+            .ok_or(anyhow::anyhow!("No-name IC"))?
+            .registry_local_store_path();
+        Ok(Arc::new(LocalRegistry::new(
+            local_store_path,
+            Duration::from_secs(10),
+        )?))
     }
 }
 

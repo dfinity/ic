@@ -46,7 +46,7 @@ ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
 maplit = "1.0.2"
 pocket-ic = { path = "../../../packages/pocket-ic" }
-proptest = "1"
+proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 tempfile = { workspace = true }

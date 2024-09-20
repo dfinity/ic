@@ -30,7 +30,7 @@ pub type UtilityCommandResult<T> = Result<T, UtilityCommandError>;
 /// stdin.
 ///
 /// This is used to interact with the USB HSM via system tools.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct UtilityCommand {
     program: String,
     args: Vec<String>,

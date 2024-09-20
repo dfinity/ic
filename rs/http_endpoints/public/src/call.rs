@@ -1,10 +1,8 @@
 //! Module that deals with ingress messages
-mod call_v2;
-mod call_v3;
+pub mod call_v2;
+pub mod call_v3;
 mod ingress_watcher;
 
-pub use call_v2::CallServiceV2;
-pub use call_v3::CallServiceV3;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{

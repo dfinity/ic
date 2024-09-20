@@ -58,8 +58,7 @@ pub async fn handle_construction_submit(
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_nanos() as u64;
-    let valid_ingress_end: u64 =
-        now.saturating_add(ic_constants::MAX_INGRESS_TTL.as_nanos() as u64);
+    let valid_ingress_end: u64 = now.saturating_add(ic_limits::MAX_INGRESS_TTL.as_nanos() as u64);
 
     // We start at the highest ingress expiry and work our way down to the first ingress expiry that is currently valid
     if let Some(envelope) = signed_transaction
@@ -503,8 +502,8 @@ pub fn handle_construction_parse(
                     // The ingress start is the first ingress expiry set minus the ingress interval
                     ingress_start: ingress_expiry_start.map(|start| {
                         start
-                            - (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT)
-                                .as_nanos() as u64
+                            - (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
+                                as u64
                     }),
                     ingress_end: ingress_expiry_end,
                 }

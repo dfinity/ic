@@ -40,7 +40,6 @@ use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
     objects::ObjectMap,
-    request_types::MetadataRequest,
     response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
 };
 use std::{
@@ -494,10 +493,7 @@ impl RosettaRequestHandler {
     }
 
     /// Get List of Available Networks
-    pub async fn network_list(
-        &self,
-        _metadata_request: MetadataRequest,
-    ) -> Result<NetworkListResponse, ApiError> {
+    pub async fn network_list(&self) -> Result<NetworkListResponse, ApiError> {
         let net_id = self.network_id();
         Ok(NetworkListResponse::new(vec![net_id]))
     }

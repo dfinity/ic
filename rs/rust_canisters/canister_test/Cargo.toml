@@ -23,6 +23,6 @@ ic-types = { path = "../../types/types" }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }
 tokio = { workspace = true }
-wasmprinter = "0.2.45"
-wat = "1.0.52"
+wasmprinter = { workspace = true }
+wat = { workspace = true }
 

@@ -11,4 +11,4 @@ ic-crypto-internal-sha2 = { path = "../sha2" }
 
 [dev-dependencies]
 hex = { workspace = true }
-wycheproof = "0.5"
+wycheproof = { version = "0.6", default-features = false, features = ["hkdf", "mac"] }

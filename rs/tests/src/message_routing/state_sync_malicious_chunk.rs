@@ -51,7 +51,7 @@ const DKG_INTERVAL_LARGE: u64 = 199;
 const NUM_CANISTERS: usize = 8;
 const SIZE_LEVEL: usize = 8;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
     allowed_failures: usize,

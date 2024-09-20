@@ -77,7 +77,7 @@ where
     account_id: NeuronAccountIdIndex<Memory>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct CorruptedNeuronIndexes {
     pub neuron_id: NeuronId,
     pub indexes: Vec<NeuronIndexDefect>,
@@ -99,7 +99,7 @@ impl Display for CorruptedNeuronIndexes {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronIndexDefect {
     Subaccount { reason: String },
     Principal { reason: String },

@@ -11,6 +11,10 @@
     "local": "ryjl3-tyaaa-aaaaa-aaaba-cai",
     "mainnet": "ryjl3-tyaaa-aaaaa-aaaba-cai"
   },
+  "icp-index": {
+    "local": "qhbym-qaaaa-aaaaa-aaafq-cai",
+    "mainnet": "qhbym-qaaaa-aaaaa-aaafq-cai"
+  },
   "icp-ledger-archive": {
     "local": "qjdve-lqaaa-aaaaa-aaaeq-cai",
     "mainnet": "qjdve-lqaaa-aaaaa-aaaeq-cai"

@@ -12,7 +12,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
-use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_histogram_vec_stats, labels};
 use ic_types::{
     ingress::WasmResult, CanisterId, Cycles, NumInstructions, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
@@ -149,7 +149,7 @@ fn test_fetch_canister_logs_via_execute_ingress() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            "Cannot enqueue management message because fetch_canister_logs method is not allowed to be called via ingress messages.",
+            "ic00 method fetch_canister_logs can not be called via ingress messages",
         ))
     );
 }
@@ -178,6 +178,26 @@ fn test_fetch_canister_logs_via_query_call() {
             .encode(),
         ))
     );
+}
+
+#[test]
+fn test_metrics_for_fetch_canister_logs_via_query_call() {
+    fn fetch_canister_logs_count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(
+            env.metrics_registry(),
+            "execution_subnet_query_message_duration_seconds",
+        )
+        .get(&labels(&[
+            ("method_name", "query_ic00_fetch_canister_logs"),
+            ("status", "success"),
+        ]))
+        .map_or(0, |stats| stats.count)
+    }
+    let (env, canister_id, controller) = setup_with_controller(wat_canister().build_wasm());
+
+    assert_eq!(fetch_canister_logs_count(&env), 0);
+    let _ = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(fetch_canister_logs_count(&env), 1);
 }
 
 #[test]
@@ -1203,7 +1223,7 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
 #[test]
 fn test_canister_log_memory_usage_bytes() {
     // Test canister logging metrics record the size of the log.
-    let metric = "canister_log_memory_usage_bytes";
+    let metric = "canister_log_memory_usage_bytes_v2";
     const PAYLOAD_SIZE: usize = 1_000;
     let (env, canister_id, _controller) = setup_with_controller(
         wat_canister()

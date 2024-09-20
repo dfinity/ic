@@ -223,6 +223,7 @@ impl MockManagementCanisterClient {
         self.calls.lock().unwrap().clone().into()
     }
 
+    #[track_caller]
     pub fn assert_all_replies_consumed(&self) {
         assert!(self.replies.lock().unwrap().is_empty())
     }
@@ -232,13 +233,13 @@ impl MockManagementCanisterClient {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),

@@ -36,6 +36,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_registry_canister.pb.v1.SubnetForCanister",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
+    config.type_attribute(
+        "ic_registry_canister.pb.v1.GetApiBoundaryNodeIdsRequest",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_registry_canister.pb.v1.ApiBoundaryNodeIdRecord",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
 
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

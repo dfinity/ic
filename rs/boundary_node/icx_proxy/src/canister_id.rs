@@ -16,7 +16,7 @@ pub struct ResolverState {
     pub dns: DnsCanisterConfig,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct QueryParam(pub Principal);
 
 #[async_trait]
@@ -67,7 +67,7 @@ impl FromRequestParts<ResolverState> for QueryParam {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UriHost(pub Principal);
 
 #[async_trait]
@@ -102,7 +102,7 @@ impl FromRequestParts<ResolverState> for UriHost {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct HostHeader(pub Principal);
 
 #[async_trait]
@@ -143,7 +143,7 @@ impl FromRequestParts<ResolverState> for HostHeader {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RefererHeaderHost(pub Principal);
 
 #[async_trait]
@@ -194,7 +194,7 @@ impl FromRequestParts<ResolverState> for RefererHeaderHost {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RefererHeaderQueryParam(pub Principal);
 
 #[async_trait]

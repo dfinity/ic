@@ -32,3 +32,6 @@ fn calculate_hash(bytes: &[u8]) -> [u8; 32] {
     wasm_sha.write(bytes);
     wasm_sha.finish()
 }
+
+#[cfg(test)]
+mod tests;

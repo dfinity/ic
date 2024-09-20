@@ -1,17 +1,18 @@
-use crate::{pb::v1::NodeProvidersMonthlyXdrRewards, registry::Registry};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use crate::{
+    mutations::node_management::common::{get_key_family, get_key_family_iter},
+    pb::v1::NodeProvidersMonthlyXdrRewards,
+    registry::Registry,
+};
 use ic_protobuf::registry::{
-    dc::v1::DataCenterRecord,
-    node_operator::v1::NodeOperatorRecord,
-    node_rewards::v2::{NodeRewardRate, NodeRewardsTable},
+    dc::v1::DataCenterRecord, node_operator::v1::NodeOperatorRecord,
+    node_rewards::v2::NodeRewardsTable,
 };
 use ic_registry_keys::{
-    make_data_center_record_key, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
-use ic_types::PrincipalId;
+use ic_registry_node_provider_rewards::calculate_rewards_v0;
 use prost::Message;
-use std::{collections::HashMap, convert::TryFrom, str::from_utf8};
+use std::collections::BTreeMap;
 
 impl Registry {
     /// Return a map from Node Provider IDs to the amount (in 10,000ths of an
@@ -30,160 +31,19 @@ impl Registry {
 
         let rewards_table = NodeRewardsTable::decode(rewards_table_bytes.as_slice()).unwrap();
 
-        // The reward coefficients for the NP, at the moment used only for type3 nodes, as a measure for stimulating decentralization.
-        // It is kept outside of the reward calculation loop in order to reduce node rewards for NPs with multiple DCs.
-        // We want to have as many independent NPs as possible for the given reward budget.
-        let mut np_coefficients: HashMap<String, f64> = HashMap::new();
+        let node_operators =
+            get_key_family::<NodeOperatorRecord>(self, NODE_OPERATOR_RECORD_KEY_PREFIX);
 
-        for (key, values) in self.store.iter() {
-            if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
-                let value = values.back().unwrap();
-                if value.deletion_marker {
-                    continue;
-                }
-                let node_operator = NodeOperatorRecord::decode(value.value.as_slice()).unwrap();
-                let node_operator_id = PrincipalId::try_from(
-                    &node_operator.node_operator_principal_id,
-                )
-                .map_err(|e| {
-                    format!(
-                        "Node Operator key '{:?}' cannot be parsed as a PrincipalId: '{}'",
-                        from_utf8(key.as_slice()),
-                        e
-                    )
-                })?;
+        let data_centers = get_key_family_iter::<DataCenterRecord>(self, DATA_CENTER_KEY_PREFIX)
+            .collect::<BTreeMap<String, DataCenterRecord>>();
 
-                let node_provider_id = PrincipalId::try_from(
-                    &node_operator.node_provider_principal_id,
-                )
-                .map_err(|e| {
-                    format!(
-                        "Node Operator with key '{}' has a node_provider_principal_id \
-                                 that cannot be parsed as a PrincipalId: '{}'",
-                        node_operator_id, e
-                    )
-                })?;
+        let reward_values = calculate_rewards_v0(&rewards_table, &node_operators, &data_centers)?;
 
-                let dc_id = &node_operator.dc_id;
-                let dc_key = make_data_center_record_key(dc_id);
-                let dc_record_bytes = self
-                    .get(dc_key.as_bytes(), self.latest_version())
-                    .ok_or_else(|| {
-                        format!(
-                            "Node Operator with key '{}' has data center ID '{}' \
-                            not found in the Registry",
-                            node_operator_id, dc_id
-                        )
-                    })?
-                    .value
-                    .clone();
-                let dc = DataCenterRecord::decode(dc_record_bytes.as_slice()).unwrap();
-                let region = &dc.region;
-
-                let np_rewards = rewards
-                    .rewards
-                    .entry(node_provider_id.to_string())
-                    .or_default();
-                for (node_type, node_count) in node_operator.rewardable_nodes {
-                    let rate = match rewards_table.get_rate(region, &node_type) {
-                        Some(rate) => rate,
-                        None => {
-                            println!(
-                                "The Node Rewards Table does not have an entry for \
-                             node type '{}' within region '{}' or parent region, defaulting to 1 xdr per month per node, for \
-                             NodeProvider '{}' on Node Operator '{}'",
-                                node_type, region, node_provider_id, node_operator_id
-                            );
-                            NodeRewardRate {
-                                xdr_permyriad_per_node_per_month: 1,
-                                reward_coefficient_percent: Some(100),
-                            }
-                        }
-                    };
-
-                    let dc_reward = match &node_type {
-                        t if t.starts_with("type3") => {
-                            // For type3 nodes, the rewards are progressively reduced for each additional node owned by a NP.
-                            // This helps to improve network decentralization. The first node gets the full reward.
-                            // After the first node, the rewards are progressively reduced by multiplying them with reward_coefficient_percent.
-                            // For the n-th node, the reward is:
-                            // reward(n) = reward(n-1) * reward_coefficient_percent ^ (n-1)
-                            //
-                            // A note around the type3 rewards and iter() over self.store
-                            //
-                            // One known issue with this implementation is that in some edge cases it could lead to
-                            // unexpected results. The outer loop iterates over the node operator records sorted
-                            // lexicographically, instead of the order in which the records were added to the registry,
-                            // or instead of the order in which NP/NO adds nodes to the network. This means that all
-                            // reduction factors for the node operator A are applied prior to all reduction factors for
-                            // the node operator B, independently from the order in which the node operator records,
-                            // nodes, or the rewardable nodes were added to the registry.
-                            // For instance, say a Node Provider adds a Node Operator B in region 1 with higher reward
-                            // coefficient so higher average rewards, and then A in region 2 with lower reward
-                            // coefficient so lower average rewards. When the rewards are calculated, the rewards for
-                            // Node Operator A are calculated before the rewards for B (due to the lexicographical
-                            // order), and the final rewards will be lower than they would be calculated first for B and
-                            // then for A, as expected based on the insert order.
-
-                            let reward_base = rate.xdr_permyriad_per_node_per_month as f64;
-
-                            // To de-stimulate the same NP having too many nodes in the same country, the node rewards
-                            // is reduced for each node the NP has in the given country.
-                            // Join the NP PrincipalId + DC Continent + DC Country, and use that as the key for the
-                            // reduction coefficients.
-                            let np_coefficients_key = format!(
-                                "{}:{}",
-                                node_provider_id,
-                                region
-                                    .splitn(3, ',')
-                                    .take(2)
-                                    .collect::<Vec<&str>>()
-                                    .join(":")
-                            );
-
-                            let mut np_coeff =
-                                *np_coefficients.get(&np_coefficients_key).unwrap_or(&1.0);
-
-                            // Default reward_coefficient_percent is set to 80%, which is used as a fallback only in the
-                            // unlikely case that the type3 entry in the reward table:
-                            // a) has xdr_permyriad_per_node_per_month entry set for this region, but
-                            // b) does NOT have the reward_coefficient_percent value set
-                            let dc_reward_coefficient_percent =
-                                rate.reward_coefficient_percent.unwrap_or(80) as f64 / 100.0;
-
-                            let mut dc_reward = 0;
-                            for i in 0..node_count {
-                                let node_reward = (reward_base * np_coeff) as u64;
-                                println!(
-                                    "NodeProvider {} {}/{} {} node in {} DC: reward {}",
-                                    node_provider_id,
-                                    i + 1,
-                                    node_count,
-                                    node_type.as_str(),
-                                    node_operator.dc_id,
-                                    node_reward,
-                                );
-                                dc_reward += node_reward;
-                                np_coeff *= dc_reward_coefficient_percent;
-                            }
-                            np_coefficients.insert(np_coefficients_key, np_coeff);
-                            dc_reward
-                        }
-                        _ => node_count as u64 * rate.xdr_permyriad_per_node_per_month,
-                    };
-
-                    println!(
-                        "NodeProvider {} reward for all {} {} nodes in {} DC: reward {}",
-                        node_provider_id,
-                        node_count,
-                        node_type.as_str(),
-                        node_operator.dc_id,
-                        dc_reward,
-                    );
-                    *np_rewards += dc_reward;
-                }
-            }
-        }
+        rewards.rewards = reward_values
+            .rewards_per_node_provider
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect();
 
         rewards.registry_version = Some(self.latest_version());
 
@@ -195,6 +55,9 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
+
+    #[cfg(target_arch = "wasm32")]
+    use dfn_core::println;
     use ic_nervous_system_common_test_keys::{
         TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     };
@@ -207,8 +70,8 @@ mod tests {
     };
     use ic_registry_keys::make_node_operator_record_key;
     use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_types::PrincipalId;
     use maplit::btreemap;
-
     use std::collections::BTreeMap;
 
     /// Assert that `get_node_providers_monthly_xdr_rewards` returns success in the case

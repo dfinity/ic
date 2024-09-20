@@ -25,7 +25,7 @@ const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 // \[small, medium, large\]
 const MSG_SIZES: [usize; 3] = [32, 10_000, 1_000_000];
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]
@@ -280,8 +280,8 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
     bytes_to_sign: &[u8],
     rng: &mut R,
 ) -> (Vec<u8>, Vec<u8>) {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
-    let signature = sk.sign_message(bytes_to_sign).to_vec();
+    let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
+    let signature = sk.sign_message_with_ecdsa(bytes_to_sign).to_vec();
     let public_key = sk.public_key().serialize_sec1(false);
     (signature, public_key)
 }

@@ -64,7 +64,7 @@ impl Csprng {
 }
 
 /// The purpose the randomness is used for.
-#[derive(Clone, Debug, Eq, PartialEq, EnumCount, EnumIter)]
+#[derive(Clone, Eq, PartialEq, Debug, EnumCount, EnumIter)]
 pub enum RandomnessPurpose {
     CommitteeSampling,
     BlockmakerRanking,

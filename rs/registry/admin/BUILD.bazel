@@ -63,7 +63,6 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
-    "//rs/nns/governance",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
@@ -74,7 +73,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 # (Currently not used)
 # DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 #     "//rs/sns/init:init--test_feature",
-#     "//rs/nns/governance:governance--test_feature",
 #     "//rs/nns/sns-wasm:sns-wasm--test_feature",
 #     "//rs/nns/handlers/root/impl:root--test_feature",
 #     "//rs/sns/swap:swap--test_feature",

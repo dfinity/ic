@@ -1,7 +1,7 @@
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use std::fmt;
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, candid::CandidType, candid::Deserialize)]
 pub struct RegistryCanisterInitPayload {
     pub mutations: Vec<RegistryAtomicMutateRequest>,
 }

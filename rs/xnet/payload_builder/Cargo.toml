@@ -12,7 +12,7 @@ hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
-ic-constants = { path = "../../constants" }
+ic-limits = { path = "../../limits" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces = { path = "../../interfaces" }
@@ -55,7 +55,7 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 nix = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
 reqwest = { workspace = true }
 tempfile = { workspace = true }
 url = { workspace = true }

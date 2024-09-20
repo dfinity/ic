@@ -1,4 +1,5 @@
 use crate::generate_sns_init_payload;
+use anyhow::Result;
 use clap::Parser;
 use std::{path::PathBuf, str::FromStr};
 
@@ -22,18 +23,13 @@ enum SubCommand {
     Validate,
 }
 
-pub fn exec(init_config_file_args: InitConfigFileArgs) {
+pub fn exec(init_config_file_args: InitConfigFileArgs) -> Result<()> {
     let init_config_file_path = init_config_file_args
         .init_config_file_path
         .unwrap_or_else(|| PathBuf::from_str(DEFAULT_INIT_CONFIG_PATH).unwrap());
     match init_config_file_args.sub_command {
-        SubCommand::Validate => validate(init_config_file_path),
-    }
-}
-
-fn validate(init_config_file: PathBuf) {
-    if let Err(err) = generate_sns_init_payload(&init_config_file) {
-        eprintln!("{}", err);
-        std::process::exit(1);
+        SubCommand::Validate => {
+            generate_sns_init_payload(init_config_file_path.as_ref()).map(|_| ())
+        }
     }
 }

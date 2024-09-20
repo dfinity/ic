@@ -4,7 +4,7 @@ use ic_crypto_sha2::Sha256;
 use icp_ledger::{BlockIndex, TimeStamp, Transaction};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RosettaBlock {
     pub index: BlockIndex,
     pub parent_hash: Option<[u8; 32]>,

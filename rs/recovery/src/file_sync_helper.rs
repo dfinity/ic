@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     thread,
+    time::Duration,
 };
 
 /// Given the name and replica version of a binary, download the artifact to the
@@ -32,8 +33,14 @@ pub async fn download_binary(
 
     let mut file = target_dir.join(format!("{}.gz", binary_name));
 
-    info!(logger, "Downloading {} to {:?}...", binary_name, file);
-    let file_downloader = FileDownloader::new(None);
+    info!(
+        logger,
+        "Downloading {} to {}...",
+        binary_name,
+        file.display()
+    );
+    let file_downloader =
+        FileDownloader::new_with_timeout(Some(logger.clone().into()), Duration::from_secs(60));
     file_downloader
         .download_file(&binary_url, &file, None)
         .await

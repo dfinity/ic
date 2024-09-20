@@ -12,7 +12,7 @@ use ic_registry_routing_table::{
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 use prost::Message;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum GetSubnetForCanisterError {
     InvalidCanisterId,
     NoSubnetAssigned,

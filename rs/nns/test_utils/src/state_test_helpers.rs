@@ -7,7 +7,6 @@ use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
-    CYCLES_LEDGER_CANISTER_ID,
 };
 use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
@@ -28,12 +27,12 @@ use ic_nervous_system_common::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_MINTING_CANISTER_ID,
-    GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
-    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, ROOT_CANISTER_INDEX_IN_NNS_SUBNET,
-    SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET, SUBNET_RENTAL_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_governance_api::pb::v1::{
     self as nns_governance_pb,
@@ -46,14 +45,18 @@ use ic_nns_governance_api::pb::v1::{
         JoinCommunityFund, LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Topic, Vote,
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_registry_transport::pb::v1::{
+    RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
+};
 use ic_sns_governance::pb::v1::{
     self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
 };
@@ -98,6 +101,33 @@ pub fn reduce_state_machine_logging_unless_env_set() {
         Ok(_) => {}
         Err(_) => env::set_var("RUST_LOG", "ERROR"),
     }
+}
+
+pub fn registry_get_changes_since(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    version: u64,
+) -> RegistryGetChangesSinceResponse {
+    let mut request = vec![];
+    RegistryGetChangesSinceRequest { version }
+        .encode(&mut request)
+        .unwrap();
+
+    let result = state_machine
+        .execute_ingress_as(sender, REGISTRY_CANISTER_ID, "get_changes_since", request)
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_changes_since was rejected by the NNS registry canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    RegistryGetChangesSinceResponse::decode(&result[..]).unwrap()
 }
 
 /// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
@@ -361,7 +391,7 @@ pub fn get_canister_status(
 
 pub fn get_root_canister_status(machine: &StateMachine) -> Result<CanisterStatusResultV2, String> {
     machine
-        .canister_status_as(PrincipalId::from(ROOT_CANISTER_ID), ROOT_CANISTER_ID)
+        .canister_status_as(PrincipalId::from(LIFELINE_CANISTER_ID), ROOT_CANISTER_ID)
         .unwrap()
 }
 
@@ -1328,12 +1358,15 @@ pub fn nns_get_migrations(state_machine: &StateMachine) -> Migrations {
     Decode!(&reply, Migrations).unwrap()
 }
 
-pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoResponse {
+pub fn nns_list_proposals(
+    state_machine: &StateMachine,
+    request: ListProposalInfo,
+) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
             "list_proposals",
-            Encode!(&ListProposalInfo::default()).unwrap(),
+            Encode!(&request).unwrap(),
         )
         .unwrap();
 
@@ -1343,6 +1376,43 @@ pub fn nns_list_proposals(state_machine: &StateMachine) -> ListProposalInfoRespo
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+pub fn get_all_proposal_ids(
+    state_machine: &StateMachine,
+    exclude_topic: Vec<Topic>,
+) -> Vec<ProposalId> {
+    let mut proposal_ids = vec![];
+    let mut before_proposal = None;
+
+    loop {
+        let ListProposalInfoResponse { proposal_info } = nns_list_proposals(
+            state_machine,
+            ListProposalInfo {
+                before_proposal,
+                limit: 100,
+                exclude_topic: exclude_topic
+                    .iter()
+                    .map(|topic| i32::from(*topic))
+                    .collect(),
+                include_reward_status: vec![],
+                include_status: vec![],
+                include_all_manage_neuron_proposals: None,
+                omit_large_fields: Some(true),
+            },
+        );
+        let new_proposal_ids = proposal_info
+            .into_iter()
+            .map(|info| info.id.unwrap())
+            .collect::<Vec<_>>();
+        if new_proposal_ids.is_empty() {
+            break;
+        }
+        before_proposal = Some(new_proposal_ids[new_proposal_ids.len() - 1]);
+        proposal_ids.extend(new_proposal_ids);
+    }
+
+    proposal_ids
 }
 
 /// Return the monthly Node Provider rewards
@@ -1446,6 +1516,31 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
     };
 
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
+}
+
+pub fn get_neurons_fund_audit_info(
+    state_machine: &StateMachine,
+    proposal_id: ProposalId,
+) -> GetNeuronsFundAuditInfoResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_neurons_fund_audit_info",
+            Encode!(&GetNeuronsFundAuditInfoRequest {
+                nns_proposal_id: Some(proposal_id)
+            })
+            .unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => {
+            panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
+        }
+    };
+
+    Decode!(&result, GetNeuronsFundAuditInfoResponse).unwrap()
 }
 
 pub fn list_neurons(
@@ -1958,6 +2053,19 @@ pub fn get_icp_xdr_conversion_rate(
     Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
 }
 
+pub fn get_average_icp_xdr_conversion_rate(
+    machine: &StateMachine,
+) -> IcpXdrConversionRateCertifiedResponse {
+    let bytes = query(
+        machine,
+        CYCLES_MINTING_CANISTER_ID,
+        "get_average_icp_xdr_conversion_rate",
+        Encode!().unwrap(),
+    )
+    .expect("Failed to retrieve the average conversion rate");
+    Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
+}
+
 pub fn cmc_set_default_authorized_subnetworks(
     machine: &StateMachine,
     subnets: Vec<SubnetId>,
@@ -1988,11 +2096,11 @@ pub fn cmc_set_default_authorized_subnetworks(
 }
 
 pub fn setup_cycles_ledger(state_machine: &StateMachine) {
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     enum LedgerArgs {
         Init(Config),
     }
-    #[derive(CandidType, Serialize, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Serialize)]
     struct Config {
         pub max_transactions_per_request: u64,
         pub index_id: Option<candid::Principal>,
@@ -2000,13 +2108,13 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
 
     state_machine.reroute_canister_range(
         std::ops::RangeInclusive::<CanisterId>::new(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
+            CYCLES_LEDGER_CANISTER_ID,
+            CYCLES_LEDGER_CANISTER_ID,
         ),
         state_machine.get_subnet_id(),
     );
     state_machine.create_canister_with_cycles(
-        Some(CYCLES_LEDGER_CANISTER_ID),
+        Some(CYCLES_LEDGER_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -2020,11 +2128,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
     }))
     .unwrap();
     state_machine
-        .install_existing_canister(
-            CYCLES_LEDGER_CANISTER_ID.try_into().unwrap(),
-            cycles_ledger_wasm,
-            arg,
-        )
+        .install_existing_canister(CYCLES_LEDGER_CANISTER_ID, cycles_ledger_wasm, arg)
         .expect("Installing cycles ledger failed");
 }
 
