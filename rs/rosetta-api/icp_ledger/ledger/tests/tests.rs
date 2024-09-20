@@ -197,7 +197,6 @@ fn test_anonymous_transfers() {
     const TRANSFER_AMOUNT: u64 = 1_000_000;
     let p1 = PrincipalId::new_user_test_id(1);
     let anon = PrincipalId::new_anonymous();
-    println!("anon: {:?}", anon);
     let (env, canister_id) = setup(
         ledger_wasm(),
         encode_init_args,
