@@ -58,12 +58,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-flame",
     "@crate_index//:tracing-opentelemetry",
     "@crate_index//:tracing-subscriber",
-] + select({
-    "@rules_rust//rust/platform:linux": [
-        "//rs/monitoring/backtrace",
-    ],
-    "//conditions:default": [],
-})
+]
 
 MACRO_DEPENDENCIES = []
 

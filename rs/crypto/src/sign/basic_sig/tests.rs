@@ -407,6 +407,62 @@ mod verify_sig_batch {
     }
 
     #[test]
+    fn should_not_verify_batch_with_corrupted_signature() {
+        let mut rng = reproducible_rng();
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .with_rng(rng.fork())
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .with_rng(rng)
+            .build();
+        registry_client.reload();
+
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let sig_node1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+        let sig_node2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
+        let sig_node2_corrupted = {
+            let mut sig = sig_node2.get().0;
+            sig[0] ^= 0x80; // flip first bit
+            BasicSigOf::new(BasicSig(sig))
+        };
+
+        let mut signatures = BTreeMap::new();
+        assert!(crypto_1
+            .verify_basic_sig(&sig_node1, &msg, NODE_1, REG_V2)
+            .is_ok());
+        assert!(crypto_1
+            .verify_basic_sig(&sig_node2_corrupted, &msg, NODE_2, REG_V2)
+            .is_err());
+
+        signatures.insert(NODE_1, &sig_node1);
+        signatures.insert(NODE_2, &sig_node2_corrupted);
+
+        let sig_batch = crypto_1.combine_basic_sig(signatures, REG_V2);
+        assert!(sig_batch.is_ok());
+
+        assert_matches!(
+            crypto_1.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
+
+    #[test]
     fn should_not_verify_an_empty_batch() {
         let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
         let key_record =

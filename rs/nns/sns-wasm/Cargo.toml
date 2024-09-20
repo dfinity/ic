@@ -36,7 +36,6 @@ ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 ic-wasm = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-libflate = "1.1.2"
 maplit = "1.0.2"
 prost = { workspace = true }
 serde = { workspace = true }
@@ -55,6 +54,7 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-test-utils = { path = "../test_utils" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-sns-swap = { path = "../../sns/swap" }

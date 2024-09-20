@@ -63,10 +63,6 @@ tracing-flame = "0.2.0"
 tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-# this library uses libunwind, which is only applicable to Linux
-ic-backtrace = { path = "../monitoring/backtrace" }
-
 [dev-dependencies]
 assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
@@ -75,7 +71,7 @@ ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "3.0.4"
-wat = "1.0.52"
+wat = { workspace = true }
 
 [[bench]]
 name = "calls"

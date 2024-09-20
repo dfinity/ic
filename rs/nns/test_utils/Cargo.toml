@@ -34,10 +34,10 @@ ic-management-canister-types = { path = "../../types/management_canister_types" 
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
-ic-nns-governance = { path = "../governance" }
 ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-governance-init = { path = "../governance/init" }
 ic-nns-gtc = { path = "../gtc" }
@@ -45,6 +45,7 @@ ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-handler-lifeline-interface = { path = "../handlers/lifeline/interface" }
 ic-nns-handler-root = { path = "../handlers/root/impl" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-canister-api = { path = "../../registry/canister/api" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -70,4 +71,3 @@ rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }
-walrus = "0.19.0"

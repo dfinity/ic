@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{payload_builder, utils, PayloadCreationError};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
@@ -27,7 +29,7 @@ use prometheus::IntCounterVec;
 // is never used` warning on this enum even though we are implicitly reading them when we log the
 // enum. See https://github.com/rust-lang/rust/issues/88900
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum InvalidDkgPayloadReason {
     CryptoError(CryptoError),
     DkgVerifyDealingError(DkgVerifyDealingError),
@@ -38,6 +40,8 @@ pub(crate) enum InvalidDkgPayloadReason {
     DkgDealingAtStartHeight(Height),
     InvalidDealer(NodeId),
     DealerAlreadyDealt(NodeId),
+    /// There are multiple dealings from the same dealer in the payload.
+    DuplicateDealers,
     /// The number of dealings in the payload exceeds the maximum allowed number of dealings.
     TooManyDealings {
         limit: usize,
@@ -48,7 +52,7 @@ pub(crate) enum InvalidDkgPayloadReason {
 /// Possible failures which could occur while validating a dkg payload. They don't imply that the
 /// payload is invalid.
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) enum DkgPayloadValidationFailure {
     PayloadCreationFailed(PayloadCreationError),
     /// Crypto related errors.
@@ -218,6 +222,24 @@ fn validate_dealings_payload(
     // Get a list of all dealers, who created a dealing already, indexed by DKG id.
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
 
+    // Get a list of all dealers in the payload.
+    let dealers_from_payload: HashSet<_> = dealings
+        .messages
+        .iter()
+        .map(|message| (message.content.dkg_id, message.signature.signer))
+        .collect();
+
+    if dealers_from_payload.len() != dealings.messages.len() {
+        return Err(InvalidDkgPayloadReason::DuplicateDealers.into());
+    }
+
+    if let Some(&(_, dealer_id)) = dealers_from_payload
+        .intersection(&dealers_from_chain)
+        .next()
+    {
+        return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
+    }
+
     // Check that all messages have a valid DKG config from the summary and the
     // dealer is valid, then verify each dealing.
     for message in &dealings.messages {
@@ -237,14 +259,6 @@ fn validate_dealings_payload(
         // If the dealer is not in the set of dealers, reject.
         if !config.dealers().get().contains(&dealer_id) {
             return Err(InvalidDkgPayloadReason::InvalidDealer(dealer_id).into());
-        }
-
-        // If the dealer created a dealing already, reject.
-        if dealers_from_chain
-            .get(&config.dkg_id())
-            .is_some_and(|dealers| dealers.contains(&dealer_id))
-        {
-            return Err(InvalidDkgPayloadReason::DealerAlreadyDealt(dealer_id).into());
         }
 
         // Verify the signature.
@@ -359,11 +373,21 @@ mod tests {
     fn validate_dealings_payload_when_valid_passes_test() {
         assert_eq!(
             validate_payload_test_case(
-                /*dealings_to_validate=*/ vec![fake_dkg_message(SUBNET_1, NODE_1)],
-                /*parents_dealings=*/ vec![],
-                /*max_dealings_per_block=*/ 1,
+                /*dealings_to_validate=*/
+                vec![
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_1, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_1, NiDkgTag::HighThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::HighThreshold),
+                ],
+                /*parents_dealings=*/
+                vec![
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_2, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::LowThreshold),
+                    fake_dkg_message_with_dkg_tag(SUBNET_1, NODE_3, NiDkgTag::HighThreshold),
+                ],
+                /*max_dealings_per_block=*/ 3,
                 SUBNET_1,
-                /*committee=*/ &[NODE_1],
+                /*committee=*/ &[NODE_1, NODE_2, NODE_3],
             ),
             Ok(())
         );
@@ -422,6 +446,27 @@ mod tests {
             ),
             Err(PayloadValidationError::InvalidArtifact(
                 InvalidDkgPayloadReason::DealerAlreadyDealt(NODE_2)
+            ))
+        );
+    }
+
+    #[test]
+    fn validate_dealings_payload_when_duplicate_dealer_fails_test() {
+        assert_eq!(
+            validate_payload_test_case(
+                /*dealings_to_validate=*/
+                vec![
+                    fake_dkg_message(SUBNET_1, NODE_1),
+                    fake_dkg_message(SUBNET_1, NODE_1)
+                ],
+                /*parents_dealings=*/
+                vec![],
+                /*max_dealings_per_block=*/ 2,
+                SUBNET_1,
+                /*committee=*/ &[NODE_1, NODE_2, NODE_3],
+            ),
+            Err(PayloadValidationError::InvalidArtifact(
+                InvalidDkgPayloadReason::DuplicateDealers
             ))
         );
     }
@@ -521,13 +566,21 @@ mod tests {
     }
 
     fn fake_dkg_message(subnet_id: SubnetId, dealer_id: NodeId) -> Message {
+        fake_dkg_message_with_dkg_tag(subnet_id, dealer_id, NiDkgTag::HighThreshold)
+    }
+
+    fn fake_dkg_message_with_dkg_tag(
+        subnet_id: SubnetId,
+        dealer_id: NodeId,
+        dkg_tag: NiDkgTag,
+    ) -> Message {
         let content = DealingContent::new(
             NiDkgDealing::dummy_dealing_for_tests(0),
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_id,
-                dkg_tag: NiDkgTag::HighThreshold,
                 target_subnet: NiDkgTargetSubnet::Local,
+                dkg_tag,
             },
         );
 

@@ -493,7 +493,7 @@ fn verify_forward_secure_key(
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ForwardSecureKeyVerificationError {
     Deserialization,
     PopVerificationFailed,

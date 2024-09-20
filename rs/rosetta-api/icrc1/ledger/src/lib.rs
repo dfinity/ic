@@ -30,6 +30,8 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::DefaultMemoryImpl;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
@@ -47,6 +49,7 @@ use icrc_ledger_types::{
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -62,7 +65,7 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
 
 impl ArchiveCanisterWasm for Icrc1ArchiveWasm {
@@ -72,7 +75,7 @@ impl ArchiveCanisterWasm for Icrc1ArchiveWasm {
 }
 
 /// Like [endpoints::Value], but can be serialized to CBOR.
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum StoredValue {
     NatBytes(ByteBuf),
     IntBytes(ByteBuf),
@@ -224,7 +227,7 @@ impl InitArgsBuilder {
     }
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
@@ -241,7 +244,7 @@ pub struct InitArgs {
     pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
@@ -256,7 +259,7 @@ impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
     }
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct ChangeArchiveOptions {
     pub trigger_threshold: Option<usize>,
     pub num_blocks_to_archive: Option<usize>,
@@ -297,7 +300,7 @@ impl ChangeArchiveOptions {
     }
 }
 
-#[derive(Default, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Vec<(String, Value)>>,
@@ -314,21 +317,31 @@ pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub maximum_number_of_accounts: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts_overflow_trim_quantity: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 #[allow(clippy::large_enum_variant)]
 pub enum LedgerArgument {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the ledger must write and read its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Ledger<Tokens: TokensType> {
     balances: LedgerBalances<Tokens>,
@@ -369,7 +382,7 @@ fn default_accounts_overflow_trim_quantity() -> usize {
     ACCOUNTS_OVERFLOW_TRIM_QUANTITY
 }
 
-#[derive(CandidType, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct FeatureFlags {
     pub icrc2: bool,
 }
@@ -648,9 +661,6 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 );
             }
             self.feature_flags = feature_flags;
-        }
-        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
-            self.maximum_number_of_accounts = maximum_number_of_accounts.try_into().unwrap();
         }
         if let Some(accounts_overflow_trim_quantity) = args.accounts_overflow_trim_quantity {
             self.accounts_overflow_trim_quantity =

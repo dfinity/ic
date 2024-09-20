@@ -23,7 +23,7 @@ sha2 = { workspace = true }
 sha3 = { workspace = true }
 subtle = "2.5"
 wasm-bindgen = { version = "0.2.84", optional = true }
-zeroize = { version = "1", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

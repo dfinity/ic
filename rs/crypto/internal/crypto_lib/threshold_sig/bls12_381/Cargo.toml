@@ -17,7 +17,7 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
 lazy_static = { workspace = true }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
@@ -25,13 +25,13 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 strum_macros = { workspace = true }
 subtle = "2.4"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }
 
 [[bench]]
 name = "zk"

@@ -12,7 +12,7 @@ use ic_types::{PrincipalId, Time};
 use std::path::PathBuf;
 
 /// Supported `state_tool` commands and their arguments.
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 #[clap(about = "IC state tool", version)]
 enum Opt {
     /// Computes diff of canonical trees between checkpoints.

@@ -11,4 +11,6 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../types" }
 ic-utils = { path = "../../utils" }
+ic-validate-eq = { path = "../../utils/validate_eq" }
+ic-validate-eq-derive = { path = "../../utils/validate_eq_derive" }
 serde = { workspace = true }

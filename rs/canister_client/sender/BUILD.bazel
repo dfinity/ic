@@ -4,8 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ed25519",
+    "//rs/crypto/secp256k1",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:rand",

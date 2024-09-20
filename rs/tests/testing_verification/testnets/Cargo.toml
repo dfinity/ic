@@ -23,6 +23,7 @@ slog = { workspace = true }
 tests = { path = "../.." }
 url = { workspace = true }
 xrc-mock = { path = "../../../rosetta-api/tvl/xrc_mock" }
+os_qualification_utils = { path = "../../dre/utils" }
 
 [[bin]]
 name = "large"

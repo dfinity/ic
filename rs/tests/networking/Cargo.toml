@@ -15,6 +15,7 @@ cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-limits = { path = "../../limits" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-prep = { path = "../../prep" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }

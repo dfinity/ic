@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:sha2",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
@@ -34,6 +35,7 @@ rust_binary(
     compile_data = [
         "templates/upgrade.md",
         "templates/install.md",
+        "templates/submit_with_ic_admin.shx",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,

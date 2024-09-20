@@ -25,7 +25,7 @@ pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
 pub const DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER: u64 = 100;
 
 /// The state of a neuron
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronState {
     /// In this state, the neuron is not dissolving and has a specific
     /// `dissolve_delay` that is larger than zero.
@@ -42,7 +42,7 @@ pub enum NeuronState {
     Dissolved,
 }
 /// The status of an invocation of `remove_permission`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum RemovePermissionsStatus {
     /// This status indicates all PermissionTypes for a PrincipalId
     /// were removed from a neuron's permission list and therefore

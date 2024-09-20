@@ -9,11 +9,9 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus",
     "//rs/consensus/utils",
-    "//rs/constants",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/ed25519",
-    "//rs/crypto/extended_bip32",
     "//rs/crypto/interfaces/sig_verification",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -26,6 +24,7 @@ DEPENDENCIES = [
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
+    "//rs/limits",
     "//rs/messaging",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -55,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:rand",
+    "@crate_index//:rcgen",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:sha2",
@@ -151,7 +151,6 @@ rust_ic_test(
     crate = ":state_machine_tests",
     deps = [
         # Keep sorted.
-        "//rs/crypto/utils/canister_threshold_sig",
         "@crate_index//:proptest",
     ],
 )

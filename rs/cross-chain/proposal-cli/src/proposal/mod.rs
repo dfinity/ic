@@ -61,12 +61,33 @@ impl ProposalTemplate {
             .expect("failed to write hex args");
     }
 
+    pub fn args_sha256_hex(&self) -> String {
+        match self {
+            ProposalTemplate::Upgrade(template) => template.upgrade_args.args_sha256_hex(),
+            ProposalTemplate::Install(template) => template.install_args.args_sha256_hex(),
+        }
+    }
+
     pub fn render(&self) -> String {
         match self {
             ProposalTemplate::Upgrade(template) => template.render(),
             ProposalTemplate::Install(template) => template.render(),
         }
         .expect("failed to render proposal template")
+    }
+
+    pub fn canister_id(&self) -> &Principal {
+        match self {
+            ProposalTemplate::Upgrade(template) => &template.canister_id,
+            ProposalTemplate::Install(template) => &template.canister_id,
+        }
+    }
+
+    pub fn compressed_wasm_hash(&self) -> &CompressedWasmHash {
+        match self {
+            ProposalTemplate::Upgrade(template) => &template.compressed_wasm_hash,
+            ProposalTemplate::Install(template) => &template.compressed_wasm_hash,
+        }
     }
 
     pub fn target_canister(&self) -> &TargetCanister {

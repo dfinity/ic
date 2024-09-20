@@ -8,9 +8,11 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io;
 use std::io::prelude::*;
+use std::io::{BufReader, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tar::Archive;
+use zstd::stream::read::Decoder as ZstdDecoder;
 
 /// Streams HTTP response bodies to files
 pub struct FileDownloader {
@@ -34,20 +36,20 @@ impl FileDownloader {
         }
     }
 
-    /// Download a .tar.gz file from `url`, verify its hash if given, and
+    /// Download a .tar.gz or .tar.zst file from `url`, verify its hash if given, and
     /// extract the file into `target_dir`
-    pub async fn download_and_extract_tar_gz(
+    pub async fn download_and_extract_tar(
         &self,
         url: &str,
         target_dir: &Path,
         expected_sha256_hex: Option<String>,
     ) -> FileDownloadResult<()> {
-        let tar_gz_path = target_dir.join("tmp.tar.gz");
-        self.download_file(url, &tar_gz_path, expected_sha256_hex)
+        let tar_path = target_dir.join("tmp-tar");
+        self.download_file(url, &tar_path, expected_sha256_hex)
             .await?;
-        extract_tar_gz_into_dir(&tar_gz_path, target_dir)?;
-        fs::remove_file(&tar_gz_path)
-            .map_err(|e| FileDownloadError::file_remove_error(&tar_gz_path, e))?;
+        extract_tar_into_dir(&tar_path, target_dir)?;
+        fs::remove_file(&tar_path)
+            .map_err(|e| FileDownloadError::file_remove_error(&tar_path, e))?;
 
         Ok(())
     }
@@ -182,17 +184,46 @@ pub fn check_file_hash(path: &Path, expected_sha256_hex: &str) -> FileDownloadRe
     }
 }
 
-/// Extract the contents of a given .tar.gz file into `target_dir`
-pub fn extract_tar_gz_into_dir(tar_gz_path: &Path, target_dir: &Path) -> FileDownloadResult<()> {
-    let map_to_untar_error = |e| FileDownloadError::untar_error(tar_gz_path, e);
+/// Check if the file is in Gzip format by verifying the first 2 bytes
+fn is_gz_file<R: Read + Seek>(reader: &mut R) -> io::Result<bool> {
+    reader.seek(SeekFrom::Start(0))?;
+    let mut buffer = [0; 2];
+    reader.read_exact(&mut buffer)?;
+    reader.seek(SeekFrom::Start(0))?;
+    Ok(buffer == [0x1f, 0x8b])
+}
 
-    let tar_gz_file =
-        File::open(tar_gz_path).map_err(|e| FileDownloadError::file_open_error(tar_gz_path, e))?;
+/// Check if the file is in Zstandard format by verifying the first 4 bytes
+fn is_zst_file<R: Read + Seek>(reader: &mut R) -> io::Result<bool> {
+    reader.seek(SeekFrom::Start(0))?;
+    let mut buffer = [0; 4];
+    reader.read_exact(&mut buffer)?;
+    reader.seek(SeekFrom::Start(0))?;
+    Ok(buffer == [0x28, 0xb5, 0x2f, 0xfd])
+}
 
-    let tar = GzDecoder::new(tar_gz_file);
-    let mut archive = Archive::new(tar);
-    archive.unpack(target_dir).map_err(map_to_untar_error)?;
-    Ok(())
+/// Extract the contents of a given .tar.gz or tar.zst file into `target_dir`
+pub fn extract_tar_into_dir(tar_path: &Path, target_dir: &Path) -> FileDownloadResult<()> {
+    let map_to_untar_error = |e| FileDownloadError::untar_error(tar_path, e);
+
+    let tar_file =
+        File::open(tar_path).map_err(|e| FileDownloadError::file_open_error(tar_path, e))?;
+    let mut buf_reader = BufReader::new(tar_file);
+
+    if is_gz_file(&mut buf_reader).map_err(map_to_untar_error)? {
+        let tar = GzDecoder::new(buf_reader);
+        let mut archive = Archive::new(tar);
+        archive.unpack(target_dir).map_err(map_to_untar_error)
+    } else if is_zst_file(&mut buf_reader).map_err(map_to_untar_error)? {
+        let tar = ZstdDecoder::new(buf_reader).map_err(map_to_untar_error)?;
+        let mut archive = Archive::new(tar);
+        archive.unpack(target_dir).map_err(map_to_untar_error)
+    } else {
+        Err(FileDownloadError::untar_error(
+            tar_path,
+            io::Error::new(io::ErrorKind::Other, "Unrecognized file type"),
+        ))
+    }
 }
 
 pub type FileDownloadResult<T> = Result<T, FileDownloadError>;
@@ -288,11 +319,16 @@ impl Error for FileDownloadError {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
     use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
     use mockito::{Mock, ServerGuard};
     use slog::Level;
+    use tar::Builder;
+    use tempfile::tempdir;
     use tempfile::{NamedTempFile, TempPath};
     use tokio::test;
+    use zstd::stream::write::Encoder as ZstdEncoder;
 
     use super::*;
 
@@ -471,5 +507,102 @@ mod tests {
             &Level::Warning,
             "File already exists, but hash check failed",
         );
+    }
+
+    fn create_tar<W: Write>(writer: W) -> io::Result<()> {
+        let mut tar = Builder::new(writer);
+        let mut header = tar::Header::new_gnu();
+        header.set_path("test.txt")?;
+        header.set_size("Hello, world!".as_bytes().len() as u64);
+        header.set_cksum();
+        tar.append(&header, "Hello, world!".as_bytes())?;
+        tar.finish()?;
+        Ok(())
+    }
+
+    #[test]
+    async fn test_is_gz_file() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.tar.gz");
+
+        let tar_gz = File::create(&file_path).unwrap();
+        let mut encoder = GzEncoder::new(tar_gz, Compression::default());
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        let mut file = File::open(&file_path).unwrap();
+        assert!(is_gz_file(&mut file).unwrap());
+    }
+
+    #[test]
+    async fn test_is_zst_file() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.tar.zst");
+
+        let tar_zst = File::create(&file_path).unwrap();
+        let mut encoder = ZstdEncoder::new(tar_zst, 0).unwrap();
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        let mut file = File::open(&file_path).unwrap();
+        assert!(is_zst_file(&mut file).unwrap());
+    }
+
+    #[test]
+    async fn test_extract_tar_into_dir_gz() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar.gz");
+        let extract_dir = temp_dir.path().join("extract");
+
+        let tar_gz = File::create(&tar_path).unwrap();
+        let mut encoder = GzEncoder::new(tar_gz, Compression::default());
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
+
+        let extracted_file = extract_dir.join("test.txt");
+        let contents = std::fs::read_to_string(extracted_file).unwrap();
+        assert_eq!(contents, "Hello, world!");
+    }
+
+    #[test]
+    async fn test_extract_tar_into_dir_zst() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.tar.zst");
+        let extract_dir = temp_dir.path().join("extract");
+
+        let tar_zst = File::create(&tar_path).unwrap();
+        let mut encoder = ZstdEncoder::new(tar_zst, 0).unwrap();
+        create_tar(&mut encoder).unwrap();
+        encoder.finish().unwrap();
+
+        extract_tar_into_dir(&tar_path, &extract_dir).unwrap();
+
+        let extracted_file = extract_dir.join("test.txt");
+        let contents = std::fs::read_to_string(extracted_file).unwrap();
+        assert_eq!(contents, "Hello, world!");
+    }
+
+    #[test]
+    async fn test_extract_tar_into_dir_unsupported_file_format() {
+        let temp_dir = tempdir().unwrap();
+        let tar_path = temp_dir.path().join("test.unsupported");
+        let extract_dir = temp_dir.path().join("extract");
+
+        let mut file = File::create(&tar_path).unwrap();
+        file.write_all(b"unsupported content").unwrap();
+
+        let result = extract_tar_into_dir(&tar_path, &extract_dir);
+
+        match result {
+            Err(FileDownloadError::IoError(message, _)) => {
+                assert_eq!(
+                    message,
+                    format!("Failed to unpack tar file: {:?}", tar_path)
+                );
+            }
+            _ => panic!("Expected FileDownloadError::IoError"),
+        }
     }
 }

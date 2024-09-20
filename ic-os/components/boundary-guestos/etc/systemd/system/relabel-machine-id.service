@@ -1,0 +1,13 @@
+[Unit]
+Description=Relabel /etc/machine-id
+Before=systemd-journald.service
+DefaultDependencies=no
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=systemd-journald.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/relabel-machine-id.sh

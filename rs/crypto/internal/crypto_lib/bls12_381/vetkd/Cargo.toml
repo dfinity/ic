@@ -10,7 +10,7 @@ documentation.workspace = true
 ic-crypto-internal-bls12-381-type = { path = "../type" }
 ic-crypto-sha3 = { path = "../../../../sha3" }
 rand = { workspace = true }
-zeroize = { version = "1", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

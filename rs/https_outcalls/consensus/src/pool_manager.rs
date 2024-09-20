@@ -7,7 +7,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::ChangeSetProducer,
+    canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
 };
 use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
@@ -364,6 +364,12 @@ impl CanisterHttpPoolManagerImpl {
             .with_label_values(&["generate_change_set"])
             .start_timer();
         let mut change_set = Vec::new();
+
+        // Whenever we have artifacts to purge, we insert the purge change actions before everything
+        // else, to avoid having in the validated pool artifacts belonging to different epochs and
+        // hence preserving the expected maximal number of artifacts in the pool.
+        change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
+
         let finalized_height = self.consensus_pool_cache.finalized_block().height();
 
         if self
@@ -384,9 +390,6 @@ impl CanisterHttpPoolManagerImpl {
             canister_http_pool,
             finalized_height,
         ));
-
-        // Purge items in the pool that are no longer needed
-        change_set.extend(self.purge_shares_of_processed_requests(canister_http_pool));
 
         self.metrics
             .in_client_requests
@@ -417,8 +420,8 @@ impl CanisterHttpPoolManagerImpl {
     }
 }
 
-impl<T: CanisterHttpPool> ChangeSetProducer<T> for CanisterHttpPoolManagerImpl {
-    type ChangeSet = CanisterHttpChangeSet;
+impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerImpl {
+    type Mutations = CanisterHttpChangeSet;
 
     fn on_state_change(&self, canister_http_pool: &T) -> CanisterHttpChangeSet {
         if let Ok(subnet_features) = self.registry_client.get_features(
@@ -659,9 +662,9 @@ pub mod test {
                     };
 
                     let content = empty_canister_http_response(7);
-                    canister_http_pool.apply_changes(vec![
-                        CanisterHttpChangeAction::AddToValidated(share, content),
-                    ]);
+                    canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                        share, content,
+                    )]);
                 }
 
                 // Insert the second share as unvalidated.
@@ -780,7 +783,7 @@ pub mod test {
 
                 let mut canister_http_pool =
                     CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share, content,
                 )]);
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
@@ -953,7 +956,7 @@ pub mod test {
                     signature,
                 };
 
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
                     share, content,
                 )]);
 

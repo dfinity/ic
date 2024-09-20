@@ -13,7 +13,7 @@ use utils::{get_command_stdout, retry, retry_pred};
 
 static SYSFS_NETWORK_DIR: &str = "/sys/class/net";
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Interface {
     pub name: String,
     pub speed_mbps: Option<u64>,

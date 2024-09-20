@@ -20,6 +20,7 @@ pub mod systemd;
 /// Requires superuser permissions to run `ipmitool` and write to the systemd directory
 pub fn generate_network_config(
     network_info: &NetworkInfo,
+    mgmt_mac: Option<&str>,
     deployment_name: Option<&str>,
     node_type: NodeType,
     output_directory: &Path,
@@ -31,7 +32,8 @@ pub fn generate_network_config(
 
     let deployment_name = deployment_name
         .context("Error: Deployment name not found when attempting to generate mac address")?;
-    let mac = generate_mac_address(deployment_name, &node_type, &network_info.bmc_mac)?;
+
+    let mac = generate_mac_address(deployment_name, &node_type, mgmt_mac)?;
     eprintln!("Using generated mac (unformatted) {}", mac.get());
 
     eprintln!("Generating ipv6 address");

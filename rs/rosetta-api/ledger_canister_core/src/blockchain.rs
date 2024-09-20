@@ -12,7 +12,7 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_hash_of::HashOf;
 
 /// Stores a chain of transactions with their metadata
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 pub struct Blockchain<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     pub blocks: Vec<EncodedBlock>,

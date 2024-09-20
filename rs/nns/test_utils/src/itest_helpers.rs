@@ -29,8 +29,10 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance::governance::TimeWarp;
-use ic_nns_governance_api::pb::v1::{Governance, NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{
+    pb::v1::{Governance, NnsFunction, ProposalStatus},
+    test_api::TimeWarp,
+};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
@@ -701,7 +703,7 @@ where
 }
 
 /// Encapsulates different test scenarios, with different upgrade modes.
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum UpgradeTestingScenario {
     Never,
     Always,

@@ -5,7 +5,7 @@ use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, dkg, idkg};
-use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -126,12 +126,6 @@ fn consensus_produces_expected_batches() {
             time_source.clone(),
         )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
-        let membership = Membership::new(
-            consensus_cache.clone(),
-            registry_client.clone(),
-            replica_config.subnet_id,
-        );
-        let membership = Arc::new(membership);
         let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
             metrics_registry.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -141,10 +135,10 @@ fn consensus_produces_expected_batches() {
 
         let (dummy_watcher, _) = watch::channel(Height::from(0));
 
-        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
+        let consensus = ic_consensus::consensus::ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client) as Arc<_>,
-            Arc::clone(&membership) as Arc<_>,
+            consensus_cache.clone(),
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&ingress_selector) as Arc<_>,
             Arc::clone(&xnet_payload_builder) as Arc<_>,
@@ -157,11 +151,12 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time_source) as Arc<_>,
+            0,
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
-            0,
         );
+        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(router.clone());
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -194,7 +189,7 @@ fn consensus_produces_expected_batches() {
             replica_config.node_id,
             pool_config,
             Box::new(consensus),
-            consensus_gossip,
+            consensus_bouncer,
             dkg,
             Box::new(idkg),
             Box::new(certifier),

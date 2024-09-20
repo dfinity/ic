@@ -18,7 +18,7 @@ use ic_system_test_driver::{
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
-        simulate_network::{simulate_network, NetworkSimulation, ProductionSubnetTopology},
+        simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
             get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
@@ -58,21 +58,13 @@ const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
 
 /// Simulate RTT and Packet loss
-const NETWORK_SIMULATION: Option<NetworkSimulation> =
-    Some(NetworkSimulation::Subnet(ProductionSubnetTopology::IO67));
+const NETWORK_SIMULATION: ProductionSubnetTopology = ProductionSubnetTopology::IO67;
 const SUBNET_SIZE: usize = 13;
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
-    let config = |env| {
-        config(
-            env,
-            SUBNET_SIZE,
-            TUNED_INITIAL_NOTARIZATION_DELAY,
-            NETWORK_SIMULATION,
-        )
-    };
+    let config = |env| config(env, SUBNET_SIZE, TUNED_INITIAL_NOTARIZATION_DELAY);
     let test = |env| {
         fill_execution_rounds(
             env,
@@ -96,12 +88,7 @@ const JAEGER_VM_NAME: &str = "jaeger-vm";
 
 const MAX_CANISTERS_INSTALLING_IN_PARALLEL: usize = 10;
 
-pub fn config(
-    env: TestEnv,
-    subnet_size: usize,
-    initial_notary_delay: Duration,
-    network_simulation: Option<NetworkSimulation>,
-) {
+pub fn config(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
     let logger = env.logger();
     PrometheusVm::default()
         .with_required_host_features(vec![HostFeature::Performance])
@@ -158,16 +145,14 @@ pub fn config(
         }
     }
 
-    if let Some(network_simulation) = network_simulation {
-        info!(&logger, "Setting simulated packet loss and RTT.");
-        let app_subnet = env
-            .topology_snapshot()
-            .subnets()
-            .find(|s| s.subnet_type() == SubnetType::Application)
-            .unwrap();
+    info!(&logger, "Setting simulated packet loss and RTT.");
+    let app_subnet = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
 
-        simulate_network(app_subnet, &network_simulation);
-    }
+    app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
 pub fn fill_execution_rounds(

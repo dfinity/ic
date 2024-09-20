@@ -80,15 +80,14 @@ pub struct ListenConfig {
     #[clap(long)]
     pub http_port: Option<u16>,
 
+    /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
+    #[cfg(feature = "tls")]
+    #[clap(long)]
+    pub https_port: Option<u16>,
+
     /// Unix socket to listen on for HTTP
-    #[cfg(not(feature = "tls"))]
     #[clap(long)]
     pub http_unix_socket: Option<PathBuf>,
-
-    /// Port to listen for HTTPS
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "443")]
-    pub https_port: u16,
 
     /// Skip replica TLS certificate verification. DANGER: to be used only for testing
     #[clap(long)]
@@ -103,6 +102,35 @@ pub struct ListenConfig {
     /// This is applied to both normal and health check requests.
     #[clap(long, default_value = "4000")]
     pub http_timeout_connect: u64,
+
+    /// Maximum time between two read calls in milliseconds.
+    /// Applies to HTTP client (towards replica)
+    #[clap(long, default_value = "30000")]
+    pub http_timeout_read_client: u64,
+
+    /// Maximum time between two read calls in milliseconds.
+    /// Applies to HTTP server (towards client)
+    #[clap(long, default_value = "15000")]
+    pub http_timeout_read_server: u64,
+
+    /// Maximum number of requests to be served over a single connection.
+    /// After that it's gracefully closed
+    #[clap(long, default_value = "1000")]
+    pub http_max_requests_per_conn: u64,
+
+    /// For how long to keep the idle connections in the HTTP client pool in seconds.
+    #[clap(long, default_value = "45")]
+    pub http_pool_timeout_idle: u64,
+
+    /// How many idle connections to keep in the HTTP client pool per host.
+    #[clap(long)]
+    pub http_pool_max_idle: Option<usize>,
+
+    /// Time to wait for the client to close connection in seconds.
+    /// After that it's closed forcefully.
+    /// Applies to requests closed after `--http-max-requests-per-conn`
+    #[clap(long, default_value = "30")]
+    pub http_grace_period: u64,
 
     /// Max number of in-flight requests that can be served in parallel.
     /// If this is exceeded - new requests would be throttled.
@@ -120,20 +148,24 @@ pub struct ListenConfig {
     #[clap(long, default_value = "1200", value_parser = clap::value_parser!(u64).range(10..))]
     pub shed_target_latency: u64,
 
-    /// How frequently to send TCP/HTTP2 keepalives, in seconds. Affects both incoming and outgoing connections.
-    #[clap(long, default_value = "15")]
+    /// How frequently to send TCP/HTTP2 keepalives, in seconds.
+    /// Affects both incoming and outgoing connections.
+    #[clap(long, default_value = "30")]
     pub http_keepalive: u64,
 
     /// How long to wait for a keepalive response, in seconds
-    #[clap(long, default_value = "3")]
+    #[clap(long, default_value = "15")]
     pub http_keepalive_timeout: u64,
 
     /// How long to keep idle outgoing connections open, in seconds
     #[clap(long, default_value = "120")]
     pub http_idle_timeout: u64,
 
+    /// Max number of HTTP2 streams to allow
+    #[clap(long, default_value = "200", value_parser = clap::value_parser!(u32).range(1..))]
+    pub http2_max_streams: u32,
+
     /// Backlog of incoming connections to set on the listening socket.
-    /// Currently used only for UNIX socket.
     #[clap(long, default_value = "8192")]
     pub backlog: u32,
 
@@ -142,8 +174,8 @@ pub struct ListenConfig {
     pub disable_http2_client: bool,
 
     /// Number of HTTP clients to create to spread the load over
-    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u8).range(1..))]
-    pub http_client_count: u8,
+    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
+    pub http_client_count: u16,
 }
 
 #[derive(Args)]
@@ -182,28 +214,28 @@ pub struct FirewallConfig {
 #[derive(Args)]
 pub struct TlsConfig {
     /// Hostname to request TLS certificate for
-    #[clap(long, default_value = "")]
-    pub hostname: String,
+    #[clap(long)]
+    pub hostname: Option<String>,
 
-    /// How many days before certificate expires to start renewing it
-    #[clap(long, default_value = "30", value_parser = clap::value_parser!(u32).range(1..90))]
-    pub renew_days_before: u32,
-
-    /// Path to the ACME credentials file. If file does not exist - new account will be created & saved to it, so the folder needs to be writeable.
-    /// If this argument is not specified or the file is empty then ACME client will not be created and only certificate specified by
-    /// --tls-*-path options will be used (this is useful mostly for testing).
+    /// Path to the ACME credentials folder, needs to be writeable - it stores the account info & issued certificate.
+    /// This enables the ACME client.
+    /// On the first start the account will be created.
     #[clap(long)]
     pub acme_credentials_path: Option<PathBuf>,
 
-    /// The path to the ingress TLS cert.
-    /// If ACME client is used (see above) - the file needs to be writeable.
-    #[clap(long, default_value = "cert.pem")]
-    pub tls_cert_path: PathBuf,
+    /// Whether to use LetsEncrypt staging environment.
+    #[clap(long)]
+    pub acme_staging: bool,
 
-    /// The path to the ingress TLS private-key.
-    /// If ACME client is used (see above) - the file needs to be writeable.
-    #[clap(long, default_value = "pkey.pem")]
-    pub tls_pkey_path: PathBuf,
+    /// The path to the TLS certificate in PEM format.
+    /// This is required if the ACME client is not used.
+    #[clap(long)]
+    pub tls_cert_path: Option<PathBuf>,
+
+    /// The path to the TLS private key in PEM format.
+    /// This is required if the ACME client is not used.
+    #[clap(long)]
+    pub tls_pkey_path: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -211,24 +243,31 @@ pub struct MonitoringConfig {
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
     pub metrics_addr: SocketAddr,
+
     /// Maximum logging level
     #[clap(long, default_value = "info")]
     pub max_logging_level: tracing::Level,
+
     /// Disable per-request logging and metrics recording
     #[clap(long)]
     pub disable_request_logging: bool,
+
     /// Log only failed (non-2xx status code or other problems) requests
     #[clap(long)]
     pub log_failed_requests_only: bool,
+
     /// Enables logging to stdout
     #[clap(long)]
     pub log_stdout: bool,
+
     /// Enables logging to Journald
     #[clap(long)]
     pub log_journald: bool,
+
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(long)]
     pub log_null: bool,
+
     /// Path to a GeoIP country database file
     #[clap(long)]
     pub geoip_db: Option<PathBuf>,
@@ -239,6 +278,7 @@ pub struct RateLimitingConfig {
     /// Allowed number of update calls per second per subnet per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_subnet: Option<u32>,
+
     /// Allowed number of update calls per second per ip per boundary node. Panics if 0 is passed!
     #[clap(long)]
     pub rate_limit_per_second_per_ip: Option<u32>,
@@ -267,12 +307,15 @@ pub struct CacheConfig {
     /// Maximum size of in-memory cache in bytes. Specify a size to enable caching.
     #[clap(long)]
     pub cache_size_bytes: Option<u64>,
+
     /// Maximum size of a single cached response item in bytes
     #[clap(long, default_value = "131072")]
     pub cache_max_item_size_bytes: u64,
+
     /// Time-to-live for cache entries in seconds
     #[clap(long, default_value = "1")]
     pub cache_ttl_seconds: u64,
+
     /// Whether to cache non-anonymous requests
     #[clap(long, default_value = "false")]
     pub cache_non_anonymous: bool,

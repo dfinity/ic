@@ -205,11 +205,8 @@ async fn construction_submit(
 }
 
 #[post("/network/list")]
-async fn network_list(
-    msg: web::Json<rosetta_core::request_types::MetadataRequest>,
-    req_handler: web::Data<RosettaRequestHandler>,
-) -> HttpResponse {
-    let res = req_handler.network_list(msg.into_inner()).await;
+async fn network_list(req_handler: web::Data<RosettaRequestHandler>) -> HttpResponse {
+    let res = req_handler.network_list().await;
     to_rosetta_response(res)
 }
 

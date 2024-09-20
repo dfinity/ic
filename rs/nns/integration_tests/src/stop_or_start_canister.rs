@@ -6,8 +6,8 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::pb::v1::{
-    manage_neuron_response::Command, proposal::Action, stop_or_start_canister::CanisterAction,
-    ExecuteNnsFunction, NnsFunction, Proposal, StopOrStartCanister,
+    manage_neuron_response::Command, stop_or_start_canister::CanisterAction, ExecuteNnsFunction,
+    MakeProposalRequest, NnsFunction, ProposalActionRequest, StopOrStartCanister,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -39,7 +39,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
 
     // Step 3: Make a proposal to stop the canister and wait for it to be executed.
     let action = if use_proposal_action {
-        Action::StopOrStartCanister(StopOrStartCanister {
+        ProposalActionRequest::StopOrStartCanister(StopOrStartCanister {
             canister_id: Some(REGISTRY_CANISTER_ID.get()),
             action: Some(CanisterAction::Stop as i32),
         })
@@ -48,7 +48,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
             canister_id: REGISTRY_CANISTER_ID,
             action: RootCanisterAction::Stop,
         };
-        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::StopOrStartNnsCanister as i32,
             payload: Encode!(&stop_or_start_request).unwrap(),
         })
@@ -57,7 +57,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
-        &Proposal {
+        &MakeProposalRequest {
             title: Some("Stop registry canister".to_string()),
             action: Some(action),
             ..Default::default()
@@ -74,7 +74,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
 
     // Step 5: Make a proposal to start the canister and wait for it to be executed.
     let action = if use_proposal_action {
-        Action::StopOrStartCanister(StopOrStartCanister {
+        ProposalActionRequest::StopOrStartCanister(StopOrStartCanister {
             canister_id: Some(REGISTRY_CANISTER_ID.get()),
             action: Some(CanisterAction::Start as i32),
         })
@@ -83,7 +83,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
             canister_id: REGISTRY_CANISTER_ID,
             action: RootCanisterAction::Start,
         };
-        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+        ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
             nns_function: NnsFunction::StopOrStartNnsCanister as i32,
             payload: Encode!(&stop_or_start_request).unwrap(),
         })
@@ -92,7 +92,7 @@ fn test_stop_and_start_registry_canister(use_proposal_action: bool) {
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
-        &Proposal {
+        &MakeProposalRequest {
             title: Some("Start registry canister".to_string()),
             action: Some(action),
             ..Default::default()

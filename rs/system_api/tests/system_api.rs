@@ -2,13 +2,13 @@ use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
     PerformanceCounterType, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -1343,6 +1343,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1415,6 +1416,7 @@ fn push_output_request_respects_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
@@ -1526,6 +1528,7 @@ fn push_output_request_oversized_request_memory_limits() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
         Rc::new(DefaultOutOfInstructionsHandler::default()),

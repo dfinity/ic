@@ -543,7 +543,7 @@ fn tmp_name() -> String {
 }
 
 #[cfg(target_os = "linux")]
-#[derive(Error, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Error)]
 pub enum CopyFileRangeAllError {
     #[error(transparent)]
     Nix(#[from] nix::Error),

@@ -35,9 +35,6 @@ pub struct Stream {
     pub messages: ::prost::alloc::vec::Vec<RequestOrResponse>,
     #[prost(uint64, tag = "5")]
     pub signals_end: u64,
-    /// TODO: MR-577 Remove `deprecated_reject_signals` once all replicas are updated.
-    #[prost(uint64, repeated, tag = "6")]
-    pub deprecated_reject_signals: ::prost::alloc::vec::Vec<u64>,
     #[prost(message, repeated, tag = "8")]
     pub reject_signals: ::prost::alloc::vec::Vec<RejectSignal>,
     #[prost(message, optional, tag = "7")]
@@ -269,12 +266,11 @@ pub struct CanisterQueues {
     #[prost(message, optional, tag = "10")]
     pub pool: ::core::option::Option<MessagePool>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]
-    pub next_input_queue: i32,
+    pub next_input_source: i32,
     #[prost(message, repeated, tag = "7")]
-    pub local_subnet_input_schedule:
-        ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
+    pub local_sender_schedule: ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(message, repeated, tag = "8")]
-    pub remote_subnet_input_schedule:
+    pub remote_sender_schedule:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::CanisterId>,
     #[prost(uint64, tag = "11")]
     pub guaranteed_response_memory_reservations: u64,

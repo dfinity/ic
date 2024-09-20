@@ -33,7 +33,7 @@ build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 # Build everything ic-os without sandbox
-build --strategy_regexp=ic-os/.*=local
+build --strategy_regexp=ic-os[:/].*=local
 
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
@@ -41,8 +41,8 @@ build --experimental_repository_downloader_retries=3 # https://bazel.build/refer
 
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
-build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
-build --flag_alias=s3_upload=//gitlab-ci/src/artifacts:s3_upload
+build --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
+build --flag_alias=s3_upload=//ci/src/artifacts:s3_upload
 build --flag_alias=k8s=//rs/tests:k8s
 build --flag_alias=timeout_value=//bazel:timeout_value
 
@@ -54,7 +54,7 @@ test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --verbose_failures
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-nns_tests_nightly"
+test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_nightly_nns,-system_test_staging,-system_test_hotfix,-system_test_benchmark,-fuzz_test,-fi_tests_nightly,-nns_tests_nightly"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
@@ -119,3 +119,19 @@ build:afl --run_under="/ic/bin/afl_wrapper.sh"
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
+
+# In bazel 7+ bzlmod is the default, though our repo doesn't support it yet
+common --noenable_bzlmod
+
+# The default value makes rules_rust pick a dummy toolchain that breaks
+# our canister that depend on C deps
+#   https://github.com/bazelbuild/rules_rust/issues/2764
+common --noincompatible_enable_cc_toolchain_resolution
+
+# This is disabled by default on bazel 7+ some of our targets choke
+# on this (not yet clear why)
+common --remote_download_all
+
+# This option (in conjunction with remote cache issues) creates build failures
+#   https://github.com/bazelbuild/bazel/issues/22387
+common --noexperimental_inmemory_dotd_files

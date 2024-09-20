@@ -841,6 +841,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
+                w.encode_gauge(
+                    "cketh_minter_heap_memory_bytes",
+                    heap_memory_size_bytes() as f64,
+                    "Size of the heap memory allocated by this canister.",
+                )?;
+
                 w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
                     .value(
                         &[("canister", "cketh-minter")],
@@ -1016,7 +1022,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             max_skip_timestamp,
         ));
 
-        const MAX_BODY_SIZE: usize = 3_000_000;
+        const MAX_BODY_SIZE: usize = 2_000_000;
         HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
             .with_body_and_content_length(log.serialize_logs(MAX_BODY_SIZE))
@@ -1038,6 +1044,18 @@ fn check_audit_log() {
             .is_equivalent_to(s)
             .expect("replaying the audit log should produce an equivalent state")
     })
+}
+
+/// Returns the amount of heap memory in bytes that has been allocated.
+#[cfg(target_arch = "wasm32")]
+pub fn heap_memory_size_bytes() -> usize {
+    const WASM_PAGE_SIZE_BYTES: usize = 65536;
+    core::arch::wasm32::memory_size(0) * WASM_PAGE_SIZE_BYTES
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+pub fn heap_memory_size_bytes() -> usize {
+    0
 }
 
 fn main() {}

@@ -4,6 +4,7 @@ set -e
 
 # Monitor the GuestOS virtual machine.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -27,16 +28,6 @@ Arguments:
             ;;
     esac
 done
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function monitor_guestos() {
     if [ ! "$(virsh list --all | grep 'guestos')" ]; then

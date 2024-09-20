@@ -49,15 +49,15 @@ use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse}
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use slog::Level;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
-    fs::File,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tracing::{instrument, warn};
 
@@ -75,6 +75,7 @@ pub struct PocketIcBuilder {
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
+    log_level: Option<Level>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -86,6 +87,7 @@ impl PocketIcBuilder {
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
             nonmainnet_features: false,
+            log_level: None,
         }
     }
 
@@ -97,6 +99,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
+            self.log_level,
         )
     }
 
@@ -108,6 +111,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
+            self.log_level,
         )
         .await
     }
@@ -136,6 +140,13 @@ impl PocketIcBuilder {
     pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
         Self {
             nonmainnet_features,
+            ..self
+        }
+    }
+
+    pub fn with_log_level(self, log_level: Level) -> Self {
+        Self {
+            log_level: Some(log_level),
             ..self
         }
     }
@@ -249,6 +260,12 @@ impl PocketIcBuilder {
         self
     }
 
+    /// Add an empty verified application subnet
+    pub fn with_verified_application_subnet(mut self) -> Self {
+        self.config.verified_application.push(SubnetSpec::default());
+        self
+    }
+
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
         self.config
             .application
@@ -298,6 +315,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
     }
 
@@ -309,7 +327,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false)
+        Self::from_components(config, server_url, max_request_time_ms, None, false, None)
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -324,6 +342,7 @@ impl PocketIc {
             Some(DEFAULT_MAX_REQUEST_TIME_MS),
             None,
             false,
+            None,
         )
     }
 
@@ -333,6 +352,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
+        log_level: Option<Level>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -351,6 +371,7 @@ impl PocketIc {
                 max_request_time_ms,
                 state_dir,
                 nonmainnet_features,
+                log_level,
             )
             .await
         });
@@ -1274,54 +1295,44 @@ pub fn start_or_reuse_server() -> Url {
             .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
     };
 
-    if !Path::new(&bin_path).exists() {
+    if !Path::new(&bin_path).is_file() {
+        let is_dir = if Path::new(&bin_path).is_dir() {
+            " (this is a directory, but it should be a binary file)"
+        } else {
+            ""
+        };
         panic!("
 Could not find the PocketIC binary.
 
-The PocketIC binary could not be found at {:?}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
+The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
 or place it in your current working directory (you are running PocketIC from {:?}).
 
 To download the binary, please visit https://github.com/dfinity/pocketic."
-, &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+, &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
-    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
-    if create_file_atomically(started_file_path).is_ok() {
-        let mut cmd = Command::new(PathBuf::from(bin_path));
-        cmd.arg("--pid").arg(parent_pid.to_string());
-        if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-            cmd.stdout(std::process::Stdio::null());
-            cmd.stderr(std::process::Stdio::null());
-        }
-        cmd.spawn().expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    cmd.arg("--pid").arg(parent_pid.to_string());
+    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
     }
+    cmd.spawn()
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path));
 
-    let start = Instant::now();
     loop {
-        match ready_file_path.try_exists() {
-            Ok(true) => {
-                let port_string = std::fs::read_to_string(port_file_path)
-                    .expect("Failed to read port from port file");
-                let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if port_string.contains("\n") {
+                let port: u16 = port_string
+                    .trim_end()
+                    .parse()
+                    .expect("Failed to parse port to number");
+                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
-            _ => std::thread::sleep(Duration::from_millis(20)),
         }
-        if start.elapsed() > Duration::from_secs(10) {
-            panic!("Failed to start PocketIC service in time");
-        }
+        std::thread::sleep(Duration::from_millis(20));
     }
-}
-
-// Ensures atomically that this file was created freshly, and gives an error otherwise.
-fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
-    File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&file_path)
 }

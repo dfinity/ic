@@ -13,13 +13,13 @@ use crate::{
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
@@ -35,7 +35,7 @@ use ic_types::{
         RequestOrResponse, Response, NO_DEADLINE,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, PrincipalId, Time,
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -190,7 +190,7 @@ impl<'a> QueryContext<'a> {
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
         let call_origin = match query.source {
             QuerySource::User { user_id, .. } => CallOrigin::Query(user_id),
-            QuerySource::Anonymous => CallOrigin::Query(PrincipalId::new_anonymous().into()),
+            QuerySource::Anonymous => CallOrigin::Query(query.source().into()),
         };
 
         let method = match wasm_query_method(old_canister, query.method_name.to_string()) {

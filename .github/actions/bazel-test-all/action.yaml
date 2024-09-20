@@ -18,10 +18,7 @@ inputs:
     default: ''
   BAZEL_STARTUP_ARGS:
     required: false
-    default: ''
-  RUN_ON_DIFF_ONLY:
-    required: false
-    default: "false"
+    default: '--output_base=/var/tmp/bazel-output/'
   HONEYCOMB_API_TOKEN:
     required: false
   SSH_PRIVATE_KEY:
@@ -36,6 +33,11 @@ runs:
         run: |
           set -x +e
 
+          # temporarily set permissions again until we can figure out issue
+          if [ -e /cache ]; then
+            sudo chown -RL 1001:1001 /cache
+          fi
+
           if [ -n "$SSH_PRIVATE_KEY" ]; then
             # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
             test -z "${SSH_AUTH_SOCK:-}" && { eval "$(ssh-agent -s)"; ssh-add - <<< "${SSH_PRIVATE_KEY}"; }
@@ -45,7 +47,7 @@ runs:
             echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
           fi
 
-          ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
+          ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
           if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then
@@ -59,6 +61,5 @@ runs:
           BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
           BAZEL_EXTRA_ARGS: "${{ inputs.BAZEL_EXTRA_ARGS }} ${{ inputs.BAZEL_EXTRA_ARGS_RULES }}"
           BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
-          RUN_ON_DIFF_ONLY: ${{ inputs.RUN_ON_DIFF_ONLY }}
           HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}

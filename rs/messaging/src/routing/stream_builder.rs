@@ -1,6 +1,8 @@
-use crate::message_routing::LatencyMetrics;
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
+use crate::message_routing::{
+    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
 use ic_error_types::RejectCode;
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -45,6 +47,9 @@ struct StreamBuilderMetrics {
     pub critical_error_payload_too_large: IntCounter,
     /// Critical error for responses dropped due to destination not found.
     pub critical_error_response_destination_not_found: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 }
 
 /// Desired byte size of an outgoing stream.
@@ -82,7 +87,10 @@ const CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND: &str =
     "mr_stream_builder_response_destination_not_found";
 
 impl StreamBuilderMetrics {
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
+    ) -> Self {
         let stream_messages = metrics_registry.int_gauge_vec(
             METRIC_STREAM_MESSAGES,
             "Messages currently enqueued in streams, by remote subnet.",
@@ -120,6 +128,9 @@ impl StreamBuilderMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_PAYLOAD_TOO_LARGE);
         let critical_error_response_destination_not_found =
             metrics_registry.error_counter(CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND);
+        let critical_error_induct_response_failed = message_routing_metrics
+            .critical_error_induct_response_failed
+            .clone();
         // Initialize all `routed_messages` counters with zero, so they are all exported
         // from process start (`IntCounterVec` is really a map).
         for (msg_type, status) in &[
@@ -147,6 +158,7 @@ impl StreamBuilderMetrics {
             critical_error_infinite_loops,
             critical_error_payload_too_large,
             critical_error_response_destination_not_found,
+            critical_error_induct_response_failed,
         }
     }
 }
@@ -171,12 +183,13 @@ impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
         metrics_registry: &MetricsRegistry,
+        message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
             subnet_id,
-            metrics: StreamBuilderMetrics::new(metrics_registry),
+            metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             log,
         }
@@ -211,9 +224,18 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
-            // Enqueuing a response for a local request.
-            // There should never be the case of getting `CanisterStopped` or `CanisterStopping`.
-            .unwrap();
+            .unwrap_or_else(|(err, response)| {
+                // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
+                // `NonMatchingResponse` error.
+                error!(
+                    self.log,
+                    "{}: Failed to enqueue reject response for local request: {}\n{:?}",
+                    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                    err,
+                    response
+                );
+                self.metrics.critical_error_induct_response_failed.inc();
+            });
     }
 
     /// Records the result of routing an XNet message.

@@ -51,18 +51,18 @@ pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
 
 #[derive(
-    Serialize,
-    Deserialize,
-    CandidType,
-    Clone,
     Copy,
-    Default,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
     Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
+    Default,
+    CandidType,
+    Deserialize,
+    Serialize,
 )]
 pub struct Memo(pub u64);
 
@@ -70,17 +70,17 @@ pub type Certification = Option<Vec<u8>>;
 
 /// An operation which modifies account balances
 #[derive(
-    Serialize,
-    Deserialize,
-    CandidType,
     Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
     Hash,
     Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
+    CandidType,
+    Deserialize,
     IntoStaticStr,
+    Serialize,
 )]
 pub enum Operation {
     Burn {
@@ -225,7 +225,7 @@ where
 
 /// An operation with the metadata the client generated attached to it
 #[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
 )]
 pub struct Transaction {
     pub operation: Operation,
@@ -331,7 +331,7 @@ impl Transaction {
 }
 
 /// A transaction with the metadata the canister generated attached to it
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Block {
     pub parent_hash: Option<HashOf<EncodedBlock>>,
     pub transaction: Transaction,
@@ -424,7 +424,7 @@ impl BlockType for Block {
     }
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransferFee {
     /// The fee to pay to perform a transfer
     pub transfer_fee: Tokens,
@@ -439,23 +439,20 @@ impl Default for TransferFee {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum LedgerCanisterPayload {
     Init(InitArgs),
     Upgrade(Option<UpgradeArgs>),
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct LedgerCanisterInitPayload(pub LedgerCanisterPayload);
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub maximum_number_of_accounts: Option<usize>,
-
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icrc1_minting_account: Option<Account>,
 
@@ -464,7 +461,7 @@ pub struct UpgradeArgs {
 }
 
 // This is how we pass arguments to 'init' in main.rs
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct InitArgs {
     pub minting_account: AccountIdentifier,
     pub icrc1_minting_account: Option<Account>,
@@ -643,7 +640,6 @@ impl LedgerCanisterInitPayloadBuilder {
 }
 
 pub struct LedgerCanisterUpgradePayloadBuilder {
-    maximum_number_of_accounts: Option<usize>,
     icrc1_minting_account: Option<Account>,
     feature_flags: Option<FeatureFlags>,
 }
@@ -651,15 +647,9 @@ pub struct LedgerCanisterUpgradePayloadBuilder {
 impl LedgerCanisterUpgradePayloadBuilder {
     fn new() -> Self {
         Self {
-            maximum_number_of_accounts: None,
             icrc1_minting_account: None,
             feature_flags: None,
         }
-    }
-
-    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: usize) -> Self {
-        self.maximum_number_of_accounts = Some(maximum_number_of_accounts);
-        self
     }
 
     pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
@@ -670,7 +660,6 @@ impl LedgerCanisterUpgradePayloadBuilder {
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-                maximum_number_of_accounts: self.maximum_number_of_accounts,
                 icrc1_minting_account: self.icrc1_minting_account,
                 feature_flags: self.feature_flags,
             })),
@@ -679,7 +668,7 @@ impl LedgerCanisterUpgradePayloadBuilder {
 }
 
 /// Argument taken by the send endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct SendArgs {
     pub memo: Memo,
     pub amount: Tokens,
@@ -714,7 +703,7 @@ impl From<SendArgs> for TransferArgs {
 pub type AccountIdBlob = [u8; 32];
 
 /// Argument taken by the transfer endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransferArgs {
     pub memo: Memo,
     pub amount: Tokens,
@@ -724,7 +713,7 @@ pub struct TransferArgs {
     pub created_at_time: Option<TimeStamp>,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum TransferError {
     BadFee { expected_fee: Tokens },
     InsufficientFunds { balance: Tokens },
@@ -763,14 +752,14 @@ impl fmt::Display for TransferError {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum PaymentError {
     Reject(String),
     TransferError(TransferError),
 }
 
 /// Struct sent by the ledger canister when it notifies a recipient of a payment
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransactionNotification {
     pub from: PrincipalId,
     pub from_subaccount: Option<Subaccount>,
@@ -782,7 +771,7 @@ pub struct TransactionNotification {
 }
 
 /// Argument taken by the notification endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct NotifyCanisterArgs {
     pub block_height: BlockIndex,
     pub max_fee: Tokens,
@@ -817,13 +806,13 @@ impl NotifyCanisterArgs {
 }
 
 /// Arguments taken by the account_balance candid endpoint.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct BinaryAccountBalanceArgs {
     pub account: AccountIdBlob,
 }
 
 /// Argument taken by the account_balance_dfx endpoint
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct AccountBalanceArgs {
     pub account: AccountIdentifier,
 }
@@ -836,7 +825,7 @@ impl AccountBalanceArgs {
 
 /// An operation which modifies account balances
 #[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
 )]
 pub enum CandidOperation {
     Burn {
@@ -986,7 +975,7 @@ impl TryFrom<CandidOperation> for Operation {
 
 /// An operation with the metadata the client generated attached to it
 #[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
+    Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
 )]
 pub struct CandidTransaction {
     pub operation: Option<CandidOperation>,
@@ -1010,7 +999,7 @@ impl TryFrom<CandidTransaction> for Transaction {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct CandidBlock {
     pub parent_hash: Option<[u8; HASH_LENGTH]>,
     pub transaction: CandidTransaction,
@@ -1055,7 +1044,7 @@ impl TryFrom<CandidBlock> for Block {
 /// to query past values. Requiring 1 candid value instead of zero is a
 /// non-backward compatible change. But adding optional fields to a struct taken
 /// as input is backward-compatible.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransferFeeArgs {}
 
 /// Argument taken by the total_supply endpoint
@@ -1064,30 +1053,30 @@ pub struct TransferFeeArgs {}
 /// to query past values. Requiring 1 candid value instead of zero is a
 /// non-backward compatible change. But adding optional fields to a struct taken
 /// as input is backward-compatible.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TotalSupplyArgs {}
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct Symbol {
     pub symbol: String,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct Name {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct Decimals {
     pub decimals: u32,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct ArchiveInfo {
     pub canister_id: CanisterId,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct Archives {
     pub archives: Vec<ArchiveInfo>,
 }
@@ -1098,20 +1087,20 @@ pub struct TipOfChainRes {
     pub tip_index: BlockIndex,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Debug, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
     pub length: usize,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Debug, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct BlockRange {
     pub blocks: Vec<CandidBlock>,
 }
 
 pub type GetBlocksResult = Result<BlockRange, GetBlocksError>;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, CandidType, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GetBlocksError {
     BadFirstBlockIndex {
         requested_index: BlockIndex,
@@ -1175,7 +1164,7 @@ pub fn iter_blocks(blocks: &[EncodedBlock], offset: usize, length: usize) -> Ite
     IterBlocksRes(blocks)
 }
 
-#[derive(CandidType, Deserialize, Clone)]
+#[derive(Clone, CandidType, Deserialize)]
 pub enum CyclesResponse {
     CanisterCreated(CanisterId),
     // Silly requirement by the candid derivation
@@ -1183,14 +1172,14 @@ pub enum CyclesResponse {
     Refunded(String, Option<BlockIndex>),
 }
 
-#[derive(Debug, CandidType, Deserialize, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ArchivedBlocksRange {
     pub start: BlockIndex,
     pub length: u64,
     pub callback: QueryArchiveBlocksFn,
 }
 
-#[derive(Debug, CandidType, Deserialize, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct QueryBlocksResponse {
     pub chain_length: u64,
     pub certificate: Option<serde_bytes::ByteBuf>,
@@ -1199,7 +1188,7 @@ pub struct QueryBlocksResponse {
     pub archived_blocks: Vec<ArchivedBlocksRange>,
 }
 
-#[derive(Debug, CandidType, Deserialize, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct QueryEncodedBlocksResponse {
     pub chain_length: u64,
     pub certificate: Option<serde_bytes::ByteBuf>,
@@ -1210,7 +1199,7 @@ pub struct QueryEncodedBlocksResponse {
 
 pub type GetEncodedBlocksResult = Result<Vec<EncodedBlock>, GetBlocksError>;
 
-#[derive(Debug, CandidType, Deserialize, Clone)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ArchivedEncodedBlocksRange {
     pub start: BlockIndex,
     pub length: u64,
@@ -1222,7 +1211,7 @@ pub type QueryArchiveBlocksFn =
 pub type QueryArchiveEncodedBlocksFn =
     icrc_ledger_types::icrc3::archive::QueryArchiveFn<GetBlocksArgs, GetEncodedBlocksResult>;
 
-#[derive(CandidType, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct FeatureFlags {
     pub icrc2: bool,
 }

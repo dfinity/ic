@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// Contains all context information related to an incoming call.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
     /// `CallContext` needed to form the eventual reply.
@@ -183,7 +183,7 @@ impl TryFrom<pb::CallContext> for CallContext {
 }
 
 /// The action the caller of `CallContext.on_canister_result` should take.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CallContextAction {
     /// The canister produced a `Reply` for the request which is returned along
     /// with the remaining cycles that the canister did not accept.
@@ -211,7 +211,7 @@ pub enum CallContextAction {
 
 /// Call context and callback stats to initialize and validate `CanisterQueues`
 /// guaranteed response memory reservation and queue capacity stats.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub(crate) struct CallContextManagerStats {
     /// The number of canister update call contexts that have not yet been responded
     /// to.
@@ -411,19 +411,23 @@ impl CallContextManagerStats {
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
-    /// Maps call context to its responded status.
+
+    /// Call contexts (including deleted ones) that still have open callbacks.
     call_contexts: BTreeMap<CallContextId, CallContext>,
+
+    /// Callbacks still awaiting response, plus the callback of the currently
+    /// paused or aborted DTS response execution, if any.
     callbacks: BTreeMap<CallbackId, Arc<Callback>>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
     CanisterUpdate(CanisterId, CallbackId, CoarseTime),
@@ -590,38 +594,41 @@ impl CallContextManager {
         self.callbacks.get(&callback_id).map(AsRef::as_ref)
     }
 
-    /// Validates the given response before inducting it into the queue.
+    /// Tests whether the given response should be inducted or silently dropped.
     /// Verifies that the stored respondent and originator associated with the
     /// `callback_id`, as well as its deadline match those of the response.
     ///
-    /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
-    /// or if the response is not valid.
-    pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
+    /// Returns:
+    ///
+    ///  * `Ok(true)` if the response can be safely inducted.
+    ///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
+    ///    for a best-effort response (because the callback might have expired and
+    ///    been closed).
+    ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
+    ///    not found for a guaranteed response.
+    ///  * `Err(StateError::NonMatchingResponse)` if the response details do not
+    ///    match those of the callback.
+    pub(crate) fn should_enqueue(&self, response: &Response) -> Result<bool, StateError> {
         match self.callback(response.originator_reply_callback) {
             Some(callback) if response.respondent != callback.respondent
                     || response.originator != callback.originator
                     || response.deadline != callback.deadline => {
-                Err(StateError::NonMatchingResponse {
-                    err_str: format!(
+                Err(StateError::non_matching_response(format!(
                         "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
                         callback.originator, callback.respondent, Time::from(callback.deadline)
-                    ),
-                    originator: response.originator,
-                    callback_id: response.originator_reply_callback,
-                    respondent: response.respondent,
-                    deadline: response.deadline,
-                })
+                    ), response))
             }
-            Some(_) => Ok(()),
+            Some(_) => Ok(true),
             None => {
                 // Received an unknown callback ID.
-                Err(StateError::NonMatchingResponse {
-                    err_str: "unknown callback ID".to_string(),
-                    originator: response.originator,
-                    callback_id: response.originator_reply_callback,
-                    respondent: response.respondent,
-                    deadline: response.deadline,
-                })
+                if response.deadline == NO_DEADLINE {
+                    // This is an error for a guaranteed response.
+                    Err(StateError::non_matching_response("unknown callback ID", response))
+                } else {
+                    // But should be ignored in the case of a best-effort response (as the callback
+                    // may have expired and been dropped in the meantime).
+                    Ok(false)
+                }
             }
         }
     }

@@ -128,7 +128,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut batch_payload = BatchPayload::default();
         let mut accumulated_size = 0;
 
-        for section_id in section_select {
+        for (priority, section_id) in section_select.into_iter().enumerate() {
             accumulated_size += self.section_builder[section_id]
                 .build_payload(
                     &mut batch_payload,
@@ -143,6 +143,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                             .saturating_sub(accumulated_size),
                     ),
                     past_payloads,
+                    priority,
                     &self.metrics,
                     &self.logger,
                 )

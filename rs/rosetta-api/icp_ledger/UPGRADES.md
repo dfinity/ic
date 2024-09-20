@@ -1,6 +1,6 @@
 # ICP ledger upgrade history
 
-The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ICP ledger index (`qhbym-qaaaa-aaaaa-aaafq-cai`), and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`, `qsgjb-riaaa-aaaaa-aaaga-cai`).
+The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`), ICP ledger index (`qhbym-qaaaa-aaaaa-aaafq-cai`), and ICP ledger archives (`qjdve-lqaaa-aaaaa-aaaeq-cai`, `qsgjb-riaaa-aaaaa-aaaga-cai`, `q4eej-kyaaa-aaaaa-aaaha-cai`).
 
 | Proposal | Date | Git commit | Wasm |
 |---------:|:----:|:----------:|------|
@@ -24,3 +24,8 @@ The upgrade history for the ICP ledger canister (`ryjl3-tyaaa-aaaaa-aaaba-cai`),
 | [`130755`](https://dashboard.internetcomputer.org/proposal/130755)| `2024-06-28`| `b43280208c32633a29657a1051660324e88a373d` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/b43280208c32633a29657a1051660324e88a373d/canisters/ledger-canister_notify-method.wasm.gz) |
 | [`130756`](https://dashboard.internetcomputer.org/proposal/130756)| `2024-06-28`| `b43280208c32633a29657a1051660324e88a373d` | [ledger-archive-node-canister.wasm.gz](https://download.dfinity.systems/ic/b43280208c32633a29657a1051660324e88a373d/canisters/ledger-archive-node-canister.wasm.gz) |
 | [`130757`](https://dashboard.internetcomputer.org/proposal/130757)| `2024-06-28`| `b43280208c32633a29657a1051660324e88a373d` | [ledger-archive-node-canister.wasm.gz](https://download.dfinity.systems/ic/b43280208c32633a29657a1051660324e88a373d/canisters/ledger-archive-node-canister.wasm.gz) |
+| [`131701`](https://dashboard.internetcomputer.org/proposal/131701)| `2024-08-12`| `2bdfdc54ccc7ef27dd7b4f37aaea172198dce6ab` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/2bdfdc54ccc7ef27dd7b4f37aaea172198dce6ab/canisters/ledger-canister_notify-method.wasm.gz) |
+| [`132137`](https://dashboard.internetcomputer.org/proposal/132137)| `2024-08-23`| `b0ade55f7e8999e2842fe3f49df163ba224b71a2` | [ic-icp-index-canister.wasm.gz](https://download.dfinity.systems/ic/b0ade55f7e8999e2842fe3f49df163ba224b71a2/canisters/ic-icp-index-canister.wasm.gz) |
+| [`132138`](https://dashboard.internetcomputer.org/proposal/132138)| `2024-08-23`| `b0ade55f7e8999e2842fe3f49df163ba224b71a2` | [ledger-canister_notify-method.wasm.gz](https://download.dfinity.systems/ic/b0ade55f7e8999e2842fe3f49df163ba224b71a2/canisters/ledger-canister_notify-method.wasm.gz) |
+| [`132139`](https://dashboard.internetcomputer.org/proposal/132139)| `2024-08-23`| `b0ade55f7e8999e2842fe3f49df163ba224b71a2` | [ledger-archive-node-canister.wasm.gz](https://download.dfinity.systems/ic/b0ade55f7e8999e2842fe3f49df163ba224b71a2/canisters/ledger-archive-node-canister.wasm.gz) |
+| [`132140`](https://dashboard.internetcomputer.org/proposal/132140)| `2024-08-23`| `b0ade55f7e8999e2842fe3f49df163ba224b71a2` | [ledger-archive-node-canister.wasm.gz](https://download.dfinity.systems/ic/b0ade55f7e8999e2842fe3f49df163ba224b71a2/canisters/ledger-archive-node-canister.wasm.gz) |

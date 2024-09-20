@@ -3,18 +3,16 @@ use anyhow::anyhow;
 use anyhow::Context;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::identity::Identity;
-use ic_crypto_ecdsa_secp256k1::KeyDecodingError;
-use ic_crypto_ecdsa_secp256k1::{
-    PrivateKey as Secp256k1PrivateKey, PublicKey as Secp256k1PublicKey,
-};
 use ic_crypto_ed25519::{
     PrivateKey as Ed25519SecretKey, PrivateKeyDecodingError, PrivateKeyFormat,
     PublicKey as Ed25519PublicKey,
 };
+use ic_crypto_secp256k1::KeyDecodingError;
+use ic_crypto_secp256k1::{PrivateKey as Secp256k1PrivateKey, PublicKey as Secp256k1PublicKey};
 use ic_types::PrincipalId;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Ed25519KeyPair {
     secret_key: Ed25519SecretKey,
     public_key: Ed25519PublicKey,
@@ -127,7 +125,7 @@ impl RosettaSupportedKeyPair for Ed25519KeyPair {
 
 impl RosettaSupportedKeyPair for Secp256k1KeyPair {
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.secret_key.sign_message(msg).to_vec()
+        self.secret_key.sign_message_with_ecdsa(msg).to_vec()
     }
 
     //The default serialization version for the Public Key is sec1

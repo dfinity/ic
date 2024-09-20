@@ -29,7 +29,7 @@ RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login
 # but this is per system (so backups are not persisted across upgrades)
 # and thus not very useful, and /etc is read-only.
 # So simply suppress generating backups.
-RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
+RUN sed -e 's/\(# \)\?\(backup *= *\)[01]/\20/' -e 's/\(# \)\?\(archive *= *\)[01]/\20/' -i /etc/lvm/lvm.conf
 
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
@@ -39,7 +39,7 @@ RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id
@@ -76,7 +76,6 @@ RUN systemctl enable \
     systemd-resolved
 
 RUN systemctl disable \
-    systemd-timesyncd \
     ssh
 
 # ------ SETUPOS WORK --------------------------------------------

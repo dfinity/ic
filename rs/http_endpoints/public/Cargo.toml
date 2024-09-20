@@ -60,11 +60,6 @@ tower-http = { workspace = true }
 tracing-flame = "0.2.0"
 tracing-subscriber = { workspace = true }
 
-
-[target.'cfg(target_os = "linux")'.dependencies]
-# this library uses libunwind, which is only applicable to Linux
-ic-backtrace = { path = "../../monitoring/backtrace" }
-
 [dev-dependencies]
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -85,7 +80,7 @@ ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 pretty_assertions = { workspace = true }
-proptest = "1.0.0"
+proptest = { workspace = true }
 reqwest = { workspace = true }
 rstest = { workspace = true }
 rustls = { workspace = true }

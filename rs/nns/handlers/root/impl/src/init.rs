@@ -1,4 +1,4 @@
-#[derive(candid::CandidType, candid::Deserialize, Clone, Debug)]
+#[derive(Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct RootCanisterInitPayload {}
 
 pub struct RootCanisterInitPayloadBuilder {}

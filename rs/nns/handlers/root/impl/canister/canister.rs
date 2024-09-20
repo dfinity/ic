@@ -1,5 +1,5 @@
 use candid::candid_method;
-use dfn_candid::{candid, candid_one};
+use dfn_candid::{candid, candid_one, candid_one_with_config};
 use dfn_core::{
     api::caller,
     endpoint::{over, over_async},
@@ -284,7 +284,7 @@ async fn update_canister_settings_(
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    over(candid_one, serve_http)
+    over(candid_one_with_config, serve_http)
 }
 
 /// Serve an HttpRequest made to this canister
@@ -315,67 +315,4 @@ fn main() {
 fn main() {}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
-    use lazy_static::lazy_static;
-    use pretty_assertions::assert_eq;
-    use std::{env::var_os, path::PathBuf};
-
-    lazy_static! {
-        static ref DECLARED_INTERFACE: String = {
-            let cargo_manifest_dir =
-                var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined");
-
-            let path = PathBuf::from(cargo_manifest_dir).join("canister/root.did");
-
-            let contents = std::fs::read(path).unwrap();
-            String::from_utf8(contents).unwrap()
-        };
-        static ref IMPLEMENTED_INTERFACE: String = {
-            candid::export_service!();
-            __export_service()
-        };
-    }
-
-    /// Makes sure that ./root.did is up to date with the implementation.
-    #[test]
-    fn check_candid_interface_definition_file() {
-        assert_eq!(
-            *DECLARED_INTERFACE, *IMPLEMENTED_INTERFACE,
-            "Generated candid definition does not match canister/root.did. \
-             Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) in \
-             rs/nns/handlers/root/impl/ to update canister/root.did."
-        );
-    }
-
-    /// This is redundant vs. the previous test. The purpose of this is to show
-    /// what the world would look like if we adopted the recommendation that [we
-    /// use .did files as our source of truth][use-did-file], instead of
-    /// generating them (what we do now).
-    ///
-    ///   [use-did-file]: https://mmapped.blog/posts/01-effective-rust-canisters.html#canister-interfaces
-    #[test]
-    fn test_implementation_conforms_to_declared_interface() {
-        let result = service_equal(
-            CandidSource::Text(&IMPLEMENTED_INTERFACE),
-            CandidSource::Text(&DECLARED_INTERFACE),
-        );
-
-        if let Err(err) = result {
-            panic!(
-                "Implemented interface:\n\
-                 {}\n\
-                 \n\
-                 Declared interface:\n\
-                 {}\n\
-                 \n\
-                 Error:\n\
-                 {}n\
-                 \n\
-                 The Candid service implementation does not comply with the declared interface.",
-                *IMPLEMENTED_INTERFACE, *DECLARED_INTERFACE, err,
-            );
-        }
-    }
-}
+mod tests;

@@ -2,14 +2,17 @@ mod candid;
 mod canister;
 mod dashboard;
 mod git;
+mod ic_admin;
 mod proposal;
 
 use crate::candid::encode_upgrade_args;
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
 use crate::git::{GitCommitHash, GitRepository};
+use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
+use ic_admin::IcAdminArgs;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -45,6 +48,10 @@ enum Commands {
         /// Output directory where generated files will be written
         #[arg(short, long)]
         output_dir: PathBuf,
+
+        /// Tool to submit proposal
+        #[command(subcommand)]
+        submit: Option<SubmitProposal>,
     },
     /// install a canister
     #[command(arg_required_else_help = true)]
@@ -63,7 +70,28 @@ enum Commands {
         /// Output directory where generated files will be written
         #[arg(short, long)]
         output_dir: PathBuf,
+
+        /// Tool to submit proposal
+        #[command(subcommand)]
+        submit: Option<SubmitProposal>,
     },
+}
+
+#[derive(Clone, Debug, Subcommand)]
+enum SubmitProposal {
+    /// Generate the `ic-admin` command to submit the proposal.
+    /// The proposal will *not* be automatically submitted.
+    IcAdmin(IcAdminArgs),
+}
+
+impl SubmitProposal {
+    fn render_command(self, proposal: &ProposalTemplate, generated_files: ProposalFiles) -> String {
+        match self {
+            SubmitProposal::IcAdmin(args) => {
+                args.command_to_submit_proposal(proposal, generated_files)
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -76,6 +104,7 @@ async fn main() {
             to,
             args,
             output_dir,
+            submit,
         } => {
             check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
 
@@ -106,13 +135,14 @@ async fn main() {
                 release_notes,
             };
 
-            write_to_disk(output_dir, proposal, &ic_repo);
+            write_to_disk(output_dir, proposal, submit, &ic_repo);
         }
         Commands::Install {
             canister,
             at,
             args,
             output_dir,
+            submit,
         } => {
             let mut ic_repo = GitRepository::clone_ic();
 
@@ -133,7 +163,7 @@ async fn main() {
                 install_args,
             };
 
-            write_to_disk(output_dir, proposal, &ic_repo);
+            write_to_disk(output_dir, proposal, submit, &ic_repo);
         }
     }
 }
@@ -141,6 +171,7 @@ async fn main() {
 fn write_to_disk<P: Into<ProposalTemplate>>(
     output_dir: PathBuf,
     proposal: P,
+    submit_with: Option<SubmitProposal>,
     ic_repo: &GitRepository,
 ) {
     const GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
@@ -153,44 +184,67 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     }
     fs::create_dir_all(&output_dir).unwrap_or_else(|_| panic!("failed to create {:?}", output_dir));
 
-    let args_file_path = output_dir.join("args.bin");
-    let mut args_file = fs::File::create(&args_file_path)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", args_file_path));
+    let bin_args_file_path = output_dir.join("args.bin");
+    let mut args_file = fs::File::create(&bin_args_file_path)
+        .unwrap_or_else(|_| panic!("failed to create {:?}", bin_args_file_path));
     proposal.write_bin_args(&mut args_file);
     println!(
         "Binary upgrade args written to '{}'",
-        args_file_path.display()
+        bin_args_file_path.display()
     );
 
-    let args_file_path = output_dir.join("args.hex");
-    let mut args_file = fs::File::create(&args_file_path)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", args_file_path));
+    let hex_args_file_path = output_dir.join("args.hex");
+    let mut args_file = fs::File::create(&hex_args_file_path)
+        .unwrap_or_else(|_| panic!("failed to create {:?}", hex_args_file_path));
     proposal.write_hex_args(&mut args_file);
     println!(
         "Hexadecimal upgrade args written to '{}'",
-        args_file_path.display()
+        hex_args_file_path.display()
     );
 
     let artifact = output_dir.join(proposal.target_canister().artifact_file_name());
     ic_repo.copy_file(&proposal.target_canister().artifact(), &artifact);
     println!("Artifact written to '{}'", artifact.display());
 
-    let proposal = proposal.render();
-    if proposal.len() > GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX {
+    let proposal_summary_content = proposal.render();
+    if proposal_summary_content.len() > GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX {
         errors.push(format!(
             "Proposal summary is too long and will fail validation from the governance canister when submitted: {} bytes (max {})",
-            proposal.len(),
+            proposal_summary_content.len(),
             GOVERNANCE_PROPOSAL_SUMMARY_BYTES_MAX
         ));
     }
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
         .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));
-    summary_file.write_all(proposal.as_bytes()).unwrap();
+    summary_file
+        .write_all(proposal_summary_content.as_bytes())
+        .unwrap();
     println!(
         "Proposal summary written to '{}'",
         proposal_summary.display()
     );
+
+    if let Some(submit) = submit_with {
+        use std::os::unix::fs::OpenOptionsExt;
+        let proposal_files = ProposalFiles {
+            wasm: artifact,
+            arg: bin_args_file_path,
+            summary: proposal_summary,
+        }
+        .strip_prefix(&output_dir)
+        .unwrap();
+        let command = submit.render_command(&proposal, proposal_files);
+        let submit_script = output_dir.join("submit.sh");
+        let mut submit_file = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o740) //ensure script is executable
+            .open(submit_script.as_path())
+            .unwrap_or_else(|_| panic!("failed to create {:?}", submit_script));
+        submit_file.write_all(command.as_bytes()).unwrap();
+        println!("Submit script written to '{}'", submit_script.display());
+    }
 
     if !errors.is_empty() {
         println!("Proposal was generated, but some errors were detected:");

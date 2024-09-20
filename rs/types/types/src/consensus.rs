@@ -4,7 +4,6 @@ use crate::{
     batch::{BatchPayload, ValidationContext},
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
-    replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
     signature::*,
     *,
@@ -19,9 +18,9 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
 };
 use serde::{Deserialize, Serialize};
+use std::cmp::PartialOrd;
 use std::convert::TryInto;
 use std::hash::Hash;
-use std::{cmp::PartialOrd, convert::Infallible};
 
 pub mod block_maker;
 pub mod catchup;
@@ -68,7 +67,7 @@ pub trait IsShare {
     fn is_share(&self) -> bool;
 }
 
-/// Abstract messages with hash attribute. The [`hash`] implementation is expected
+/// Abstract messages with hash attribute. The `hash` implementation is expected
 /// to return an existing hash value, instead of computing one.
 pub trait HasHash {
     fn hash(&self) -> &CryptoHash;
@@ -256,13 +255,13 @@ impl HasHeight for BlockMetadata {
 
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
-#[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Rank(pub u64);
 
 /// Block is the type that is used to create blocks out of which we build a
 /// block chain
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Block {
     pub version: ReplicaVersion,
@@ -324,7 +323,7 @@ impl SignedBytesWithoutDomainSeparator for BlockMetadata {
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
 /// BlockMetadata contains the version, height and hash of a block
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BlockMetadata {
     version: ReplicaVersion,
@@ -338,11 +337,11 @@ impl BlockMetadata {
         self.subnet_id
     }
 
-    pub fn from_block(block: &HashedBlock, config: &ReplicaConfig) -> Self {
+    pub fn from_block(block: &HashedBlock, subnet_id: SubnetId) -> Self {
         Self {
             version: block.version().clone(),
             height: block.height(),
-            subnet_id: config.subnet_id,
+            subnet_id,
             hash: block.get_hash().clone(),
         }
     }
@@ -350,12 +349,18 @@ impl BlockMetadata {
     /// Creates a signed block metadata instance from a given block proposal.
     pub fn signed_from_proposal(
         proposal: &BlockProposal,
-        config: &ReplicaConfig,
+        subnet_id: SubnetId,
     ) -> Signed<Self, BasicSignature<Self>> {
         Signed {
-            content: Self::from_block(&proposal.content, config),
+            content: Self::from_block(&proposal.content, subnet_id),
             signature: proposal.signature.clone(),
         }
+    }
+}
+
+impl HasHash for BlockMetadata {
+    fn hash(&self) -> &CryptoHash {
+        self.hash.get_ref()
     }
 }
 
@@ -403,7 +408,7 @@ impl AsRef<Block> for BlockProposal {
 }
 
 /// NotarizationContent holds the values that are signed in a notarization
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct NotarizationContent {
     pub version: ReplicaVersion,
@@ -504,7 +509,7 @@ impl TryFrom<pb::NotarizationShare> for NotarizationShare {
 }
 
 /// FinalizationContent holds the values that are signed in a finalization
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct FinalizationContent {
     pub version: ReplicaVersion,
@@ -607,7 +612,7 @@ impl TryFrom<pb::FinalizationShare> for FinalizationShare {
 /// RandomBeaconContent holds the content that is signed in the random beacon,
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomBeaconContent {
     pub version: ReplicaVersion,
@@ -710,7 +715,7 @@ impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
 /// RandomTapeContent holds the content that is signed in the random tape,
 /// which is the height and the replica version used to create the random
 /// tape.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RandomTapeContent {
     pub version: ReplicaVersion,
@@ -800,7 +805,7 @@ impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
 }
 
 /// A proof that shows a block maker has produced equivocating blocks.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EquivocationProof {
     pub signer: NodeId,
@@ -886,7 +891,7 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
 
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum ConsensusMessage {
     RandomBeacon(RandomBeacon),
@@ -906,11 +911,9 @@ pub enum ConsensusMessage {
 impl IdentifiableArtifact for ConsensusMessage {
     const NAME: &'static str = "consensus";
     type Id = ConsensusMessageId;
-    type Attribute = ();
     fn id(&self) -> Self::Id {
         self.get_id()
     }
-    fn attribute(&self) -> Self::Attribute {}
 }
 
 impl PbArtifact for ConsensusMessage {
@@ -918,8 +921,6 @@ impl PbArtifact for ConsensusMessage {
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ();
-    type PbAttributeError = Infallible;
 }
 
 impl From<ConsensusMessage> for pb::ConsensusMessage {
@@ -1005,7 +1006,7 @@ impl_cm_conversion! {
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
 /// contains only a hash instead of the full message in each variant.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum ConsensusMessageHash {
     RandomBeacon(CryptoHashOf<RandomBeacon>),
     Finalization(CryptoHashOf<Finalization>),
@@ -1243,7 +1244,7 @@ impl ConsensusMessageHash {
 
 /// Indicates one of the consensus committees that are responsible for creating
 /// signature shares on various types of artifacts
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum Committee {
     /// LowThreshold indicates the committee that creates threshold signatures
     /// with a low threshold. That is, f+1 out the 3f+1 committee members can

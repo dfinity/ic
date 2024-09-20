@@ -13,6 +13,8 @@ hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
+ic-icrc1-tokens-u256 = { path = "tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "tokens_u64" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
@@ -29,13 +31,15 @@ ic-icrc1-index-ng = { path = "index-ng" }
 ic-icrc1-ledger = { path = "ledger" }
 ic-icrc1-ledger-sm-tests = { path = "ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "test_utils" }
-ic-icrc1-tokens-u256 = { path = "tokens_u256" }
-ic-icrc1-tokens-u64 = { path = "tokens_u64" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
-proptest = "1.0"
+proptest = { workspace = true }
 rand = { workspace = true }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]

@@ -10,12 +10,24 @@ use serde::de::DeserializeOwned;
 
 pub struct Candid<T>(pub T);
 
+pub trait HasCandidDecoderConfig {
+    fn decoding_quota() -> usize;
+}
+
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
-fn decoder_config() -> DecoderConfig {
+fn default_decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
+
+fn decoder_config<T: HasCandidDecoderConfig>() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_decoding_quota(T::decoding_quota());
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
     config.set_full_error_message(false);
     config
@@ -39,7 +51,8 @@ impl<Tuple: ArgumentEncoder> IntoWire for Candid<Tuple> {
 
 impl<Tuple: for<'a> ArgumentDecoder<'a>> FromWire for Candid<Tuple> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let res = decode_args_with_config(&bytes, &decoder_config()).map_err(|e| e.to_string())?;
+        let res = decode_args_with_config(&bytes, &default_decoder_config())
+            .map_err(|e| e.to_string())?;
         Ok(Candid(res))
     }
 }
@@ -64,10 +77,39 @@ impl<T: CandidType> IntoWire for CandidOne<T> {
 
 impl<A1: DeserializeOwned + CandidType> FromWire for CandidOne<A1> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let mut de = IDLDeserialize::new_with_config(&bytes[..], &decoder_config())
+        let mut de = IDLDeserialize::new_with_config(&bytes[..], &default_decoder_config())
             .map_err(|e| e.to_string())?;
         let res = de.get_value().map_err(|e| e.to_string())?;
         Ok(CandidOne(res))
+    }
+}
+
+pub struct CandidOneWithDecodingConfig<T>(pub T);
+
+impl<T> NewType for CandidOneWithDecodingConfig<T> {
+    type Inner = T;
+    fn from_inner(t: Self::Inner) -> Self {
+        CandidOneWithDecodingConfig(t)
+    }
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
+}
+
+impl<T: CandidType> IntoWire for CandidOneWithDecodingConfig<T> {
+    fn into_bytes(self) -> Result<Vec<u8>, String> {
+        encode_one(self.0).map_err(|e| e.to_string())
+    }
+}
+
+impl<A1: DeserializeOwned + CandidType + HasCandidDecoderConfig> FromWire
+    for CandidOneWithDecodingConfig<A1>
+{
+    fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
+        let mut de = IDLDeserialize::new_with_config(&bytes[..], &decoder_config::<A1>())
+            .map_err(|e| e.to_string())?;
+        let res = de.get_value().map_err(|e| e.to_string())?;
+        Ok(CandidOneWithDecodingConfig(res))
     }
 }
 
@@ -90,5 +132,10 @@ pub fn candid_multi_arity<A, B>(a: Candid<A>, b: B) -> (A, Candid<B>) {
 
 /// This is a candid function that takes one argument and returns another
 pub fn candid_one<A, B>(a: CandidOne<A>, b: B) -> (A, CandidOne<B>) {
+    witness(a, b)
+}
+
+/// This is a candid function that takes one argument and returns another
+pub fn candid_one_with_config<A, B>(a: CandidOne<A>, b: B) -> (A, CandidOneWithDecodingConfig<B>) {
     witness(a, b)
 }

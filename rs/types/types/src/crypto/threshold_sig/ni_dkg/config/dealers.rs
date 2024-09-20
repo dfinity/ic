@@ -7,7 +7,7 @@ mod tests;
 
 /// A set of dealers for non-interactive DKG. Satisfies invariants, see
 /// `NiDkgDealers::new`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct NiDkgDealers {
     dealers: BTreeSet<NodeId>,
     // The count equals `dealers.len()`.

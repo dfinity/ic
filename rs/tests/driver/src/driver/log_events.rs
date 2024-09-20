@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use slog::info;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LogEvent<T> {
     pub event_name: String,
     pub body: T,

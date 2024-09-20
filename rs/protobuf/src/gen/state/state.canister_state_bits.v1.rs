@@ -672,11 +672,6 @@ pub struct CanisterStateBits {
     #[prost(message, optional, tag = "41")]
     pub total_query_stats: ::core::option::Option<TotalQueryStats>,
     /// Log visibility for the canister.
-    ///
-    /// TODO(EXC-1670): remove this field.
-    #[prost(enumeration = "LogVisibility", tag = "42")]
-    pub log_visibility: i32,
-    /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
     /// Log records of the canister.
@@ -842,39 +837,6 @@ impl CyclesUseCase {
             "CYCLES_USE_CASE_NON_CONSUMED" => Some(Self::NonConsumed),
             "CYCLES_USE_CASE_BURNED_CYCLES" => Some(Self::BurnedCycles),
             "CYCLES_USE_CASE_SCHNORR_OUTCALLS" => Some(Self::SchnorrOutcalls),
-            _ => None,
-        }
-    }
-}
-/// TODO(EXC-1670): Migrate to pb_canister_state_bits::LogVisibilityV2.
-/// The current enum only supports i32 values, which limits the
-/// storage of allowed_viewers principals. LogVisibilityV2 will
-/// support both enum values and a list of principals.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum LogVisibility {
-    Unspecified = 0,
-    Controllers = 1,
-    Public = 2,
-}
-impl LogVisibility {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
-        match value {
-            "LOG_VISIBILITY_UNSPECIFIED" => Some(Self::Unspecified),
-            "LOG_VISIBILITY_CONTROLLERS" => Some(Self::Controllers),
-            "LOG_VISIBILITY_PUBLIC" => Some(Self::Public),
             _ => None,
         }
     }

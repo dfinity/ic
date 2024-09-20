@@ -1,5 +1,17 @@
 #!/bin/bash
 
+#### UI
+
+# Prints arguments followed by space, no new line, all in green.
+# Does not read input. Use `read` (or `read -s` for secrets).
+prompt() {
+    echo -e -n "\033[0;32m$*\033[0m "
+}
+
+echo_line() {
+    print_blue "================================================================================"
+}
+
 #### Bash helpers
 
 is_variable_set() {
@@ -27,7 +39,7 @@ ensure_variable_set() {
 check_or_set_dfx_hsm_pin() {
     VALUE=${DFX_HSM_PIN:-}
     if [ -z "$VALUE" ]; then
-        echo -n "Enter your HSM_PIN":
+        prompt "Enter your HSM PIN:"
         read -s DFX_HSM_PIN
         export DFX_HSM_PIN
         echo
@@ -109,10 +121,15 @@ latest_commit_with_prebuilt_artifacts() {
 
 #### User interaction helpers
 confirm() {
-    echo "Type 'yes' to confirm, anything else, or Ctrl+C to cancel"
+    if [ "${DRY_RUN:-false}" = true ]; then
+        print_yellow "(This is just a dry run.)"
+    fi
+
+    prompt "Type 'yes' to confirm, anything else, or Ctrl+C to cancel:"
     read CONFIRM
 
     if [ "$CONFIRM" != "yes" ]; then
+        echo
         echo "Aborting..."
         exit 1
     fi

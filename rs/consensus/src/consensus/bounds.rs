@@ -12,7 +12,7 @@ use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
 use super::MINIMUM_CHAIN_LENGTH;
 
 /// Summary of when the consensus pool exceeds certain bounds.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ExcessEvent {
     /// The expected number of artifacts in the pool (i.e. our bound).
     pub expected: ArtifactCounts,
@@ -21,7 +21,7 @@ pub struct ExcessEvent {
 }
 
 /// Number of artifacts in the consensus pool.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ArtifactCounts {
     block_proposals: usize,
     notarizations: usize,
@@ -34,6 +34,7 @@ pub struct ArtifactCounts {
     random_tape_shares: usize,
     cup_shares: usize,
     cups: usize,
+    equivocation_proofs: usize,
 }
 
 /// Returns the upper limit on the artifact counts a validated pool is allowed
@@ -102,6 +103,10 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // One cup share for each CUP, issued by each replica.
         cup_shares: cups * n,
         cups,
+        // We purge equivocation proofs below and at the finalized height.
+        // This means we can have at most D heights, each with a maximum
+        // of f + 1 equivocation proofs (one proof per block maker).
+        equivocation_proofs: d * (f + 1),
     }
 }
 
@@ -137,6 +142,7 @@ pub fn validated_pool_within_bounds(
         random_tape_shares: validated.random_tape_share().size(),
         cup_shares: validated.catch_up_package_share().size(),
         cups: validated.catch_up_package().size(),
+        equivocation_proofs: validated.equivocation_proof().size(),
     };
 
     (actual_counts.block_proposals > bounds.block_proposals
@@ -149,7 +155,8 @@ pub fn validated_pool_within_bounds(
         || actual_counts.random_beacon_shares > bounds.random_beacon_shares
         || actual_counts.random_tape_shares > bounds.random_tape_shares
         || actual_counts.cup_shares > bounds.cup_shares
-        || actual_counts.cups > bounds.cups)
+        || actual_counts.cups > bounds.cups
+        || actual_counts.equivocation_proofs > bounds.equivocation_proofs)
         .then_some(ExcessEvent {
             expected: bounds,
             found: actual_counts,
@@ -178,6 +185,7 @@ mod tests {
             random_tape_shares: 24840,
             cup_shares: 80,
             cups: 2,
+            equivocation_proofs: 980,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
 

@@ -76,6 +76,9 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
                 PurgeableArtifactType::FinalizationShare => {
                     purge!(finalization_share, FinalizationShare);
                 }
+                PurgeableArtifactType::EquivocationProof => {
+                    purge!(equivocation_proof, EquivocationProof);
+                }
             }
         } else {
             purge!(random_beacon, RandomBeacon);

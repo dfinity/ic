@@ -20,7 +20,7 @@ ic-btc-validation = { workspace = true }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }

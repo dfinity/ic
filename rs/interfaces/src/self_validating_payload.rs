@@ -33,6 +33,7 @@ pub trait SelfValidatingPayloadBuilder: Send + Sync {
         validation_context: &ValidationContext,
         past_payloads: &[&SelfValidatingPayload],
         byte_limit: NumBytes,
+        priority: usize,
     ) -> (SelfValidatingPayload, NumBytes);
 
     /// Checks whether the provided `SelfValidatingPayload` is valid given a

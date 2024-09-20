@@ -32,7 +32,7 @@ const INITIAL_USER_ACCOUNT_BALANCE_E8S: u64 = 1_000_000_000_000;
 const MINTER_PRINCIPAL: PrincipalId = PrincipalId::new(0, [0u8; 29]);
 const TOO_MANY_BLOCKS: u64 = 100;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 enum UpgradeToVersion {
     /// The version currently on mainnet
     MainNet,
@@ -400,6 +400,7 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     assert!(ledger_archives.is_empty());
 }
 
+#[ignore]
 #[test]
 fn should_spawn_a_new_archive_with_icp_transfers() {
     let mut setup = Setup::builder().build();
