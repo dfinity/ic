@@ -4,7 +4,10 @@ use std::{
     hash::Hasher,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, AtomicU64},
+        Arc, Mutex, RwLock,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -26,7 +29,7 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadValidationFailure,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
+use ic_logger::{error, info, new_replica_logger_from_config, no_op_logger, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_pprof::{Pprof, PprofCollector};
 use ic_quic_transport::{create_udp_socket, SubnetTopology};
@@ -37,9 +40,9 @@ use ic_types::{
 use libp2p::{gossipsub::IdentTopic, swarm::SwarmEvent, Multiaddr, PeerId, Swarm, SwarmBuilder};
 use prometheus::{
     core::{AtomicF64, GenericGauge},
-    Gauge, Histogram, IntCounter, TextEncoder,
+    Gauge, Histogram, IntCounter, IntGauge, TextEncoder,
 };
-use rand::SeedableRng;
+use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use tokio::{process::Command, runtime::Handle, select, sync::watch, time::Interval};
 use tokio_rustls::rustls::{
@@ -129,6 +132,7 @@ impl PriorityFnFactory<TestArtifact, TestConsensus> for TestConsensus {
                 Priority::Drop
             } else {
                 Priority::FetchNow
+                // Priority::Stash
             }
             // let expiry_time_secs = u64::from_le_bytes(id[16..24].try_into().unwrap());
 
@@ -190,6 +194,7 @@ struct Metrics {
     received_artifact_count: IntCounter,
     message_latency: Histogram,
     sent_artifacts: IntCounter,
+    link_up: IntGauge,
 }
 
 enum Mode {
@@ -198,8 +203,11 @@ enum Mode {
 }
 
 impl Mode {
-    const TARGET_MAX_BW_BITS_PER_S: usize = 10_000_000_000;
-    const TARGET_EXP_DURATION: Duration = Duration::from_secs(15 * 60);
+    // const TARGET_MAX_BW_BITS_PER_S: usize = 10_000_000_000;
+    // const TARGET_EXP_DURATION: Duration = Duration::from_secs(15 * 60);
+    // COnst owrkload
+    const TARGET_MAX_BW_BITS_PER_S: usize = 1_000_000_000;
+    const TARGET_EXP_DURATION: Duration = Duration::from_secs(15);
     fn should_send(&self) -> bool {
         match self {
             Self::OneToN(0) | Self::NtoN => true,
@@ -239,6 +247,7 @@ async fn load_generator(
     relaying: bool,
     metrics: Arc<Metrics>,
     mut rps_rx: watch::Receiver<usize>,
+    stop: Arc<AtomicBool>,
 ) {
     let peers_num = peers.len();
     let (tx, mut received_artifacts_rx) = tokio::sync::mpsc::channel(1000);
@@ -257,6 +266,7 @@ async fn load_generator(
     let mut purge_queue: DelayQueue<TestArtifact> = DelayQueue::new();
 
     let mut produce_and_send_artifact = tokio::time::interval(Duration::from_secs(1));
+    // let mut produce_and_send_artifact = tokio::time::interval(Duration::from_millis(1));
     let mut send_rate_update = tokio::time::interval(Duration::from_secs(1));
     let mut now_n = Instant::now();
 
@@ -325,13 +335,13 @@ async fn load_generator(
             // }
             // Outgoing Artifact to peers
             _ = send_rate_update.tick() => {
-                let new_period = mode.next_period(produce_and_send_artifact, now_n, peers_num, message_size);
-                metrics.send_artifact_period.set(new_period.as_secs_f64());
-                now_n = Instant::now();
-                produce_and_send_artifact = tokio::time::interval(new_period);
+                // let new_period = mode.next_period(produce_and_send_artifact, now_n, peers_num, message_size);
+                // metrics.send_artifact_period.set(new_period.as_secs_f64());
+                // now_n = Instant::now();
+                // produce_and_send_artifact = tokio::time::interval(new_period);
             },
             _ = produce_and_send_artifact.tick() => {
-                if !mode.should_send() {
+                if !mode.should_send() || stop.load(std::sync::atomic::Ordering::SeqCst) {
                     continue
                 }
                 let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
@@ -364,7 +374,7 @@ async fn load_generator(
 
             }
             _ = log_interval.tick() => {
-                set_packet_loss(log.clone(), peers.clone(), node_id).await;
+                // set_packet_loss(log.clone(), peers.clone(), node_id).await;
                 info!(log, "Sent artifacts total {}", metrics.sent_artifacts.get());
                 info!(log, "Received artifacts total {}", metrics.received_artifact_count.get());
             }
@@ -381,6 +391,16 @@ async fn metrics_handler(
         MetricsRegistry,
     )>,
 ) -> String {
+    let node_exporter = if let Ok(Ok(response)) = tokio::time::timeout(
+        Duration::from_secs(2),
+        reqwest::get("http://0.0.0.0:9100/metrics"),
+    )
+    .await
+    {
+        response.text().await.unwrap_or_default()
+    } else {
+        String::new()
+    };
     let encoder = TextEncoder::new();
     let mut encoded_metrics1 = encoder
         .encode_to_string(&metrics.1.prometheus_registry().gather())
@@ -390,6 +410,7 @@ async fn metrics_handler(
     let p_metrics = metrics.0.lock().unwrap();
     prometheus_client::encoding::text::encode(&mut buffer, &p_metrics).unwrap();
     encoded_metrics1.push_str(&buffer);
+    encoded_metrics1.push_str(&node_exporter);
     encoded_metrics1
 }
 
@@ -447,6 +468,8 @@ async fn main() {
     let metrics_reg = MetricsRegistry::default();
 
     let sent_artifacts = metrics_reg.int_counter("load_generator_sent_artifacts_total", "TODO");
+    let link_up = metrics_reg.int_gauge("link_up", "TODO");
+    link_up.set(1);
     let send_artifact_period = metrics_reg.gauge("send_artifact_period", "TODO");
     let libp2p = metrics_reg.int_gauge("libp2p", "TODO");
     libp2p.set(args.libp2p as i64);
@@ -468,6 +491,7 @@ async fn main() {
         sent_artifacts,
         received_artifact_count: received_artifacts,
         message_latency,
+        link_up,
     });
 
     let (log, _async_log_guard) =
@@ -486,6 +510,14 @@ async fn main() {
 
     let mut peers_addrs = args.peers_addrs;
     peers_addrs.insert(args.id as usize, transport_addr);
+    let stop = Arc::new(AtomicBool::new(false));
+
+    rt_handle.spawn(interface_stopper(
+        log.clone(),
+        peers_addrs.len(),
+        metrics.clone(),
+        stop.clone(),
+    ));
 
     info!(log, "peers {:?}", peers_addrs);
     let registry = Arc::new(Mutex::new(prometheus_client::registry::Registry::default()));
@@ -534,6 +566,7 @@ async fn main() {
         args.relaying,
         metrics.clone(),
         rps_rx,
+        stop,
     ));
 
     let metrics_address: SocketAddr = (
@@ -612,7 +645,7 @@ fn start_cm(
 
     new_p2p_consensus.add_client(ap_rx, cb_tx, downloader);
     let quic_transport = Arc::new(ic_quic_transport::QuicTransport::start(
-        &log,
+        &no_op_logger(),
         &metrics,
         &rt_handle,
         Arc::new(tls) as Arc<_>,
@@ -1082,5 +1115,88 @@ async fn set_packet_loss(log: ReplicaLogger, peers: Vec<SocketAddr>, node_id: u6
             .await
             .unwrap();
         info!(log, "tc match {id} out {:?}", output);
+    }
+}
+
+async fn interface_stopper(
+    log: ReplicaLogger,
+    n: usize,
+    metrics: Arc<Metrics>,
+    stop: Arc<AtomicBool>,
+) {
+    tokio::time::sleep(Duration::from_secs(60 * 3)).await;
+    for _ in 0..100 {
+        info!(log, "MAYBE STOPING.");
+        if thread_rng().gen_bool(0.2) {
+            info!(log, "STOPING!!!");
+            stop_interface(log.clone(), metrics.clone()).await;
+        }
+        // Sleep before next check, you can adjust this to how often you want to check
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    info!(log, "NO MORE STOPPING");
+}
+
+async fn stop_interface(log: ReplicaLogger, metrics: Arc<Metrics>) {
+    let interface = "enp39s0"; // Replace with your network interface
+
+    // Bring down the interface
+
+    let output = Command::new("sudo")
+        .arg("iptables")
+        .arg("-A")
+        .arg("INPUT")
+        .arg("-p")
+        .arg("udp")
+        .arg("--dport")
+        .arg("4100") // replace with your port
+        .arg("-j")
+        .arg("DROP")
+        .output()
+        .await
+        .expect("Failed to block the port");
+    // let output = Command::new("sudo")
+    //     .arg("ip")
+    //     .arg("link")
+    //     .arg("set")
+    //     .arg(interface)
+    //     .arg("down")
+    //     .output()
+    //     .await
+    //     .expect("Failed to bring down the interface");
+
+    if output.status.success() {
+        metrics.link_up.set(0);
+        info!(log, "Interface {} down for 20 seconds...", interface);
+        info!(log, "Interface is down. {:?}", output);
+
+        // Sleep for 20 seconds
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        // Bring up the interface again
+        let output = Command::new("sudo")
+            .arg("iptables")
+            .arg("-D")
+            .arg("INPUT")
+            .arg("-p")
+            .arg("udp")
+            .arg("--dport")
+            .arg("4100") // the same port you blocked earlier
+            .arg("-j")
+            .arg("DROP")
+            .output()
+            .await
+            .expect("Failed to unblock the port");
+        info!(log, "Interface is back up. {:?}", output);
+
+        if output.status.success() {
+            metrics.link_up.set(1);
+            info!(log, "Interface {} is back up.", interface);
+        } else {
+            info!(log, "Failed to bring up the interface: {:?}", output);
+        }
+    } else {
+        info!(log, "Failed to bring down the interface: {:?}", output);
     }
 }

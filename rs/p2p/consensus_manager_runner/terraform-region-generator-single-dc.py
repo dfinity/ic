@@ -54,31 +54,52 @@ resource "aws_instance" "deletable-instance-REGION" {
   provider        = aws.eu_central_1
   ami             = "AMI"
   instance_type   = "MACHINE"
-  monitoring = true
-  key_name = aws_key_pair.deletable-key-eu_central_1.key_name
+  monitoring      = true
+  key_name        = aws_key_pair.deletable-key-eu_central_1.key_name
   vpc_security_group_ids = [aws_security_group.deletable-sg-eu_central_1.id]
-
   tags = {
     Name = "experiment"
   }
   user_data = <<EOF
 #!/bin/bash
-
+# Existing network configurations
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
 sudo sysctl -w net.core.rmem_default=500000000
 sudo sysctl -w net.core.wmem_default=500000000
-sudo sysctl -w net.ipv4.tcp_window_scaling = 1
-sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
-sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
-sudo sysctl -w net.ipv4.tcp_wmem= 10240 16777216 33554432 
-sudo sysctl -w net.ipv4.tcp_rmem= 10240 16777216 33554432 
+sudo sysctl -w net.ipv4.tcp_window_scaling=1
+sudo sysctl -w net.ipv4.tcp_wmem="10240 16777216 33554432"
+sudo sysctl -w net.ipv4.tcp_rmem="10240 16777216 33554432"
 
 # Download the binary from the pre-signed S3 URL
 curl -o /tmp/binary "${var.runner_url}"
-
 # Make binary executable
 chmod +x /tmp/binary
+
+# Install Node Exporter
+wget https://github.com/prometheus/node_exporter/releases/download/v1.6.1/node_exporter-1.6.1.linux-amd64.tar.gz
+tar xvfz node_exporter-*.tar.gz
+sudo mv node_exporter-*/node_exporter /usr/local/bin/
+sudo useradd -rs /bin/false node_exporter
+cat <<EOT | sudo tee /etc/systemd/system/node_exporter.service
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+
+[Install]
+WantedBy=multi-user.target
+EOT
+
+sudo systemctl daemon-reload
+sudo systemctl enable node_exporter
+sudo systemctl start node_exporter
+rm -rf node_exporter-*
 EOF
 }
 

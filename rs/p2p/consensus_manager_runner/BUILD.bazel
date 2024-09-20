@@ -42,6 +42,8 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:clap",
     "@crate_index//:tokio-rustls",
+    "@crate_index//:reqwest",
+
 ]
 
 

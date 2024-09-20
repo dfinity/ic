@@ -366,6 +366,15 @@ where
             id: id.clone(),
         };
 
+        // let limit = 50_000;
+        // if self
+        //     .slot_table
+        //     .get(&peer_id)
+        //     .is_some_and(|m| m.len() > limit)
+        // {
+        //     return;
+        // }
+
         let (to_add, to_remove) = match self
             .slot_table
             .entry(peer_id)
