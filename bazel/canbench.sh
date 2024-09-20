@@ -43,8 +43,12 @@ elif [ "$1" = "--update" ]; then
         cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 else
+    echo "CANBENCH_BIN: "${CANBENCH_BIN}
+    echo "POCKET_IC_BIN: "${POCKET_IC_BIN}
+    echo "pocket ic version:"
+    ${POCKET_IC_BIN} --version
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
-    ${CANBENCH_BIN} >$CANBENCH_OUTPUT
+    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
         cat "$CANBENCH_OUTPUT"
         echo "**\`$REPO_RESULTS_PATH\` is not up to date ❌**

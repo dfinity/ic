@@ -31,6 +31,7 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
 
     canbench_bin = "$(location @crate_index//:canbench__canbench)"
     wasm_path = "$(location :{name}_wasm)".format(name = name)
+    pocket_ic_bin = "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
     data = [
         ":{name}_wasm".format(name = name),
         "@crate_index//:canbench__canbench",
@@ -42,6 +43,14 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
         "CANBENCH_BIN": canbench_bin,
         "WASM_PATH": wasm_path,
         "CANBENCH_RESULTS_PATH": canbench_results_path,
+        # Hack to escape the sandbox and update the actual repository
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+    }
+    test_env = {
+        "CANBENCH_BIN": canbench_bin,
+        "WASM_PATH": wasm_path,
+        "CANBENCH_RESULTS_PATH": canbench_results_path,
+        "POCKET_IC_BIN": pocket_ic_bin,
         # Hack to escape the sandbox and update the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
     }
@@ -71,8 +80,9 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
             srcs = [
                 "//bazel:canbench.sh",
             ],
-            data = data,
-            env = env,
-            tags = ["requires-network"],
+            data = data + [
+                "//rs/pocket_ic_server:pocket-ic-server",
+            ],
+            env = test_env,
             args = ["--test"],
         )
