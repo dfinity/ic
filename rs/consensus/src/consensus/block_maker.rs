@@ -547,19 +547,20 @@ pub(super) fn get_block_maker_delay(
 ) -> Option<Duration> {
     let settings =
         get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
-    let unit_delay = settings.unit_delay;
+    // If this is not a Rank-0 block maker, check how many non-rank-0 blocks have been notarized in
+    // the past, and increase the delay if there have been too many.
+    let dynamic_delay = if rank > Rank(0)
+        && count_non_rank_0_blocks(pool, parent) > DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS
+    {
+        if let Some(metrics) = metrics {
+            metrics.dynamic_delay_triggered.inc();
+        }
+        DYNAMIC_DELAY_EXTRA_DURATION
+    } else {
+        Duration::ZERO
+    };
 
-    let dynamic_delay =
-        if count_non_rank_0_blocks(pool, parent) > DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS {
-            if let Some(metrics) = metrics {
-                metrics.dynamic_delay_triggered.inc();
-            }
-            unit_delay + DYNAMIC_DELAY_EXTRA_DURATION
-        } else {
-            unit_delay
-        };
-
-    Some(dynamic_delay * rank.0 as u32)
+    Some(settings.unit_delay * rank.0 as u32 + dynamic_delay)
 }
 
 /// Return true if the time since round start is greater than the required block
@@ -1054,7 +1055,7 @@ mod tests {
     #[rstest]
     #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
     #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 10))]
-    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * (3 + 10)))]
+    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 10))]
     fn get_block_maker_delay_many_non_rank_0_blocks(
         #[case] rank: Rank,
         #[case] unit_delay: Duration,
