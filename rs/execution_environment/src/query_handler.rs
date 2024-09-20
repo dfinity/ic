@@ -204,7 +204,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.confg.allowed_viewers_feature,
+                        self.config.allowed_viewers_feature,
                     );
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
