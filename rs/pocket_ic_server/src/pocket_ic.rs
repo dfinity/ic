@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation, RUN_AS_BITCOIN_ADAPTER_FLAG};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
 use askama::Template;
 use axum::{
     extract::State,
@@ -14,6 +14,7 @@ use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource};
+use ic_btc_adapter::start_server;
 use ic_config::{
     execution_environment, flag_status::FlagStatus, http_handler, logger::Config as LoggerConfig,
     subnet_config::SubnetConfig,
@@ -81,12 +82,12 @@ use std::{
     io::{BufReader, Write},
     net::SocketAddr,
     path::PathBuf,
-    process::{Child, Command},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime},
 };
-use tempfile::{NamedTempFile, TempDir, TempPath};
+use tempfile::{NamedTempFile, TempDir};
 use tokio::sync::Mutex as TokioMutex;
+use tokio::task::JoinHandle;
 use tokio::{runtime::Runtime, sync::mpsc};
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
@@ -154,14 +155,56 @@ struct SubnetConfigInternal {
 pub(crate) type CanisterHttpAdapters = Arc<TokioMutex<HashMap<SubnetId, CanisterHttp>>>;
 
 struct BitcoinAdapterParts {
-    process: Child,
-    _config: TempPath,
+    adapter: JoinHandle<()>,
     uds_path: PathBuf,
+}
+
+impl BitcoinAdapterParts {
+    fn new(
+        bitcoind_addr: SocketAddr,
+        uds_path: PathBuf,
+        log_level: Option<Level>,
+        replica_logger: ReplicaLogger,
+        metrics_registry: MetricsRegistry,
+        runtime: Arc<Runtime>,
+    ) -> Self {
+        let level = match log_level.unwrap_or(Level::Warning) {
+            Level::Critical => ic_config::logger::Level::Critical,
+            Level::Error => ic_config::logger::Level::Error,
+            Level::Warning => ic_config::logger::Level::Warning,
+            Level::Info => ic_config::logger::Level::Info,
+            Level::Debug => ic_config::logger::Level::Debug,
+            Level::Trace => ic_config::logger::Level::Trace,
+        };
+        let logger_config = LoggerConfig {
+            level,
+            ..Default::default()
+        };
+        let bitcoin_adapter_config = BitcoinAdapterConfig {
+            network: Network::Regtest,
+            nodes: vec![bitcoind_addr],
+            socks_proxy: None,
+            ipv6_only: false,
+            logger: logger_config,
+            incoming_source: IncomingSource::Path(uds_path.clone()),
+            address_limits: (1, 1),
+            ..Default::default()
+        };
+        let adapter = tokio::spawn(async move {
+            start_server(
+                &replica_logger,
+                &metrics_registry,
+                runtime.handle(),
+                bitcoin_adapter_config,
+            )
+        });
+        BitcoinAdapterParts { adapter, uds_path }
+    }
 }
 
 impl Drop for BitcoinAdapterParts {
     fn drop(&mut self) {
-        self.process.kill().unwrap();
+        self.adapter.abort();
         remove_file(self.uds_path.clone()).unwrap();
     }
 }
@@ -278,8 +321,8 @@ impl PocketIc {
         time: SystemTime,
         nonmainnet_features: bool,
         log_level: Option<Level>,
-        bitcoind_addr: Option<SocketAddr>,
-    ) -> (StateMachineBuilder, Option<BitcoinAdapterParts>) {
+        bitcoin_adapter_uds_path: Option<PathBuf>,
+    ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
@@ -316,52 +359,7 @@ impl PocketIc {
             .unwrap()
             .as_nanos() as u64;
         let time = Time::from_nanos_since_unix_epoch(t);
-        let bitcoin_adapter_parts = bitcoind_addr.map(|bitcoind_addr| {
-            let bitcoin_network = Network::Regtest;
-            let level = match log_level.unwrap_or(Level::Warning) {
-                Level::Critical => ic_config::logger::Level::Critical,
-                Level::Error => ic_config::logger::Level::Error,
-                Level::Warning => ic_config::logger::Level::Warning,
-                Level::Info => ic_config::logger::Level::Info,
-                Level::Debug => ic_config::logger::Level::Debug,
-                Level::Trace => ic_config::logger::Level::Trace,
-            };
-            let logger_config = LoggerConfig {
-                level,
-                ..Default::default()
-            };
-            let bitcoin_adapter_uds_path =
-                NamedTempFile::new().unwrap().into_temp_path().to_path_buf();
-            let bitcoin_adapter_config = BitcoinAdapterConfig {
-                network: bitcoin_network,
-                nodes: vec![bitcoind_addr],
-                socks_proxy: None,
-                ipv6_only: false,
-                logger: logger_config,
-                incoming_source: IncomingSource::Path(bitcoin_adapter_uds_path.clone()),
-                ..Default::default()
-            };
-            let bitcoin_adapter_config_json =
-                serde_json::to_string(&bitcoin_adapter_config).unwrap();
-            let mut bitcoin_adapter_config_file = NamedTempFile::new().unwrap();
-            bitcoin_adapter_config_file
-                .as_file_mut()
-                .write_all(bitcoin_adapter_config_json.as_bytes())
-                .unwrap();
-            let bitcoin_adapter_config_path = bitcoin_adapter_config_file.into_temp_path();
-            let current_binary_path = PathBuf::from(std::env::args().next().unwrap());
-            let child = Command::new(current_binary_path)
-                .arg(RUN_AS_BITCOIN_ADAPTER_FLAG)
-                .arg(&bitcoin_adapter_config_path)
-                .spawn()
-                .unwrap();
-            BitcoinAdapterParts {
-                process: child,
-                _config: bitcoin_adapter_config_path,
-                uds_path: bitcoin_adapter_uds_path,
-            }
-        });
-        let builder = StateMachineBuilder::new()
+        StateMachineBuilder::new()
             .with_runtime(runtime)
             .with_config(Some(state_machine_config))
             .with_subnet_seed(subnet_seed)
@@ -371,12 +369,7 @@ impl PocketIc {
             .with_state_machine_state_dir(state_machine_state_dir)
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
-            .with_bitcoin_testnet_uds_path(
-                bitcoin_adapter_parts
-                    .as_ref()
-                    .map(|p| p.uds_path.to_path_buf()),
-            );
-        (builder, bitcoin_adapter_parts)
+            .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
     }
 
     pub(crate) fn new(
@@ -513,12 +506,14 @@ impl PocketIc {
             time,
         } in subnet_config_info.into_iter()
         {
-            let bitcoind_addr = if matches!(subnet_kind, SubnetKind::Bitcoin) {
-                bitcoind_addr
-            } else {
-                None
-            };
-            let (mut builder, bitcoin_adapter_parts) = Self::state_machine_builder(
+            let bitcoin_adapter_uds_path =
+                if matches!(subnet_kind, SubnetKind::Bitcoin) && bitcoind_addr.is_some() {
+                    Some(NamedTempFile::new().unwrap().into_temp_path().to_path_buf())
+                } else {
+                    None
+                };
+
+            let mut builder = Self::state_machine_builder(
                 state_machine_state_dir,
                 runtime.clone(),
                 subnet_kind,
@@ -528,9 +523,8 @@ impl PocketIc {
                 time,
                 nonmainnet_features,
                 log_level,
-                bitcoind_addr,
+                bitcoin_adapter_uds_path.clone(),
             );
-            _bitcoin_adapter_parts = _bitcoin_adapter_parts.or(bitcoin_adapter_parts);
 
             if let DtsFlag::Disabled = dts_flag {
                 builder = builder.no_dts();
@@ -565,6 +559,18 @@ impl PocketIc {
             }
 
             let sm = builder.build_with_subnets(subnets.clone());
+
+            if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
+                _bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
+                    bitcoind_addr.unwrap(),
+                    bitcoin_adapter_uds_path,
+                    log_level,
+                    sm.replica_logger.clone(),
+                    sm.metrics_registry.clone(),
+                    runtime.clone(),
+                ));
+            }
+
             let subnet_id = sm.get_subnet_id();
 
             // Store the actual NNS subnet ID if none was provided by the client.
@@ -2379,8 +2385,16 @@ fn route(
                     // Compute the subnet seed.
                     let subnet_seed =
                         compute_subnet_seed(vec![range], Some(canister_allocation_range));
+                    // If applicable, we create a new UDS path for the bitcoin adapter.
+                    let bitcoin_adapter_uds_path = if matches!(subnet_kind, SubnetKind::Bitcoin)
+                        && pic.bitcoind_addr.is_some()
+                    {
+                        Some(NamedTempFile::new().unwrap().into_temp_path().to_path_buf())
+                    } else {
+                        None
+                    };
                     // We build the `StateMachine` of the new subnet.
-                    let (builder, _bitcoin_adapter_parts) = PocketIc::state_machine_builder(
+                    let builder = PocketIc::state_machine_builder(
                         PocketIc::create_state_machine_state_dir(&pic.state_dir, &subnet_seed),
                         pic.runtime.clone(),
                         subnet_kind,
@@ -2390,10 +2404,20 @@ fn route(
                         time,
                         pic.nonmainnet_features,
                         pic.log_level,
-                        pic.bitcoind_addr,
+                        bitcoin_adapter_uds_path.clone(),
                     );
-                    pic._bitcoin_adapter_parts = _bitcoin_adapter_parts;
                     let sm = builder.build_with_subnets(pic.subnets.clone());
+                    // If applicable, we start a new bitcoin adapter.
+                    if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
+                        pic._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
+                            pic.bitcoind_addr.unwrap(),
+                            bitcoin_adapter_uds_path,
+                            pic.log_level,
+                            sm.replica_logger.clone(),
+                            sm.metrics_registry.clone(),
+                            pic.runtime.clone(),
+                        ));
+                    }
                     // We insert the new subnet into the routing table.
                     let subnet_id = sm.get_subnet_id();
                     pic.routing_table.insert(range, subnet_id).unwrap();

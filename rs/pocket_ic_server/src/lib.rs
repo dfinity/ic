@@ -43,8 +43,6 @@ use axum::async_trait;
 use pocket_ic::PocketIc;
 use serde::Deserialize;
 
-pub const RUN_AS_BITCOIN_ADAPTER_FLAG: &str = "--run-as-bitcoin-adapter";
-
 /// Represents an identifiable operation on PocketIC.
 pub trait Operation {
     /// Executes an operation.
