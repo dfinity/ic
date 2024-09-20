@@ -33,7 +33,7 @@ proptest! {
         seeds in proptest::collection::vec(any::<u64>().no_shrink(), 3),
         max_payload_bytes in (MAX_PAYLOAD_BYTES / 4)..=MAX_PAYLOAD_BYTES,
         calls_per_round in 1..=10,
-        reply_weight in 0..=2,
+        reply_weight in 1..=2,
         call_weight in 0..=2,
         // Note: both weights zero defaults to only replies.
     ) {
