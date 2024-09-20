@@ -898,6 +898,7 @@ impl SchedulerImpl {
     /// The given `canisters_by_thread` defines the priority of canisters.
     /// Returns:
     /// - the new states of the canisters,
+    /// - the actually executed canister ids,
     /// - the ingress results,
     /// - the maximum number of instructions executed on a thread,
     /// - the total heap delta.
@@ -2060,7 +2061,6 @@ fn execute_canisters_on_thread(
 
             let instructions_before = round_limits.instructions;
             let canister_had_paused_execution = canister.has_paused_execution();
-            let canister_id = canister.canister_id();
             let ExecuteCanisterResult {
                 canister: new_canister,
                 instructions_used,
@@ -2077,7 +2077,10 @@ fn execute_canisters_on_thread(
                 &mut round_limits,
                 subnet_size,
             );
-            executed_canister_ids.insert(canister_id);
+            if instructions_used.unwrap_or(0.into()) > 0.into() {
+                // We only want to count the canister as executed if it used instructions.
+                executed_canister_ids.insert(new_canister.canister_id());
+            }
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
