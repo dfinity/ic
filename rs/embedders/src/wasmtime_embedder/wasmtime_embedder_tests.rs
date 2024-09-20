@@ -52,7 +52,6 @@ fn test_wasmtime_system_api() {
         Cycles::zero(),
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
     );
     let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(

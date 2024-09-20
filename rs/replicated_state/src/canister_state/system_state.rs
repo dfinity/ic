@@ -791,7 +791,6 @@ impl SystemState {
         initial_cycles: Cycles,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self::new_internal(
             canister_id,
@@ -800,7 +799,7 @@ impl SystemState {
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
-            on_low_wasm_memory_hook_status,
+            OnLowWasmMemoryHookStatus::default(),
         )
     }
 

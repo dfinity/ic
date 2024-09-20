@@ -1429,7 +1429,6 @@ impl CanisterManager {
             cycles,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
