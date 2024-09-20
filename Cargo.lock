@@ -5481,7 +5481,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
- "hyper 0.14.30",
+ "hyper 1.4.1",
  "rand 0.8.5",
  "slog",
  "sync_wrapper 1.0.1",

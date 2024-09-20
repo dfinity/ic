@@ -1,5 +1,5 @@
 {
-  "checksum": "1a71cd15faad6d063bb365e238d8e57fe6df234d506241b7630655616a119d17",
+  "checksum": "b5e78e193692597d9f780ec779e7f2ca405ae06e60eaff5bee51628a62b151cd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17899,11 +17899,6 @@
             {
               "id": "humantime-serde 1.1.1",
               "target": "humantime_serde"
-            },
-            {
-              "id": "hyper 0.14.27",
-              "target": "hyper",
-              "alias": "hyper_0_14_27"
             },
             {
               "id": "hyper 1.4.1",
@@ -79095,7 +79090,6 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
-    "hyper 0.14.27",
     "hyper 1.4.1",
     "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",

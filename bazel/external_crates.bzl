@@ -508,18 +508,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
             ),
-            "hyper_0_14_27": crate.spec(
-                package = "hyper",
-                version = "^0.14.27",
-                features = [
-                    "client",
-                    "full",
-                    "http1",
-                    "http2",
-                    "server",
-                    "tcp",
-                ],
-            ),
             "hyper": crate.spec(
                 version = "^1.4.1",
                 features = [
