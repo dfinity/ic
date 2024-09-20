@@ -335,8 +335,7 @@ fn normalize_get_transactions_response(
 
     // Skip checks that are moot when requested transactions and directly
     // available transactions are disjoint.
-    if directly_available_requested_range_len > Nat::from(0_u64) {
-
+    if directly_available_requested_range_len > 0_u64 {
         // Make sure there is no gap between response.archived_ranges vs. response.transactions.
         if response.first_index != start {
             return Err(format!(
@@ -348,7 +347,7 @@ fn normalize_get_transactions_response(
 
         // Make sure that the response has all the transactions that we
         // requested and are locally available.
-        if Nat::from(response.transactions.len()) != directly_available_requested_range_len {
+        if response.transactions.len() != directly_available_requested_range_len {
             return Err(format!(
                 "GetTransactionsResponse seems to be missing some requested \
                  transactions at the end of our requested range. This might \
