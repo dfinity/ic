@@ -381,7 +381,7 @@ fn generate_transactions(
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
         let current_allowance = in_memory_ledger
-            .get_allowance_if_set(&from, &spender)
+            .get_allowance(&from, &spender)
             .unwrap_or(Allowance::default());
         let expires_at = state_machine
             .time()

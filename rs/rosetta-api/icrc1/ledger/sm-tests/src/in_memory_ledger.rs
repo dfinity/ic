@@ -35,7 +35,7 @@ pub trait InMemoryLedgerState {
     type AccountId;
     type Tokens;
 
-    fn get_allowance_if_set(
+    fn get_allowance(
         &self,
         from: &Self::AccountId,
         spender: &Self::AccountId,
@@ -91,7 +91,7 @@ where
     type AccountId = AccountId;
     type Tokens = Tokens;
 
-    fn get_allowance_if_set(
+    fn get_allowance(
         &self,
         from: &Self::AccountId,
         spender: &Self::AccountId,
