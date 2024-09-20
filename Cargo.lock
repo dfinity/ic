@@ -11927,6 +11927,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-wasm-api"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-nervous-system-clients",
+ "ic-nervous-system-proto",
+ "ic-sns-init",
+ "ic-types",
+ "ic-utils 0.9.0",
+ "prost",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-sns-wasm-protobuf-generator"
 version = "0.9.0"
 dependencies = [

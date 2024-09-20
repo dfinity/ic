@@ -1,7 +1,7 @@
 use prost_build::Config;
 use std::path::Path;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ProtoPaths<'a> {
     pub sns_wasm: &'a Path,
     pub sns_init: &'a Path,
@@ -14,6 +14,7 @@ pub struct ProtoPaths<'a> {
 
 /// Build protos using prost_build.
 pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
+    println!("Generating prost files for {:?}", out);
     let proto_files = [proto.sns_wasm.join("ic_sns_wasm/pb/v1/sns_wasm.proto")];
 
     let mut config = Config::new();

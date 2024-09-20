@@ -207,6 +207,7 @@ members = [
     "rs/nns/gtc/protobuf_generator",
     "rs/nns/gtc_accounts",
     "rs/nns/sns-wasm",
+    "rs/nns/sns-wasm/api",
     "rs/nns/sns-wasm/protobuf_generator",
     "rs/determinism_test",
     "rs/orchestrator",
