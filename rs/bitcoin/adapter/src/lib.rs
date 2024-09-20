@@ -6,11 +6,10 @@
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::{incoming_from_nth_systemd_socket, shutdown_signal};
-use ic_logger::{info, new_replica_logger_from_config};
+use ic_async_utils::incoming_from_nth_systemd_socket;
+use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
-use serde_json::to_string_pretty;
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::{mpsc::channel, Mutex};
 /// This module contains the AddressManager struct. The struct stores addresses
@@ -197,16 +196,13 @@ impl AdapterState {
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.
-pub async fn run_server(config: &config::Config) {
-    let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
-
-    info!(
-        logger,
-        "Starting the adapter with config: {}",
-        to_string_pretty(&config).unwrap()
-    );
-
-    let metrics_registry = MetricsRegistry::global();
+pub fn start_server(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config,
+) {
+    let _enter = rt_handle.enter();
 
     // Metrics server should only be started if we are managed by systemd and receive the
     // metrics socket as FD(4).
@@ -216,15 +212,15 @@ pub async fn run_server(config: &config::Config) {
     // Systemd Service config: ic-https-outcalls-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
         let stream = unsafe { incoming_from_nth_systemd_socket(2) };
-        start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
+        start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
     }
 
     let adapter_state = AdapterState::new(config.idle_seconds);
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(config, &metrics_registry)));
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, &metrics_registry)));
     let get_successors_handler = GetSuccessorsHandler::new(
-        config,
+        &config,
         // The get successor handler should be low latency, and instead of not sharing state and
         // offloading the computation to an event loop here we directly access the shared state.
         blockchain_state.clone(),
@@ -236,7 +232,7 @@ pub async fn run_server(config: &config::Config) {
 
     start_grpc_server(
         config.clone(),
-        logger.clone(),
+        log.clone(),
         adapter_state.clone(),
         get_successors_handler,
         transaction_manager_tx,
@@ -244,14 +240,12 @@ pub async fn run_server(config: &config::Config) {
     );
 
     start_main_event_loop(
-        config,
-        logger.clone(),
+        &config,
+        log.clone(),
         blockchain_state,
         transaction_manager_rx,
         adapter_state,
         blockchain_manager_rx,
         &metrics_registry,
     );
-
-    shutdown_signal(logger.inner_logger.root.clone()).await;
 }
