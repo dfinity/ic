@@ -160,7 +160,7 @@ fn start_adapter_and_client(
     network: bitcoin::Network,
 ) -> (BitcoinAdapterClient, TempPath) {
     let metrics_registry = MetricsRegistry::new();
-    Builder::new()
+    let res = Builder::new()
         .make(|uds_path| {
             start_adapter(
                 &logger,
@@ -178,7 +178,15 @@ fn start_adapter_and_client(
             ))
         })
         .unwrap()
-        .into_parts()
+        .into_parts();
+
+    let anchor: BlockHash = "0000000000000000035908aacac4c97fb4e172a1758bbbba2ee2b188765780eb"
+        .parse()
+        .unwrap();
+    // We send this request to make sure the adapter is not idle.
+    let _ = make_get_successors_request(&res.0, anchor.to_vec(), vec![]);
+
+    res
 }
 
 fn wait_for_blocks(client: &Client, blocks: u64) {
@@ -494,7 +502,7 @@ fn test_receives_blocks() {
 
     assert_eq!(blocks.len(), 150);
 }
-/*
+
 /// Checks that the adapter can connect to multiple BitcoinD peers.
 #[test]
 fn test_connection_to_multiple_peers() {
@@ -545,15 +553,10 @@ fn test_connection_to_multiple_peers() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
-    let temp_file = NamedTempFile::new().unwrap();
-    let metrics_registry = MetricsRegistry::new();
-
-    start_adapter(
-        &logger,
-        &metrics_registry,
-        rt.handle(),
+    let _r = start_adapter_and_client(
+        &rt,
         vec![url1, url2, url3],
-        temp_file.path(),
+        logger,
         bitcoin::Network::Regtest,
     );
 
@@ -561,7 +564,7 @@ fn test_connection_to_multiple_peers() {
     wait_for_connection(&client2, 3);
     wait_for_connection(&client3, 3);
 }
-*/
+
 /// The client (replica) receives newly created transactions by 3rd parties using the gRPC service.
 #[test]
 fn test_receives_new_3rd_party_txs() {
@@ -690,7 +693,6 @@ fn test_send_tx() {
     }
 }
 
-/*
 /// Checks that the client (replica) receives blocks from both created forks.
 #[test]
 fn test_receives_blocks_from_forks() {
@@ -865,7 +867,7 @@ fn test_bfs_order() {
     );
     assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 }
-*/
+
 // This test makes use of mainnet data. It first syncs the headerchain until the adapter
 // checkpoint is passed and then requests 10 blocks, from 350,990 to 350,999.
 #[test]
