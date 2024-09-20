@@ -182,8 +182,8 @@ mod tests {
     fn test_pool_bounds() {
         // Example for 40-node subnet w/ 499 DKG interval, assuming e=50 and d=70
         let max_counts = ArtifactCounts {
-            block_proposals: 1545,
-            notarizations: 1545,
+            block_proposals: 1531,
+            notarizations: 1531,
             finalization: 621,
             random_beacon: 622,
             random_tape: 622,
