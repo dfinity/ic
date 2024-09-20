@@ -54,6 +54,7 @@ check_unused_components_test(
 
 genrule(
     name = "validate-ic-json5-script",
+    testonly = True,
     outs = ["validate-ic-json5.sh"],
     cmd = """
     cat <<EOF > $@
@@ -69,7 +70,6 @@ json5 -c "\\$$TEMPFILE"
 rm "\\$$TEMPFILE"
 EOF
     """,
-    testonly = True,
     tags = ["manual"],
 )
 
