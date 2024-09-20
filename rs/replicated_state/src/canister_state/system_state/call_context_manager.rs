@@ -276,7 +276,7 @@ impl CallContextManagerStats {
 
     /// Calculates the stats for the given call contexts and callbacks.
     ///
-    /// Time complexity: `O(n)`.
+    /// Time complexity: `O(|call_contexts| + |callbacks|)`.
     pub(crate) fn calculate_stats(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
         callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
@@ -284,9 +284,11 @@ impl CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
             .filter(|call_context| !call_context.responded)
-            .filter_map(|call_context| match call_context.call_origin {
-                CallOrigin::CanisterUpdate(originator, _, _) => Some(originator),
-                _ => None,
+            .filter(|call_context| {
+                matches!(
+                    call_context.call_origin,
+                    CallOrigin::CanisterUpdate(_, _, _)
+                )
             })
             .count();
         let unresponded_guaranteed_response_call_contexts = call_contexts
