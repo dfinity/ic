@@ -2060,7 +2060,7 @@ fn execute_canisters_on_thread(
 
             let instructions_before = round_limits.instructions;
             let canister_had_paused_execution = canister.has_paused_execution();
-            let canister_id = canister.canister_id().clone();
+            let canister_id = canister.canister_id();
             let ExecuteCanisterResult {
                 canister: new_canister,
                 instructions_used,
