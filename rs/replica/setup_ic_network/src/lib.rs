@@ -314,6 +314,7 @@ fn start_consensus(
             Arc::from(query_stats_payload_builder),
             Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
             Arc::clone(&artifact_pools.idkg_pool) as Arc<_>,
+            Arc::clone(&artifact_pools.certification_pool) as Arc<_>,
             Arc::clone(&dkg_key_manager) as Arc<_>,
             message_router.clone(),
             Arc::clone(&state_manager) as Arc<_>,
