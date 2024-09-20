@@ -103,7 +103,7 @@ fn start_adapter(
         ..Default::default()
     };
 
-    start_server(&logger, metrics_registry, rt_handle, config);
+    start_server(logger, metrics_registry, rt_handle, config);
 }
 
 fn get_default_bitcoind() -> BitcoinD {
