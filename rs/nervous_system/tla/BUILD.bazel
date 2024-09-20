@@ -14,20 +14,13 @@ config_setting(
     },
 )
 
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nns/constants",
     "//rs/rosetta-api/icp_ledger",
     "//rs/tla_instrumentation",
     "//rs/types/base_types",
-]
-
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants:constants--test_feature",
 ]
 
 rust_library(
@@ -44,7 +37,7 @@ rust_library(
     crate_features = test_with_tla(),
     crate_name = "ic_nervous_system_tla",
     version = "0.1.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
+    deps = DEPENDENCIES + [
         "//rs/tla_instrumentation:local_key",
     ],
 )
