@@ -73,8 +73,8 @@ const UDP_BUFFER_SIZE: usize = 25_000_000; // 25MB
 const RECEIVE_WINDOW: VarInt = VarInt::from_u32(200_000_000);
 const SEND_WINDOW: u64 = 100_000_000;
 const STREAM_RECEIVE_WINDOW: VarInt = VarInt::from_u32(4_000_000);
-const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(1_000);
-const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(1_000);
+const MAX_CONCURRENT_BIDI_STREAMS: VarInt = VarInt::from_u32(30_000);
+const MAX_CONCURRENT_UNI_STREAMS: VarInt = VarInt::from_u32(30_000);
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);

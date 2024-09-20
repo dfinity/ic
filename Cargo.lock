@@ -7186,6 +7186,7 @@ dependencies = [
  "prometheus-client",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "reqwest 0.12.5",
  "slog",
  "tokio",
  "tokio-rustls 0.26.0",

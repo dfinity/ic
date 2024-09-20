@@ -1,7 +1,6 @@
 # A .bazelrc needing build configuration. Without this configuration, the
 # build will most likely fail.
-
-# To require no rustfmt issues, pass --config=fmt.
+500500# To require no rustfmt issues, pass --config=fmt.
 # To require no clippy issues, pass --config=clippy. Without this, warnings will still be generated.
 # To enable both of the above, pass --config=lint.
 # --config=ci implies --config=lint
@@ -28,7 +27,7 @@ build --incompatible_strict_action_env # use an environment with a static value 
 
 # default to optimized and unstripped binaries.
 build --compilation_mode=opt
-build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
+# build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
