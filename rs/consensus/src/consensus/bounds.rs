@@ -95,14 +95,14 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // Only one random tape per height. Assuming execution keeps up,
         // the max height for new random tapes is finalized_height+1.
         random_tape: l + 1,
-        // We purge notarization shares below finalized height. So we consider
-        // at most d+1 heights, for which n replicas may notary-sign f+1
-        // different blocks.
-        notarization_shares: (d + 1) * (f + 1) * n,
-        // We purge finalization shares below finalized height. So we consider
-        // at most d+1 heights, for which n replicas may issue a finalization
-        // share for a single block.
-        finalization_shares: (d + 1) * n,
+        // We purge notarization shares below and at the finalized height. So
+        // we consider at most d heights, for which n replicas may notary-sign
+        // f+1 different blocks.
+        notarization_shares: d * (f + 1) * n,
+        // We purge finalization shares below and at the finalized height.
+        // So we consider at most d heights, for which n replicas may issue
+        // a finalization share for a single block.
+        finalization_shares: d * n,
         // For every height, every replica may submit a random beacon share.
         // Because we don't purge them below the CUP height, we use l.
         random_beacon_shares: (l + 1) * n,
@@ -114,7 +114,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         // We purge equivocation proofs below and at the finalized height.
         // This means we can have at most d+1 heights, each with a maximum
         // of f + 1 equivocation proofs (one proof per block maker).
-        equivocation_proofs: (d + 1) * (f + 1),
+        equivocation_proofs: d * (f + 1),
     }
 }
 
@@ -187,13 +187,13 @@ mod tests {
             finalization: 621,
             random_beacon: 622,
             random_tape: 622,
-            notarization_shares: 39760,
-            finalization_shares: 2840,
+            notarization_shares: 39200,
+            finalization_shares: 2800,
             random_beacon_shares: 24880,
             random_tape_shares: 24880,
             cup_shares: 80,
             cups: 2,
-            equivocation_proofs: 994,
+            equivocation_proofs: 980,
         };
         assert_eq!(get_maximum_validated_artifacts(40, 499), max_counts);
 
