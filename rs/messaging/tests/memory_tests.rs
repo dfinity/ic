@@ -51,7 +51,7 @@ proptest! {
 /// remote subnet with 1 canister installed.
 ///
 /// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
-/// 'chatter' enabled, i.e. the installed canisters aremaking random calls (including downstream calls).
+/// 'chatter' enabled, i.e. the installed canisters are making random calls (including downstream calls).
 ///
 /// For the second phase, the 'chatter' is disabled and additional rounds are executed until all
 /// hanging calls have received a reply.
