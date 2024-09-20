@@ -68,11 +68,27 @@ if [ -z "${KUBECONFIG:-}" ] && [ ! -z "${KUBECONFIG_TNET_CREATOR_LN1:-}" ]; then
     trap 'rm -f -- "$KUBECONFIG"' EXIT
 fi
 
+# An awk (mawk) program used to process STDERR to make it easier
+# to find the build event URL when going through logs.
+stderr_awk_program='
+  # When seeing the stream info line, grab the url and save it as stream_url
+  match($0, /Streaming build results to/) \
+    { stream_info_line = $0; \
+      match(stream_info_line, /https:\/\/[a-zA-Z0-9\/-.]*/); \
+      stream_url = substr(stream_info_line, RSTART, RLENGTH) } \
+  # In general, forward every line to the output
+  // { print } \
+  # Every N lines, repeat the stream info line
+  // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line }
+  # Finally, print a GitHub notice
+  END { print "::notice title=Build Events for "job_name"::"stream_url }'
+
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
     ${BAZEL_STARTUP_ARGS} \
     ${BAZEL_COMMAND} \
+    --color=yes \
     ${BAZEL_CI_CONFIG} \
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
@@ -80,5 +96,4 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --s3_upload="${s3_upload:-"False"}" \
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
-    2>&1 \
-    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
+    2> >(awk >&2 -v job_name="$CI_JOB_NAME" "$stderr_awk_program")

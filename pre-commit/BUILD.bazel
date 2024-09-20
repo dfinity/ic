@@ -101,17 +101,20 @@ sh_binary(
 )
 
 sh_test(
-    name = "shfmt-lint",
+    name = "shfmt-check",
     size = "small",
-    srcs = ["shfmt-lint.sh"],
+    srcs = ["shfmt-format.sh"],
+    args = ["$(rootpath //:WORKSPACE.bazel)"],
     data = [
         "//:WORKSPACE.bazel",
         "@shfmt",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
+        # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        # read by our script to differentiate between write & check
+        "SHFMT_CHECK": "1",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -128,13 +131,12 @@ sh_binary(
         "@shfmt",
     ],
     env = {
-        # Hack to escape the sandbox and grep on the actual repository
+        # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "shfmt_path": "$(rootpath @shfmt//:shfmt)",
     },
     tags = [
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
     ],
     visibility = ["//visibility:public"],
 )
