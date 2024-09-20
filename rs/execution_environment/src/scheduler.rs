@@ -883,7 +883,7 @@ impl SchedulerImpl {
             .observe(round_filtered_canisters.active_canister_ids.len() as f64);
         self.metrics
             .executed_canisters_per_round
-            .set(round_executed_canister_ids.len() as i64);
+            .observe(round_executed_canister_ids.len() as f64);
 
         self.metrics
             .heap_delta_rate_limited_canisters_per_round
