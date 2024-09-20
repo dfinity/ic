@@ -729,6 +729,24 @@ fn get_principals_authorized_to_create_canisters_to_subnets_() {
     })
 }
 
+#[candid_method(query, rename = "get_default_subnets")]
+fn get_default_subnets() -> Vec<PrincipalId> {
+    with_state(|state| {
+        state
+            .default_subnets
+            .clone()
+            .iter()
+            .map(|s| s.get())
+            .collect()
+    })
+}
+
+/// Returns the list of default subnets to which anyone can deploy canisters to.
+#[export_name = "canister_query get_default_subnets"]
+fn get_default_subnets_() {
+    over(candid_one, |_: ()| get_default_subnets())
+}
+
 /// Constructs a hash tree that can be used to certify requests for the
 /// conversion rate (both the current and the average, if they are set).
 ///
