@@ -3,7 +3,7 @@ use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Cli
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{
     config::{Config, IncomingSource},
-    start_server, AdapterState,
+    start_server,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_interface::Network;
@@ -22,7 +22,7 @@ use std::{
     path::Path,
     str::FromStr,
 };
-use tempfile::{Builder, NamedTempFile, TempPath};
+use tempfile::{Builder, TempPath};
 use tokio::runtime::Runtime;
 
 type BitcoinAdapterClient = Box<

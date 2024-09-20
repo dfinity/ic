@@ -2,8 +2,7 @@ use clap::Parser;
 use ic_async_utils::abort_on_panic;
 use ic_async_utils::shutdown_signal;
 use ic_btc_adapter::{cli::Cli, start_server};
-use ic_logger::new_replica_logger_from_config;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 
