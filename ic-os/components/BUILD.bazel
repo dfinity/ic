@@ -51,3 +51,32 @@ check_unused_components_test(
     repo_components = REPO_COMPONENTS,
     used_components = used_components.keys(),
 )
+
+genrule(
+    name = "validate-ic-json5-script",
+    outs = ["validate-ic-json5.sh"],
+    cmd = """
+    cat <<EOF > $@
+#!/bin/bash
+set -eux
+TEMPFILE=\\$$(mktemp)
+# The version of 'json5' available on CI containers does not support
+# the '--validate' argument so we have to copy to a temporary file
+# and compile in place with the '-c' argument to check validity.
+sed <"\\$${1?missing json5 file}" 's/{{[^}]*}}/0/g' >"\\$$TEMPFILE"
+echo "Validating: \\$$1"
+json5 -c "\\$$TEMPFILE"
+rm "\\$$TEMPFILE"
+EOF
+    """,
+    testonly = True,
+    tags = ["manual"],
+)
+
+sh_test(
+    name = "validate-ic-json5",
+    srcs = ["validate-ic-json5-script"],
+    args = ["$(execpath ic/ic.json5.template)"],
+    data = ["ic/ic.json5.template"],
+    tags = ["manual"],
+)
