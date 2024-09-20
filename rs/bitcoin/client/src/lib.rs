@@ -220,7 +220,6 @@ pub fn setup_bitcoin_adapter_clients(
     adapters_config: AdaptersConfig,
 ) -> BitcoinAdapterClients {
     let metrics = Metrics::new(metrics_registry);
-    let _enter = rt_handle.enter();
 
     // Register bitcoin adapters metrics.
     if let Some(metrics_uds_path) = adapters_config.bitcoin_testnet_uds_metrics_path {
