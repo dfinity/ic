@@ -115,7 +115,7 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         cup_shares: cups * n,
         cups,
         // We purge equivocation proofs below and at the finalized height.
-        // This means we can have at most d+1 heights, each with a maximum
+        // This means we can have at most d heights, each with a maximum
         // of f + 1 equivocation proofs (one proof per block maker).
         equivocation_proofs: d * (f + 1),
     }
