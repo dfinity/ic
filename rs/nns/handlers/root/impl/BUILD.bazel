@@ -10,7 +10,7 @@ exports_files(["canister/root.did"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -128,7 +128,7 @@ rust_library(
 
 rust_test(
     name = "root_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [":root--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 

@@ -4,7 +4,6 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = [
     # Keep sorted.
-    "//rs/nervous_system/canisters:__pkg__",
     "//rs/nervous_system/clients:__pkg__",
     "//rs/nervous_system/common:__subpackages__",
     "//rs/nervous_system/runtime:__pkg__",
@@ -40,7 +39,7 @@ ALIASES = {}
 
 rust_library(
     name = "dfn_candid",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "dfn_candid",
     proc_macro_deps = MACRO_DEPENDENCIES,

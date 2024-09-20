@@ -1,30 +1,35 @@
 use async_trait::async_trait;
 use candid::Nat;
-use dfn_candid::candid_one;
-use dfn_core::{call, CanisterId};
+use dfn_core::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nervous_system_common::{
     ledger::{ICRC1Ledger, IcpLedger},
     NervousSystemError,
 };
+use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount as IcpSubaccount, Tokens,
     TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use std::marker::PhantomData;
 
-pub struct IcpLedgerCanister {
-    id: CanisterId,
+pub struct IcpLedgerCanister<Rt: Runtime> {
+    canister_id: CanisterId,
+    _phantom: PhantomData<Rt>,
 }
 
-impl IcpLedgerCanister {
-    pub fn new(id: CanisterId) -> Self {
-        IcpLedgerCanister { id }
+impl<Rt: Runtime + Send + Sync> IcpLedgerCanister<Rt> {
+    pub fn new(canister_id: CanisterId) -> Self {
+        IcpLedgerCanister {
+            canister_id,
+            _phantom: PhantomData,
+        }
     }
 }
 
 #[async_trait]
-impl ICRC1Ledger for IcpLedgerCanister {
+impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -33,7 +38,7 @@ impl ICRC1Ledger for IcpLedgerCanister {
         to: Account,
         memo: u64,
     ) -> Result<BlockIndex, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::transfer_funds(
+        <IcpLedgerCanister<Rt> as IcpLedger>::transfer_funds(
             self,
             amount_e8s,
             fee_e8s,
@@ -45,11 +50,11 @@ impl ICRC1Ledger for IcpLedgerCanister {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::total_supply(self).await
+        <IcpLedgerCanister<Rt> as IcpLedger>::total_supply(self).await
     }
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        <IcpLedgerCanister as IcpLedger>::account_balance(
+        <IcpLedgerCanister<Rt> as IcpLedger>::account_balance(
             self,
             icrc1_account_to_icp_accountidentifier(account),
         )
@@ -57,12 +62,12 @@ impl ICRC1Ledger for IcpLedgerCanister {
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.id
+        self.canister_id
     }
 }
 
 #[async_trait]
-impl IcpLedger for IcpLedgerCanister {
+impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -78,20 +83,20 @@ impl IcpLedger for IcpLedgerCanister {
         // this method, make sure that the staked amount
         // can cover BOTH of these amounts, otherwise there
         // will be an error.
-        let result: Result<Result<u64, TransferError>, (Option<i32>, String)> = call(
-            self.id,
-            "transfer",
-            candid_one,
-            TransferArgs {
-                memo: Memo(memo),
-                amount: Tokens::from_e8s(amount_e8s),
-                fee: Tokens::from_e8s(fee_e8s),
-                from_subaccount,
-                to: to.to_address(),
-                created_at_time: None,
-            },
-        )
-        .await;
+        let result: Result<(Result<u64, TransferError>,), (i32, String)> =
+            Rt::call_without_cleanup(
+                self.canister_id,
+                "transfer",
+                (TransferArgs {
+                    memo: Memo(memo),
+                    amount: Tokens::from_e8s(amount_e8s),
+                    fee: Tokens::from_e8s(fee_e8s),
+                    from_subaccount,
+                    to: to.to_address(),
+                    created_at_time: None,
+                },),
+            )
+            .await;
 
         result
             .map_err(|(code, msg)| {
@@ -100,19 +105,19 @@ impl IcpLedger for IcpLedgerCanister {
                     code, msg
                 ))
             })
-            .and_then(|inner_result| {
-                inner_result.map_err(|e: TransferError| {
+            .and_then(|inner_result: (Result<u64, TransferError>,)| {
+                inner_result.0.map_err(|e: TransferError| {
                     NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
                 })
             })
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        let result: Result<Tokens, (Option<i32>, String)> =
-            call(self.id, "icrc1_total_supply", candid_one, ())
+        let result: Result<Tokens, (i32, String)> =
+            Rt::call_without_cleanup(self.canister_id, "icrc1_total_supply", ((),))
                 .await
-                .map(|e8s: Nat| {
-                    Tokens::try_from(e8s)
+                .map(|e8s: (Nat,)| {
+                    Tokens::try_from(e8s.0)
                         .expect("Should always succeed, as ICP ledger internally stores u64")
                 });
 
@@ -130,15 +135,15 @@ impl IcpLedger for IcpLedgerCanister {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        let result: Result<Tokens, (Option<i32>, String)> = call(
-            self.id,
+        let result: Result<Tokens, (i32, String)> = Rt::call_without_cleanup(
+            self.canister_id,
             "account_balance",
-            candid_one,
-            BinaryAccountBalanceArgs {
+            (BinaryAccountBalanceArgs {
                 account: account.to_address(),
-            },
+            },),
         )
-        .await;
+        .await
+        .map(|tokens: (Tokens,)| tokens.0);
 
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
@@ -151,7 +156,7 @@ impl IcpLedger for IcpLedgerCanister {
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.id
+        self.canister_id
     }
 }
 

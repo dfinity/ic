@@ -31,7 +31,7 @@ runs:
         id: bazel-test-all
         shell: bash
         run: |
-          set -x +e
+          set +e # manual error handling to ensure we can run some post-build commands
 
           # temporarily set permissions again until we can figure out issue
           if [ -e /cache ]; then
@@ -51,7 +51,14 @@ runs:
           BAZEL_EXIT_CODE="$?"
 
           if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then
-              bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+              # avoid output unless an error occurs during bes export. This ensures
+              # only the (more relevant) output from the main bazel command is shown.
+              exportout=$(mktemp)
+              if ! bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb" 2> "$exportout" >&2; then
+                echo "bes export failed:"
+                cat "$exportout"
+              fi
+              rm "$exportout"
           fi
 
           exit "$BAZEL_EXIT_CODE"

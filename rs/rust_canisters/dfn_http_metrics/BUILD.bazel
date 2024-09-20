@@ -24,7 +24,7 @@ DEPENDENCIES = [
 
 rust_library(
     name = "dfn_http_metrics",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "dfn_http_metrics",
     version = "0.9.0",
     deps = DEPENDENCIES,
