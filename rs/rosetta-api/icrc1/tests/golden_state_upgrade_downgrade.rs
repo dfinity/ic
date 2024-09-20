@@ -521,34 +521,34 @@ fn perform_upgrade_downgrade_testing(
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
         if extended_testing {
-            verify_ledger_state(&state_machine, canister_id, burns_without_spender.clone());
+            verify_ledger_state(state_machine, canister_id, burns_without_spender.clone());
         }
         upgrade_canister(
-            &state_machine,
+            state_machine,
             (canister_id_str, canister_name),
             master_canister_wasm.clone(),
         );
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
         upgrade_canister(
-            &state_machine,
+            state_machine,
             (canister_id_str, canister_name),
             bump_gzip_timestamp(&master_canister_wasm),
         );
         if extended_testing {
-            let blocks = get_all_ledger_and_archive_blocks(&state_machine, canister_id);
+            let blocks = get_all_ledger_and_archive_blocks(state_machine, canister_id);
             let mut expected_ledger_state =
                 ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(None);
             expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
-            generate_transactions(&state_machine, canister_id, &mut expected_ledger_state);
+            generate_transactions(state_machine, canister_id, &mut expected_ledger_state);
         }
         // Downgrade back to the mainnet ledger version
         upgrade_canister(
-            &state_machine,
+            state_machine,
             (canister_id_str, canister_name),
             mainnet_canister_wasm.clone(),
         );
         if extended_testing {
-            verify_ledger_state(&state_machine, canister_id, burns_without_spender);
+            verify_ledger_state(state_machine, canister_id, burns_without_spender);
         }
     }
 }
