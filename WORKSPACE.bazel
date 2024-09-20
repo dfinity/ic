@@ -82,6 +82,7 @@ oci_register_toolchains(name = "oci")
 
 load("@rules_oci//oci:pull.bzl", "oci_pull")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
+load("mainnet-artifacts.bzl", "mainnet_binary_gzs")
 load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 # file server used in tests
@@ -959,3 +960,5 @@ http_file(
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")
 
 kubeconfig()
+
+mainnet_binary_gzs()

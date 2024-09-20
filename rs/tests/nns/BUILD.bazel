@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_ENV", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -16,7 +16,7 @@ system_test(
         "vcpus": 16,
         "boot_image_minimal_size_gibibytes": 100,
     },
-    env = NNS_CANISTER_ENV,
+    env = IC_MAINNET_NNS_RECOVERY_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
     flaky = True,
     # TODO: replace 'experimental_system_test_colocation' with 'k8s' once everything is on k8s
