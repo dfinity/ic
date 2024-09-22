@@ -27,7 +27,7 @@ ic-ledger-core = { path = "../../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../../packages/ic-ledger-hash-of" }
 ic-rosetta-test-utils = { path = "../../../test_utils" }
 ic-management-canister-types = { path = "../../../../types/management_canister_types" }
-ic-state-machine-tests = { path = "../../../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../../../pocket_ic_tests" }
 ic-types = { path = "../../../../types/types" }
 ic-universal-canister = { path = "../../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }

@@ -11,8 +11,8 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
+use ic_pocket_ic_tests::StateMachine;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
     MAX_BLOCKS_PER_REQUEST,

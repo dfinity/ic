@@ -2,7 +2,7 @@ use crate::state_machine_helpers::ledger::icp_ledger_tip;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_icp_index::Status;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use std::time::Duration;
 
 const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);

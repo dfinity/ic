@@ -4,7 +4,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::verify_ledger_state;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use std::str::FromStr;
 
 mod common;

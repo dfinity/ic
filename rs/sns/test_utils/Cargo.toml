@@ -35,7 +35,7 @@ ic-sns-governance = { path = "../governance", features = ["test"] }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }

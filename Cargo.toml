@@ -227,6 +227,7 @@ members = [
     "rs/protobuf",
     "rs/protobuf/generator",
     "rs/pocket_ic_server",
+    "rs/pocket_ic_tests",
     "rs/registry/admin",
     "rs/registry/admin-derive",
     "rs/registry/canister",

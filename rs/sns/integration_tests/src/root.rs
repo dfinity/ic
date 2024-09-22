@@ -12,6 +12,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
@@ -24,7 +25,6 @@ use ic_sns_test_utils::{
         state_machine_builder_for_sns_tests, Scenario,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use std::{collections::BTreeSet, time::Duration};

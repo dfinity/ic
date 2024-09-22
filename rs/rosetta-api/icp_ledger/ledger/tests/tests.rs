@@ -10,7 +10,7 @@ use ic_icrc1_ledger_sm_tests::{
 };
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::{block::BlockType, Tokens};
-use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
+use ic_pocket_ic_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,

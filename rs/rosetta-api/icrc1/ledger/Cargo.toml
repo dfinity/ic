@@ -44,7 +44,7 @@ cddl = "0.9.4"
 ic-agent = { workspace = true }
 ic-icrc1-ledger-sm-tests = { path = "sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../../pocket_ic_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 leb128 = "0.2.4"
 num-bigint = { workspace = true }

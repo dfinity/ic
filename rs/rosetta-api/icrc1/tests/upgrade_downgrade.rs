@@ -8,8 +8,8 @@ use ic_icrc1_ledger_sm_tests::{
     NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime};
 
@@ -132,7 +132,7 @@ fn install_ledger(
         ledger_mainnet_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -143,7 +143,7 @@ fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
         index_ng_mainnet_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }

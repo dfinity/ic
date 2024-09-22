@@ -54,7 +54,7 @@ ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../sns-wasm" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }

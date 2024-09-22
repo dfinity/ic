@@ -16,6 +16,7 @@ use ic_nns_governance_api::pb::v1::{
     proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
     ProposalInfo, ProposalStatus,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
@@ -25,7 +26,6 @@ use ic_sns_wasm::pb::v1::{
     ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
     UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
-use ic_state_machine_tests::StateMachine;
 use maplit::btreemap;
 use std::{
     collections::{BTreeMap, HashMap},

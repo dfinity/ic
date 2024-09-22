@@ -13,7 +13,7 @@ hex = { workspace = true }
 ic-icrc1-test-utils = { path = "../icrc1/test_utils" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-rosetta-api = { path = "../" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
 nix = { workspace = true }

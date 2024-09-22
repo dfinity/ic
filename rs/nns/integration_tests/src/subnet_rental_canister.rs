@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
         setup_subnet_rental_canister_with_correct_canister_id, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_pocket_ic_tests::{StateMachine, WasmResult};
 use ic_types::Time;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger::{

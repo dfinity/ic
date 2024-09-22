@@ -4,7 +4,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{setup_nns_canisters, state_machine_builder_for_nns_tests, update},
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use registry_canister::pb::v1::{ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest};
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {

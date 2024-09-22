@@ -17,7 +17,7 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1169,7 +1169,7 @@ mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
     use ic_icrc1_ledger_sm_tests::{system_time_to_nanos, MINTER};
-    use ic_state_machine_tests::{StateMachine, WasmResult};
+    use ic_pocket_ic_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
     use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -1617,7 +1617,7 @@ mod incompatible_token_type_upgrade {
     use super::*;
     use assert_matches::assert_matches;
     use ic_icrc1_ledger_sm_tests::metadata;
-    use ic_state_machine_tests::ErrorCode::CanisterCalledTrap;
+    use ic_pocket_ic_tests::ErrorCode::CanisterCalledTrap;
     use num_bigint::BigUint;
 
     fn default_init_args() -> Vec<u8> {

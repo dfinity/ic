@@ -85,9 +85,9 @@ DEV_ENV = {
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nns/test_utils",
+    "//rs/pocket_ic_tests",
     "//rs/rosetta-api/tvl",
     "//rs/rosetta-api/tvl/xrc_mock",
-    "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",

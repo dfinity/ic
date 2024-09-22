@@ -21,7 +21,7 @@ use ic_nns_test_utils::{
         set_controllers, set_up_universal_canister, setup_nns_canisters, update_with_sender,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use maplit::btreeset;
 use std::collections::BTreeSet;
 

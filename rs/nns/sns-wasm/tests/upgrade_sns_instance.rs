@@ -14,6 +14,7 @@ use ic_nns_test_utils::{
     state_test_helpers,
     state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
 };
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 use ic_sns_governance::{
     pb::v1::{
         self as sns_governance_pb,
@@ -34,7 +35,6 @@ use ic_sns_wasm::pb::v1::{
     GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
     SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::{
     account::Account,

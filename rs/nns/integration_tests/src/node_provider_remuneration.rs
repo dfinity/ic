@@ -28,11 +28,11 @@ use ic_nns_test_utils::{
         setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
-use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Tokens, TOKEN_SUBDIVIDABLE_BY};
 use maplit::btreemap;

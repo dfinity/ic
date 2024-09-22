@@ -14,8 +14,8 @@ use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
+use ic_pocket_ic_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;

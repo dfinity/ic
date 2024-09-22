@@ -17,6 +17,7 @@ use ic_nns_test_utils::state_test_helpers::{
     create_canister, sns_claim_staked_neuron, sns_make_proposal, sns_stake_neuron,
     sns_wait_for_proposal_execution, update,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
@@ -33,7 +34,6 @@ use ic_sns_test_utils::{
         SnsTestCanisterIds,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use itertools::Itertools;
 use lazy_static::lazy_static;

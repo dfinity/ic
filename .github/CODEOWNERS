@@ -157,6 +157,7 @@ go_deps.bzl               @dfinity/idx
 /rs/p2p/                                                @dfinity/networking
 /rs/phantom_newtype/                                    @dfinity/ic-interface-owners
 /rs/pocket_ic_server/                                   @dfinity/pocket-ic
+/rs/pocket_ic_tests/                                    @dfinity/ic-message-routing-owners @dfinity/pocket-ic
 /rs/prep/                                               @dfinity/utopia
 /rs/protobuf/                                           @dfinity/ic-interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity/execution

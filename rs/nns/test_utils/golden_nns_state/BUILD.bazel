@@ -5,9 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/pocket_ic_tests",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
-    "//rs/state_machine_tests",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:tempfile",

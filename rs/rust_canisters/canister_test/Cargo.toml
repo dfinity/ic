@@ -18,7 +18,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-replica-tests = { path = "../../replica_tests" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-types = { path = "../../types/types" }
 on_wire = { path = "../on_wire" }
 rand = { workspace = true }

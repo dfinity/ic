@@ -1,5 +1,5 @@
 use canister_test::*;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 
 // This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.

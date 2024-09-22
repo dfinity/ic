@@ -53,7 +53,7 @@ BASE_DEPENDENCIES = [
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/http_types",
         "//rs/rust_canisters/on_wire",
-        "//rs/state_machine_tests",
+        "//rs/pocket_ic_tests",
         "//rs/test_utilities",
         "//rs/types/error_types",
         "//rs/types/management_canister_types",

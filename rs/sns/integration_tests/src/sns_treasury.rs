@@ -17,6 +17,7 @@ use ic_nns_test_utils::{
         sns_wait_for_proposal_execution,
     },
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
     pb::v1::{
@@ -36,7 +37,6 @@ use ic_sns_test_utils::{
         state_machine_builder_for_sns_tests, SnsTestCanisterIds,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount,
     DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,

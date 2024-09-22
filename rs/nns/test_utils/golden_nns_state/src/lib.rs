@@ -1,9 +1,9 @@
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_config::{execution_environment::Config, subnet_config::SubnetConfig};
-use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
+use ic_pocket_ic_tests::{
     StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_types::NumInstructions;
 
 use ic_config::flag_status::FlagStatus;
@@ -117,8 +117,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         .with_state_machine_state_dir(Box::new(state_dir))
         // Patch StateMachine. This is a bit of a hack that we need because we
         // are initializing from a state_dir.
-        .with_nns_subnet_id(subnet_id)
-        .with_subnet_id(subnet_id);
+        .with_nns_subnet_id(subnet_id);
 
     println!("Building StateMachine...");
     let state_machine = state_machine_builder.build();

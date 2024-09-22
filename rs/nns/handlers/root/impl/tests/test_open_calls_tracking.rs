@@ -12,7 +12,7 @@ use ic_nns_test_utils::{
         query, set_up_universal_canister, setup_nns_canisters, update_with_sender,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use serde_bytes::ByteBuf;
 
 /// Test that the canister_status failure does not cause an incorrect increase

@@ -1,0 +1,21 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
+    "//rs/state_machine_tests",
+]
+
+rust_library(
+    name = "pocket_ic_tests",
+    testonly = True,
+    srcs = [
+        "src/lib.rs",
+    ],
+    crate_name = "ic_pocket_ic_tests",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)

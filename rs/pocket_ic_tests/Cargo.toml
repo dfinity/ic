@@ -1,0 +1,14 @@
+[package]
+name = "ic-pocket-ic-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-registry-routing-table = { path = "../registry/routing_table" }
+ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-state-machine-tests = { path = "../state_machine_tests" }

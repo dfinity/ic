@@ -7,8 +7,8 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::minter_identity;
+use ic_pocket_ic_tests::{ErrorCode, StateMachine, StateMachineBuilder, Time, UserError};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, Time, UserError};
 use std::time::{Duration, SystemTime};
 
 mod common;
@@ -44,7 +44,7 @@ fn install_and_upgrade(
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -149,7 +149,7 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
             index_ng_wasm(),
             Encode!(&args).unwrap(),
             None,
-            ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+            ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
         )
         .unwrap();
 
