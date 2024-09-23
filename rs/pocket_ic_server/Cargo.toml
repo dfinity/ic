@@ -79,7 +79,7 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }

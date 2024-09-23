@@ -245,10 +245,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "bitcoincore-rpc": crate.spec(
-                version = "^0.15.0",
+                version = "^0.19.0",
             ),
             "bitcoind": crate.spec(
-                version = "^0.32.0",
+                version = "^0.36.0",
             ),
             "bitflags": crate.spec(
                 version = "^1.2.1",

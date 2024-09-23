@@ -16,7 +16,7 @@ axum = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
 bincode = { workspace = true }
-bitcoincore-rpc = "0.15.0"
+bitcoincore-rpc = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }

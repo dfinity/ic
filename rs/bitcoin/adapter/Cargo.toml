@@ -35,8 +35,8 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = "0.15.0"
-bitcoind = "0.32.0"
+bitcoincore-rpc = { workspace = true }
+bitcoind = { workspace = true }
 criterion = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }

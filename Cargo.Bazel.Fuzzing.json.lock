@@ -1,5 +1,5 @@
 {
-  "checksum": "7059ee8ebf23a06427b529a3b7d636561f31d7f874d553442922453110341f6e",
+  "checksum": "537377a8e7d3f8fec404f6bebf2a0ad31f8bb09c42f8e9ce9660d1e70f463c07",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5740,6 +5740,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -6172,7 +6178,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -7102,14 +7109,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin 0.30.1": {
+    "bitcoin 0.32.2": {
       "name": "bitcoin",
-      "version": "0.30.1",
+      "version": "0.32.2",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoin/0.30.1/download",
-          "sha256": "4e99ff7289b20a7385f66a0feda78af2fc119d28fb56aea8886a9cd0a4abdd75"
+          "url": "https://static.crates.io/crates/bitcoin/0.32.2/download",
+          "sha256": "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
         }
       },
       "targets": [
@@ -7157,118 +7164,6 @@
         "deps": {
           "common": [
             {
-              "id": "bech32 0.9.1",
-              "target": "bech32"
-            },
-            {
-              "id": "bitcoin 0.30.1",
-              "target": "build_script_build"
-            },
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private",
-              "alias": "bitcoin_internals"
-            },
-            {
-              "id": "bitcoin_hashes 0.12.0",
-              "target": "bitcoin_hashes"
-            },
-            {
-              "id": "hex_lit 0.1.1",
-              "target": "hex_lit"
-            },
-            {
-              "id": "secp256k1 0.27.0",
-              "target": "secp256k1"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde",
-              "alias": "actual_serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "rustc_flags": {
-          "common": [
-            "-Cpasses=sancov-module",
-            "-Cllvm-args=-sanitizer-coverage-level=4",
-            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-            "-Cllvm-args=-sanitizer-coverage-pc-table",
-            "-Cllvm-args=-sanitizer-coverage-trace-compares",
-            "-Cllvm-args=-sanitizer-coverage-stack-depth",
-            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-            "-Ctarget-cpu=native",
-            "-Coverflow_checks",
-            "-Copt-level=3",
-            "-Clink-dead-code",
-            "-Cinstrument-coverage",
-            "-Cdebug-assertions",
-            "-Ccodegen-units=1",
-            "-Zextra-const-ub-checks",
-            "-Zstrict-init-checks",
-            "-Zsanitizer=address"
-          ],
-          "selects": {}
-        },
-        "version": "0.30.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
-    "bitcoin 0.32.2": {
-      "name": "bitcoin",
-      "version": "0.32.2",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin/0.32.2/download",
-          "sha256": "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
               "id": "base58ck 0.1.0",
               "target": "base58ck",
               "alias": "base58"
@@ -7313,6 +7208,11 @@
             {
               "id": "secp256k1 0.29.0",
               "target": "secp256k1"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde",
+              "alias": "actual_serde"
             }
           ],
           "selects": {}
@@ -7397,7 +7297,9 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default"
+            "default",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7406,6 +7308,10 @@
             {
               "id": "bitcoin-internals 0.3.0",
               "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -7455,84 +7361,13 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
         "edition": "2021",
         "version": "0.1.2"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
-    "bitcoin-private 0.1.0": {
-      "name": "bitcoin-private",
-      "version": "0.1.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin-private/0.1.0/download",
-          "sha256": "73290177011694f38ec25e165d0387ab7ea749a4b81cd4c80dae5988229f7a57"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin_private",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin_private",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.0"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -7571,7 +7406,9 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7581,6 +7418,10 @@
               "id": "bitcoin-internals 0.3.0",
               "target": "bitcoin_internals",
               "alias": "internals"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -7648,66 +7489,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin_hashes 0.12.0": {
-      "name": "bitcoin_hashes",
-      "version": "0.12.0",
-      "package_url": "https://github.com/rust-bitcoin/bitcoin_hashes/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin_hashes/0.12.0/download",
-          "sha256": "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin_hashes",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin_hashes",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private",
-              "alias": "internals"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.12.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
     "bitcoin_hashes 0.14.0": {
       "name": "bitcoin_hashes",
       "version": "0.14.0",
@@ -7741,7 +7522,9 @@
           "common": [
             "alloc",
             "bitcoin-io",
-            "io"
+            "io",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -7755,6 +7538,10 @@
               "id": "hex-conservative 0.2.1",
               "target": "hex_conservative",
               "alias": "hex"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -7768,14 +7555,14 @@
       ],
       "license_file": null
     },
-    "bitcoincore-rpc 0.15.0": {
+    "bitcoincore-rpc 0.19.0": {
       "name": "bitcoincore-rpc",
-      "version": "0.15.0",
+      "version": "0.19.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.15.0/download",
-          "sha256": "dd0e67dbf7a9971e7f4276f6089e9e814ce0f624a03216b7d92d00351ae7fb3e"
+          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
+          "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
         }
       },
       "targets": [
@@ -7797,14 +7584,21 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "bitcoincore-rpc-json 0.15.0",
+              "id": "bitcoincore-rpc-json 0.19.0",
               "target": "bitcoincore_rpc_json"
             },
             {
-              "id": "jsonrpc 0.12.1",
+              "id": "jsonrpc 0.18.0",
               "target": "jsonrpc"
             },
             {
@@ -7822,8 +7616,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.15.0"
+        "edition": "2018",
+        "version": "0.19.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -7831,14 +7625,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoincore-rpc-json 0.15.0": {
+    "bitcoincore-rpc-json 0.19.0": {
       "name": "bitcoincore-rpc-json",
-      "version": "0.15.0",
+      "version": "0.19.0",
       "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.15.0/download",
-          "sha256": "2e2ae16202721ba8c3409045681fac790a5ddc791f05731a2df22c0c6bffc0f1"
+          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
+          "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
         }
       },
       "targets": [
@@ -7860,10 +7654,17 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "rand"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "bitcoin 0.28.2",
+              "id": "bitcoin 0.32.2",
               "target": "bitcoin"
             },
             {
@@ -7877,8 +7678,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.15.0"
+        "edition": "2021",
+        "version": "0.19.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -7886,14 +7687,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoind 0.32.0": {
+    "bitcoind 0.36.0": {
       "name": "bitcoind",
-      "version": "0.32.0",
+      "version": "0.36.0",
       "package_url": "https://github.com/RCasatta/bitcoind",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoind/0.32.0/download",
-          "sha256": "ee93e3628c679646a9f1cb2e4c55ec10fc3d477a2a8c26dcde4267dfb2e2109a"
+          "url": "https://static.crates.io/crates/bitcoind/0.36.0/download",
+          "sha256": "3ee5cf6a9903ff9cc808494c1232b0e9f6eef6600913d0d69fe1cb5c428f25b9"
         }
       },
       "targets": [
@@ -7934,13 +7735,12 @@
               "target": "anyhow"
             },
             {
-              "id": "bitcoind 0.32.0",
-              "target": "build_script_build"
+              "id": "bitcoincore-rpc 0.19.0",
+              "target": "bitcoincore_rpc"
             },
             {
-              "id": "core-rpc 0.17.0",
-              "target": "core_rpc",
-              "alias": "bitcoincore_rpc"
+              "id": "bitcoind 0.36.0",
+              "target": "build_script_build"
             },
             {
               "id": "log 0.4.20",
@@ -7958,7 +7758,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.32.0"
+        "version": "0.36.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -13699,132 +13499,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "core-rpc 0.17.0": {
-      "name": "core-rpc",
-      "version": "0.17.0",
-      "package_url": "https://github.com/RCasatta/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/core-rpc/0.17.0/download",
-          "sha256": "26d77079e1b71c2778d6e1daf191adadcd4ff5ec3ccad8298a79061d865b235b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "core_rpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "core_rpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private"
-            },
-            {
-              "id": "core-rpc-json 0.17.0",
-              "target": "core_rpc_json"
-            },
-            {
-              "id": "jsonrpc 0.13.0",
-              "target": "jsonrpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.127",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.17.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "core-rpc-json 0.17.0": {
-      "name": "core-rpc-json",
-      "version": "0.17.0",
-      "package_url": "https://github.com/RCasatta/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/core-rpc-json/0.17.0/download",
-          "sha256": "581898ed9a83f31c64731b1d8ca2dfffcfec14edf1635afacd5234cddbde3a41"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "core_rpc_json",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "core_rpc_json",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.30.1",
-              "target": "bitcoin"
-            },
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.127",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.17.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "core2 0.4.0": {
       "name": "core2",
       "version": "0.4.0",
@@ -17822,11 +17496,11 @@
               "alias": "bitcoin_0_32"
             },
             {
-              "id": "bitcoincore-rpc 0.15.0",
+              "id": "bitcoincore-rpc 0.19.0",
               "target": "bitcoincore_rpc"
             },
             {
-              "id": "bitcoind 0.32.0",
+              "id": "bitcoind 0.36.0",
               "target": "bitcoind"
             },
             {
@@ -25881,7 +25555,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -34305,80 +33980,14 @@
       "license_ids": [],
       "license_file": "LICENSE"
     },
-    "jsonrpc 0.12.1": {
+    "jsonrpc 0.18.0": {
       "name": "jsonrpc",
-      "version": "0.12.1",
-      "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/apoelstra/rust-jsonrpc",
-          "commitish": {
-            "Rev": "e42044d8e0896317488dfbd65eb5563d76e937fe"
-          }
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "jsonrpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "jsonrpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "base64",
-            "default",
-            "simple_http",
-            "simple_tcp"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.127",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.12.1"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "jsonrpc 0.13.0": {
-      "name": "jsonrpc",
-      "version": "0.13.0",
+      "version": "0.18.0",
       "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/jsonrpc/0.13.0/download",
-          "sha256": "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
+          "url": "https://static.crates.io/crates/jsonrpc/0.18.0/download",
+          "sha256": "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
         }
       },
       "targets": [
@@ -34404,6 +34013,8 @@
           "common": [
             "base64",
             "default",
+            "minreq",
+            "minreq_http",
             "simple_http",
             "simple_tcp"
           ],
@@ -34414,6 +34025,10 @@
             {
               "id": "base64 0.13.1",
               "target": "base64"
+            },
+            {
+              "id": "minreq 2.12.0",
+              "target": "minreq"
             },
             {
               "id": "serde 1.0.203",
@@ -34427,7 +34042,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.13.0"
+        "version": "0.18.0"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -39281,6 +38896,90 @@
         "Zlib"
       ],
       "license_file": "LICENSE"
+    },
+    "minreq 2.12.0": {
+      "name": "minreq",
+      "version": "2.12.0",
+      "package_url": "https://github.com/neonmoe/minreq",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/minreq/2.12.0/download",
+          "sha256": "763d142cdff44aaadd9268bebddb156ef6c65a0e13486bb81673cf2d8739f9b0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "minreq",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "minreq",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "json-using-serde",
+            "serde",
+            "serde_json"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "minreq 2.12.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.127",
+              "target": "serde_json"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.12.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "ISC",
+      "license_ids": [
+        "ISC"
+      ],
+      "license_file": null
     },
     "mio 0.8.10": {
       "name": "mio",
@@ -57374,35 +57073,11 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "bitcoin_hashes",
-            "rand",
-            "rand-std",
-            "recovery",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
-              "id": "bitcoin_hashes 0.12.0",
-              "target": "bitcoin_hashes"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
               "id": "secp256k1-sys 0.8.1",
               "target": "secp256k1_sys"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
             }
           ],
           "selects": {}
@@ -57495,7 +57170,12 @@
         "crate_features": {
           "common": [
             "alloc",
-            "hashes"
+            "hashes",
+            "rand",
+            "rand-std",
+            "recovery",
+            "serde",
+            "std"
           ],
           "selects": {}
         },
@@ -57507,8 +57187,16 @@
               "alias": "hashes"
             },
             {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
               "id": "secp256k1-sys 0.10.0",
               "target": "secp256k1_sys"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
             }
           ],
           "selects": {}
@@ -57644,14 +57332,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "recovery",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -57802,7 +57482,9 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "recovery",
+            "std"
           ],
           "selects": {}
         },
@@ -78853,8 +78535,8 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin 0.32.2",
-    "bitcoincore-rpc 0.15.0",
-    "bitcoind 0.32.0",
+    "bitcoincore-rpc 0.19.0",
+    "bitcoind 0.36.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
