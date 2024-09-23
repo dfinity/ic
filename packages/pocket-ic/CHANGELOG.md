@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The function `PocketIc::get_subnet_metrics` to retrieve metrics of a given subnet.
+
 
 
 ## 5.0.0 - 2024-09-12
