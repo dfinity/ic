@@ -4,7 +4,7 @@ use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::{ECDSA_SIGNATURE_FEE, SCHNORR_SIGNATURE_FEE};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
     MasterPublicKeyId, Payload, SchnorrAlgorithm, SchnorrKeyId, SchnorrPublicKeyArgs,
@@ -14,19 +14,19 @@ use ic_management_canister_types::{
 use ic_message::ForwardParams;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::InternetComputer;
-use ic_system_test_driver::driver::ic::Subnet;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
-use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
-use ic_system_test_driver::driver::test_env_api::IcNodeContainer;
-use ic_system_test_driver::driver::test_env_api::NnsInstallationBuilder;
 use ic_system_test_driver::{
     canister_api::{CallMode, Request},
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
+    },
     nns::vote_and_execute_proposal,
     util::{block_on, MessageCanister},
 };
@@ -820,7 +820,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
     assert!(res);
 }
 
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub enum SignWithChainKeyReply {
     Ecdsa(SignWithECDSAReply),
     Schnorr(SignWithSchnorrReply),

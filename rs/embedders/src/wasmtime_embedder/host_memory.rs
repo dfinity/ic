@@ -15,9 +15,11 @@ use libc::MAP_FAILED;
 use libc::{mmap, munmap};
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
 use wasmtime::{LinearMemory, MemoryType};
-use wasmtime_environ::{WASM32_MAX_SIZE, WASM_PAGE_SIZE};
+use wasmtime_environ::WASM32_MAX_SIZE;
 
 use crate::MIN_GUARD_REGION_SIZE;
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -27,7 +29,7 @@ fn is_multiple_of_page_size(size: usize) -> bool {
     size == round_up_to_page_size(size, PAGE_SIZE)
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Hash)]
 pub(crate) struct MemoryStart(pub(crate) usize);
 
 pub(crate) struct MemoryPageSize(Arc<AtomicUsize>);

@@ -7,9 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-either = "1.6.0"
-ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
@@ -34,5 +33,5 @@ ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-types = { path = "../../types/types" }
 slog = { workspace = true }
-tower-http = { workspace = true }
 tokio = { workspace = true }
+tower-http = { workspace = true }

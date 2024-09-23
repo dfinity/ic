@@ -11,12 +11,12 @@ name = "kv_store"
 path = "src/main.rs"
 
 [dependencies]
+base64 = { workspace = true }
+candid = { workspace = true }
+flate2 = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-candid = { workspace = true }
 ic-certified-map = "0.3"
-base64 = { workspace = true }
-flate2 = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 sha2 = { workspace = true }

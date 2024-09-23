@@ -1,20 +1,28 @@
-use candid::Encode;
+use candid::{CandidType, Encode};
 use canister_test::Wasm;
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use ic_base_types::CanisterId;
+use ic_cbor::CertificateToCbor;
+use ic_certificate_verification::VerifyCertificate;
+use ic_certification::{Certificate, HashTree, LookupResult};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{
     pb::v1::NeuronId,
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
-use ic_nns_constants::{EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX};
-use ic_nns_governance::pb::v1::{
-    manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal,
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX,
+};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, NnsFunction,
+    ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        create_canister_at_specified_id, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        create_canister_at_specified_id, get_average_icp_xdr_conversion_rate,
+        get_icp_xdr_conversion_rate, nns_governance_make_proposal, nns_wait_for_proposal_execution,
+        setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -68,14 +76,16 @@ fn propose_icp_xdr_rate(
         id: TEST_NEURON_1_ID,
     };
 
-    let proposal = Proposal {
+    let proposal = MakeProposalRequest {
         title: Some(format!("Update ICP/XDR rate to {}", xdr_permyriad_per_icp)),
         summary: "".to_string(),
         url: "".to_string(),
-        action: Some(Action::ExecuteNnsFunction(ExecuteNnsFunction {
-            nns_function: NnsFunction::IcpXdrConversionRate as i32,
-            payload: Encode!(&payload).unwrap(),
-        })),
+        action: Some(ProposalActionRequest::ExecuteNnsFunction(
+            ExecuteNnsFunction {
+                nns_function: NnsFunction::IcpXdrConversionRate as i32,
+                payload: Encode!(&payload).unwrap(),
+            },
+        )),
     };
 
     let response = nns_governance_make_proposal(
@@ -484,5 +494,120 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     assert_eq!(
         response.data.timestamp_seconds,
         cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 4 + 22
+    );
+}
+
+fn verify_cmc_certified_data<Data>(
+    state_machine: &StateMachine,
+    certificate: Vec<u8>,
+    hash_tree: Vec<u8>,
+    label: &[u8],
+    data: Data,
+) where
+    Data: CandidType,
+{
+    // Verify the certificate with the IC root key.
+    let root_key = state_machine.root_key_der();
+    let certificate = Certificate::from_cbor(certificate.as_slice()).unwrap();
+    let current_time_nanos = state_machine.get_time().as_nanos_since_unix_epoch() as u128;
+    certificate
+        .verify(
+            CYCLES_MINTING_CANISTER_ID.as_ref(),
+            root_key.as_slice(),
+            &current_time_nanos,
+            &60_000_000_000, // 1 minute in nanoseconds
+        )
+        .unwrap();
+
+    // Verify the hash tree with the certificate.
+    let certified_data = certificate.tree.lookup_path([
+        b"canister",
+        CYCLES_MINTING_CANISTER_ID.get().as_slice(),
+        b"certified_data",
+    ]);
+    let certified_data = match certified_data {
+        LookupResult::Found(certified_data) => certified_data,
+        _ => panic!("Failed to find certified_data in certificate"),
+    };
+    let hash_tree: HashTree = serde_cbor::from_slice(&hash_tree)
+        .expect("Failed to deserialize the witness into a HashTree");
+    assert_eq!(hash_tree.digest(), certified_data);
+
+    // Verify the data with the hash tree.
+    let hash_tree_entry = hash_tree.lookup_path([label]);
+    let hash_tree_entry = match hash_tree_entry {
+        LookupResult::Found(entry) => entry,
+        _ => panic!("Failed to find ICP_XDR_CONVERSION_RATE in hash tree"),
+    };
+    assert_eq!(Encode!(&data).unwrap(), hash_tree_entry);
+}
+
+#[test]
+fn test_get_icp_xdr_conversion_rate_certification() {
+    // Step 1: Prepare the world by setting up the NNS and the exchange rate canister.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_mock_exchange_rate_canister(
+        &state_machine,
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
+    );
+
+    // Step 2: Advance the time to ensure the exchange rate is updated and the data is certified.
+    state_machine.advance_time(Duration::from_secs(60));
+    state_machine.tick();
+
+    // Step 3: Get the ICP/XDR conversion rate.
+    let IcpXdrConversionRateCertifiedResponse {
+        data,
+        certificate,
+        hash_tree,
+    } = get_icp_xdr_conversion_rate(&state_machine);
+
+    // Step 4: Verify the certification.
+    verify_cmc_certified_data(
+        &state_machine,
+        certificate,
+        hash_tree,
+        b"ICP_XDR_CONVERSION_RATE",
+        data,
+    );
+}
+
+#[test]
+fn test_get_average_icp_xdr_conversion_rate_certification() {
+    // Step 1: Prepare the world by setting up the NNS and the exchange rate canister.
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID)
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payload);
+    setup_mock_exchange_rate_canister(
+        &state_machine,
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
+    );
+
+    // Step 2: Advance the time to ensure the exchange rate is updated and the data is certified.
+    state_machine.advance_time(Duration::from_secs(60));
+    state_machine.tick();
+
+    // Step 3: Get the average ICP/XDR conversion rate.
+    let IcpXdrConversionRateCertifiedResponse {
+        data,
+        certificate,
+        hash_tree,
+    } = get_average_icp_xdr_conversion_rate(&state_machine);
+
+    // Step 4: Verify the certification.
+    verify_cmc_certified_data(
+        &state_machine,
+        certificate,
+        hash_tree,
+        b"AVERAGE_ICP_XDR_CONVERSION_RATE",
+        data,
     );
 }

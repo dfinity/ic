@@ -87,11 +87,19 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = [
         "//rs/replicated_state:replicated_state_test_binary",
         "//testnet:mainnet_revisions",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/recovery",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
 )

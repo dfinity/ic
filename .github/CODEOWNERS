@@ -4,9 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-/.github/                 @dfinity/idx
-/.github/workflows        @dfinity/idx
-/.github/CODEOWNERS       @dfinity/ic-owners-owners
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
 /hs/                      @dfinity/utopia
@@ -64,20 +61,15 @@ go_deps.bzl               @dfinity/idx
 # [metrics-proxy]
 /ic-os/components/monitoring/metrics-proxy/      @dfinity/dre
 
-# [GitLab-CI]
-/.pre-commit-config.yaml                                                @dfinity/idx
-/pre-commit/                                                            @dfinity/idx
-/.gitlab-ci.yml                                                         @dfinity/idx
-/.gitlab/                                                               @dfinity/idx
-/.gitlab/CODEOWNERS                                                     @dfinity/ic-owners-owners
-/gitlab-ci/                                                             @dfinity/idx
-/gitlab-ci/src/std-fs-check/                                            @dfinity/node
-/gitlab-ci/src/dependencies/                                            @dfinity/product-security
-/gitlab-ci/config/dependencies.yml                                      @dfinity/product-security
-/gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity/idx
-/gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity/execution
-/gitlab-ci/config/rosetta.yml                                           @dfinity/finint
+# [GitHub-Ci]
+/.github/                                                                @dfinity/idx
+/.github/workflows/                                                      @dfinity/idx
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
+/ci/                                                                     @dfinity/idx
+/ci/src/dependencies/                                                    @dfinity/product-security
+/.pre-commit-config.yaml                                                 @dfinity/idx
+/pre-commit/                                                             @dfinity/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity/node @dfinity/dre
@@ -99,6 +91,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/mock/                                       @dfinity/finint
 /rs/bitcoin/client/                                     @dfinity/networking
 /rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
+/rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
@@ -113,7 +106,6 @@ go_deps.bzl               @dfinity/idx
 /rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
 /rs/config/src/subnet_config.rs                         @dfinity/execution
 /rs/consensus/                                          @dfinity/consensus
-/rs/constants/                                          @dfinity/ic-interface-owners
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
 /rs/cross-chain/                                        @dfinity/cross-chain-team
 /rs/crypto/                                             @dfinity/crypto-team
@@ -151,6 +143,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/p2p.rs                               @dfinity/networking
 /rs/interfaces/src/p2p/                                 @dfinity/networking
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
+/rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
 /rs/monitoring/                                         @dfinity/networking
@@ -200,6 +193,7 @@ go_deps.bzl               @dfinity/idx
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/nns-team
+/rs/rust_canisters/backtrace-canister                   @dfinity/execution
 /rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
 /rs/rust_canisters/proxy_canister/                      @dfinity/networking
@@ -208,6 +202,8 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
+/rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
+/rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking
@@ -228,9 +224,11 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
+/rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
+/rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
 /rs/tests/gix/                                          @dfinity/idx
@@ -262,6 +260,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
+/rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners

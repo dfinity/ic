@@ -131,10 +131,13 @@ use crate::{
     },
 };
 use candid::DecoderConfig;
+use ic_nervous_system_temporary::Temporary;
 use mockall::automock;
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
+    time::{Duration, SystemTime},
 };
 
 #[cfg(test)]
@@ -172,6 +175,49 @@ mod subaccount_index;
 /// The value of 10_000 follows the Candid recommendation.
 const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 
+// TODO(NNS1-3248): Delete this once the feature has made it through the
+// probation period. At that point, we will not need this "kill switch". We can
+// leave this here indefinitely, but it will just be clutter after a modest
+// amount of time.
+thread_local! {
+    // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
+    // delete. That way, if we need to recall the feature, we can do that via a
+    // 1-line change (by replacing true with `cfg!(feature = "test")`). After
+    // the feature has been released, it will go through its "probation" period.
+    // If that goes well, then, this can be deleted.
+    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+}
+
+pub fn is_private_neuron_enforcement_enabled() -> bool {
+    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
+    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+}
+
+pub fn are_set_visibility_proposals_enabled() -> bool {
+    ARE_SET_VISIBILITY_PROPOSALS_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
+    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
+}
+
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
@@ -185,7 +231,7 @@ trait Clock {
     fn set_time_warp(&mut self, new_time_warp: TimeWarp);
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct IcClock {
     time_warp: TimeWarp,
 }
@@ -198,13 +244,21 @@ impl IcClock {
     }
 }
 
+fn now_seconds() -> u64 {
+    let duration = if cfg!(target_arch = "wasm32") {
+        Duration::from_nanos(ic_cdk::api::time())
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+    };
+    duration.as_secs()
+}
+
 impl Clock for IcClock {
     fn now(&self) -> u64 {
         // Step 1: Read the real time.
-        let real_timestamp_seconds = dfn_core::api::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .expect("IcClock malfunctioned.")
-            .as_secs();
+        let real_timestamp_seconds = now_seconds();
 
         // Step 2: Apply time warp.
         let TimeWarp { delta_s } = self.time_warp;

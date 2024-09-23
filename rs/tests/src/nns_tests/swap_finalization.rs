@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::{GetDerivedStateResponse, GetLifecycleResponse, Lifecycle};
 use ic_system_test_driver::{

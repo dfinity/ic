@@ -10,14 +10,13 @@ documentation.workspace = true
 anyhow = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client = { path = "../../canister_client" }
-ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nns-common = { path = "../../nns/common" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 slog = { workspace = true }
 tests = { path = ".." }
 

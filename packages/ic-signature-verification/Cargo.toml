@@ -1,6 +1,6 @@
 [package]
 name = "ic-signature-verification"
-version = "0.1.0"
+version = "0.2.0"
 description = "Verification of signatures supported by the Internet Computer"
 license = "Apache-2.0"
 readme = "README.md"
@@ -8,15 +8,17 @@ include = ["src", "Cargo.toml", "CHANGELOG.md", "LICENSE", "README.md"]
 repository = "https://github.com/dfinity/ic"
 authors.workspace = true
 edition.workspace = true
-documentation.workspace = true
+documentation = "https://docs.rs/ic-signature-verification"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ic-canister-sig-creation = "1.0"
-ic-certification = "2.5"
+ic-certification = { workspace = true }
+ic-verify-bls-signature = { version = "0.6", default-features = false, features = [
+    "alloc",
+] }
 ic_principal = "0.1"
-ic-verify-bls-signature = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11"
@@ -28,4 +30,4 @@ hex = { workspace = true }
 ic-crypto-internal-types = { path = "../../rs/crypto/internal/crypto_lib/types" }
 ic-crypto-test-utils-canister-sigs = { path = "../../rs/crypto/test_utils/canister_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../rs/crypto/test_utils/reproducible_rng" }
-ic-types = { path = "../../rs/types/types"}
+ic-types = { path = "../../rs/types/types" }

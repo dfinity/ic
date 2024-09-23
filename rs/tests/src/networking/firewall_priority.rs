@@ -26,21 +26,25 @@ Success::
 end::catalog[] */
 
 use candid::CandidType;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance_api::pb::v1::NnsFunction;
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
-    SshSession,
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+            NnsInstallationBuilder, SshSession,
+        },
+    },
+    nns::{
+        await_proposal_execution, submit_external_proposal_with_test_id,
+        vote_execute_proposal_assert_executed,
+    },
+    util::{self, block_on},
 };
-use ic_system_test_driver::nns::{
-    await_proposal_execution, submit_external_proposal_with_test_id,
-    vote_execute_proposal_assert_executed,
-};
-use ic_system_test_driver::util::{self, block_on};
 use registry_canister::mutations::firewall::{
     compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
     UpdateFirewallRulesPayload,

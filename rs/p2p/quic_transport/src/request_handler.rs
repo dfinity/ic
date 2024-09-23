@@ -12,9 +12,17 @@
 //!
 use std::time::Duration;
 
-use axum::Router;
+use anyhow::{anyhow, Context};
+use axum::{
+    body::Body,
+    http::{Method, Request, Response, Version},
+    Router,
+};
+use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_logger::{info, ReplicaLogger};
+use ic_protobuf::transport::v1 as pb;
+use prost::Message;
 use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 use tracing::instrument;
@@ -22,10 +30,9 @@ use tracing::instrument;
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_READ, ERROR_TYPE_STOPPED, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI,
     },
-    utils::{read_request, write_response},
-    ConnId,
+    ConnId, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -50,35 +57,6 @@ pub(crate) async fn run_stream_acceptor(
              _ = quic_metrics_scrape.tick() => {
                 metrics.collect_quic_connection_stats(&connection, &peer_id);
             }
-            uni = connection.accept_uni() => {
-                match uni {
-                    Ok(uni_rx) => {
-                        inflight_requests.spawn(
-                            metrics.request_task_monitor.instrument(
-                                handle_uni_stream(
-                                    log.clone(),
-                                    peer_id,
-                                    conn_id,
-                                    metrics.clone(),
-                                    router.clone(),
-                                    uni_rx,
-                                )
-                            )
-                        );
-                    }
-                    Err(e) => {
-                        info!(log, "Error accepting uni dir stream {}", e.to_string());
-                        metrics
-                            .request_handle_errors_total
-                            .with_label_values(&[
-                                STREAM_TYPE_UNI,
-                                ERROR_TYPE_ACCEPT,
-                            ])
-                            .inc();
-                        break;
-                    }
-                }
-            },
             bi = connection.accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
@@ -109,6 +87,7 @@ pub(crate) async fn run_stream_acceptor(
                     }
                 }
             },
+            _ = connection.accept_uni() => {},
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 if let Err(err) = completed_request {
@@ -193,41 +172,75 @@ async fn handle_bi_stream(
     }
 }
 
-#[instrument(skip(log, metrics, router, uni_rx))]
-async fn handle_uni_stream(
-    log: ReplicaLogger,
-    peer_id: NodeId,
-    conn_id: ConnId,
-    metrics: QuicTransportMetrics,
-    router: Router,
-    uni_rx: RecvStream,
-) {
-    let mut request = match read_request(uni_rx).await {
-        Ok(request) => request,
-        Err(e) => {
-            info!(every_n_seconds => 60, log, "Failed to read request from uni stream: {}", e);
-            metrics
-                .request_handle_errors_total
-                .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
-                .inc();
-            return;
-        }
+async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, anyhow::Error> {
+    let raw_msg = recv_stream
+        .read_to_end(MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .with_context(|| "Failed to read request from the stream.")?;
+
+    let request_proto = pb::HttpRequest::decode(raw_msg.as_slice())
+        .with_context(|| "Failed to decode http request.")?;
+
+    let mut request = Request::builder()
+        .method(match pb::HttpMethod::try_from(request_proto.method) {
+            Ok(pb::HttpMethod::Get) => Method::GET,
+            Ok(pb::HttpMethod::Post) => Method::POST,
+            Ok(pb::HttpMethod::Put) => Method::PUT,
+            Ok(pb::HttpMethod::Delete) => Method::DELETE,
+            Ok(pb::HttpMethod::Head) => Method::HEAD,
+            Ok(pb::HttpMethod::Options) => Method::OPTIONS,
+            Ok(pb::HttpMethod::Connect) => Method::CONNECT,
+            Ok(pb::HttpMethod::Patch) => Method::PATCH,
+            Ok(pb::HttpMethod::Trace) => Method::TRACE,
+            Ok(pb::HttpMethod::Unspecified) => {
+                return Err(anyhow!("received http method unspecified."));
+            }
+            Err(e) => {
+                return Err(anyhow!("received invalid method {}", e));
+            }
+        })
+        .version(Version::HTTP_3)
+        .uri(request_proto.uri);
+    for h in request_proto.headers {
+        let pb::HttpHeader { key, value } = h;
+        request = request.header(key, value);
+    }
+    // This consumes the body without requiring allocation or cloning the whole content.
+    let body_bytes = Bytes::from(request_proto.body);
+    request
+        .body(Body::from(body_bytes))
+        .with_context(|| "Failed to build request.")
+}
+
+async fn write_response(
+    send_stream: &mut SendStream,
+    response: Response<Body>,
+) -> Result<(), anyhow::Error> {
+    let (parts, body) = response.into_parts();
+    // Check for axum error in body
+    // TODO: Think about this. What is the error that can happen here?
+    let body = axum::body::to_bytes(body, MAX_MESSAGE_SIZE_BYTES)
+        .await
+        .with_context(|| "Failed to read response from body.")?;
+    let response_proto = pb::HttpResponse {
+        status_code: parts.status.as_u16().into(),
+        headers: parts
+            .headers
+            .into_iter()
+            .filter_map(|(k, v)| {
+                k.map(|k| ic_protobuf::transport::v1::HttpHeader {
+                    key: k.to_string(),
+                    value: v.as_bytes().to_vec(),
+                })
+            })
+            .collect(),
+        body: body.into(),
     };
 
-    request.extensions_mut().insert::<NodeId>(peer_id);
-    request.extensions_mut().insert::<ConnId>(conn_id);
-
-    // Record application level errors.
-    if !router
-        .oneshot(request)
+    let response_bytes = response_proto.encode_to_vec();
+    send_stream
+        .write_all(&response_bytes)
         .await
-        .expect("Infallible")
-        .status()
-        .is_success()
-    {
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_APP])
-            .inc();
-    }
+        .with_context(|| "Failed to write request to stream.")?;
+    Ok(())
 }

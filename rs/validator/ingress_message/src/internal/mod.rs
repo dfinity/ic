@@ -3,11 +3,9 @@ use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, Caniste
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
 use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPublicKey};
 use ic_types::messages::{HttpRequest, HttpRequestContent};
-use ic_types::time::UNIX_EPOCH;
 use ic_types::Time;
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 #[cfg(test)]
 mod tests;
@@ -276,10 +274,19 @@ impl TimeProvider {
         match &self {
             TimeProvider::Constant(time) => *time,
             TimeProvider::SystemTime => {
-                UNIX_EPOCH
-                    + dfn_core::api::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .expect("SystemTime is before UNIX EPOCH!")
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Time::from_nanos_since_unix_epoch(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .expect("SystemTime is before UNIX EPOCH!")
+                            .as_nanos() as u64,
+                    )
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
+                }
             }
         }
     }

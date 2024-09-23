@@ -10,12 +10,12 @@ axum = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
+ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
-ic-base-types = { path = "../../types/base_types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }

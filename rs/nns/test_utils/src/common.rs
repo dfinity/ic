@@ -1,18 +1,21 @@
-use crate::registry::invariant_compliant_mutation;
+use crate::{
+    gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+};
 use canister_test::{Project, Wasm};
 use core::{
     option::Option::{None, Some},
     time::Duration,
 };
-use cycles_minting_canister::{CyclesCanisterInitPayload, CYCLES_LEDGER_CANISTER_ID};
+use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
-    ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
+    ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
-use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
+use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -86,7 +89,7 @@ impl NnsInitPayloadsBuilder {
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID.try_into().unwrap()),
+                cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
@@ -137,9 +140,18 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+    pub fn with_test_neurons_fund_neurons_with_hotkeys(
+        &mut self,
+        hotkeys: Vec<PrincipalId>,
+        maturity_equivalent_icp_e8s: u64,
+    ) -> &mut Self {
         self.governance
-            .with_additional_neurons(neurons.into_iter().map(|n| n.into()).collect());
+            .with_test_neurons_fund_neurons_with_hotkeys(hotkeys, maturity_equivalent_icp_e8s);
+        self
+    }
+
+    pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        self.governance.with_additional_neurons(neurons);
         self
     }
 
@@ -152,7 +164,7 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn with_governance_proto(&mut self, proto: Governance) -> &mut Self {
-        self.governance.with_governance_proto(proto.into());
+        self.governance.with_governance_proto(proto);
         self
     }
 
@@ -181,22 +193,15 @@ impl NnsInitPayloadsBuilder {
         self.genesis_token.add_sr_neurons(SEED_ROUND_ACCOUNTS);
         self.genesis_token.add_ect_neurons(ECT_ACCOUNTS);
 
-        let default_followees = self
-            .governance
-            .proto
-            .default_followees
-            .iter()
-            .map(|(id, followees)| (*id, followees.clone().into()))
-            .collect();
+        let default_followees = &self.governance.proto.default_followees;
 
         let gtc_neurons = self
             .genesis_token
             .get_gtc_neurons()
             .into_iter()
             .map(|mut neuron| {
-                neuron.followees.clone_from(&default_followees);
-                // convert for our init that uses api types
-                neuron.into()
+                neuron.followees.clone_from(default_followees);
+                neuron
             })
             .collect();
 
@@ -237,8 +242,7 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn with_network_economics(&mut self, network_economics: NetworkEconomics) -> &mut Self {
-        self.governance
-            .with_network_economics(network_economics.into());
+        self.governance.with_network_economics(network_economics);
         self
     }
 
@@ -272,7 +276,7 @@ impl NnsInitPayloadsBuilder {
         }
         NnsInitPayloads {
             registry: self.registry.build(),
-            governance: self.governance.build().into(),
+            governance: self.governance.build(),
             ledger: self.ledger.clone(),
             root: self.root.build(),
             cycles_minting: self.cycles_minting.clone(),

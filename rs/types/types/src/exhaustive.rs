@@ -9,7 +9,9 @@ use crate::consensus::idkg::{
     PseudoRandomId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
     ReshareOfMaskedParams, ReshareOfUnmaskedParams, UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
-use crate::consensus::{BlockPayload, ConsensusMessageHashable};
+use crate::consensus::{
+    Block, BlockPayload, CatchUpShareContent, ConsensusMessageHashable, Payload, SummaryPayload,
+};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscript,
@@ -21,10 +23,14 @@ use crate::crypto::threshold_sig::ni_dkg::{
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
 };
 use crate::crypto::{
-    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
-    CryptoHash, CryptoHashOf, CryptoHashable, Signed,
+    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
+    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
+    IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
 };
-use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
+use crate::signature::{
+    BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare, ThresholdSignature,
+    ThresholdSignatureShare,
+};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -278,7 +284,10 @@ impl<K: ExhaustiveSet + std::cmp::Ord> ExhaustiveSet for BTreeSet<K> {
 
 impl ExhaustiveSet for RejectCode {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        RejectCode::iter().collect()
+        RejectCode::iter()
+            // TODO(MR-610): Drop this after `SysUnknown` is supported on mainnet.
+            .filter(|code| *code != RejectCode::SysUnknown)
+            .collect()
     }
 }
 
@@ -391,20 +400,60 @@ impl<V: ExhaustiveSet + CryptoHashable> ExhaustiveSet for Hashed<CryptoHashOf<V>
     }
 }
 
+#[derive(Clone)]
+struct HashedSummaryBlock {
+    summary_block: HashedBlock,
+}
+
+impl ExhaustiveSet for HashedSummaryBlock {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let summary_payloads = SummaryPayload::exhaustive_set(rng);
+        let mut index = 0;
+
+        Block::exhaustive_set(rng)
+            .into_iter()
+            .map(|mut block| {
+                let summary = match block.payload.as_ref() {
+                    BlockPayload::Summary(summary) => summary.clone(),
+                    BlockPayload::Data(_) => {
+                        let summary = summary_payloads[index % summary_payloads.len()].clone();
+                        index += 1;
+                        summary
+                    }
+                };
+                block.payload = Payload::new(crypto_hash, BlockPayload::Summary(summary));
+
+                Self {
+                    summary_block: Hashed::new(crypto_hash, block),
+                }
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for CatchUpContent {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let registry_versions = Option::<RegistryVersion>::exhaustive_set(rng);
-        <(HashedBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
+        <(HashedSummaryBlock, HashedRandomBeacon, CryptoHashOfState)>::exhaustive_set(rng)
             .into_iter()
             .enumerate()
-            .map(|(i, tuple)| {
+            .map(|(i, (block, random_beacon, state_hash))| {
                 Self::new(
-                    tuple.0,
-                    tuple.1,
-                    tuple.2,
+                    block.summary_block,
+                    random_beacon,
+                    state_hash,
                     registry_versions[i % registry_versions.len()],
                 )
             })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for CatchUpShareContent {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <CatchUpContent>::exhaustive_set(rng)
+            .iter()
+            .map(|cup| cup.into())
             .collect()
     }
 }
@@ -481,7 +530,13 @@ impl ExhaustiveSet for CryptoHash {
     }
 }
 
-impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<T>> {
+impl<T> ExhaustiveSet for BasicSigOf<T> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_rng: &mut R) -> Vec<Self> {
+        vec![BasicSigOf::new(BasicSig(vec![1, 2, 3]))]
+    }
+}
+
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<U>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
@@ -495,6 +550,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<T>> {
             .collect()
     }
 }
+
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let signatures_map: BTreeMap<_, _> = NodeId::exhaustive_set(rng)
@@ -525,6 +581,53 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
                         1, 2, 3, 4, 5, 6,
                     ])),
                     signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet, U: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignatureShare<U>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, NodeId)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signer)| Self {
+                content,
+                signature: ThresholdSignatureShare {
+                    signature: ThresholdSigShareOf::new(ThresholdSigShare(vec![1, 2, 3, 4, 5, 6])),
+                    signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignatureShare<T>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, NodeId)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signer)| Self {
+                content,
+                signature: MultiSignatureShare {
+                    signature: IndividualMultiSigOf::new(IndividualMultiSig(vec![
+                        1, 2, 3, 4, 5, 6,
+                    ])),
+                    signer,
+                },
+            })
+            .collect()
+    }
+}
+
+impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, MultiSignature<T>> {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(T, Vec<NodeId>)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(content, signers)| Self {
+                content,
+                signature: MultiSignature {
+                    signature: CombinedMultiSigOf::new(CombinedMultiSig(vec![1, 2, 3, 4, 5, 6])),
+                    signers,
                 },
             })
             .collect()
@@ -849,6 +952,8 @@ mod tests {
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
+    use crate::consensus::ConsensusMessage;
+
     use super::*;
 
     const CUP_COMPATIBILITY_TEST_PATH: &str = "cup_compatibility_test";
@@ -916,15 +1021,32 @@ mod tests {
         }
     }
 
+    #[test]
+    fn verify_exhaustive_consensus_message() {
+        let set = ConsensusMessage::exhaustive_set(&mut reproducible_rng());
+        println!("Number of consensus message variants: {}", set.len());
+        for msg in &set {
+            // serialize -> deserialize round-trip
+            let bytes = pb::ConsensusMessage::from(msg.clone()).encode_to_vec();
+            let proto_msg = pb::ConsensusMessage::decode(bytes.as_slice()).unwrap();
+            let new_msg = ConsensusMessage::try_from(proto_msg).unwrap();
+
+            assert_eq!(
+                msg, &new_msg,
+                "deserialized consensus message is different from original"
+            );
+        }
+    }
+
     /// Check if the BTreeMap implementation produces a correct minimal exhaustive set.
     #[test]
     fn check_impl_btreemap() {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ExhaustiveSet)]
         enum Small {
             A,
             B,
         }
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, ExhaustiveSet)]
         enum Big {
             X,
             Y,
@@ -950,12 +1072,12 @@ mod tests {
     /// Check if named enum fields produce correct result
     #[test]
     fn derive_named_enum_field() {
-        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Debug, ExhaustiveSet)]
         enum Enum1 {
             V1 { first: Enum2, second: Enum2 },
             V2,
         }
-        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        #[derive(Clone, Eq, PartialEq, Debug, ExhaustiveSet)]
         enum Enum2 {
             A1,
             A2,

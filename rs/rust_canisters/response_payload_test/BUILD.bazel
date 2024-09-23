@@ -4,14 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_json",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rust_canisters/dfn_macro",
+    "@crate_index//:ic-cdk-macros",
 ]
 
 ALIASES = {}

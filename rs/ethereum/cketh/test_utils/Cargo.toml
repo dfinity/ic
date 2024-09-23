@@ -19,9 +19,9 @@ ic-ethereum-types = { path = "../../types" }
 ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

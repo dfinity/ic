@@ -1,9 +1,10 @@
 //! Contains methods and structs that support settings up the NNS.
 
 use ic_types::hostos_version::HostosVersion;
+use itertools::Itertools;
 use registry_canister::mutations::{
-    do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
+    do_update_nodes_hostos_version::DeployHostosToSomeNodes,
 };
 
 use crate::{
@@ -22,7 +23,7 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
     ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
 };
@@ -51,7 +52,7 @@ use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum UpgradeContent {
     All,
     Orchestrator,
@@ -479,8 +480,8 @@ pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: ReplicaVersion,
-    sha256: String,
+    version: Option<ReplicaVersion>,
+    sha256: Option<String>,
     upgrade_urls: Vec<String>,
     versions_to_unelect: Vec<String>,
 ) -> ProposalId {
@@ -490,17 +491,24 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: Some(String::from(version.clone())),
-            release_package_sha256_hex: Some(sha256.clone()),
+            replica_version_to_elect: version.clone().map(String::from),
+            release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect,
+            replica_versions_to_unelect: versions_to_unelect.clone(),
             guest_launch_measurement_sha256_hex: None,
         },
-        format!(
-            "Elect replica version: {} with hash: {}",
-            String::from(version),
-            sha256
-        ),
+        match (version, sha256, versions_to_unelect.is_empty()) {
+            (Some(v), Some(sha), _) => format!(
+                "Elect replica version: {} with hash: {}",
+                String::from(v),
+                sha
+            ),
+            (None, None, false) => format!(
+                "Retiring versions: {}",
+                versions_to_unelect.iter().join(", ")
+            ),
+            _ => panic!("Not valid arguments provided for submitting update elected replica version proposal")
+        },
         "".to_string(),
     )
     .await
@@ -683,8 +691,7 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         sender,
         neuron_id,
         NnsFunction::ReviseElectedHostosVersions,
-        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
-        UpdateElectedHostosVersionsPayload {
+        ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -725,8 +732,7 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         sender,
         neuron_id,
         NnsFunction::DeployHostosToSomeNodes,
-        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
-        UpdateNodesHostosVersionPayload {
+        DeployHostosToSomeNodes {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),
         },

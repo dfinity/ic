@@ -134,7 +134,7 @@ pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
                  )
                  (func (export "canister_inspect_message")
                    (if (i32.ne (i32.const 0) (call $msg_arg_data_size))
-                       (call $accept_message))
+                       (then call $accept_message))
                  )
                  (memory 1)
                )"#,

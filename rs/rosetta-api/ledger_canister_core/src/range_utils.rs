@@ -12,7 +12,7 @@ pub fn make_range(start: u64, len: usize) -> Range<u64> {
 
 /// An error indicating that an intersection of two intervals is not a
 /// well-formed interval.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct NoIntersection;
 
 /// Constructs an intersection of two ranges.

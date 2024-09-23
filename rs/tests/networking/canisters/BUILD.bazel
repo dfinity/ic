@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+]
+
+rust_canister(
+    name = "cloner_canister",
+    testonly = True,
+    srcs = ["src/cloner_canister.rs"],
+    service_file = ":candid.did",
+    deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "cloner_canister_types",
+    srcs = ["src/cloner_canister.rs"],
+    deps = DEPENDENCIES,
+)

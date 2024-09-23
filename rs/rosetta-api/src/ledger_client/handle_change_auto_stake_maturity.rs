@@ -1,7 +1,5 @@
-use crate::errors::ApiError;
-use crate::ledger_client::OperationOutput;
-use ic_nns_governance::pb::v1::manage_neuron_response::Command;
-use ic_nns_governance::pb::v1::ManageNeuronResponse;
+use crate::{errors::ApiError, ledger_client::OperationOutput};
+use ic_nns_governance_api::pb::v1::{manage_neuron_response::Command, ManageNeuronResponse};
 
 pub fn handle_change_auto_stake_maturity(
     bytes: Vec<u8>,

@@ -1,34 +1,38 @@
 use dfn_candid::CandidOne;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_types::messages::{Blob, HttpCanisterUpdate, MessageId};
-use ic_types::PrincipalId;
+use ic_types::{
+    messages::{Blob, HttpCanisterUpdate, MessageId},
+    PrincipalId,
+};
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use on_wire::IntoWire;
 use rand::Rng;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
 };
 
-use crate::convert::{make_read_state_from_update, to_arg, to_model_account_identifier};
-use crate::errors::ApiError;
-use crate::ledger_client::LedgerAccess;
-use crate::models::{
-    AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, PublicKey, SignatureType, SigningPayload, UnsignedTransaction,
+use crate::{
+    convert,
+    convert::{make_read_state_from_update, to_arg, to_model_account_identifier},
+    errors::ApiError,
+    ledger_client::LedgerAccess,
+    models,
+    models::{
+        AccountIdentifier, ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata,
+        ConstructionPayloadsResponse, PublicKey, SignatureType, SigningPayload,
+        UnsignedTransaction,
+    },
+    request::Request,
+    request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        NeuronInfo, PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
-use crate::request::Request;
-use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
-    Stake, StakeMaturity, StartDissolve, StopDissolve,
-};
-use crate::{convert, models};
 use rosetta_core::convert::principal_id_from_public_key;
 
 impl RosettaRequestHandler {
@@ -51,9 +55,8 @@ impl RosettaRequestHandler {
         let transactions =
             convert::operations_to_requests(&ops, false, self.ledger.token_symbol())?;
 
-        let interval = ic_constants::MAX_INGRESS_TTL
-            - ic_constants::PERMITTED_DRIFT
-            - Duration::from_secs(120);
+        let interval =
+            ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT - Duration::from_secs(120);
 
         let meta: Option<ConstructionPayloadsRequestMetadata> = msg
             .metadata
@@ -90,7 +93,7 @@ impl RosettaRequestHandler {
         let mut now = ingress_start;
         while now < ingress_end {
             let ingress_expiry = (now
-                + ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT))
+                + ic_limits::MAX_INGRESS_TTL.saturating_sub(ic_limits::PERMITTED_DRIFT))
             .as_nanos_since_unix_epoch();
             ingress_expiries.push(ingress_expiry);
             now += interval;
@@ -420,7 +423,7 @@ fn handle_list_neurons(
         .map_err(|err| ApiError::InvalidPublicKey(false, err.into()))?;
 
     // Argument for the method called on the governance canister.
-    let args = ic_nns_governance::pb::v1::ListNeurons {
+    let args = ic_nns_governance_api::pb::v1::ListNeurons {
         neuron_ids: vec![],
         include_neurons_readable_by_caller: true,
         include_empty_neurons_readable_by_caller: None,
@@ -885,7 +888,7 @@ fn add_neuron_management_payload(
     account: icp_ledger::AccountIdentifier,
     controller: Option<PrincipalId>, // specify with hotkey.
     neuron_index: u64,
-    command: ic_nns_governance::pb::v1::manage_neuron::Command,
+    command: ic_nns_governance_api::pb::v1::manage_neuron::Command,
     payloads: &mut Vec<SigningPayload>,
     updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
     pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,

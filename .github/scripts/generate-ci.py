@@ -17,6 +17,7 @@ def transform_yaml(input_file, output_file):
         # Remove anchors
         command = f"yq -i eval 'del(.anchors)' {output_file}"
         run_command(command)
+        print(f"Generating {output_file} from {input_file}")
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
         print(f"Failed to transform {input_file} to {output_file}")

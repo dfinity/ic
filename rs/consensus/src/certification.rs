@@ -11,7 +11,7 @@ use ic_types::{
 mod certifier;
 mod verifier;
 
-pub use certifier::{setup, CertifierImpl};
+pub use certifier::{CertifierBouncer, CertifierImpl};
 pub use verifier::VerifierImpl;
 
 /// A trait that encompasses all crypto signing/verification interface required

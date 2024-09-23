@@ -2979,10 +2979,10 @@ fn test_best_effort_responses_feature_flag_enabled() {
 fn test_best_effort_responses_feature_flag_disabled() {
     match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
         Err(e) => {
-            assert_eq!(e.code(), ErrorCode::CanisterContractViolation);
-            assert!(e
-                .description()
-                .ends_with("ic0::call_with_best_effort_response is not enabled."));
+            e.assert_contains(
+                ErrorCode::CanisterContractViolation,
+                "ic0::call_with_best_effort_response is not enabled.",
+            );
         }
         _ => panic!("Unexpected result"),
     };
@@ -3020,8 +3020,8 @@ fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
     let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
         .unwrap_err();
 
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert!(err
-        .description()
-        .ends_with("ic0::msg_deadline is not enabled."));
+    err.assert_contains(
+        ErrorCode::CanisterContractViolation,
+        "ic0::msg_deadline is not enabled.",
+    );
 }

@@ -157,15 +157,15 @@ impl BoundaryNodeManager {
         // TODO: Should these values be settable via config?
         let args = vec![
             format!("--hostname={}", domain_name),
-            format!("--http-port=80"),
             format!("--https-port=443"),
             format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
             format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
-            format!("--acme-credentials-path=/var/lib/ic/data/ic-boundary-acme.json"),
+            format!("--acme-credentials-path=/var/lib/ic/data"),
             format!("--disable-registry-replicator"),
             format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
             format!("--log-journald"),
             format!("--metrics-addr=[::]:9324"),
+            format!("--rate-limit-per-second-per-subnet=1000"),
             format!("--bouncer-enable"),
             format!("--bouncer-ratelimit=600"),
             format!("--bouncer-burst-size=1200"),

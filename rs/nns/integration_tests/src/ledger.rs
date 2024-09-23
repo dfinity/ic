@@ -7,7 +7,7 @@ use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
     manage_neuron::{
@@ -165,7 +165,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 )
                 .await
                 .expect("Error calling the manage_neuron api.");
-            result.expect("Error disbursing the neuron.");
+            result.panic_if_error("Error disbursing the neuron.");
 
             // Check the balance again.
             //
@@ -357,7 +357,7 @@ fn test_stake_and_disburse_neuron_with_account() {
                 )
                 .await
                 .expect("Error calling the manage_neuron api.");
-            result.expect("Error disbursing the neuron.");
+            result.panic_if_error("Error disbursing the neuron.");
 
             // Check the balance again.
             //

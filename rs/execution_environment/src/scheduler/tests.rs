@@ -23,7 +23,7 @@ use ic_management_canister_types::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_metrics::{
@@ -1279,6 +1279,20 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         0
     );
 
+    // Taking a snapshot of the canister will decrease the balance.
+    // Increase the canister balance to be able to take a new snapshot.
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test.execution_cost(instructions);
+    test.state_mut()
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     test.inject_call_to_ic00(
@@ -1370,13 +1384,27 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-
     assert!(test
         .state()
         .canister_state(&canister_id)
         .unwrap()
         .execution_state
         .is_some());
+
+    // Taking a snapshot of the canister will decrease the balance.
+    // Increase the canister balance to be able to take a new snapshot.
+    let subnet_type = SubnetType::Application;
+    let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+    let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
+    let instructions = scheduler_config.canister_snapshot_baseline_instructions
+        + NumInstructions::new(canister_snapshot_size.get());
+    let expected_charge = test.execution_cost(instructions);
+    test.state_mut()
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
+
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     test.inject_call_to_ic00(

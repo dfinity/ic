@@ -9,8 +9,8 @@ LIB_DEPS = [
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/bitcoin/ckbtc/kyt",
-    "//rs/crypto/extended_bip32",
     "//rs/crypto/getrandom_for_wasm",
+    "//rs/crypto/secp256k1",
     "//rs/crypto/sha2",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
@@ -135,6 +135,7 @@ rust_ic_test(
     data = [
         ":ckbtc_minter_debug.wasm",
         "//rs/bitcoin/ckbtc/kyt:kyt_canister",
+        "//rs/bitcoin/kyt:btc_kyt_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     ],

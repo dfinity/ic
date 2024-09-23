@@ -6,12 +6,12 @@ New compressed Wasm hash: `{{compressed_wasm_hash}}`
 
 Target canister: `{{canister_id}}`
 
-Previous {{canister}} proposal: https://dashboard.internetcomputer.org/proposal/TODO
+Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 
 ---
 
 ## Motivation
-THIS MUST BE FILLED OUT
+TODO: THIS MUST BE FILLED OUT
 
 
 ## Upgrade args
@@ -36,6 +36,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout {{to}}
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 sha256sum ./{{canister.artifact().as_path().display()}}
 ```

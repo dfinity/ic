@@ -76,11 +76,11 @@ fn upgrade_index(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
 }
 
 fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
-    let ledger_upgrade_args = LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-        maximum_number_of_accounts: None,
-        icrc1_minting_account: None,
-        feature_flags: Some(FeatureFlags { icrc2: true }),
-    }));
+    let ledger_upgrade_args: LedgerCanisterPayload =
+        LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+            icrc1_minting_account: None,
+            feature_flags: Some(FeatureFlags { icrc2: true }),
+        }));
 
     state_machine
         .upgrade_canister(

@@ -19,9 +19,10 @@ candid = { workspace = true }
 colored = "2.0.0"
 csv = "1.1"
 ic-agent = { workspace = true }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../../nns/common" }
-ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../swap" }
 rgb = "0.8.37"
@@ -30,4 +31,3 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 textplots = { version = "0.8" }
 tokio = { workspace = true }
-ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

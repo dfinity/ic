@@ -11,21 +11,18 @@ name = "sync-with-released-nevous-system-wasms"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = { workspace = true }
 candid = { workspace = true }
 colored = "2.0.0"
+futures = { workspace = true }
 ic-agent = { workspace = true }
-ic-sns-governance = { path = "../../../sns/governance" }
-ic-sns-swap = { path = "../../../sns/swap" }
-ic-sns-wasm = { path = "../../../nns/sns-wasm" }
 ic-base-types = { path = "../../../types/base_types" }
-rgb = "0.8.37"
-serde = { workspace = true }
-tokio = { workspace = true }
+ic-nervous-system-agent = { path = "../../agent" }
 ic-nervous-system-clients = { path = "../../clients" }
 ic-nervous-system-common-test-keys = { path = "../../common/test_keys" }
-ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-common = { path = "../../../nns/common" }
-ic-nns-governance = { path = "../../../nns/governance" }
-futures = { workspace = true }
+ic-nns-constants = { path = "../../../nns/constants" }
+rgb = "0.8.37"
+serde = { workspace = true }
 tempfile = { workspace = true }
-anyhow = { workspace = true }
+tokio = { workspace = true }

@@ -100,7 +100,7 @@ pub trait RegistryClient: Send + Sync {
 }
 
 /// A versioned (Key, Value) pair returned from the registry.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct RegistryVersionedRecord<T> {
     /// The key of the record.
     pub key: String,

@@ -8,6 +8,7 @@ use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
+use pretty_assertions::assert_eq;
 
 static CREATED_TIMESTAMP_SECONDS: u64 = 123_456_789;
 
@@ -172,28 +173,6 @@ fn test_modify_neuron_update_indexes() {
 }
 
 #[test]
-fn test_heap_range_with_begin_and_limit() {
-    let neuron_1 = simple_neuron_builder(1).build();
-    let neuron_3 = simple_neuron_builder(3).build();
-    let neuron_7 = simple_neuron_builder(7).build();
-    let neuron_12 = simple_neuron_builder(12).build();
-
-    let neuron_store = NeuronStore::new(btreemap! {
-        1 => neuron_1,
-        3 => neuron_3.clone(),
-        7 => neuron_7.clone(),
-        12 => neuron_12,
-    });
-
-    let observed_neurons: Vec<_> = neuron_store
-        .range_heap_neurons(NeuronId { id: 3 }..)
-        .take(2)
-        .collect();
-
-    assert_eq!(observed_neurons, vec![neuron_3, neuron_7],);
-}
-
-#[test]
 fn test_add_neurons() {
     // Step 1.1: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -305,7 +284,7 @@ fn test_neuron_store_new_then_restore() {
             restored_neuron_store
                 .with_neuron(&neuron.id(), |neuron| neuron.clone())
                 .unwrap(),
-            neuron.clone()
+            neuron.clone(),
         );
     }
     assert_eq!(
@@ -753,130 +732,5 @@ fn test_get_full_neuron() {
             neuron_id: neuron_not_managed.id(),
             principal_id,
         })
-    );
-}
-
-fn new_non_self_authenticating_principal_id(id: u64) -> PrincipalId {
-    let res = PrincipalId::new_user_test_id(id);
-    assert!(!res.is_self_authenticating());
-    res
-}
-
-fn new_self_authenticating_principal_id(id: u64) -> PrincipalId {
-    let res = PrincipalId::new_self_authenticating(&id.to_be_bytes());
-    assert!(res.is_self_authenticating());
-    res
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_trivial() {
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&vec![]),
-        vec![]
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_ordering_preserved_for_self_auth() {
-    let hot_keys = vec![
-        new_self_authenticating_principal_id(1),
-        new_self_authenticating_principal_id(2),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_self_authenticating_principal_id(1),
-            new_self_authenticating_principal_id(2),
-        ],
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_ordering_preserved_for_non_self_auth() {
-    let hot_keys = vec![
-        new_non_self_authenticating_principal_id(1),
-        new_non_self_authenticating_principal_id(2),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_non_self_authenticating_principal_id(1),
-            new_non_self_authenticating_principal_id(2),
-        ],
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_ordering_preserved_for_self_auth_followed_by_non_self_auth() {
-    let hot_keys = vec![
-        new_self_authenticating_principal_id(1),
-        new_non_self_authenticating_principal_id(2),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_self_authenticating_principal_id(1),
-            new_non_self_authenticating_principal_id(2),
-        ],
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_ordering_reversed_for_non_self_auth_followed_by_self_auth() {
-    let hot_keys = vec![
-        new_non_self_authenticating_principal_id(1),
-        new_self_authenticating_principal_id(2),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_self_authenticating_principal_id(2),
-            new_non_self_authenticating_principal_id(1),
-        ],
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_plenty_self_authenticating() {
-    let hot_keys = vec![
-        new_self_authenticating_principal_id(1),
-        new_non_self_authenticating_principal_id(2),
-        new_self_authenticating_principal_id(3),
-        new_self_authenticating_principal_id(4),
-        new_self_authenticating_principal_id(5),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_self_authenticating_principal_id(1),
-            // #2 dropped as a non-self-authenticating principal.
-            new_self_authenticating_principal_id(3),
-            new_self_authenticating_principal_id(4),
-            // #5 dropped as there are already sufficiently-many hotkeys.
-        ],
-    );
-}
-
-#[test]
-fn test_pick_most_important_hotkeys_few_self_authenticating() {
-    let hot_keys = vec![
-        new_non_self_authenticating_principal_id(1),
-        new_self_authenticating_principal_id(2),
-        new_non_self_authenticating_principal_id(3),
-        new_non_self_authenticating_principal_id(4),
-    ];
-
-    assert_eq!(
-        NeuronsFundNeuron::pick_most_important_hotkeys(&hot_keys),
-        vec![
-            new_self_authenticating_principal_id(2),
-            new_non_self_authenticating_principal_id(1),
-            new_non_self_authenticating_principal_id(3),
-        ],
     );
 }

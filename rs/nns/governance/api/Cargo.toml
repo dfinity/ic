@@ -13,8 +13,11 @@ path = "src/lib.rs"
 [dependencies]
 bytes = { workspace = true }
 candid = { workspace = true }
+comparable = { version = "0.5", features = ["derive"] }
 ic-base-types = { path = "../../../types/base_types" }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-nervous-system-clients = { path = "../../../nervous_system/clients" }
+ic-nervous-system-common-validation = { path = "../../../nervous_system/common/validation" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../common" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -27,6 +30,5 @@ itertools = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-strum_macros = { workspace = true }
 strum = { workspace = true }
-comparable = { version = "0.5", features = ["derive"] }
+strum_macros = { workspace = true }

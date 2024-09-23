@@ -8,6 +8,9 @@ use axum::{
     Router,
 };
 use ethnum::u256;
+use http::header::{
+    HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
+};
 use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -50,6 +53,17 @@ pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
 
 pub fn test_route_subnet(n: usize) -> RouteSubnet {
     test_route_subnet_with_id("f7crg-kabae".into(), n)
+}
+
+fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
+    assert!(headers.contains_key(&name), "Header {} is missing", name);
+    assert_eq!(
+        headers.get(&name).unwrap(),
+        &HeaderValue::from_str(expected_value).unwrap(),
+        "Header {} does not match expected value: {}",
+        name,
+        expected_value,
+    );
 }
 
 #[derive(Clone)]
@@ -120,18 +134,13 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let request_id = resp
-        .headers()
-        .get(HEADER_X_REQUEST_ID)
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let request_id = resp.headers().get(X_REQUEST_ID).unwrap().to_str().unwrap();
     assert!(UUID_REGEX.is_match(request_id));
 
     // Check if canister id header is correct
     let canister_id = resp
         .headers()
-        .get(HEADER_IC_CANISTER_ID)
+        .get(X_IC_CANISTER_ID)
         .unwrap()
         .to_str()
         .unwrap();
@@ -142,31 +151,34 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
-        resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
+        resp.headers().get(X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
 
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure = format!(
-        "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
-    );
+    let expected_failure =
+        format!("malformed_request: value of '{X_REQUEST_ID}' header is not in UUID format\n");
 
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "1")
+        .header(X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -174,12 +186,16 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -187,12 +203,16 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "")
+        .header(X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -221,43 +241,41 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let request_id = resp
-        .headers()
-        .get(HEADER_X_REQUEST_ID)
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let request_id = resp.headers().get(X_REQUEST_ID).unwrap().to_str().unwrap();
     assert!(UUID_REGEX.is_match(request_id));
 
     // case 2: 'x-request-id' header contains a valid uuid, this uuid is not overwritten by middleware
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613-149e-4bde-8443-33593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(
-        resp.headers().get(HEADER_X_REQUEST_ID).unwrap(),
+        resp.headers().get(X_REQUEST_ID).unwrap(),
         "40a6d613-149e-4bde-8443-33593fd2fd17"
     );
 
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure = format!(
-        "malformed_request: value of '{HEADER_X_REQUEST_ID}' header is not in UUID format\n"
-    );
+    let expected_failure =
+        format!("malformed_request: value of '{X_REQUEST_ID}' header is not in UUID format\n");
 
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "1")
+        .header(X_REQUEST_ID, "1")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -265,12 +283,16 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
+        .header(X_REQUEST_ID, "40a6d613149e4bde844333593fd2fd17")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -278,12 +300,16 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     let request = Request::builder()
         .method("GET")
         .uri(url)
-        .header(HEADER_X_REQUEST_ID, "")
+        .header(X_REQUEST_ID, "")
         .body(Body::from(""))
         .unwrap();
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = hyper::body::to_bytes(resp).await.unwrap().to_vec();
+    let (_, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, expected_failure);
 
@@ -365,8 +391,11 @@ async fn test_status() -> Result<(), Error> {
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let (parts, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
     assert_eq!(
@@ -374,6 +403,11 @@ async fn test_status() -> Result<(), Error> {
         Some(ReplicaHealthStatus::Healthy)
     );
     assert_eq!(health.root_key.as_deref(), Some(&root_key),);
+
+    let headers = parts.headers;
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
 
     // Test starting
     proxy_router.set_health(ReplicaHealthStatus::Starting);
@@ -388,8 +422,11 @@ async fn test_status() -> Result<(), Error> {
 
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let (parts, body) = resp.into_parts();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
     assert_eq!(
@@ -397,12 +434,17 @@ async fn test_status() -> Result<(), Error> {
         Some(ReplicaHealthStatus::Starting)
     );
 
+    let headers = parts.headers;
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+
     Ok(())
 }
 
 #[tokio::test]
 async fn test_all_call_types() -> Result<(), Error> {
-    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024);
+    let (mut app, subnets) = setup_test_router(false, false, 10, 1, 1024, None);
     let node = subnets[0].nodes[0].clone();
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
@@ -440,72 +482,25 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
+    let (parts, body) = resp.into_parts();
+
     // Check response headers
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_NODE_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.id.to_string()
-    );
+    let headers = parts.headers;
+    assert_header(&headers, X_IC_NODE_ID, &node.id.to_string());
+    assert_header(&headers, X_IC_SUBNET_ID, &node.subnet_id.to_string());
+    assert_header(&headers, X_IC_SUBNET_TYPE, node.subnet_type.as_ref());
+    assert_header(&headers, X_IC_SENDER, &sender.to_string());
+    assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, X_IC_METHOD_NAME, "foobar");
+    assert_header(&headers, X_IC_REQUEST_TYPE, "query");
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
 
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.subnet_id.to_string()
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        node.subnet_type.as_ref()
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SENDER)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        sender.to_string(),
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_CANISTER_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        canister_id.to_string(),
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_METHOD_NAME)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        "foobar",
-    );
-
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_REQUEST_TYPE)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        "query",
-    );
-
-    let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -542,7 +537,10 @@ async fn test_all_call_types() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
     let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -579,7 +577,10 @@ async fn test_all_call_types() -> Result<(), Error> {
     assert_eq!(resp.status(), StatusCode::ACCEPTED);
 
     let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -613,18 +614,19 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Make sure that the canister_id is there even if the CBOR does not have it
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_CANISTER_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        canister_id.to_string(),
-    );
+    let (parts, body) = resp.into_parts();
 
-    let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    // Check response headers
+    let headers = parts.headers;
+    // Make sure that the canister_id is there even if the CBOR does not have it
+    assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 
@@ -660,18 +662,19 @@ async fn test_all_call_types() -> Result<(), Error> {
     let resp = app.call(request).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // Make sure that the subnet_id is there even if the CBOR does not have it
-    assert_eq!(
-        resp.headers()
-            .get(HEADER_IC_SUBNET_ID)
-            .unwrap()
-            .to_str()
-            .unwrap(),
-        subnet_id.to_string(),
-    );
+    let (parts, body) = resp.into_parts();
 
-    let (_parts, body) = resp.into_parts();
-    let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    // Check response headers
+    let headers = parts.headers;
+    // Make sure that the subnet_id is there even if the CBOR does not have it
+    assert_header(&headers, X_IC_SUBNET_ID, &subnet_id.to_string());
+    assert_header(&headers, CONTENT_TYPE, "application/cbor");
+    assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
+    assert_header(&headers, X_FRAME_OPTIONS, "DENY");
+    let body = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "a".repeat(1024));
 

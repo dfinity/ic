@@ -19,13 +19,13 @@ All the IC-OS images can be built though Bazel.
 
 === Environment setup
 
-Building IC-OS images locally requires environment configuration. The required packages are found in ic/gitlab-ci/container/Dockerfile.
+Building IC-OS images locally requires environment configuration. The required packages are found in ic/ci/container/Dockerfile.
 
 In addition to these packages, https://bazel.build/install[Bazel] must be installed.
 
 As an alternative, the following script can be used to build the images in a container with the correct environment already configured:
 
-    ./gitlab-ci/container/container-run.sh
+    ./ci/container/container-run.sh
 
 === Build targets
 

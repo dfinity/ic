@@ -10,5 +10,5 @@ documentation.workspace = true
 ic-crypto-internal-sha2 = { path = "../sha2" }
 
 [dev-dependencies]
-wycheproof = "0.5"
 hex = { workspace = true }
+wycheproof = { version = "0.6", default-features = false, features = ["hkdf", "mac"] }

@@ -3,6 +3,7 @@ use crate::fixtures::{
     GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
 };
 use assert_matches::assert_matches;
+use fixtures::environment_fixture::CanisterCallReply;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -1713,10 +1714,10 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
-        neuron_recipes: None,
+        neuron_recipes: Some(NeuronRecipes {
+            neuron_recipes: Vec::new(),
+        }),
     };
 
     // Generate a principal id that should not be authorized to call claim_swap_neurons
@@ -1755,17 +1756,15 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 }
 
 #[test]
-fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
+fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     // Set up the test environment with default sale canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
     let test_neuron_id = NeuronId::new_test_neuron_id(1);
 
-    // Create a request with an invalid NeuronParameter
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
+    // Create a request with an invalid NeuronRecipes
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(test_neuron_id.clone()),
             ..Default::default() // The rest of the fields are unset and will fail validation
@@ -1809,9 +1808,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
     // Create a request with a neuron id that should collide with the neuron already inserted into
     // Governance
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![NeuronRecipe {
             neuron_id: Some(neuron_id.clone()),
             controller: Some(user_principal),
@@ -1859,9 +1856,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![
             NeuronRecipe {
                 neuron_id: Some(test_neuron_id_success.clone()),
@@ -1937,9 +1932,7 @@ fn test_claim_swap_neurons_succeeds() {
         followees: Some(NeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
     };
 
-    #[allow(deprecated)] // TODO: remove once neuron_parameters is removed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![],
         neuron_recipes: Some(NeuronRecipes::from(vec![
             direct_participant_neuron_recipe.clone(),
             nf_participant_neuron_recipe.clone(),
@@ -3024,4 +3017,45 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         proposal_data.minimum_yes_proportion_of_total.unwrap(),
         Percentage::from_basis_points(2000)
     );
+}
+
+#[test]
+fn test_updates_root_settings() {
+    let mut gov = {
+        // Set up the test environment migrated_root_wasm_memory_limit set to Some(false);
+        let gov_fixture_builder =
+            GovernanceCanisterFixtureBuilder::new().set_migrated_root_wasm_memory_limit(false);
+        let gov = gov_fixture_builder.create();
+        // The heartbeat will call the management canister to update the settings,
+        // so we need to mock the reply
+        gov.environment_fixture
+            .environment_fixture_state
+            .lock()
+            .unwrap()
+            .mocked_canister_replies
+            .push(CanisterCallReply::Response(Vec::new()));
+        gov
+    };
+
+    gov.heartbeat();
+    assert!(gov
+        .governance
+        .proto
+        .migrated_root_wasm_memory_limit
+        .unwrap());
+}
+
+#[test]
+#[should_panic(
+    expected = "Expected there to be a mocked canister reply on the stack for method `update_settings`"
+)]
+fn test_updates_root_settings_calls_management_canister() {
+    let mut gov = {
+        // Set up the test environment migrated_root_wasm_memory_limit set to Some(false);
+        let gov_fixture_builder =
+            GovernanceCanisterFixtureBuilder::new().set_migrated_root_wasm_memory_limit(false);
+        gov_fixture_builder.create()
+    };
+
+    gov.heartbeat(); // should panic
 }

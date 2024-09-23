@@ -7,14 +7,14 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
 dfn_core = { path = "../dfn_core" }
-dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
+dfn_macro = { path = "../dfn_macro" }
+on_wire = { path = "../on_wire" }
 rand = { workspace = true }
 rand_pcg = "0.3.1"
-on_wire = { path = "../on_wire" }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [[bin]]
 name = "json"
@@ -41,18 +41,18 @@ name = "panics"
 path = "src/panics.rs"
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 criterion = { workspace = true }
-assert_matches = { workspace = true }
-on_wire = { path = "../on_wire" }
+dfn_candid = { path = "../dfn_candid" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-error-types = { path = "../../types/error_types" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
-dfn_candid = { path = "../dfn_candid" }
-candid = { workspace = true }
+on_wire = { path = "../on_wire" }
 
 [[bench]]
 name = "json"

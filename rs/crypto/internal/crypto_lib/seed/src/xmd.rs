@@ -1,7 +1,7 @@
 use ic_crypto_sha2::{Sha256, Sha512};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum XmdError {
     InvalidOutputLength(String),
 }

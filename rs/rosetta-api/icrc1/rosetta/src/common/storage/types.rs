@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RosettaBlock {
     pub index: u64,
     pub block: IcrcBlock,
@@ -114,7 +114,7 @@ impl RosettaBlock {
         BlockIdentifier::from_bytes(self.index, &self.get_block_hash())
     }
 }
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct IcrcBlock {
     pub parent_hash: Option<[u8; 32]>,
     pub transaction: IcrcTransaction,
@@ -223,7 +223,7 @@ impl FromSql for IcrcBlock {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct IcrcTransaction {
     pub operation: IcrcOperation,
     pub created_at_time: Option<u64>,
@@ -273,7 +273,7 @@ impl From<IcrcTransaction> for Value {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum IcrcOperation {
     Mint {
         to: Account,
@@ -462,7 +462,7 @@ where
         .transpose()
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MetadataEntry {
     pub key: String,
     pub value: Vec<u8>,

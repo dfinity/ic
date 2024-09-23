@@ -37,9 +37,11 @@ hyper = { workspace = true }
 hyper-rustls = { workspace = true }
 hyper-util = { workspace = true }
 hyperlocal-next = "0.9.0"
-itertools = { workspace = true }
 ic-agent = { workspace = true }
+ic-http-certification = { workspace = true }
+ic-response-verification = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
+itertools = { workspace = true }
 maxminddb = "0.24"
 opentelemetry = { version = "0.20", features = ["metrics", "trace"] }
 opentelemetry-prometheus = { version = "0.13" }
@@ -51,16 +53,14 @@ rustls-native-certs = "0.7.0"
 rustls-pemfile = "2.1.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 tikv-jemallocator = "0.5"
+tokio = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tokio = { workspace = true }
-ic-response-verification = { workspace = true }
-ic-http-certification = { workspace = true }
-thiserror = { workspace = true }
 url = { workspace = true }
 
 [features]
@@ -68,5 +68,5 @@ skip_body_verification = []
 dev_proxy = []
 
 [dev-dependencies]
-tokio-test = "0.4.2"
 httptest = "0.15.4"
+tokio-test = "0.4.2"

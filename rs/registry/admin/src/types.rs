@@ -3,9 +3,9 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
-use ic_canister_client::Agent;
-use ic_canister_client::Sender;
+use ic_canister_client::{Agent, Sender};
 use ic_nns_common::types::NeuronId;
+use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_protobuf::registry::{
     node::v1::IPv4InterfaceConfig,
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -17,12 +17,13 @@ use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
-use serde::Serialize;
-use std::str::FromStr;
+use serde::{Deserialize, Serialize};
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
 };
+use strum_macros::EnumString;
 
 /// All or part of the registry
 #[derive(Default, Serialize)]
@@ -55,7 +56,7 @@ pub(crate) enum RegistryValue {
 
 /// User-friendly representation of a v1::SubnetRecord. For instance,
 /// the `membership` field is a `Vec<String>` to pretty-print the node IDs.
-#[derive(Default, Serialize, Clone)]
+#[derive(Clone, Default, Serialize)]
 pub(crate) struct SubnetRecord {
     pub membership: Vec<String>,
     pub nodes: IndexMap<PrincipalId, NodeDetails>,
@@ -135,7 +136,7 @@ impl From<&SubnetRecordProto> for SubnetRecord {
 
 /// User-friendly representation of the v1::IPv4InterfaceConfig.
 /// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub(crate) struct IPv4Interface {
     pub address: Ipv4Addr,
     pub gateways: Vec<Ipv4Addr>,
@@ -143,7 +144,7 @@ pub(crate) struct IPv4Interface {
 }
 
 /// Encapsulates a node/node operator id pair.
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub(crate) struct NodeDetails {
     pub ipv6: Ipv6Addr,
     pub ipv4: Option<IPv4Interface>,
@@ -204,7 +205,7 @@ pub trait ProposalMetadata {
 }
 
 /// A description of a subnet, either by index, or by id.
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub enum SubnetDescriptor {
     Id(PrincipalId),
     Index(usize),
@@ -245,9 +246,22 @@ impl SubnetDescriptor {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumString, Serialize)]
+pub enum LogVisibility {
+    #[strum(serialize = "controllers")]
+    Controllers,
+    #[strum(serialize = "public")]
+    Public,
+}
+
 /// Trait to extract the payload for each proposal type.
 /// This trait is async as building some payloads requires async calls.
 #[async_trait]
 pub trait ProposalPayload<T: CandidType> {
     async fn payload(&self, agent: &Agent) -> T;
+}
+
+#[async_trait]
+pub trait ProposalAction {
+    async fn action(&self) -> ProposalActionRequest;
 }

@@ -12,7 +12,7 @@ fn setup() -> (PocketIc, Url) {
         .with_sns_subnet()
         .build();
 
-    let _ = install_nns_canisters(&pocket_ic, vec![], false, None);
+    let _ = install_nns_canisters(&pocket_ic, vec![], false, None, vec![]);
     let endpoint = pocket_ic.make_live(None);
     (pocket_ic, endpoint)
 }

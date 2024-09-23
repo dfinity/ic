@@ -2,7 +2,6 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 
 use std::net::SocketAddr;
 
-use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -15,17 +14,14 @@ use ic_protobuf::registry::{
 };
 use idna::domain_to_ascii_strict;
 
-use crate::mutations::{
-    common::check_ipv4_config,
-    node_management::{
-        common::{
-            get_node_operator_record, make_add_node_registry_mutations,
-            make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
-        },
-        do_remove_node_directly::RemoveNodeDirectlyPayload,
-        do_update_node_ipv4_config_directly::IPv4Config,
+use crate::mutations::node_management::{
+    common::{
+        get_node_operator_record, make_add_node_registry_mutations,
+        make_update_node_operator_mutation, node_exists_with_ipv4, scan_for_nodes_by_ip,
     },
+    do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use ic_registry_canister_api::AddNodePayload;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -99,10 +95,14 @@ impl Registry {
             .transpose()?;
 
         // 5. If there is an IPv4 config, make sure that the IPv4 is not used by anyone else
-        let ipv4_intf_config = payload
-            .public_ipv4_config
-            .clone()
-            .map(make_valid_node_ivp4_config_or_panic);
+        let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
+            ipv4_config.panic_on_invalid();
+            IPv4InterfaceConfig {
+                ip_addr: ipv4_config.ip_addr().to_string(),
+                gateway_ip_addr: vec![ipv4_config.gateway_ip_addr().to_string()],
+                prefix_length: ipv4_config.prefix_length(),
+            }
+        });
         if let Some(ipv4_config) = ipv4_intf_config.clone() {
             if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
@@ -143,31 +143,6 @@ impl Registry {
 
         Ok(node_id)
     }
-}
-
-/// The payload of an update request to add a new node.
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct AddNodePayload {
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub node_signing_pk: Vec<u8>,
-    pub committee_signing_pk: Vec<u8>,
-    pub ni_dkg_dealing_encryption_pk: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be X509PublicKeyCert
-    pub transport_tls_cert: Vec<u8>,
-    // Raw bytes of the protobuf, but these should be PublicKey
-    pub idkg_dealing_encryption_pk: Option<Vec<u8>>,
-
-    pub xnet_endpoint: String,
-    pub http_endpoint: String,
-
-    pub chip_id: Option<Vec<u8>>,
-
-    pub public_ipv4_config: Option<IPv4Config>,
-    pub domain: Option<String>,
-
-    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
-    pub p2p_flow_endpoints: Vec<String>,
-    pub prometheus_metrics_endpoint: String,
 }
 
 /// Parses the ConnectionEndpoint string
@@ -278,21 +253,6 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
-fn make_valid_node_ivp4_config_or_panic(ipv4_config: IPv4Config) -> IPv4InterfaceConfig {
-    check_ipv4_config(
-        ipv4_config.ip_addr.to_string(),
-        vec![ipv4_config.gateway_ip_addr.to_string()],
-        ipv4_config.prefix_length,
-    )
-    .expect("Invalid IPv4 config");
-
-    IPv4InterfaceConfig {
-        ip_addr: ipv4_config.ip_addr,
-        gateway_ip_addr: vec![ipv4_config.gateway_ip_addr],
-        prefix_length: ipv4_config.prefix_length,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -305,6 +265,7 @@ mod tests {
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_canister_api::IPv4Config;
     use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
     use ic_registry_transport::insert;
     use lazy_static::lazy_static;
@@ -494,37 +455,6 @@ mod tests {
                 port: 80u32,
             }
         );
-    }
-
-    #[test]
-    fn should_succeed_if_ipv4_config_is_valid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        };
-
-        let ipv4_config = IPv4InterfaceConfig {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: vec!["204.153.51.1".to_string()],
-            prefix_length: 24,
-        };
-
-        assert_eq!(
-            make_valid_node_ivp4_config_or_panic(ipv4_config_raw),
-            ipv4_config
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn should_panic_if_ipv4_config_is_invalid() {
-        let ipv4_config_raw = IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.49.1".to_string(),
-            prefix_length: 24,
-        };
-        make_valid_node_ivp4_config_or_panic(ipv4_config_raw);
     }
 
     #[test]
@@ -753,11 +683,11 @@ mod tests {
         )]);
 
         // create an IPv4 config
-        let ipv4_config = Some(IPv4Config {
-            ip_addr: "204.153.51.58".to_string(),
-            gateway_ip_addr: "204.153.51.1".to_string(),
-            prefix_length: 24,
-        });
+        let ipv4_config = Some(IPv4Config::maybe_invalid_new(
+            "204.153.51.58".to_string(),
+            "204.153.51.1".to_string(),
+            24,
+        ));
 
         // create two node payloads with the same IPv4 config
         let (mut payload_1, _) = prepare_add_node_payload(1);

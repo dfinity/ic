@@ -365,9 +365,6 @@ pub struct Init {
     /// swap.
     #[prost(uint64, optional, tag = "26")]
     pub nns_proposal_id: ::core::option::Option<u64>,
-    /// The Neurons' Fund participants of this SNS decentralization swap.
-    #[prost(message, optional, tag = "27")]
-    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
     /// Controls whether swap finalization should be attempted automatically in the
     /// canister heartbeat. If set to false, `finalize_swap` must be called
     /// manually. Note: it is safe to call `finalize_swap` multiple times
@@ -470,14 +467,6 @@ pub struct LinearScalingCoefficient {
     #[prost(uint64, optional, tag = "5")]
     pub intercept_icp_e8s: ::core::option::Option<u64>,
 }
-/// Represents multiple Neurons' Fund participants.
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NeuronsFundParticipants {
-    #[prost(message, repeated, tag = "1")]
-    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
-}
 /// Represents one NNS neuron from the Neurons' Fund participating in this swap.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -512,7 +501,7 @@ pub struct CfParticipant {
     #[prost(message, repeated, tag = "2")]
     pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
     /// The principal that can vote on behalf of these Neurons' Fund neurons.
-    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
+    /// Deprecated. Please use `controller` instead
     /// TODO(NNS1-3198): Remove
     #[deprecated]
     #[prost(string, tag = "1")]
@@ -705,7 +694,7 @@ pub struct CfInvestment {
     pub hotkeys: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Principals>,
     #[prost(fixed64, tag = "2")]
     pub nns_neuron_id: u64,
-    /// Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+    /// Deprecated. Please use `controller` instead (not `hotkeys`!)
     /// TODO(NNS1-3198): Remove
     #[deprecated]
     #[prost(string, tag = "1")]
@@ -1493,8 +1482,8 @@ pub mod settle_neurons_fund_participation_request {
 /// the Neurons' Fund. However, this distribution also needs to be made available to the SNS Swap
 /// that will use this information to create SNS neurons of an appropriate size for each
 /// Neurons' Fund (as well as direct) participant. That is why in the `committed` case,
-/// the NNS Governance should populate the `neurons_fund_participants` field, while in the `aborted`
-/// case it should be empty.
+/// the NNS Governance provides `neurons_fund_neuron_portions`, while in the `aborted`
+/// case it does not.
 ///
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.
@@ -1531,11 +1520,6 @@ pub mod settle_neurons_fund_participation_response {
         /// has been capped to reflect the maximum participation amount for this SNS swap.
         #[prost(bool, optional, tag = "4")]
         pub is_capped: ::core::option::Option<bool>,
-        /// Deprecated. Please use `controller` instead (not `hotkeys`!)
-        /// TODO(NNS1-3198): Remove
-        #[deprecated]
-        #[prost(string, optional, tag = "3")]
-        pub hotkey_principal: ::core::option::Option<::prost::alloc::string::String>,
     }
     /// Request was completed successfully.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

@@ -3,7 +3,7 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{NumInstructions, NumOsPages};
+use ic_types::{NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use serde::{Deserialize, Serialize};
 
 use crate::flag_status::FlagStatus;
@@ -38,6 +38,9 @@ pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
 
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
+
+/// The number of rayon threads use for the parallel page copying optimization.
+const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
 /// Sandbox process eviction does not activate if the number of sandbox
 /// processes is below this threshold.
@@ -92,7 +95,7 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
@@ -105,6 +108,8 @@ pub struct FeatureFlags {
     // TODO(IC-1674): remove this flag once the feature is enabled by default.
     /// Indicates whether the best-effort responses feature is enabled.
     pub best_effort_responses: FlagStatus,
+    /// Collect a backtrace from the canister when it panics.
+    pub canister_backtrace: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -115,6 +120,7 @@ impl FeatureFlags {
             wasm_native_stable_memory: FlagStatus::Enabled,
             wasm64: FlagStatus::Disabled,
             best_effort_responses: FlagStatus::Disabled,
+            canister_backtrace: FlagStatus::Disabled,
         }
     }
 }
@@ -125,14 +131,14 @@ impl Default for FeatureFlags {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum MeteringType {
     New,
     /// for testing and benchmarking
     None,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct StableMemoryPageLimit {
     // Regular message (e.g., update) execution dirty/accessed page limit.
     pub message: NumOsPages,
@@ -142,7 +148,7 @@ pub struct StableMemoryPageLimit {
     pub query: NumOsPages,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Config {
     /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
@@ -173,6 +179,9 @@ pub struct Config {
 
     /// The number of rayon threads used by wasmtime to compile wasm binaries
     pub num_rayon_compilation_threads: usize,
+
+    /// The number of the rayon threads used for the parallel page copying optimization.
+    pub num_rayon_page_allocator_threads: usize,
 
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
@@ -223,6 +232,12 @@ pub struct Config {
 
     /// The maximum allowed size for an uncompressed canister Wasm module.
     pub wasm_max_size: NumBytes,
+
+    /// The maximum size of the wasm heap memory.
+    pub max_wasm_memory_size: NumBytes,
+
+    /// The maximum size of the stable memory.
+    pub max_stable_memory_size: NumBytes,
 }
 
 impl Config {
@@ -237,6 +252,7 @@ impl Config {
             max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
+            num_rayon_page_allocator_threads: DEFAULT_PAGE_ALLOCATOR_THREADS,
             feature_flags: FeatureFlags::const_default(),
             metering_type: MeteringType::New,
             stable_memory_dirty_page_limit: StableMemoryPageLimit {
@@ -258,6 +274,8 @@ impl Config {
             max_dirty_pages_without_optimization: DEFAULT_MAX_DIRTY_PAGES_WITHOUT_OPTIMIZATION,
             dirty_page_copy_overhead: DIRTY_PAGE_COPY_OVERHEAD,
             wasm_max_size: WASM_MAX_SIZE,
+            max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
+            max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
         }
     }
 }

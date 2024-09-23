@@ -1,10 +1,13 @@
-use crate::errors::ApiError;
-use crate::ledger_client::neuron_response::NeuronResponse;
-use crate::ledger_client::OperationOutput;
-use crate::models;
-use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronState};
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::{
+    errors::ApiError,
+    ledger_client::{neuron_response::NeuronResponse, OperationOutput},
+    models,
+};
+use ic_nns_governance_api::pb::v1::{GovernanceError, Neuron, NeuronState};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub fn handle_neuron_info(
     bytes: Vec<u8>,

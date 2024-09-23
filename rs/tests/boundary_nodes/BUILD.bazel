@@ -13,7 +13,7 @@ TEST_CANISTERS_RUNTIME_DEPS = [
 ]
 
 system_test_nns(
-    name = "boundary_node_intgrtn_test",
+    name = "bn_integration_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
@@ -29,7 +29,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "boundary_node_intgrtn_on_playnet_test",
+    name = "bn_integration_on_playnet_test",
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
@@ -46,7 +46,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "boundary_node_update_workload_test",
+    name = "bn_update_workload_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -76,7 +76,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "boundary_node_performance_test",
+    name = "bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -92,7 +92,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "mainnet_boundary_node_performance_test",
+    name = "mainnet_bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -112,7 +112,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "mainnet_boundary_node_icx_proxy_performance_test",
+    name = "mainnet_bn_icx_proxy_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,
@@ -150,7 +150,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "api_boundary_node_decentralization_test",
+    name = "api_bn_decentralization_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

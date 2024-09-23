@@ -1,0 +1,33 @@
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+system_test(
+    name = "guest_os_qualification",
+    env = {
+        "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
+    } | MAINNET_NNS_CANISTER_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    uses_guestos_dev_test = True,
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS +
+        MAINNET_NNS_CANISTER_RUNTIME_DEPS +
+        COUNTER_CANISTER_RUNTIME_DEPS +
+        XNET_TEST_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/tests/dre/utils:os_qualification_utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:tokio",
+    ],
+)

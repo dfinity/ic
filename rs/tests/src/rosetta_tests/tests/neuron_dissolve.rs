@@ -1,22 +1,25 @@
-use crate::rosetta_tests::lib::{do_multiple_txn, one_day_from_now_nanos, NeuronDetails};
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_rosetta_api::models::seconds::Seconds;
-use ic_rosetta_api::models::{AccountBalanceResponse, NeuronInfoResponse, NeuronState};
-use ic_rosetta_api::request::request_result::RequestResult;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{SetDissolveTimestamp, StartDissolve, StopDissolve};
+use crate::rosetta_tests::{
+    lib::{do_multiple_txn, one_day_from_now_nanos, NeuronDetails},
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
+};
+use ic_nns_governance_api::pb::v1::neuron::DissolveState;
+use ic_rosetta_api::{
+    models::{seconds::Seconds, AccountBalanceResponse, NeuronInfoResponse, NeuronState},
+    request::{request_result::RequestResult, Request},
+    request_types::{SetDissolveTimestamp, StartDissolve, StopDissolve},
+};
 use ic_rosetta_test_utils::{assert_canister_error, RequestInfo};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::util::block_on;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, UNIX_EPOCH};
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, UNIX_EPOCH},
+};
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-neuron-dissolve";
+const VM_NAME: &str = "neuron-dissolve";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

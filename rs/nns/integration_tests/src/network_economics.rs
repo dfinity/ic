@@ -1,5 +1,5 @@
 use dfn_candid::candid_one;
-use ic_nns_governance::pb::v1::NetworkEconomics;
+use ic_nns_governance_api::pb::v1::NetworkEconomics;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
@@ -14,7 +14,7 @@ fn test_get_network_economics() {
         };
 
         let mut nns_builder = NnsInitPayloadsBuilder::new();
-        nns_builder.governance.proto.economics = Some(network_economics.clone().into());
+        nns_builder.governance.proto.economics = Some(network_economics.clone());
 
         let nns_init_payload = nns_builder.build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;

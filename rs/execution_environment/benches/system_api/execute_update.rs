@@ -3,12 +3,12 @@
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
@@ -33,7 +33,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 "",
                 Module::render_loop(
                     LoopIterations::Mi,
-                    "(set_local $s (i32.add (get_local $s) (i32.load (i32.const 0))))",
+                    "(local.set $s (i32.add (local.get $s) (i32.load (i32.const 0))))",
                 ),
             )),
             16000006,
@@ -118,12 +118,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
         common::Benchmark(
             "ic0_debug_print()/1B".into(),
             Module::Test.from_ic0("debug_print", Params2(0, 1), Result::No),
-            119000006,
+            170000006,
         ),
         common::Benchmark(
             "ic0_debug_print()/1K".into(),
             Module::Test.from_ic0("debug_print", Params2(0, 1024), Result::No),
-            1142000006,
+            47366018006,
         ),
         common::Benchmark(
             "ic0_call_new()".into(),
@@ -159,6 +159,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "call_new+ic0_call_perform()".into(),
             Module::CallNewLoop.from_ic0("call_perform", NoParams, Result::I32),
             6558000006,
+        ),
+        common::Benchmark(
+            "call_new+ic0_call_with_best_effort_response()".into(),
+            Module::CallNewLoop.from_ic0(
+                "call_with_best_effort_response",
+                Param1(1_i32),
+                Result::No,
+            ),
+            2058000006,
         ),
         common::Benchmark(
             "ic0_stable_size()".into(),
@@ -316,15 +325,6 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "ic0_cycles_burn128()".into(),
             Module::Test.from_ic0("cycles_burn128", Params3(1_i64, 2_i64, 3_i32), Result::No),
             19000006,
-        ),
-        common::Benchmark(
-            "ic0_call_with_best_effort_response()".into(),
-            Module::CallNewLoop.from_ic0(
-                "call_with_best_effort_response",
-                Param1(1_i32),
-                Result::No,
-            ),
-            2058000006,
         ),
         common::Benchmark(
             "ic0_msg_deadline()".into(),

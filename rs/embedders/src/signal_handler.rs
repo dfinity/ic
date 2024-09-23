@@ -6,6 +6,8 @@ use std::convert::TryFrom;
 use std::sync::MutexGuard;
 use std::sync::{atomic::Ordering, Arc, Mutex};
 
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+
 /// Helper function to create a memory tracking SIGSEGV handler function.
 pub(crate) fn sigsegv_memory_tracker_handler(
     memories: Vec<(Arc<Mutex<SigsegvMemoryTracker>>, MemoryPageSize)>,
@@ -25,7 +27,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
               si_addr: *mut c_void,
               current_size_in_pages: &MemoryPageSize| unsafe {
             let page_count = current_size_in_pages.load(Ordering::SeqCst);
-            let heap_size = page_count * (wasmtime_environ::WASM_PAGE_SIZE as usize);
+            let heap_size = page_count * (WASM_PAGE_SIZE as usize);
             let heap_start = tracker.area().addr() as *mut libc::c_void;
             if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {
                 Some(heap_size)

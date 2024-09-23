@@ -7,17 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-logger = { path = "../monitoring/logger" }
-ic-types = { path = "../types/types" }
 ic-recovery = { path = "../recovery" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
+ic-types = { path = "../types/types" }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use futures::{stream, StreamExt};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
+use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
@@ -11,8 +12,6 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
-
-mod sns_wasm_utils;
 
 pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 8] = [
     ("registry", REGISTRY_CANISTER_ID),
@@ -84,7 +83,7 @@ async fn main() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<CanisterUpdate>>>()?;
 
-    let sns_upgrade_steps = sns_wasm_utils::query_sns_upgrade_steps(&agent).await?;
+    let sns_upgrade_steps = sns_wasm::query_sns_upgrade_steps(&agent).await?;
     let latest_sns_version = &sns_upgrade_steps
         .steps
         .last()
@@ -131,8 +130,7 @@ async fn main() -> Result<()> {
             .then(|(canister_name, hash, new_sha256)| async {
                 let canister_name = canister_name.to_string();
                 let new_git_hash =
-                    sns_wasm_utils::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash)
-                        .await?;
+                    sns_wasm::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash).await?;
 
                 Ok(CanisterUpdate {
                     canister_name,
@@ -167,7 +165,7 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
         .map_err(|e| anyhow!(e))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct CanisterUpdate {
     canister_name: String,
     new_git_hash: String,

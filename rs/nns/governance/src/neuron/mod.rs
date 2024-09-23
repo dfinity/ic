@@ -1,8 +1,6 @@
 use crate::pb::v1::{
     neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
 };
-use ic_nns_common::pb::v1::NeuronId;
-use std::ops::RangeBounds;
 
 pub mod dissolve_state_and_age;
 pub use dissolve_state_and_age::*;
@@ -45,42 +43,6 @@ impl NeuronProto {
             None => NeuronState::Dissolved,
         }
     }
-
-    pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
-                dissolve_delay_seconds
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(
-                when_dissolved_timestamp_seconds,
-            )) => when_dissolved_timestamp_seconds.saturating_sub(now_seconds),
-            None => 0,
-        }
-    }
-
-    pub fn stake_e8s(&self) -> u64 {
-        neuron_stake_e8s(
-            self.cached_neuron_stake_e8s,
-            self.neuron_fees_e8s,
-            self.staked_maturity_e8s_equivalent,
-        )
-    }
-}
-
-/// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
-/// that operate on NeuronId ranges with internal u64 representations in data.
-pub fn neuron_id_range_to_u64_range(range: &impl RangeBounds<NeuronId>) -> impl RangeBounds<u64> {
-    let first = match range.start_bound() {
-        std::ops::Bound::Included(start) => start.id,
-        std::ops::Bound::Excluded(start) => start.id + 1,
-        std::ops::Bound::Unbounded => 0,
-    };
-    let last = match range.end_bound() {
-        std::ops::Bound::Included(end) => end.id,
-        std::ops::Bound::Excluded(end) => end.id - 1,
-        std::ops::Bound::Unbounded => u64::MAX,
-    };
-    first..=last
 }
 
 /// Given two quantities of stake with possible associated age, return the
@@ -162,8 +124,7 @@ mod tests {
         }
     }
 
-    use proptest::prelude::*;
-    use proptest::proptest;
+    use proptest::{prelude::*, proptest};
 
     proptest! {
         #[test]

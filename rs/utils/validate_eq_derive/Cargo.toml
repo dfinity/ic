@@ -1,0 +1,15 @@
+[package]
+name = "ic-validate-eq-derive"
+edition = "2021"
+
+[lib]
+name = "ic_validate_eq_derive"
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+darling = "0.20.10"
+proc-macro2 = "1.0.86"
+quote = "1.0.36"
+syn = "1.0.109"
+

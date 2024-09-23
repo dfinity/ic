@@ -31,6 +31,8 @@ pub struct SnsWasmStableIndex {
     pub offset: u32,
     #[prost(uint32, tag = "3")]
     pub size: u32,
+    #[prost(message, repeated, tag = "4")]
+    pub metadata: ::prost::alloc::vec::Vec<MetadataSection>,
 }
 /// Specifies the upgrade path for SNS instances.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]

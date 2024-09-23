@@ -47,7 +47,7 @@ impl StableMemory for StableMemoryImplementation {
 }
 
 #[cfg(test)]
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct FakeStableMemory(Arc<Mutex<Vec<u8>>>);
 
 #[cfg(test)]
@@ -190,6 +190,7 @@ pub struct BufferedStableMemReader {
 impl BufferedStableMemReader {
     /// Create a buffered reader with the given buffer size.
     pub fn new(buffer_size_bytes: u32) -> Self {
+        assert!(buffer_size_bytes > 0, "Buffer size must be greater than 0");
         let mut reader = Self {
             buffer: Vec::with_capacity(buffer_size_bytes as usize),
             buffer_offset: 0,
@@ -240,6 +241,10 @@ impl Buf for BufferedStableMemReader {
     }
 
     fn advance(&mut self, cnt: usize) {
+        if cnt == 0 {
+            return;
+        }
+
         let remaining = self.remaining();
         assert!(
             cnt <= remaining,
@@ -278,11 +283,21 @@ impl Buf for BufferedStableMemReader {
         // Doing the above-mentioned 2 things `num_buffers_to_advance` times will result in: (1)
         // calling read() `num_buffers_to_advance` times (2) set `self.buffer_offset =
         // self.buffer_offset + cnt - num_buffers_to_advance * buffer_size = new_buffer_offset`.
+        //
+        // Why `self.buffer.capacity()` is not 0: the buffer capacity is initialized to a non-zero
+        // value, and it only decreases to `self.stable_mem.len() - self.stable_mem_offset` (in
+        // `self.read()`) when the stable memory is exhausted, i.e. `self.remaining() == 0`.
+        // However, the code below is unreachable when `self.remaining() == 0` because `cnt <=
+        // self.remaining()`.
         let (num_buffers_to_advance, new_buffer_offset) = crate::checked_div_mod(
             self.buffer_offset
                 .checked_add(cnt)
                 .expect("Tried to advance buffer beyond maximum offset"),
             self.buffer.capacity(),
+        )
+        .expect(
+            "Something impossible happened: buffer capacity became 0 before reaching \
+             the end of the stable memory",
         );
 
         for _ in 0..num_buffers_to_advance {
@@ -296,7 +311,7 @@ impl Buf for BufferedStableMemReader {
 mod test {
     use super::*;
     use bytes::Buf;
-    use ic_nns_governance::pb::v1::{Governance, NetworkEconomics, Neuron};
+    use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
     use prost::Message;
 
     fn allocate_governance(num_neurons: u64) -> Governance {
@@ -384,16 +399,18 @@ mod test {
     }
 
     #[derive(::prost::Message)]
-    pub struct TestMessageWithoutSubMessage {
+    pub struct TestMessageWithFewerFields {
         #[prost(fixed32, repeated, tag = "1")]
         pub x: ::prost::alloc::vec::Vec<u32>,
     }
     #[derive(::prost::Message)]
-    pub struct TestMessageWithSubMessage {
+    pub struct TestMessage {
         #[prost(fixed32, repeated, tag = "1")]
         pub x: ::prost::alloc::vec::Vec<u32>,
         #[prost(message, optional, tag = "2")]
         pub sub: ::core::option::Option<TestSubMessage>,
+        #[prost(bool, tag = "3")]
+        pub b: bool,
     }
     #[derive(::prost::Message)]
     pub struct TestSubMessage {
@@ -404,17 +421,18 @@ mod test {
     #[test]
     fn test_encode_and_decode_protobuf_with_missing_field() {
         // The 'missing field' `sub` needs to be larger than 1KB, and 300 * 4B > 1KB.
-        let m2 = TestMessageWithSubMessage {
+        let m2 = TestMessage {
             x: (0..100).collect(),
             sub: Some(TestSubMessage {
                 y: (0..300).collect(),
             }),
+            b: true,
         };
         let mut serialized = Vec::new();
         m2.encode(&mut serialized).expect("Encoding failed in test");
 
         let reader = BufferedStableMemReader::new_test(1024, serialized);
-        TestMessageWithoutSubMessage::decode(reader).expect("Decoding failed in test");
+        TestMessageWithFewerFields::decode(reader).expect("Decoding failed in test");
     }
 
     const TEST_DATA_SIZE: usize = 1024; // 1KiB

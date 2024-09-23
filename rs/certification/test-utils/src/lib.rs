@@ -23,7 +23,7 @@ use ic_types::{
 
 const REPLICA_TIME: u64 = 1234567;
 
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct Certificate {
     tree: MixedHashTree,
     signature: Blob,
@@ -45,13 +45,13 @@ impl Certificate {
     }
 }
 
-#[derive(serde::Serialize, Debug, Clone)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
     pub certificate: Blob,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum CertificateData {
     CustomTree(LabeledTree<Vec<u8>>),
     CanisterData {
@@ -103,7 +103,7 @@ impl CertificateData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 /// A `CertificateBuilder` can be used to construct a valid certificate with an
 /// optional delegation, if the signing subnet is not the root subnet.
 ///

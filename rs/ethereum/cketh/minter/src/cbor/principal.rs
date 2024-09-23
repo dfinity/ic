@@ -20,7 +20,7 @@ pub mod option {
     use super::*;
     use minicbor::{Decode, Encode};
 
-    #[derive(Encode, Decode)]
+    #[derive(Decode, Encode)]
     #[cbor(transparent)]
     struct CborPrincipal(#[cbor(n(0), with = "crate::cbor::principal")] pub Principal);
 

@@ -356,7 +356,7 @@ fn new_secp256r1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
 }
 
 fn new_secp256k1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
     sk.public_key().serialize_der()
 }
 
@@ -387,7 +387,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
     rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_crypto_secp256k1::PrivateKey::generate_using_rng(rng);
 
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {
@@ -396,7 +396,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
             buf.extend_from_slice(request_id.as_bytes());
             Sha256::hash(&buf)
         };
-        let signature_bytes = sk.sign_digest(&bytes_to_sign).expect("failed to sign");
+        let signature_bytes = sk.sign_digest_with_ecdsa(&bytes_to_sign);
         BasicSigOf::new(BasicSig(signature_bytes.to_vec()))
     };
 

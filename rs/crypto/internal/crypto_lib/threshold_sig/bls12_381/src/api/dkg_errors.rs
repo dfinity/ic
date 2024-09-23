@@ -17,14 +17,14 @@ mod imported_conversions;
 mod tests;
 
 /// Cognate to CryptoError::MalformedSecretKey
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MalformedSecretKeyError {
     pub algorithm: AlgorithmId,
     pub internal_error: String,
 }
 
 /// Proof of possession could not be parsed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct MalformedPopError {
     pub algorithm: AlgorithmId,
     pub internal_error: String,
@@ -33,13 +33,13 @@ pub struct MalformedPopError {
 
 /// A size is unsupported by this machine; this is not a protocol error as other
 /// machines may be able to complete this instruction successfully.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SizeError {
     pub message: String,
 }
 
 /// An internal error.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InternalError {
     pub internal_error: String,
 }

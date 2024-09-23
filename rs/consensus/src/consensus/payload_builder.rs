@@ -77,6 +77,7 @@ impl PayloadBuilderImpl {
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -84,6 +85,7 @@ impl PayloadBuilderImpl {
             BatchPayloadSectionBuilder::Ingress(ingress_selector),
             BatchPayloadSectionBuilder::XNet(xnet_payload_builder),
             BatchPayloadSectionBuilder::CanisterHttp(canister_http_payload_builder),
+            BatchPayloadSectionBuilder::QueryStats(query_stats_payload_builder),
         ];
 
         Self {
@@ -126,7 +128,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
         let mut batch_payload = BatchPayload::default();
         let mut accumulated_size = 0;
 
-        for section_id in section_select {
+        for (priority, section_id) in section_select.into_iter().enumerate() {
             accumulated_size += self.section_builder[section_id]
                 .build_payload(
                     &mut batch_payload,
@@ -141,6 +143,7 @@ impl PayloadBuilder for PayloadBuilderImpl {
                             .saturating_sub(accumulated_size),
                     ),
                     past_payloads,
+                    priority,
                     &self.metrics,
                     &self.logger,
                 )

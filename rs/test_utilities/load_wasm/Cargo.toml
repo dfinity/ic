@@ -7,5 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-escargot = { version = "0.5.7", features = ["print"] }
 cargo_metadata = "0.14.2"
+escargot = { version = "0.5.7", features = ["print"] }

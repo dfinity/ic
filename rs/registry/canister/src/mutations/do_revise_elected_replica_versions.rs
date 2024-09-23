@@ -29,7 +29,7 @@ impl Registry {
     ///
     /// This method is called by the governance canister, after a proposal
     /// for updating the elected replica versions has been accepted.
-    pub fn do_revise_elected_replica_versions(
+    pub fn do_revise_elected_guestos_versions(
         &mut self,
         payload: ReviseElectedGuestosVersionsPayload,
     ) {
@@ -193,7 +193,7 @@ impl Registry {
 /// ReviseElectedGuestosVersionsPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
-#[derive(CandidType, Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ReviseElectedGuestosVersionsPayload {
     /// Version ID. This can be anything, it has not semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step

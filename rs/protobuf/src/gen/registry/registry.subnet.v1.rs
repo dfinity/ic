@@ -3,6 +3,7 @@
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetRecord {
+    /// The IDs of the nodes that are part of this subnet.
     #[prost(bytes = "vec", repeated, tag = "3")]
     pub membership: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
     /// Maximum amount of bytes per message. This is a hard cap, which means

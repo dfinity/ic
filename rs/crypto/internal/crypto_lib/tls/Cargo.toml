@@ -14,14 +14,14 @@ rand = { workspace = true }
 rcgen = { workspace = true }
 serde = { workspace = true }
 time = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+hex = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = { workspace = true }
 serde_cbor = { workspace = true }
-hex = { workspace = true }
 x509-parser = { workspace = true }

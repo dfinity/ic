@@ -8,6 +8,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+crossbeam-channel = { workspace = true }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -15,7 +16,6 @@ ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
-crossbeam-channel = { workspace = true }
 prometheus = { workspace = true }
 slog = { workspace = true }
 

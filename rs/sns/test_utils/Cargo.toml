@@ -18,21 +18,20 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
-icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
+ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
 ic-nns-test-utils = { path = "../../nns/test_utils/" }
 ic-sns-governance = { path = "../governance", features = ["test"] }
-ic-nns-common = { path = "../../nns/common" }
-ic-nns-governance = { path = "../../nns/governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
@@ -40,6 +39,7 @@ ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icrc-ledger-client = { path = "../../../packages/icrc-ledger-client" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }
 maplit = "1.0.2"

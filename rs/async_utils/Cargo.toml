@@ -7,11 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-stream = { workspace = true }
 anyhow = { workspace = true }
+async-stream = { workspace = true }
 axum = { workspace = true }
-bytes = { workspace = true }
 byte-unit = "4.0.14"
+bytes = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { version = "0.14.16", features = ["full"] }

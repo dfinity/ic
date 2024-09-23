@@ -14,35 +14,36 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-ic0 = "0.21.1"
-ic-canister-log = "0.2.0"
 ic-base-types = { path = "../../types/base_types" }
+ic-canister-log = "0.2.0"
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../types" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
-ic-metrics-encoder = "1"
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
+ic0 = "0.21.1"
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 scopeguard = "1.1.0"
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+serde_json = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
-ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
 assert_matches = { workspace = true }
-proptest = "1.0"
 candid_parser = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+maplit = "1"
 mockall = { workspace = true }
 paste = "1.0.12"
+proptest = { workspace = true }
 scraper = "0.17.1"
 tokio = { workspace = true }

@@ -166,8 +166,8 @@ mod test {
     use crate::{
         canister_stable_memory::TestCanisterStableMemory,
         pb::v1::{
-            DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex,
-            UpgradePath,
+            DeployedSns, MetadataSection as MetadataSectionPb, SnsSpecificSnsUpgrade, SnsUpgrade,
+            SnsVersion, SnsWasmStableIndex, UpgradePath,
         },
     };
     use ic_base_types::PrincipalId;
@@ -199,6 +199,11 @@ mod test {
             hash: vec![1, 3, 6],
             offset: 34811,
             size: 1200,
+            metadata: vec![MetadataSectionPb {
+                visibility: Some("icp:public".to_string()),
+                name: Some("foo".to_string()),
+                contents: Some(vec![1, 2, 3]),
+            }],
         }];
 
         let sns_subnet_ids = vec![PrincipalId::new_subnet_test_id(34)];

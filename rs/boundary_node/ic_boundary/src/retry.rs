@@ -1,15 +1,17 @@
 use std::sync::Arc;
 
-use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse, Extension};
-use bytes::Bytes;
-use http::{request::Parts, Request, StatusCode};
-use hyper::body;
-use ic_types::{CanisterId, SubnetId};
+use axum::{
+    body::{to_bytes, Body},
+    extract::{Request, State},
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Extension,
+};
+use http::StatusCode;
 
 use crate::{
-    http::AxumResponse,
     persist::RouteSubnet,
-    routes::{ApiError, ErrorCause, RequestContext, RequestType},
+    routes::{ApiError, ErrorCause, RequestContext},
     snapshot::Node,
 };
 
@@ -29,7 +31,7 @@ pub struct RetryResult {
 }
 
 // Check if we need to retry the request based on the response that we got from lower layers
-fn request_needs_retrying(response: &AxumResponse) -> bool {
+fn request_needs_retrying(response: &Response) -> bool {
     let status = response.status();
 
     // Retry on 429
@@ -49,53 +51,16 @@ fn request_needs_retrying(response: &AxumResponse) -> bool {
     }
 }
 
-/// Clones the request from components
-fn request_clone(parts: &Parts, body: &Bytes) -> Request<Body> {
-    let mut request = Request::builder()
-        .method(parts.method.clone())
-        .uri(parts.uri.clone())
-        .version(parts.version)
-        .body(body::Body::from(body.clone()))
-        .unwrap();
-
-    *request.headers_mut() = parts.headers.clone();
-
-    // Extensions design in http crate 0.x sucks - there's no way to iterate over them,
-    // though they're stored in a hash map. Nor there's a way to clone them (at least until http 1.0.0 crate)
-    //
-    // TODO upgrade to 1.0.0 at some point, for now we just manually copy the following extensions that have
-    // to be present. This must be kept in sync with whatever extensions we inject into the request before retry middleware.
-
-    request.extensions_mut().insert(
-        parts
-            .extensions
-            .get::<Arc<RequestContext>>()
-            .unwrap()
-            .clone(),
-    );
-
-    if let Some(canister_id) = parts.extensions.get::<CanisterId>().cloned() {
-        request.extensions_mut().insert(canister_id);
-    };
-    if let Some(subnet_id) = parts.extensions.get::<SubnetId>().cloned() {
-        request.extensions_mut().insert(subnet_id);
-    }
-
-    request
-}
-
 // Middleware that optionally retries the request according to the predefined conditions
 pub async fn retry_request(
     State(params): State<RetryParams>,
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet): Extension<Arc<RouteSubnet>>,
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     // Select up to 1+retry_count nodes from the subnet if there are any
-    let nodes = if !params.disable_latency_routing
-        && (ctx.request_type == RequestType::Call || ctx.request_type == RequestType::CallV3)
-    {
+    let nodes = if !params.disable_latency_routing && (ctx.request_type.is_call()) {
         let factor = subnet.fault_tolerance_factor() + 1;
         subnet.pick_n_out_of_m_closest(1 + params.retry_count, factor)?
     } else {
@@ -103,9 +68,7 @@ pub async fn retry_request(
     };
 
     // Skip retrying in certain cases
-    if params.retry_count == 0
-        || (ctx.request_type == RequestType::Call && !params.retry_update_call)
-    {
+    if params.retry_count == 0 || (ctx.request_type.is_call() && !params.retry_update_call) {
         // Pick one node and pass the request down the stack
         // At this point there would be at least one node in the vector
         let node = nodes[0].clone();
@@ -115,22 +78,20 @@ pub async fn retry_request(
         return Ok(response);
     }
 
-    // TODO after migrating to http 1.0.0 crate use built-in cloning
-    //
-    // Deconstruct the request to be able to clone it
-    let (parts, body) = request.into_parts();
-    // This cannot fail since the body is not streaming and is just an in-memory buffer
-    let body = body::to_bytes(body).await.unwrap();
-
-    let mut response_last: Option<AxumResponse> = None;
+    let mut response_last: Option<Response> = None;
     let mut node_last: Option<Arc<Node>> = None;
     let mut retry_result = RetryResult {
         retries: 0,
         success: false,
     };
 
+    let (parts, body) = request.into_parts();
+    // We don't care for the max size since the body already buffered and checked before.
+    // And it cannot fail since it's already in-memory.
+    let body = to_bytes(body, usize::MAX).await.unwrap();
+
     for node in nodes.into_iter() {
-        let mut request = request_clone(&parts, &body);
+        let mut request = Request::from_parts(parts.clone(), Body::from(body.clone()));
         request.extensions_mut().insert(node.clone());
         let mut response = next.clone().run(request).await;
 

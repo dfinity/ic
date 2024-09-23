@@ -21,4 +21,4 @@ ic-test-utilities-state = { path = "../state" }
 ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-wasm-types = { path = "../../types/wasm_types" }
-wat = "1.0.52"
+wat = { workspace = true }

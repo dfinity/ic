@@ -567,7 +567,6 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
         .block
         .unwrap();
     env.rosetta.wait_until_synced_up_to(1).await.unwrap();
-    println!("synced up to 2");
     // Enabling Rosetta Blocks Mode should not change blocks before
     // the first rosetta index, in this case block 0
     let block0 = env
@@ -862,7 +861,6 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
 #[tokio::test]
 async fn test_query_block_range() {
     let env = TestEnv::setup(false, true).await.unwrap();
-    env.pocket_ic.auto_progress().await;
 
     let minter = test_identity()
         .sender()
@@ -1224,11 +1222,10 @@ async fn test_network_status_single_genesis_transaction() {
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let t1 = env.pocket_ic.get_time().await;
     // We need to advance the time to make sure only a single transaction gets into the genesis block
-    env.pocket_ic.auto_progress().await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    env.pocket_ic.stop_progress().await;
     let t2 = env.pocket_ic.get_time().await;
     assert!(t1 < t2);
+    env.pocket_ic.stop_progress().await;
     // We want two transactions with unique tx hashes
     env.icrc1_transfers(vec![
         TransferArg {

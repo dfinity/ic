@@ -759,7 +759,7 @@ pub mod node {
         }
     }
 
-    #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
     pub struct Nodes {
         nodes: BTreeSet<Node>,
     }
@@ -1485,7 +1485,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
         .build()
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, EnumIter)]
 pub enum IDkgMode {
     RandomUnmasked,
     Random,
@@ -1531,7 +1531,7 @@ impl IDkgMode {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct IDkgModeTestContext {
     mode: IDkgMode,
     dealers: IDkgDealers,
@@ -1870,7 +1870,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
         .build_with_signature(transcript_params, basic_signer, signer_id))
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CorruptSignedIDkgDealingError {
     SerializationError(String),
     FailedToCorruptDealing(String),

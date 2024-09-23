@@ -18,11 +18,16 @@ pub fn test_canister_wasm() -> Vec<u8> {
     TEST_CANISTER_WASM.with(|wasm| wasm.clone())
 }
 
-pub fn setup() -> (StateMachine, CanisterId) {
-    let env = StateMachineBuilder::new()
+pub fn env() -> StateMachine {
+    StateMachineBuilder::new()
         .with_checkpoints_enabled(false)
         .with_subnet_type(SubnetType::Application)
-        .build();
+        .with_canister_snapshots(true)
+        .build()
+}
+
+pub fn setup() -> (StateMachine, CanisterId) {
+    let env = env();
     let test_canister = env
         .install_canister_with_cycles(
             test_canister_wasm(),

@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

@@ -2,6 +2,7 @@ use super::*;
 use crate::StateManagerImpl;
 use ic_config::state_manager::Config;
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::subnet_test_id;

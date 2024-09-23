@@ -12,6 +12,7 @@ use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
@@ -29,7 +30,7 @@ const MIN_NUM_HUGE_PAGES_FOR_OPTIMIZATION: NumOsPages = NumOsPages::new(32);
 
 const MIN_PAGES_TO_FREE: usize = 10000;
 // The start address of a page.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct PagePtr(*mut u8);
 
 // SAFETY: All shared pages are immutable.
@@ -184,6 +185,47 @@ impl PageAllocatorInner {
                 page.copy_from_slice(0, *contents);
                 (*page_index, Page(Arc::new(page)))
             })
+            .collect()
+    }
+
+    // This is the same functionality as `allocate`, but it uses rayon to parallelize
+    // the copying of pages. This is useful when the number of pages is large.
+    pub fn allocate_fastpath(
+        page_allocator: &Arc<Self>,
+        pages: &[(PageIndex, &PageBytes)],
+    ) -> Vec<(PageIndex, Page)> {
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let allocator_creator = || {
+            MmapBasedPageAllocatorCore::new(Arc::clone(page_allocator.fd_factory.as_ref().unwrap()))
+        };
+        let core = guard.get_or_insert_with(allocator_creator);
+        // It would also be correct to increment the counters after all the
+        // allocations, but doing it before gives better performance because
+        // the core allocator can memory-map larger chunks.
+        ALLOCATED_PAGES.inc_by(pages.len());
+        core.allocated_pages += pages.len();
+
+        // Collect page addresses to avoid locking and copying for every page.
+        // This enables parallel copying of pages.
+        let mut allocated_pages_vec: Vec<_> = pages
+            .iter()
+            .map(|(_, _)| core.allocate_page(page_allocator))
+            .collect();
+
+        // Copy the contents of the pages in parallel using rayon parallel iterators.
+        // NB: the number of threads used are the same as the ones allocated when starting
+        // the sandbox, controlled by the embedders_config.num_rayon_page_allocator_threads.
+        allocated_pages_vec
+            .par_iter_mut()
+            .zip(pages.par_iter())
+            .for_each(|(allocated_page, delta_page)| {
+                allocated_page.copy_from_slice(0, delta_page.1);
+            });
+
+        allocated_pages_vec
+            .into_iter()
+            .zip(pages)
+            .map(|(allocated_page, delta_page)| (delta_page.0, Page(Arc::new(allocated_page))))
             .collect()
     }
 
@@ -387,7 +429,7 @@ impl AllocationArea {
 /// due to multiple page allocators in the sandbox process sharing the same
 /// backing file.
 /// See `PageAllocatorRegistry`.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct PageAllocatorId(usize);
 
 impl Default for PageAllocatorId {
@@ -403,7 +445,7 @@ impl Default for PageAllocatorId {
 // Indicates whether the backing file is owned by the current allocator or
 // another allocator. The owner is responsible for freeing the physical memory
 // of dropped pages by punching holes in the backing file.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 enum BackingFileOwner {
     CurrentAllocator,
     AnotherAllocator,

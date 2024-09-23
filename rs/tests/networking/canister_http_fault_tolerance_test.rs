@@ -29,9 +29,9 @@ use ic_management_canister_types::{
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::HasWasm;
 use ic_system_test_driver::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util;
@@ -114,7 +114,7 @@ pub fn test(env: TestEnv) {
             .0;
         mgr.install_code(
             &cid,
-            &env.load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
+            &load_wasm(env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set")),
         )
         .call_and_wait()
         .await

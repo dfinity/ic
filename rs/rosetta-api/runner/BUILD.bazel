@@ -1,0 +1,51 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-icp-rosetta-runner",
+    srcs = glob(["src/*.rs"]),
+    crate_name = "ic_icp_rosetta_runner",
+    deps = [
+        # Keep sorted.
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "ic-icp-rosetta-runner-tests",
+    srcs = ["tests/tests.rs"],
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox:sandbox_launcher",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/replica",
+        "//rs/rosetta-api:ic-rosetta-api-rosetta-blocks",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    ],
+    env = {
+        "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REPLICA_BIN": "$(rootpath //rs/replica)",
+        "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api:ic-rosetta-api-rosetta-blocks)",
+        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+    },
+    deps = [
+        # Keep sorted.
+        ":ic-icp-rosetta-runner",
+        "//packages/pocket-ic",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/rosetta-api/icp_ledger/test_utils",
+        "//rs/rosetta-api/test_utils",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
+)

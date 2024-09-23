@@ -1,6 +1,5 @@
-use crate::errors::ApiError;
-use crate::ledger_client::OperationOutput;
-use ic_nns_governance::pb::v1::ListNeuronsResponse;
+use crate::{errors::ApiError, ledger_client::OperationOutput};
+use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
 
 pub fn handle_list_neurons(
     bytes: Vec<u8>,

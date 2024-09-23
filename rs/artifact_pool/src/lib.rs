@@ -16,9 +16,12 @@ pub mod backup;
 mod lmdb_iterator;
 mod lmdb_pool;
 
-#[cfg(feature = "rocksdb_backend")]
+// On macOS we have support for rocksdb in addition to lmdb as lmdb
+// historically caused issues.
+
+#[cfg(target_os = "macos")]
 mod rocksdb_iterator;
-#[cfg(feature = "rocksdb_backend")]
+#[cfg(target_os = "macos")]
 mod rocksdb_pool;
 
 use ic_interfaces::{consensus_pool::ValidatedArtifact, p2p::consensus::UnvalidatedArtifact};

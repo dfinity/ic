@@ -12,6 +12,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
+    "//rs/nns/constants",
     "//rs/registry/subnet_type:subnet_type",
     "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rosetta-api/icrc1",
@@ -43,13 +44,11 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/init",
     "//rs/sns/test_utils",
-    "//rs/nns/constants",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/init:init--test_feature",
     "//rs/sns/test_utils:test_utils--test_feature",
-    "//rs/nns/constants:constants--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -67,6 +66,7 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance:build_script",
     "@crate_index//:assert_matches",
@@ -75,6 +75,7 @@ BASE_DEV_DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:pretty_assertions",
     "@crate_index//:rust_decimal",
+    "@crate_index//:serde_bytes",
     "@crate_index//:tokio",
     "@crate_index//:wat",
 ]
@@ -83,7 +84,7 @@ BASE_DEV_DEPENDENCIES = [
 # dependencies (`DEV_DEPENDENCIES`), or `TEST_DEV_DEPENDENCIES` feature previews.
 # (Currently not used)
 # DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-#     "//rs/nns/governance",
+#     "//rs/nns/governance/api",
 #     "//rs/nns/sns-wasm",
 #     "//rs/nns/test_utils",
 #     "//rs/sns/governance",
@@ -91,7 +92,7 @@ BASE_DEV_DEPENDENCIES = [
 # ]
 
 TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/test_utils:test_utils--test_feature",
     "//rs/sns/governance:governance--test_feature",

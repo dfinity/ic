@@ -22,17 +22,20 @@ use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
 use ic_wasm_transform::Body;
 use wasmparser::{BlockType, FuncType, Operator, ValType};
-use wasmtime_environ::WASM_PAGE_SIZE;
+
+use ic_types::NumBytes;
 
 use super::{instrumentation::SpecialIndices, SystemApiFunc};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     main_memory_type: WasmMemoryType,
+    max_wasm_memory_size: NumBytes,
 ) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
@@ -49,6 +52,16 @@ pub(super) fn replacement_functions(
         WasmMemoryType::Wasm64 => Nop,
     };
 
+    let max_heap_address = match main_memory_type {
+        // If we are in Wasm32 mode, we can't have a heap address that is larger than u32::MAX, which is 4 GiB.
+        // In Wasm64 mode, we can have heap addresses that are larger than u32::MAX.
+        // The embedders config passes along the largest heap size in Wasm64 mode.
+        // We need to therefore allow the heap addresses to be larger than u32::MAX in Wasm64 mode
+        // for stable_read and stable_write.
+        WasmMemoryType::Wasm32 => u32::MAX as u64,
+        WasmMemoryType::Wasm64 => max_wasm_memory_size.get(),
+    };
+
     vec![
         (
             SystemApiFunc::StableSize,
@@ -59,7 +72,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I64Const {
                             value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -77,7 +89,6 @@ pub(super) fn replacement_functions(
                         End,
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         I32WrapI64,
                         End,
@@ -94,7 +105,6 @@ pub(super) fn replacement_functions(
                     instructions: vec![
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         End,
                     ],
@@ -111,7 +121,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I64ExtendI32U,
@@ -135,7 +144,6 @@ pub(super) fn replacement_functions(
                         I64ExtendI32U,
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -173,7 +181,6 @@ pub(super) fn replacement_functions(
                         // Call try_grow_stable_memory API.
                         MemorySize {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalGet { local_index: 0 },
                         I32Const {
@@ -195,7 +202,6 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: 0 },
                         MemoryGrow {
                             mem: stable_memory_index,
-                            mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
                         // If result is -1 then grow instruction failed - this
@@ -269,7 +275,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -293,7 +298,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -546,7 +550,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -563,11 +566,11 @@ pub(super) fn replacement_functions(
                                 function_index: InjectedImports::InternalTrap as u32,
                             },
                             End,
-                            // check if these i64 hold valid i32 heap addresses
+                            // check if these i64 hold valid heap addresses
                             // check dst
                             LocalGet { local_index: DST },
                             I64Const {
-                                value: u32::MAX as i64,
+                                value: max_heap_address as i64,
                             },
                             I64GtU,
                             If {
@@ -583,7 +586,7 @@ pub(super) fn replacement_functions(
                             // check len
                             LocalGet { local_index: LEN },
                             I64Const {
-                                value: u32::MAX as i64,
+                                value: max_heap_address as i64,
                             },
                             I64GtU,
                             If {
@@ -801,7 +804,6 @@ pub(super) fn replacement_functions(
                             // If memory is too big for 32bit api, we trap
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
@@ -825,7 +827,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -1059,7 +1060,6 @@ pub(super) fn replacement_functions(
                             I64Add,
                             MemorySize {
                                 mem: stable_memory_index,
-                                mem_byte: 0, // This is ignored when serializing
                             },
                             I64Const {
                                 value: WASM_PAGE_SIZE as i64,
@@ -1076,11 +1076,11 @@ pub(super) fn replacement_functions(
                                 function_index: InjectedImports::InternalTrap as u32,
                             },
                             End,
-                            // check if these i64 hold valid i32 heap addresses
+                            // check if these i64 hold valid heap addresses
                             // check src
                             LocalGet { local_index: SRC },
                             I64Const {
-                                value: u32::MAX as i64,
+                                value: max_heap_address as i64,
                             },
                             I64GtU,
                             If {
@@ -1096,7 +1096,7 @@ pub(super) fn replacement_functions(
                             // check len
                             LocalGet { local_index: LEN },
                             I64Const {
-                                value: u32::MAX as i64,
+                                value: max_heap_address as i64,
                             },
                             I64GtU,
                             If {

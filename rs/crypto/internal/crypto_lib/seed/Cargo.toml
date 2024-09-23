@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-sha2 = { path = "../../../sha2" }
 hex = { workspace = true }
+ic-crypto-sha2 = { path = "../../../sha2" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 serde = { workspace = true }
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
+zeroize = { workspace = true }

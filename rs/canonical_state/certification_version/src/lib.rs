@@ -1,6 +1,6 @@
 use strum_macros::{EnumCount, EnumIter};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumCount, EnumIter)]
 pub enum CertificationVersion {
     /// Initial version.
     V0 = 0,
@@ -48,7 +48,7 @@ pub enum CertificationVersion {
     V19 = 19,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct UnsupportedCertificationVersion(u32);
 
 impl std::fmt::Display for UnsupportedCertificationVersion {
@@ -78,7 +78,7 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V18;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Maximum supported certification version.
 ///

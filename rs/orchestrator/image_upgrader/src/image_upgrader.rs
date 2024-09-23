@@ -118,6 +118,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// restart.
     async fn confirm_boot(&self) {
         if let Err(err) = Command::new(self.binary_dir().join("manageboot.sh").into_os_string())
+            .arg("guestos")
             .arg("confirm")
             .output()
             .await
@@ -200,6 +201,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         script.push("manageboot.sh");
         let mut c = Command::new(script.clone().into_os_string());
         let out = c
+            .arg("guestos")
             .arg("upgrade-install")
             .arg(self.image_path())
             .output()
@@ -246,6 +248,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         let script = self.binary_dir().join("manageboot.sh");
         let mut cmd = Command::new(script.into_os_string());
         let out = cmd
+            .arg("guestos")
             .arg("upgrade-commit")
             .output()
             .await

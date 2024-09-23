@@ -6,14 +6,14 @@ use serde::Deserialize;
 
 /// The UpdateSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candids
-#[derive(Clone, PartialEq, Eq, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct UpdateSettings {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettings,
     pub sender_canister_version: Option<u64>,
 }
 
-#[derive(Default, Clone, Copy, CandidType, Deserialize, Debug, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -24,7 +24,7 @@ pub enum LogVisibility {
 
 /// The CanisterSettings struct as defined in the ic-interface-spec
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Deserialize, CandidType)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettings {
     pub controllers: Option<Vec<PrincipalId>>,
     pub compute_allocation: Option<candid::Nat>,

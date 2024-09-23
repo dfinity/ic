@@ -7,7 +7,7 @@ use ic_crypto_internal_hmac::{hkdf, Hmac, Sha512};
 /// integers. We support an extension of BIP32 which uses arbitrary
 /// byte strings. If each of the index values is 4 bytes long
 /// then the derivation is compatable with standard BIP32 / SLIP-0010
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationIndex(pub Vec<u8>);
 
 /// Derivation Path for BIP32 / SLIP-0010
@@ -17,7 +17,7 @@ pub struct DerivationIndex(pub Vec<u8>);
 /// Implements SLIP-0010
 /// <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
 /// which is an extension of BIP32 to additional curves.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct DerivationPath {
     path: Vec<DerivationIndex>,
 }
@@ -89,7 +89,7 @@ impl DerivationPath {
 
         let key_offset = EccScalar::from_bytes_wide(curve_type, &hmac_output[..32])?;
 
-        let new_chain_key = hmac_output[32..].to_vec();
+        let new_chain_key = hmac_output[32..64].to_vec();
 
         // If iL >= order, try again with the "next" index
         if key_offset.serialize() != hmac_output[..32] {
@@ -105,6 +105,10 @@ impl DerivationPath {
     /// BIP32 CKDpub
     ///
     /// See <https://en.bitcoin.it/wiki/BIP_0032#Child_key_derivation_.28CKD.29_functions>
+    ///
+    /// In addition to the derived point and chain code described in BIP32, this function
+    /// also returns the scalar which is the discrete logarithm of the difference between
+    /// the input and output points.
     ///
     /// Extended to support larger inputs, which is needed for
     /// deriving the canister public key
@@ -162,7 +166,7 @@ impl DerivationPath {
 
         let key_offset = EccScalar::from_bytes_wide(EccCurveType::Ed25519, &okm[0..64])?;
         let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
-        let new_chain_key = okm[64..].to_vec();
+        let new_chain_key = okm[64..96].to_vec();
 
         Ok((new_key, new_chain_key, key_offset))
     }

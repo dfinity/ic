@@ -198,9 +198,6 @@ pub struct SnsInitPayload {
     /// Whether or not the neurons' fund is participating
     #[prost(bool, optional, tag = "40")]
     pub neurons_fund_participation: ::core::option::Option<bool>,
-    /// The Neurons' Fund participants of this SNS decentralization swap.
-    #[prost(message, optional, tag = "35")]
-    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
     /// The token_logo for the SNS project represented as a base64 encoded string.
     #[prost(string, optional, tag = "36")]
     pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
@@ -357,11 +354,4 @@ pub struct NeuronDistribution {
 pub struct DappCanisters {
     #[prost(message, repeated, tag = "1")]
     pub canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
-}
-#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NeuronsFundParticipants {
-    #[prost(message, repeated, tag = "1")]
-    pub participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
 }

@@ -1,8 +1,7 @@
 use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
 
 use crate::pb::v1::ArchivedMonthlyNodeProviderRewards;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use ic_cdk::println;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
@@ -122,6 +121,8 @@ impl State {
     fn validate(&self) {
         self.stable_neuron_store.validate();
         self.stable_neuron_indexes.validate();
+        validate_stable_log(&self.audit_events_log);
+        validate_stable_log(&self.node_provider_rewards_log);
     }
 }
 
@@ -197,8 +198,18 @@ where
     M: Memory,
 {
     // This is just to verify that any key-value pair can be deserialized without panicking. It is
-    // not guaranteed to catch all deserializations, but should catch a lot of common issues.
+    // guaranteed to catch all deserialization errors, but should help.
     let _ = btree_map.first_key_value();
+}
+
+pub(crate) fn validate_stable_log<Value, M>(log: &StableLog<Value, M, M>)
+where
+    Value: Storable,
+    M: Memory,
+{
+    // This is just to verify that an early value can be deserialized without panicking. It is not
+    // guaranteed to catch all deserialization errors, but should help.
+    let _ = log.get(0);
 }
 
 // Clears and initializes stable memory and stable structures before testing. Typically only needed

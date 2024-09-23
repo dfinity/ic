@@ -3,7 +3,7 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };
-use ic_nns_governance::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
+use ic_nns_governance_api::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::add_node_provider,

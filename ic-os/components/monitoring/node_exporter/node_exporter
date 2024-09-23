@@ -1,1 +1,1 @@
-OPTIONS="--web.config.file='/etc/node_exporter/web.yml' --collector.textfile.directory='/run/node_exporter/collector_textfile'"
+OPTIONS="--web.config.file='/etc/node_exporter/web.yml' --collector.textfile.directory='/run/node_exporter/collector_textfile' --no-collector.netdev.netlink --no-collector.arp.netlink"

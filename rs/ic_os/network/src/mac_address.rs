@@ -1,9 +1,11 @@
+use std::process::Command;
+
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::node_type::NodeType;
-use utils::{get_command_stdout, intersperse};
+use utils::intersperse;
 
 /// Wrapper types for MAC addresses
 /// - ensure clients cannot modify or construct incorrectly.
@@ -94,7 +96,7 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
 /// Generate a deterministic unformatted MAC address
 /// E.g. "6a01eb49a2b0"
 fn generate_mac_address_internal(
-    bmc_mac: &FormattedMacAddress,
+    mgmt_mac: &FormattedMacAddress,
     deployment_name: &str,
     node_type: &NodeType,
     version: char,
@@ -104,7 +106,7 @@ fn generate_mac_address_internal(
     }
 
     // Newline added to match behavior
-    let seed = format!("{}{}\n", bmc_mac.get(), deployment_name);
+    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_name);
     let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
     // When IPv4 and IPv6 were split, a different MAC for each bond was desired.
     // Leave for compatibility until later
@@ -121,19 +123,33 @@ fn generate_mac_address_internal(
 pub fn generate_mac_address(
     deployment_name: &str,
     node_type: &NodeType,
-    bmc_mac: &Option<FormattedMacAddress>,
+    mgmt_mac: Option<&str>,
 ) -> Result<UnformattedMacAddress> {
-    let bmc_mac = match bmc_mac {
-        Some(bmc_mac) => {
-            eprintln!("Using bmc_mac address found in config: {}", bmc_mac.get());
-            bmc_mac.clone()
+    let mgmt_mac = if let Some(mgmt_mac) = mgmt_mac {
+        let mgmt_mac = FormattedMacAddress::try_from(mgmt_mac)?;
+        eprintln!(
+            "Using mgmt_mac address found in deployment.json: {}",
+            mgmt_mac.get()
+        );
+        Ok(mgmt_mac)
+    } else {
+        // A bug in our version of ipmitool causes it to exit with an error
+        // status, but we have enough output to work with anyway.
+        // https://github.com/ipmitool/ipmitool/issues/388
+
+        // let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
+        let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+        if !output.status.success() {
+            eprintln!(
+                "Error running ipmitool: {}",
+                std::str::from_utf8(&output.stderr)?
+            );
         }
-        None => {
-            let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
-            get_mac_address_from_ipmitool_output(&ipmitool_output)?
-        }
-    };
-    generate_mac_address_internal(&bmc_mac, deployment_name, node_type, '6')
+        let ipmitool_output = String::from_utf8(output.stdout)?;
+
+        get_mac_address_from_ipmitool_output(&ipmitool_output)
+    }?;
+    generate_mac_address_internal(&mgmt_mac, deployment_name, node_type, '6')
 }
 
 #[cfg(test)]

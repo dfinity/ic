@@ -12,7 +12,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -700,7 +700,7 @@ pub fn generate_sns_workload_with_many_users<T, R>(
     env.emit_report(format!("{metrics}"));
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SnsUsers {
     participants: Vec<SaleParticipant>,
 }
@@ -713,7 +713,7 @@ impl TestEnvAttribute for SnsUsers {
 
 /// An SNS sale participant.
 /// Warning: This type should be used for testing purposes only.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SaleParticipant {
     name: String,
     secret_key: [u8; 32],
@@ -723,7 +723,7 @@ pub struct SaleParticipant {
     starting_sns_balance: Tokens,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnsSaleParticipants {
     pub participants: Vec<SaleParticipant>,
 }

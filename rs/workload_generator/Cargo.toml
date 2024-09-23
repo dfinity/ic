@@ -8,15 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 backoff = { workspace = true }
-ic-canister-client = { path = "../canister_client" }
-ic-canister-client-sender = { path = "../canister_client/sender" }
-ic-config = { path = "../config" }
-ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-management-canister-types = { path = "../types/management_canister_types" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-test-identity = { path = "../test_utilities/identity" }
-ic-types = { path = "../types/types" }
 byte-unit = "4.0.14"
 candid = { workspace = true }
 chrono = { workspace = true }
@@ -24,8 +15,17 @@ clap = { version = "3.2.25", features = ["derive"] }
 console = "0.11"
 futures = { workspace = true }
 hex = { workspace = true }
-itertools = { workspace = true }
+ic-canister-client = { path = "../canister_client" }
+ic-canister-client-sender = { path = "../canister_client/sender" }
+ic-config = { path = "../config" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
+ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
+ic-metrics = { path = "../monitoring/metrics" }
+ic-test-identity = { path = "../test_utilities/identity" }
+ic-types = { path = "../types/types" }
 indicatif = "0.17.3"
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
@@ -36,7 +36,7 @@ slog-scope = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [[bin]]
 name = "ic-workload-generator"

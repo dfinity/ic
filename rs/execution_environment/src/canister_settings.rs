@@ -2,7 +2,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_management_canister_types::{CanisterSettingsArgs, LogVisibility};
+use ic_management_canister_types::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
@@ -25,7 +25,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) wasm_memory_threshold: Option<NumBytes>,
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
-    pub(crate) log_visibility: Option<LogVisibility>,
+    pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -37,7 +37,7 @@ impl CanisterSettings {
         wasm_memory_threshold: Option<NumBytes>,
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
-        log_visibility: Option<LogVisibility>,
+        log_visibility: Option<LogVisibilityV2>,
         wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
@@ -76,7 +76,7 @@ impl CanisterSettings {
         self.reserved_cycles_limit
     }
 
-    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+    pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
 
@@ -179,7 +179,7 @@ pub(crate) struct CanisterSettingsBuilder {
     wasm_memory_threshold: Option<NumBytes>,
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -253,7 +253,7 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_log_visibility(self, log_visibility: LogVisibility) -> Self {
+    pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
             ..self
@@ -348,7 +348,7 @@ pub(crate) struct ValidatedCanisterSettings {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
-    log_visibility: Option<LogVisibility>,
+    log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<NumBytes>,
 }
 
@@ -381,7 +381,7 @@ impl ValidatedCanisterSettings {
         self.reservation_cycles
     }
 
-    pub fn log_visibility(&self) -> Option<&LogVisibility> {
+    pub fn log_visibility(&self) -> Option<&LogVisibilityV2> {
         self.log_visibility.as_ref()
     }
 

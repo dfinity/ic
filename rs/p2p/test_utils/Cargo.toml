@@ -8,18 +8,17 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
-either = "1.6.0"
 futures = { workspace = true }
-ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-artifact-downloader = { path = "../../p2p/artifact_downloader" }
+ic-artifact-manager = { path = "../../p2p/artifact_manager" }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-consensus-manager = { path = "../consensus_manager" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-logger = { path = "../../monitoring/logger" }
-ic-metrics = { path = "../../monitoring/metrics" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
 ic-peer-manager = { path = "../peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-quic-transport = { path = "../quic_transport" }
@@ -31,14 +30,16 @@ ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifac
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../state_sync_manager" }
-ic-types = { path = "../../types/types" }
-ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
 pin-project-lite = "0.2"
 quinn = { workspace = true }
 quinn-udp = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }

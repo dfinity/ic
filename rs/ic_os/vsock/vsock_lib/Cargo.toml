@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [target.'cfg(target_os = "linux")'.dependencies]
+anyhow = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rusb = "0.9"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 tempfile = { workspace = true }
 vsock = "0.4"
-reqwest = { workspace = true }
-regex = { workspace = true }
-sha2 = { workspace = true }
-anyhow = { workspace = true }
-rusb = "0.9"

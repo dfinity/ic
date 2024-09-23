@@ -103,7 +103,7 @@ pub trait MatchingFunction {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum InvertError {
     ValueIsNegative(Decimal),
     MaxArgumentValueError(String),
@@ -277,7 +277,7 @@ pub trait InvertibleFunction: MatchingFunction {
 
 impl<T: MatchingFunction> InvertibleFunction for T {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ValidatedLinearScalingCoefficient {
     pub from_direct_participation_icp_e8s: u64,
     pub to_direct_participation_icp_e8s: u64,
@@ -311,7 +311,7 @@ pub struct ValidatedNeuronsFundParticipationConstraints<F> {
 // -------------------------------------------------------------------------------------------------
 
 /// Polynomial atom. Represents `(param ^ degree)`.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct Atom {
     pub param: Decimal,
     pub degree: u8,
@@ -355,7 +355,7 @@ impl Atom {
 /// ```
 /// coefficient * (left.param ^ left.degree) * (right.param ^ right.degree)
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct BinomialFormulaMember {
     pub coefficient: Decimal,
     pub left: Atom,
@@ -401,7 +401,7 @@ impl BinomialFormulaMember {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct BinomialFormula {
     #[allow(unused)]
     name: String,
@@ -487,7 +487,7 @@ impl BinomialFormula {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 struct F1Cache {
     #[allow(unused)]
     t1: Decimal,
@@ -544,7 +544,7 @@ impl F1Cache {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 struct F2Cache {
     #[allow(unused)]
     t2: Decimal,
@@ -601,7 +601,7 @@ impl F2Cache {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 struct F3Cache {
     #[allow(unused)]
     t3: Decimal,
@@ -699,14 +699,14 @@ impl F3Cache {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 struct PolynomialMatchingFunctionCache {
     f_1: F1Cache,
     f_2: F2Cache,
     f_3: F3Cache,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 struct PolynomialMatchingFunctionPersistentData {
     pub t_1: Decimal,
     pub t_2: Decimal,
@@ -771,7 +771,7 @@ impl PolynomialMatchingFunctionCache {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct PolynomialMatchingFunction {
     persistent_data: PolynomialMatchingFunctionPersistentData,
     cache: PolynomialMatchingFunctionCache,
@@ -819,7 +819,7 @@ impl SerializableFunction for PolynomialMatchingFunction {
 /// values are defined in NetowrkEconomics (in XDR) and converted to ICP using the rate from CMC.
 ///
 /// This is an internal representation for `NeuronsFundMatchedFundingCurveCoefficientsPb`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct NeuronsFundParticipationLimits {
     pub max_theoretical_neurons_fund_participation_amount_icp: Decimal,
     pub contribution_threshold_icp: Decimal,
@@ -845,6 +845,7 @@ impl PolynomialMatchingFunction {
     pub fn new(
         total_maturity_equivalent_icp_e8s: u64,
         neurons_fund_participation_limits: NeuronsFundParticipationLimits,
+        enable_logging: bool,
     ) -> Result<Self, String> {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
@@ -882,7 +883,9 @@ impl PolynomialMatchingFunction {
             cap,
         };
 
-        persistent_data.log_unreachable_milestones(human_readable_cap_formula);
+        if enable_logging {
+            persistent_data.log_unreachable_milestones(human_readable_cap_formula);
+        }
 
         Self::from_persistent_data(persistent_data)
     }

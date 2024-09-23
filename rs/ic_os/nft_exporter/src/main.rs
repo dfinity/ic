@@ -19,7 +19,7 @@ struct Cli {
     metrics_file: PathBuf,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct Counter {
     family: String,
     name: String,
@@ -84,7 +84,9 @@ fn main() -> Result<(), Error> {
     for counter in counters {
         metrics.push(counter.to_metric_str());
     }
-    let metrics_str = metrics.join("\n");
+
+    let mut metrics_str = metrics.join("\n");
+    metrics_str.push('\n');
 
     let mut file = File::create(cli.metrics_file)?;
     file.write_all(metrics_str.as_bytes())?;

@@ -5,6 +5,7 @@ use ic_config::{
 };
 use ic_embedders::{
     wasm_utils::instrumentation::instruction_to_cost,
+    wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{system_api_complexity, CanisterMemoryType},
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SystemApi, TrapCode};
@@ -19,6 +20,8 @@ use ic_types::{
     time::UNIX_EPOCH,
     Cycles, NumBytes, NumInstructions,
 };
+
+const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[cfg(target_os = "linux")]
 use ic_types::PrincipalId;
@@ -96,8 +99,14 @@ fn correctly_count_instructions() {
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
@@ -151,10 +160,20 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
-    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
+    let drop_const_cost =
+        instruction_to_cost(&wasmparser::Operator::Drop, WasmMemoryType::Wasm32) + const_cost;
+    let global_set_cost = instruction_to_cost(
+        &wasmparser::Operator::GlobalSet { global_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -1544,8 +1563,14 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(
+        &wasmparser::Operator::I32Const { value: 1 },
+        WasmMemoryType::Wasm32,
+    );
+    let call_cost = instruction_to_cost(
+        &wasmparser::Operator::Call { function_index: 0 },
+        WasmMemoryType::Wasm32,
+    );
     3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 
@@ -2767,23 +2792,121 @@ fn wasm64_cycles_burn128() {
 
 #[test]
 fn large_wasm64_memory_allocation_test() {
-    let wat = r#"
-    (module
-        (func $test (export "canister_update test"))
-        (memory i64 0 16777216)
-    )"#;
+    // This test checks if maximum memory size
+    // is capped to the maximum allowed memory size in 64 bit mode.
 
     let mut config = ic_config::embedders::Config::default();
     config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let max_heap_size_in_pages = config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let wat = format!(
+        r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+            ;; store the result of memory.grow at heap address 0
+            (i64.store (i64.const 0) (memory.grow (i64.const 1)))
+            ;; return the result of memory.grow
+            (call $msg_reply_data_append (i64.const 0) (i64.const 1))
+            (call $msg_reply)
+        )
+        ;; declare a memory with initial size max_heap and another max large value
+        (memory i64 {} {})
+    )"#,
+        max_heap_size_in_pages,
+        max_heap_size_in_pages * 100
+    );
+
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
-        .with_wat(wat)
+        .with_api_type(ic_system_api::ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(&wat)
         .build();
 
-    match instance.run(FuncRef::Method(WasmMethod::Update("test".to_string()))) {
-        Ok(_) => {}
-        Err(e) => panic!("Unexpected error: {:?}", e),
-    }
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    // The reply is actually the encoding of -1 (the memory grow failed).
+    assert_eq!(wasm_res, Ok(Some(WasmResult::Reply(vec![255]))));
+}
+
+#[test]
+fn large_wasm64_stable_read_write_test() {
+    // This test checks if we allow stable_read and stable_write to work with offsets
+    // larger than 4 GiB in the wasm heap memory in 64 bit mode.
+    let wat = r#"
+    (module
+        (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+        (import "ic0" "stable64_read"
+            (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+        (import "ic0" "stable64_write"
+            (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append" (func $msg_reply_data_append (param $src i64) (param $size i64)))
+        (func $test (export "canister_update test")
+
+            (i64.store (i64.const 4294967312) (i64.const 72))
+            (i64.store (i64.const 4294967313) (i64.const 101))
+            (i64.store (i64.const 4294967314) (i64.const 108))
+            (i64.store (i64.const 4294967315) (i64.const 108))
+            (i64.store (i64.const 4294967316) (i64.const 111))
+           
+            (drop (call $stable_grow (i64.const 10)))
+
+            ;; Write to stable memory from large heap offset.
+            (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
+            ;; Read from stable memory at a different heap offset.
+            (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
+           
+            ;; Return the result of the read operation.
+            (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
+            (call $msg_reply)
+        )
+        (memory i64 70007 70007)
+    )"#;
+
+    let gb = 1024 * 1024 * 1024;
+
+    let mut config = ic_config::embedders::Config::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    config.feature_flags.wasm_native_stable_memory = FlagStatus::Enabled;
+    // Declare a large heap.
+    config.max_wasm_memory_size = NumBytes::from(10 * gb);
+
+    let mut instance = WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_api_type(ic_system_api::ApiType::update(
+            UNIX_EPOCH,
+            vec![],
+            Cycles::zero(),
+            user_test_id(24).get(),
+            call_context_test_id(13),
+        ))
+        .with_wat(wat)
+        .with_canister_memory_limit(NumBytes::from(40 * gb))
+        .build();
+
+    let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
+    let wasm_res = instance
+        .store_data_mut()
+        .system_api_mut()
+        .unwrap()
+        .take_execution_result(result.as_ref().err());
+
+    assert_eq!(
+        wasm_res,
+        Ok(Some(WasmResult::Reply(vec![72, 101, 108, 108, 111])))
+    );
 }
 
 #[test]

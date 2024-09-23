@@ -1,9 +1,9 @@
 use assert_matches::assert_matches;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
-use ic_state_layout::{CANISTER_FILE, CANISTER_STATES_DIR};
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
+use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
 
 use super::*;
 
@@ -209,6 +209,7 @@ fn split_manifest_3_canisters() {
     const CANISTER_2: CanisterId = CanisterId::from_u64(2);
     const CANISTER_3: CanisterId = CanisterId::from_u64(3);
     const CANISTER_4: CanisterId = CanisterId::from_u64(4);
+    let snapshot_1: SnapshotId = SnapshotId::from((CANISTER_1, 0));
 
     // A manifest with 3 canisters; system metadata; and non-empty ingress history
     // and subnet queues.
@@ -222,6 +223,7 @@ fn split_manifest_3_canisters() {
         &ingress_history_file_info,
         &[ingress_history_chunk_info.clone()],
     );
+    builder.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
     let (subnet_queues_file_info, subnet_queues_chunk_info) =
         non_empty_file_and_chunk_infos(SUBNET_QUEUES_FILE);
     builder.append(
@@ -270,6 +272,7 @@ fn split_manifest_3_canisters() {
         &ingress_history_file_info,
         &[ingress_history_chunk_info.clone()],
     );
+    builder_0.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
     builder_0.append(&split_marker_file_info, &[split_marker_chunk_info.clone()]);
     builder_0.append(&subnet_queues_file_info, &[subnet_queues_chunk_info]);
     builder_0.append(&empty_file_info(SYSTEM_METADATA_FILE), &[]);
@@ -337,12 +340,34 @@ fn non_empty_file_and_chunk_infos(path: &str) -> (FileInfo, ChunkInfo) {
 
 /// Returns the relative path to the `canister.pbuf` for the given canister.
 fn canister_pbuf_path(canister_id: CanisterId) -> String {
-    format!(
-        "{}/{}/{}",
-        CANISTER_STATES_DIR,
-        hex::encode(canister_id.get_ref().as_slice()),
-        CANISTER_FILE
-    )
+    // Empty root so that all paths are relative like in the manifest.
+    let checkpoint_layout =
+        CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
+
+    checkpoint_layout
+        .canister(&canister_id)
+        .unwrap()
+        .canister()
+        .raw_path()
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
+/// Returns the relative path to the `snapshot.pbuf` for the given snapshot.
+fn snapshot_pbuf_path(snapshot_id: SnapshotId) -> String {
+    // Empty root so that all paths are relative like in the manifest.
+    let checkpoint_layout =
+        CheckpointLayout::<ReadOnly>::new_untracked("".into(), Height::new(0)).unwrap();
+
+    checkpoint_layout
+        .snapshot(&snapshot_id)
+        .unwrap()
+        .snapshot()
+        .raw_path()
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 /// Returns the expected `FileInfo` and `ChunkInfo` for the split marker from
