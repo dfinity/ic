@@ -1027,6 +1027,12 @@ impl PocketIc {
     /// Returns subnet metrics for a given subnet.
     /// Panics if the subnet does not exist.
     pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> SubnetMetrics {
+        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+        struct ReadStateResponse {
+            #[serde(with = "serde_bytes")]
+            pub certificate: Vec<u8>,
+        }
+
         let path = vec![
             "subnet".into(),
             ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
@@ -1456,12 +1462,4 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
-}
-
-// Fetching subnet metrics via read_state request
-
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
-struct ReadStateResponse {
-    #[serde(with = "serde_bytes")]
-    pub certificate: Vec<u8>,
 }
