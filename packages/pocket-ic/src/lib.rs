@@ -54,6 +54,7 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
+    net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -76,6 +77,7 @@ pub struct PocketIcBuilder {
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
+    bitcoind_addr: Option<SocketAddr>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -88,6 +90,7 @@ impl PocketIcBuilder {
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
+            bitcoind_addr: None,
         }
     }
 
@@ -100,6 +103,7 @@ impl PocketIcBuilder {
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
     }
 
@@ -112,6 +116,7 @@ impl PocketIcBuilder {
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
         .await
     }
@@ -147,6 +152,13 @@ impl PocketIcBuilder {
     pub fn with_log_level(self, log_level: Level) -> Self {
         Self {
             log_level: Some(log_level),
+            ..self
+        }
+    }
+
+    pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
+        Self {
+            bitcoind_addr: Some(bitcoind_addr),
             ..self
         }
     }
@@ -316,6 +328,7 @@ impl PocketIc {
             None,
             false,
             None,
+            None,
         )
     }
 
@@ -327,7 +340,15 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
     ) -> Self {
         let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None)
+        Self::from_components(
+            config,
+            server_url,
+            max_request_time_ms,
+            None,
+            false,
+            None,
+            None,
+        )
     }
 
     /// Creates a new PocketIC instance with the specified subnet config and server url.
@@ -343,6 +364,7 @@ impl PocketIc {
             None,
             false,
             None,
+            None,
         )
     }
 
@@ -353,6 +375,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -372,6 +395,7 @@ impl PocketIc {
                 state_dir,
                 nonmainnet_features,
                 log_level,
+                bitcoind_addr,
             )
             .await
         });
