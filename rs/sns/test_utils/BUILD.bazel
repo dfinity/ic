@@ -70,7 +70,7 @@ ALIASES = {}
 rust_library(
     name = "test_utils",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -81,7 +81,7 @@ rust_library(
 rust_library(
     name = "test_utils--test_feature",
     testonly = True,
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_test_utils",

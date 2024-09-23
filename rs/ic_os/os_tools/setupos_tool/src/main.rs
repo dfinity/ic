@@ -9,7 +9,7 @@ use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JS
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, FormattedMacAddress};
+use network::mac_address::generate_mac_address;
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -21,10 +21,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
         /// systemd-networkd output directory
         output_directory: String,
-    },
-    GenerateMacAddress {
-        #[arg(short, long, default_value = "SetupOS")]
-        node_type: String,
     },
     GenerateIpv6Address {
         #[arg(short, long, default_value = "SetupOS")]
@@ -108,28 +104,6 @@ pub fn main() -> Result<()> {
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
             let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
-            Ok(())
-        }
-        Some(Commands::GenerateMacAddress { node_type }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
-            eprintln!("Using config: {:?}", config_map);
-
-            let network_info = NetworkInfo::from_config_map(&config_map)?;
-            eprintln!("Network info config: {:?}", &network_info);
-
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(
-                &deployment_settings.deployment.name,
-                &node_type,
-                deployment_settings.deployment.mgmt_mac.as_deref(),
-            )?;
-            let mac = FormattedMacAddress::from(&mac);
-            println!("{}", mac.get());
             Ok(())
         }
         None => Err(anyhow!(

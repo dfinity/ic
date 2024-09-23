@@ -20,7 +20,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{From, TryFrom, TryInto};
 use std::sync::Arc;
 use std::time::Duration;
@@ -276,7 +276,7 @@ impl CallContextManagerStats {
 
     /// Calculates the stats for the given call contexts and callbacks.
     ///
-    /// Time complexity: `O(N)`.
+    /// Time complexity: `O(|call_contexts| + |callbacks|)`.
     pub(crate) fn calculate_stats(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
         callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
@@ -284,9 +284,11 @@ impl CallContextManagerStats {
         let unresponded_canister_update_call_contexts = call_contexts
             .values()
             .filter(|call_context| !call_context.responded)
-            .filter_map(|call_context| match call_context.call_origin {
-                CallOrigin::CanisterUpdate(originator, _, _) => Some(originator),
-                _ => None,
+            .filter(|call_context| {
+                matches!(
+                    call_context.call_origin,
+                    CallOrigin::CanisterUpdate(_, _, _)
+                )
             })
             .count();
         let unresponded_guaranteed_response_call_contexts = call_contexts
@@ -318,7 +320,7 @@ impl CallContextManagerStats {
     /// corresponding to a potential paused or aborted canister response execution
     /// (since this response was just delivered).
     ///
-    /// Time complexity: `O(N)`.
+    /// Time complexity: `O(n)`.
     #[allow(dead_code)]
     pub(crate) fn calculate_unresponded_callbacks_per_respondent(
         callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
@@ -363,7 +365,7 @@ impl CallContextManagerStats {
     /// This is the count of unresponded call contexts per originator; potentially
     /// plus one for a paused or aborted canister request execution, if any.
     ///
-    /// Time complexity: `O(N)`.
+    /// Time complexity: `O(n)`.
     #[allow(dead_code)]
     pub(crate) fn calculate_unresponded_call_contexts_per_originator(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
@@ -422,6 +424,14 @@ pub struct CallContextManager {
     /// Callbacks still awaiting response, plus the callback of the currently
     /// paused or aborted DTS response execution, if any.
     callbacks: BTreeMap<CallbackId, Arc<Callback>>,
+
+    /// Callback deadline priority queue. Holds all not-yet-expired best-effort
+    /// callbacks, ordered by deadline. `CallbackIds` break ties, ensuring
+    /// deterministic ordering.
+    ///
+    /// When a `CallbackId` is returned by `expired_callbacks()`, it is removed from
+    /// the queue. This ensures that each callback is expired at most once.
+    unexpired_callbacks: BTreeSet<(CoarseTime, CallbackId)>,
 
     /// Guaranteed response and overall callback and call context stats.
     stats: CallContextManagerStats,
@@ -792,12 +802,16 @@ impl CallContextManager {
 
     /// Registers a callback for an outgoing call.
     pub(super) fn register_callback(&mut self, callback: Callback) -> CallbackId {
-        self.stats.on_register_callback(&callback);
-
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
-        self.callbacks.insert(callback_id, Arc::new(callback));
 
+        self.stats.on_register_callback(&callback);
+        if callback.deadline != NO_DEADLINE {
+            self.unexpired_callbacks
+                .insert((callback.deadline, callback_id));
+        }
+
+        self.callbacks.insert(callback_id, Arc::new(callback));
         debug_assert!(self.stats_ok());
 
         callback_id
@@ -808,10 +822,34 @@ impl CallContextManager {
     pub(super) fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
         self.callbacks.remove(&callback_id).map(|callback| {
             self.stats.on_unregister_callback(&callback);
+            if callback.deadline != NO_DEADLINE {
+                self.unexpired_callbacks
+                    .remove(&(callback.deadline, callback_id));
+            }
             debug_assert!(self.stats_ok());
 
             callback
         })
+    }
+
+    /// Expires (i.e. removes from the set of unexpired callbacks, with no change to
+    /// the callback itself) and returns the IDs of all best-effort callbacks whose
+    /// deadlines have expired since the previous call to this method, given the
+    /// current time.
+    ///
+    /// Note: A given callback ID will be returned at most once by this function.
+    #[allow(dead_code)]
+    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
+        const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
+
+        // Unfortunate two-step splitting off of the expired callbacks.
+        let unexpired_callbacks = self.unexpired_callbacks.split_off(&(now, MIN_CALLBACK_ID));
+        let expired_callbacks =
+            std::mem::replace(&mut self.unexpired_callbacks, unexpired_callbacks);
+
+        expired_callbacks
+            .into_iter()
+            .map(|(_, callback_id)| callback_id)
     }
 
     /// Returns the call origin, which is either the message ID of the ingress
@@ -936,11 +974,20 @@ impl CallContextManager {
     /// Helper function to concisely validate stats adjustments in debug builds,
     /// by writing `debug_assert!(self.stats_ok())`.
     ///
-    /// Time complexity: `O(N)`.
+    /// Time complexity: `O(n * log(n))`.
     fn stats_ok(&self) -> bool {
         debug_assert_eq!(
             CallContextManagerStats::calculate_stats(&self.call_contexts, &self.callbacks),
             self.stats
+        );
+        // The best we can do here is to check that the set of unexpired_callbacks is a
+        // subset of all best-effort callbacks.
+        let all_callback_deadlines = calculate_callback_deadlines(&self.callbacks);
+        debug_assert!(
+            all_callback_deadlines.is_superset(&self.unexpired_callbacks),
+            "unexpired_callbacks: {:?}, all_callback_deadlines: {:?}",
+            self.unexpired_callbacks,
+            all_callback_deadlines
         );
         true
     }
@@ -1021,6 +1068,11 @@ impl From<&CallContextManager> for pb::CallContextManager {
                     callback: Some(callback.as_ref().into()),
                 })
                 .collect(),
+            unexpired_callbacks: item
+                .unexpired_callbacks
+                .iter()
+                .map(|(_, id)| id.get())
+                .collect(),
         }
     }
 }
@@ -1053,16 +1105,47 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
                 )?),
             );
         }
+        let unexpired_callbacks = value
+            .unexpired_callbacks
+            .into_iter()
+            .map(CallbackId::from)
+            .map(|callback_id| {
+                let callback = callbacks.get(&callback_id).ok_or_else(|| {
+                    ProxyDecodeError::Other(format!(
+                        "Unexpired callback not found: {}",
+                        callback_id
+                    ))
+                })?;
+                Ok((callback.deadline, callback_id))
+            })
+            .collect::<Result<_, ProxyDecodeError>>()?;
         let stats = CallContextManagerStats::calculate_stats(&call_contexts, &callbacks);
 
-        Ok(Self {
+        let ccm = Self {
             next_call_context_id: value.next_call_context_id,
             next_callback_id: value.next_callback_id,
             call_contexts,
             callbacks,
+            unexpired_callbacks,
             stats,
-        })
+        };
+        debug_assert!(ccm.stats_ok());
+
+        Ok(ccm)
     }
+}
+
+/// Calculates the deadlines of all best-effort callbacks.
+///
+/// Time complexity: `O(n)`.
+fn calculate_callback_deadlines(
+    callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
+) -> BTreeSet<(CoarseTime, CallbackId)> {
+    callbacks
+        .iter()
+        .map(|(id, callback)| (callback.deadline, *id))
+        .filter(|(deadline, _)| *deadline != NO_DEADLINE)
+        .collect()
 }
 
 pub mod testing {
