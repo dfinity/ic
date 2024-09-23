@@ -131,11 +131,9 @@ def _build_container_filesystem_impl(ctx):
     if ctx.file.base_image_tar_file:
         inputs.append(ctx.file.base_image_tar_file)
         args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
-        args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
 
     # Dir mounts prepared in `ci/container/container-run.sh`
     args.extend(["--tmpfs-container-sys-dir"])
-    args.extend(["--no-cache"])
 
     tool = ctx.attr._tool
 

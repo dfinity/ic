@@ -15,6 +15,7 @@ import tarfile
 
 
 def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
+    return # FIXME
     """
     Put contents of tarfile into vfat image.
 

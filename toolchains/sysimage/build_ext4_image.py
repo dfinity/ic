@@ -108,6 +108,7 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
     if in_file:
+        # shutil.copytree(in_file, fs_basedir)
         subprocess.run(
             [
                 "fakeroot",

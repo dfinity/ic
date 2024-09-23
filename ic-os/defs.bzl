@@ -91,39 +91,44 @@ def icos_build(
         if "dev" in mode:
             package_files_arg += " packages.dev"
 
-        build_container_base_image(
-            name = "base_image.tar",
-            context_files = [image_deps["container_context_files"]],
-            image_tag = base_image_tag,
-            dockerfile = image_deps["base_dockerfile"],
-            build_args = [package_files_arg],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+    #        build_container_base_image(
+    #            name = "base_image.tar",
+    #            context_files = [image_deps["container_context_files"]],
+    #            image_tag = base_image_tag,
+    #            dockerfile = image_deps["base_dockerfile"],
+    #            build_args = [package_files_arg],
+    #            target_compatible_with = ["@platforms//os:linux"],
+    #            tags = ["manual"],
+    #        )
 
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            base_image_tar_file = ":base_image.tar",
-            base_image_tar_file_tag = base_image_tag,
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
-    else:
-        build_container_filesystem(
-            name = "rootfs-tree.tar",
-            context_files = [image_deps["container_context_files"]],
-            component_files = image_deps["component_files"],
-            dockerfile = image_deps["dockerfile"],
-            build_args = image_deps["build_args"],
-            file_build_arg = image_deps["file_build_arg"],
-            target_compatible_with = ["@platforms//os:linux"],
-            tags = ["manual"],
-        )
+    #        build_container_filesystem(
+    #            name = "rootfs-tree",
+    #            context_files = [image_deps["container_context_files"]],
+    #            component_files = image_deps["component_files"],
+    #            dockerfile = image_deps["dockerfile"],
+    #            build_args = image_deps["build_args"],
+    #            file_build_arg = image_deps["file_build_arg"],
+    #            base_image_tar_file = ":base_image.tar",
+    #            base_image_tar_file_tag = base_image_tag,
+    #            target_compatible_with = ["@platforms//os:linux"],
+    #            tags = ["manual"],
+    #        )
+    #    else:
+    #        build_container_filesystem(
+    #            name = "rootfs-tree.tar",
+    #            context_files = [image_deps["container_context_files"]],
+    #            component_files = image_deps["component_files"],
+    #            dockerfile = image_deps["dockerfile"],
+    #            build_args = image_deps["build_args"],
+    #            file_build_arg = image_deps["file_build_arg"],
+    #            target_compatible_with = ["@platforms//os:linux"],
+    #            tags = ["manual"],
+    #        )
+
+    native.alias(
+        name = "rootfs-tree.tar",
+        actual = "//ic-os:hostos_base.tar",
+    )
 
     # Extract SElinux file_contexts to use later when building ext4 filesystems
     tar_extract(
@@ -135,6 +140,12 @@ def icos_build(
         ],
         tags = ["manual"],
     )
+
+    #    copy_file(
+    #        name = "file_contexts",
+    #        src = ":rootfs-tree.tar",
+    #        out = "$(location :rootfs-tree.tar)/etc/selinux/default/contexts/files/file_contexts",
+    #    )
 
     # -------------------- Extract root partition --------------------
 

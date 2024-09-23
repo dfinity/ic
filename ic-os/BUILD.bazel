@@ -1,3 +1,8 @@
+load("//ic-os:base_os.bzl", "build_hostos")
+load("//ic-os/hostos:defs.bzl", "image_deps")
+
+package(default_visibility = ["//visibility:public"])
+
 exports_files([
     "vuln-scan/vuln-scan.sh",
     "vuln-scan/vuln-scan.html",
@@ -39,54 +44,64 @@ genrule(
 )
 
 #        # Install QEMU
-#        cp $(location qemu-system-x86_64) $$containerdir/usr/local/bin/qemu-system-x86_64
-#        cp -Lr $(location qemu) $$containerdir/usr/local/share/qemu
+#        cp $(location qemu-system-x86_64) $$container_dir/usr/local/bin/qemu-system-x86_64
+#        cp -Lr $(location qemu) $$container_dir/usr/local/share/qemu
 
-genrule(
-    name = "hostos_base",
-    srcs = [
-        "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
-        "@ubuntu-base-20.04.1-base-amd64.tar.gz//file",
-        "//ic-os/hostos/context:packages.common",  # TODO: also handle dev packages
-        # "qemu",
-        # "qemu-system-x86_64",
-    ],
-    outs = ["hostos_base.tar"],
-    cmd = """
-        set -euo pipefail
+#genrule(
+#    name = "build_hostos_base",
+#    srcs = [
+#        "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
+#        "@ubuntu-base-20.04.1-base-amd64.tar.gz//file",
+#        "//ic-os/hostos/context:packages.common",  # TODO: also handle dev packages
+#        # "qemu",
+#        # "qemu-system-x86_64",
+#    ],
+#    outs = ["hostos_base.tar.zst"],
+#    cmd = """
+#        set -euo pipefail
+#
+#        # Create container directory and untar the Ubuntu base image
+#        container_dir=$$(mktemp -d --tmpdir "icosbuildXXXX")
+#        mkdir -p $$container_dir
+#        trap 'rm -rf $$container_dir' INT TERM EXIT
+#        tar -xzf $(location @ubuntu-base-20.04.1-base-amd64.tar.gz//file) -C "$$container_dir"
+#
+#        # Install node_exporter
+#        mkdir -p $$container_dir/etc/node_exporter
+#        tar --strip-components=1 -C $$container_dir/usr/local/bin/ \
+#            -zvxf $(location @node_exporter-1.8.1.linux-amd64.tar.gz//file) \
+#            node_exporter-1.8.1.linux-amd64/node_exporter
+#
+#        # Copy list of packages
+#        cp $(location //ic-os/hostos/context:packages.common) $$container_dir/tmp
+#
+#        # TODO: figure out network
+#        cp /etc/resolv.conf $$container_dir/etc/resolv.conf
+#
+##        cp ic-os/hostos/context/setup.sh $$container_dir/tmp/setup.sh
+##        chmod 777 $$container_dir/tmp/setup.sh
+#
+#        # Install packages under chroot
+#        fakechroot fakeroot chroot $$container_dir /bin/bash -x <<EOF
+#          PACKAGES=(/tmp/packages.common)
+#          apt-get -y update && \
+#          apt-get -y upgrade && \
+#          apt-get -y --no-install-recommends install $$(for P in $$PACKAGES; do cat $$P | sed -e "s/#.*//" ; done)
+##          /tmp/setup.sh
+#EOF
+#
+#        # Clean up
+#        rm -rf $$container_dir/tmp/*
+#        rm -rf $$container_dir/var/cache/*
+#        rm -rf $$container_dir/var/log/*
+#        rm -rf $$container_dir/var/lib/apt/lists/*
+#
+#        destination_tar_path=$$(realpath $(location hostos_base.tar))
+#        cd $$container_dir
+#        tar --mtime='UTC 1970-01-01' -cf $$destination_tar_path *
+#    """,
+#)
 
-        # Create container directory and untar the Ubuntu base image
-        containerdir=$$(mktemp -d --tmpdir "icosbuildXXXX")
-        trap 'rm -rf $$containerdir' INT TERM EXIT
-        tar -xzf $(location @ubuntu-base-20.04.1-base-amd64.tar.gz//file) -C "$$containerdir"
-
-        # Install node_exporter
-        mkdir -p $$containerdir/etc/node_exporter
-        tar --strip-components=1 -C $$containerdir/usr/local/bin/ \
-            -zvxf $(location @node_exporter-1.8.1.linux-amd64.tar.gz//file) \
-            node_exporter-1.8.1.linux-amd64/node_exporter
-
-        # Copy list of packages
-        cp $(location //ic-os/hostos/context:packages.common) $$containerdir/tmp
-
-        # TODO: figure out network
-        cp /etc/resolv.conf $$containerdir/etc/resolv.conf
-
-        # Install packages under chroot
-        fakechroot fakeroot chroot $$containerdir /bin/bash -x <<EOF
-          PACKAGES=(/tmp/packages.common)
-          apt-get -y update && \
-          apt-get -y upgrade && \
-          apt-get -y --no-install-recommends install $$(for P in $$PACKAGES; do cat $$P | sed -e "s/#.*//" ; done)
-EOF
-
-        # Clean up
-        rm -rf $$containerdir/tmp/*
-        rm -rf $$containerdir/var/cache/*
-        rm -rf $$containerdir/var/log/*
-
-        destination_tar_path=$$(realpath $(location hostos_base.tar))
-        cd $$containerdir
-        tar --mtime='UTC 1970-01-01' -cf $$destination_tar_path *
-    """,
+build_hostos(
+    name = "my_hostos.tar",
 )

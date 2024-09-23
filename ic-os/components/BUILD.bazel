@@ -19,6 +19,7 @@ exports_files(
         exclude = PUBLIC_GUESTOS_EXPORTS,
     ),
     visibility = [
+        "//ic-os:__pkg__",
         "//ic-os/boundary-guestos:__subpackages__",
         "//ic-os/guestos:__subpackages__",
         "//ic-os/hostos:__subpackages__",
