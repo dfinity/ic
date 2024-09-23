@@ -1,12 +1,13 @@
+load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
-load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
-load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load("@rules_distroless//apt:defs.bzl", "dpkg_status")
+load("@rules_distroless//distroless:defs.bzl", "passwd")
+load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
-load(":system_tests.bzl", "uvm_config_image")
+load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -42,40 +43,99 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-download_pkgs(
-    name = "ubuntu_test_runtime_pkg",
-    additional_repos = [
-        "deb http://security.ubuntu.com/ubuntu focal-security main",
+# Packages we install into the image; see base image definition and its
+# 'manifest = ...' field for more information
+PACKAGES = [
+    "@focal//ca-certificates/amd64",
+    "@focal//bash/amd64",
+    "@focal//coreutils/amd64",
+    "@focal//gawk/amd64",
+    "@focal//dosfstools/amd64",
+    "@focal//libssl1.1/amd64",
+    "@focal//libunwind8/amd64",
+    "@focal//mtools/amd64",
+    "@focal//openssh-client/amd64",
+    "@focal//rsync/amd64",
+    "@focal//gzip/amd64",
+    "@focal//zstd/amd64",
+]
+
+tar(
+    name = "sh",
+    mtree = [
+        # needed as dpkg assumes sh is installed in a typical debian installation.
+        "./bin/sh type=link link=/bin/bash",
     ],
-    image_tar = "@ubuntu_base//image",
-    packages = [
-        "ca-certificates",
-        "curl",  # TODO: remove since this is for debugging
-        "dosfstools",
-        "libssl1.1",  # the test-driver depends on libssl1.1.
-        "libunwind8",  # idem
-        "mtools",
-        "openssh-client",  # for ssh-keygen.
-        "rsync",  # for //rs/tests/consensus/orchestrator:sr_app_same_nodes_test
-        "zstd",  # for create-universal-vm-config-image.sh.
-    ],
-    tags = ["manual"],
 )
 
-install_pkgs(
-    name = "ubuntu_test_runtime_image",
-    image_tar = "@ubuntu_base//image",
-    installables_tar = ":ubuntu_test_runtime_pkg.tar",
-    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
-    output_image_name = "ubuntu_test_runtime_image",
-    tags = ["manual"],
+tar(
+    name = "mkfsvfat",
+    mtree = [
+        # symlink instead of updating the PATH
+        "./bin/mkfs.vfat type=link link=/sbin/mkfs.vfat",
+    ],
+)
+
+tar(
+    name = "awk",
+    mtree = [
+        # we install the GNU variant but call 'awk' so we symlink
+        "./bin/awk type=link link=/usr/bin/gawk",
+    ],
+)
+
+# Creates /var/lib/dpkg/status with installed package information.
+dpkg_status(
+    name = "dpkg_status",
+    controls = [
+        "%s:control" % package
+        for package in PACKAGES
+    ],
+)
+
+passwd(
+    name = "passwd",
+    entries = [
+        dict(
+            gecos = ["root"],
+            gid = 0,
+            home = "/root",
+            shell = "/usr/bin/bash",
+            uid = 0,
+            username = "root",
+        ),
+    ],
+)
+
+oci_image(
+    name = "ubuntu_test_runtime_image_src",
+    architecture = "amd64",
+    os = "linux",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    tars = [
+        ":dpkg_status",
+        ":passwd",  # needed because we ssh in
+
+        # symlinks
+        ":awk",
+        ":mkfsvfat",
+        ":sh",
+    ] + PACKAGES,
+)
+
+oci_tar(
+    name = "ubuntu_test_runtime.tar",
+    image = ":ubuntu_test_runtime_image_src",
+    repo_tags = ["ubuntu_test_runtime:image"],
 )
 
 uvm_config_image(
     name = "colocate_uvm_config_image",
     srcs = [
+        ":ubuntu_test_runtime.tar",
         "//rs/tests:activate-systest-uvm-config",
-        "@ubuntu_test_runtime//image",
     ],
     remap_paths = {
         "activate-systest-uvm-config": "activate",
@@ -133,13 +193,10 @@ symlink_dir_test(
     },
 )
 
-copy_file(
-    name = "static-file-server_image",
-    src = "@static-file-server//image",
-    out = "static-file-server.tar",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+oci_tar(
+    name = "static-file-server.tar",
+    image = "@static-file-server",
+    repo_tags = ["static-file-server:image"],
 )
 
 exports_files([
@@ -150,9 +207,9 @@ exports_files([
 uvm_config_image(
     name = "btc_uvm_config_image",
     srcs = [
+        ":bitcoind.tar",
         ":src/btc_integration/bitcoin.conf",
         ":src/btc_integration/btc_activate.sh",
-        "@bitcoind//image",
     ],
     remap_paths = {
         "btc_activate.sh": "activate",
@@ -169,7 +226,7 @@ uvm_config_image(
     srcs = [
         # ":src/btc_integration/bitcoin.conf",
         ":src/jaeger/jaeger_activate.sh",
-        "@jaeger//image",
+        ":jaeger_image",
     ],
     remap_paths = {
         "jaeger_activate.sh": "activate",
@@ -255,50 +312,50 @@ symlink_dirs(
     ],
 )
 
-copy_file(
-    name = "coredns_image",
-    src = "@coredns//image",
-    out = "coredns.tar",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+oci_tar(
+    name = "jaeger.tar",
+    image = "@jaeger",
+    repo_tags = ["jaegertracing/all-in-one:1.58"],
 )
 
-copy_file(
-    name = "pebble_image",
-    src = "@pebble//image",
-    out = "pebble.tar",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:pinned"],
 )
 
-copy_file(
-    name = "python3_image",
-    src = "@python3//image",
-    out = "python3.tar",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+oci_tar(
+    name = "coredns.tar",
+    image = "@coredns",
+    repo_tags = ["coredns:latest"],
 )
 
-copy_file(
-    name = "openssl_image",
-    src = "@alpine_openssl//image",
-    out = "openssl.tar",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
+oci_tar(
+    name = "pebble.tar",
+    image = "@pebble",
+    repo_tags = ["pebble:latest"],
+)
+
+oci_tar(
+    name = "python3.tar",
+    image = "@python3",
+    repo_tags = ["python3:latest"],
+)
+
+oci_tar(
+    name = "openssl.tar",
+    image = "@alpine_openssl",
+    repo_tags = ["openssl:latest"],
 )
 
 uvm_config_image(
     name = "custom_domains_uvm_config_image",
     srcs = [
         # Docker images
-        ":coredns_image",
-        ":openssl_image",
-        ":pebble_image",
-        ":python3_image",
+        ":coredns_tar",
+        ":openssl_tar",
+        ":pebble_tar",
+        ":python3_tar",
 
         # Assets
         ":src/custom_domains_integration/activate.sh",

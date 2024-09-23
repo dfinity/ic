@@ -10,8 +10,8 @@ use crate::{
 };
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_block_hash_string,
-    get_notarization_delay_settings, get_subnet_record, is_time_to_make_block,
-    membership::Membership, pool_reader::PoolReader,
+    get_notarization_delay_settings, get_subnet_record, membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -29,7 +29,7 @@ use ic_types::{
     },
     replica_config::ReplicaConfig,
     time::current_time,
-    CountBytes, Height, NodeId, RegistryVersion,
+    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
 use std::{
     sync::{Arc, RwLock},
@@ -514,13 +514,57 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
         .any(|p| p.signature.signer == this_node)
 }
 
+/// Calculate the required delay for block making based on the block maker's
+/// rank.
+pub(super) fn get_block_maker_delay(
+    log: &ReplicaLogger,
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+    rank: Rank,
+) -> Option<Duration> {
+    get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)
+        .map(|settings| settings.unit_delay * rank.0 as u32)
+}
+
+/// Return true if the time since round start is greater than the required block
+/// maker delay for the given rank.
+pub(super) fn is_time_to_make_block(
+    log: &ReplicaLogger,
+    registry_client: &dyn RegistryClient,
+    subnet_id: SubnetId,
+    pool: &PoolReader<'_>,
+    height: Height,
+    rank: Rank,
+    time_source: &dyn TimeSource,
+) -> bool {
+    let Some(registry_version) = pool.registry_version(height) else {
+        return false;
+    };
+    let Some(block_maker_delay) =
+        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
+    else {
+        return false;
+    };
+
+    // If the relative time indicates that not enough time has passed, we fall
+    // back to the the monotonic round start time. We do this to safeguard
+    // against a stalled relative clock.
+    pool.get_round_start_time(height)
+        .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
+        || pool
+            .get_round_start_instant(height, time_source.get_origin_instant())
+            .is_some_and(|start_instant| {
+                time_source.get_instant() >= start_instant + block_maker_delay
+            })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::idkg::test_utils::create_idkg_pool;
 
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
-    use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

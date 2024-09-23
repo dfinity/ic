@@ -5,7 +5,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     pb::v1::{manage_neuron_response::Command, NnsFunction},
-    proposal_helpers::create_external_update_proposal_candid,
+    proposal_submission_helpers::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
@@ -23,7 +23,11 @@ fn test_reset_root_with_governance_proposal() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // First, see what the canister hash is for root
-    let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version = root_status.module_hash().unwrap();
 
     // Execute proposal
     let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);
@@ -64,11 +68,13 @@ fn test_reset_root_with_governance_proposal() {
 
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);
 
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version: [u8; 32] = root_status.module_hash().unwrap().try_into().unwrap();
     // Assert the root canister was upgraded
-    assert_eq!(
-        new_root_version,
-        state_machine.module_hash(ROOT_CANISTER_ID).unwrap()
-    );
+    assert_eq!(new_root_version, root_version);
 }
 
 #[test]
@@ -78,7 +84,11 @@ fn test_other_controllers_cannot_reset_root() {
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // First, see what the canister hash is for root
-    let root_version = state_machine.module_hash(ROOT_CANISTER_ID).unwrap();
+    let root_status = state_machine
+        .canister_status_as(LIFELINE_CANISTER_ID.into(), ROOT_CANISTER_ID)
+        .unwrap()
+        .unwrap();
+    let root_version = root_status.module_hash().unwrap();
 
     // Execute proposal
     let new_root = modify_wasm_bytes(&build_root_wasm().bytes(), 42);

@@ -32,7 +32,7 @@ for file in $DIFF_FILES; do
 done
 
 if grep -qE ".*\.sh" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:shfmt-lint)
+    files+=(//pre-commit:shfmt-check)
 fi
 
 if grep -qE ".*\.py" <<<"$DIFF_FILES"; then
