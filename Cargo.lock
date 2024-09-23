@@ -5756,6 +5756,7 @@ dependencies = [
  "hashlink",
  "hex",
  "http 1.1.0",
+ "hyper-util",
  "ic-adapter-metrics-server",
  "ic-async-utils",
  "ic-btc-adapter-client",

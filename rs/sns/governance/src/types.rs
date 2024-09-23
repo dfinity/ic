@@ -505,8 +505,7 @@ impl NervousSystemParameters {
                 .or(base.max_age_bonus_percentage),
             voting_rewards_parameters: self
                 .voting_rewards_parameters
-                .clone()
-                .or_else(|| base.voting_rewards_parameters.clone())
+                .or(base.voting_rewards_parameters)
                 .map(|v| match base.voting_rewards_parameters.as_ref() {
                     None => v,
                     Some(base) => v.inherit_from(base),

@@ -402,7 +402,7 @@ mod tests {
 
                 async move {
                     if let Some(client) = client {
-                        Ok(client)
+                        Ok(hyper_util::rt::TokioIo::new(client))
                     } else {
                         Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
