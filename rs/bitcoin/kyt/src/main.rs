@@ -1,18 +1,12 @@
 use bitcoin::{Address, Network};
-use ic_btc_kyt::{blocklist_contains, get_inputs_internal, CheckAddressArgs, CheckAddressResponse};
+use ic_btc_interface::Txid;
+use ic_btc_kyt::{
+    blocklist_contains, check_transaction_inputs, CheckAddressArgs, CheckAddressResponse,
+    CheckTransactionArgs, CheckTransactionError, CheckTransactionResponse, CheckTransactionStatus,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+};
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::str::FromStr;
-
-#[ic_cdk::update]
-/// The function returns the Bitcoin addresses of the inputs in the
-/// transaction with the given transaction ID.
-async fn get_inputs(tx_id: String) -> Vec<String> {
-    // TODO(XC-157): Charge cycles and also add guards.
-    match get_inputs_internal(tx_id).await {
-        Ok(inputs) => inputs,
-        Err(err) => panic!("Error in getting transaction inputs: {:?}", err),
-    }
-}
 
 #[ic_cdk::query]
 /// Return `Passed` if the given bitcion address passed the KYT check, or
@@ -28,6 +22,42 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
         CheckAddressResponse::Failed
     } else {
         CheckAddressResponse::Passed
+    }
+}
+
+#[ic_cdk::update]
+/// Return `Passed` if all input addresses of the transaction of the given
+/// transaction id passed the KYT check, or `Failed` if any of them did not.
+///
+/// Every call to check_transaction must attach at least `CHECK_TRANSACTION_CYCLES_REQUIRED`.
+/// Return `NotEnoughCycles` if not enough cycles are attached.
+///
+/// The actual cycle cost may be well less than `CHECK_TRANSACTION_CYCLES_REQUIRED`, and
+/// unspent cycles will be refunded back to the caller, minus a
+/// `CHECK_TRANSACTION_CYCLES_SERVICE_FEE`, which is always deducted regardless.
+///
+/// In certain cases, it may also return `HighLoad` or `Pending` to indicate the
+/// caller needs to call again (with at least `CHECK_TRANSACTION_CYCLES_REQUIRED` cycles)
+/// in order to get the result.
+///
+/// If a permanent error occurred in the process, e.g, when a transaction data
+/// fails to decode or its transaction id does not match, then `Error` is returned
+/// together with a text description.
+async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionResponse {
+    ic_cdk::api::call::msg_cycles_accept128(CHECK_TRANSACTION_CYCLES_SERVICE_FEE);
+    match Txid::try_from(args.txid.as_ref()) {
+        Ok(txid) => {
+            if ic_cdk::api::call::msg_cycles_available128()
+                .checked_add(CHECK_TRANSACTION_CYCLES_SERVICE_FEE)
+                .unwrap()
+                < CHECK_TRANSACTION_CYCLES_REQUIRED
+            {
+                CheckTransactionStatus::NotEnoughCycles.into()
+            } else {
+                check_transaction_inputs(txid).await
+            }
+        }
+        Err(err) => CheckTransactionError::InvalidTransaction(err.to_string()).into(),
     }
 }
 
@@ -55,7 +85,7 @@ fn check_candid_interface_compatibility() {
         .join("btc_kyt_canister.did");
 
     service_equal(
-        CandidSource::Text(&new_interface),
+        CandidSource::Text(dbg!(&new_interface)),
         CandidSource::File(old_interface.as_path()),
     )
     .unwrap();

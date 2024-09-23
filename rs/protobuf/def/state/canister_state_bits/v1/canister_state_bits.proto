@@ -72,6 +72,7 @@ message CallContextManager {
   uint64 next_callback_id = 2;
   repeated CallContextEntry call_contexts = 3;
   repeated CallbackEntry callbacks = 4;
+  repeated uint64 unexpired_callbacks = 5;
 }
 
 message CyclesAccount {
