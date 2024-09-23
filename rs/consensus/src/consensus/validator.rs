@@ -30,7 +30,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
-use ic_logger::{info, trace, warn, ReplicaLogger};
+use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
@@ -1105,12 +1105,7 @@ impl Validator {
                         hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
                         signature2: existing_metadata.signature.signature,
                     };
-                    info!(
-                        self.log,
-                        "Equivocation found for node {:?}. Producing equivocation proof: {:?}",
-                        proof.signer,
-                        proof,
-                    );
+                    warn!(self.log, "Equivocation found. Proof: {:?}", proof,);
                     change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
                         msg: ConsensusMessage::EquivocationProof(proof),
                         timestamp: self.time_source.get_relative_time(),
