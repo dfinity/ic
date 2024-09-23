@@ -397,7 +397,7 @@ where
                     peer_id,
                     self.slot_limit
                 );
-                return;
+                (false, None)
             }
         };
 
