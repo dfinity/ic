@@ -967,6 +967,7 @@ filegroup(
     strip_prefix = "bitcoin-27.0",
     urls = [
         "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
     ],
 )
 
