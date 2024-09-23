@@ -4,7 +4,6 @@ use ic_pocket_ic_tests::{
     StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_types::NumInstructions;
 
 use ic_config::flag_status::FlagStatus;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
