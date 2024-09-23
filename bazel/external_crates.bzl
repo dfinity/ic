@@ -1440,6 +1440,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "gc",
                     "parallel-compilation",
                     "runtime",
+                    "wmemcheck",
                 ],
             ),
             "wasmtime-environ": crate.spec(

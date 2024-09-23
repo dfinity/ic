@@ -71,6 +71,7 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
         Err(err) => {
             // The error could be either a compile error or some other error.
             // We have to inspect the error message to distinguish these cases.
+            println!("{:?}", err);
             let message = {
                 // We cannot use `format!` here because displaying `err` may fail.
                 let mut output = String::new();
