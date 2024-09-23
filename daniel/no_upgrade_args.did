@@ -1,0 +1,6 @@
+type Init = record {
+  i: nat64;
+}
+
+service : (opt Init) -> {
+}

@@ -1,0 +1,17 @@
+{
+  "canisters": {
+    "no-upgrade-args": {
+      "type": "custom",
+      "candid": "daniel/no_upgrade_args.did",
+      "wasm": "target/wasm32-unknown-unknown/release/no-upgrade-args.wasm",
+      "build": "cargo build --target wasm32-unknown-unknown --release -p no-upgrade-args"
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  },
+  "version": 1
+}
