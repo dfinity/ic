@@ -30,7 +30,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
-use ic_logger::{trace, warn, ReplicaLogger};
+use ic_logger::{info, trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
@@ -1095,17 +1095,24 @@ impl Validator {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
                 if proposal.content.get_hash().get_ref() != existing_metadata.content.hash() {
+                    let proof = EquivocationProof {
+                        signer: proposal.signature.signer,
+                        version: proposal.content.version().clone(),
+                        height: proposal.height(),
+                        subnet_id: self.replica_config.subnet_id,
+                        hash1: proposal.content.get_hash().clone(),
+                        signature1: proposal.signature.signature.clone(),
+                        hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
+                        signature2: existing_metadata.signature.signature,
+                    };
+                    info!(
+                        self.log,
+                        "Equivocation found for node {:?}. Producing equivocation proof: {:?}",
+                        proof.signer,
+                        proof,
+                    );
                     change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
-                        msg: ConsensusMessage::EquivocationProof(EquivocationProof {
-                            signer: proposal.signature.signer,
-                            version: proposal.content.version().clone(),
-                            height: proposal.height(),
-                            subnet_id: self.replica_config.subnet_id,
-                            hash1: proposal.content.get_hash().clone(),
-                            signature1: proposal.signature.signature.clone(),
-                            hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
-                            signature2: existing_metadata.signature.signature,
-                        }),
+                        msg: ConsensusMessage::EquivocationProof(proof),
                         timestamp: self.time_source.get_relative_time(),
                     }));
                     valid_ranks.remove(proposal.height(), proposal.rank());
