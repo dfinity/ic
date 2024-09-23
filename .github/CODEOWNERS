@@ -64,7 +64,7 @@ go_deps.bzl               @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
