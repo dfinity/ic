@@ -9,6 +9,8 @@ on:
       - rc--*
     workflows:
       - Schedule Daily
+      - Schedule RC
+      - Schedule Rust Benchmarks
       - Schedule Weekly
       - Release Testing
       - Container IC Base Images
