@@ -94,17 +94,17 @@ impl StateMachine {
     pub fn run_until_completion(&self, max_ticks: usize) {
         self.sm.run_until_completion(max_ticks)
     }
-    // tricky!!!
+    // TODO: replace by num_canisters in NNS integration tests
     pub fn num_running_canisters(&self) -> u64 {
         self.sm.num_running_canisters()
-    }
-    // tricky!!
-    pub fn canister_memory_usage_bytes(&self) -> u64 {
-        self.sm.canister_memory_usage_bytes()
     }
 
     pub fn new() -> Self {
         StateMachineBuilder::new().build()
+    }
+
+    pub fn canister_memory_usage_bytes(&self) -> u64 {
+        self.sm.canister_memory_usage_bytes()
     }
 
     pub fn get_subnet_id(&self) -> SubnetId {
