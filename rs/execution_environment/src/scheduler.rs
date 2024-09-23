@@ -2388,11 +2388,16 @@ fn can_execute_subnet_msg(
         Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => {
             !ongoing_long_install_code && !effective_canister_is_aborted
         }
+        // Deleting an aborted canister requires to stop it first.
+        Ic00Method::DeleteCanister => !effective_canister_is_aborted,
+        // Stopping an aborted canister does not generate a reply.
+        Ic00Method::StopCanister => !effective_canister_is_aborted,
+        // Loading a snapshot is similar to the install code.
+        Ic00Method::LoadCanisterSnapshot => !effective_canister_is_aborted,
         // It's safe to allow other subnet messages on aborted canisters.
         Ic00Method::CanisterStatus
         | Ic00Method::CanisterInfo
         | Ic00Method::CreateCanister
-        | Ic00Method::DeleteCanister
         | Ic00Method::DepositCycles
         | Ic00Method::HttpRequest
         | Ic00Method::ECDSAPublicKey
@@ -2400,7 +2405,6 @@ fn can_execute_subnet_msg(
         | Ic00Method::SetupInitialDKG
         | Ic00Method::SignWithECDSA
         | Ic00Method::StartCanister
-        | Ic00Method::StopCanister
         | Ic00Method::UninstallCode
         | Ic00Method::UpdateSettings
         | Ic00Method::ComputeInitialIDkgDealings
@@ -2421,7 +2425,6 @@ fn can_execute_subnet_msg(
         | Ic00Method::StoredChunks
         | Ic00Method::ClearChunkStore
         | Ic00Method::TakeCanisterSnapshot
-        | Ic00Method::LoadCanisterSnapshot
         | Ic00Method::ListCanisterSnapshots
         | Ic00Method::DeleteCanisterSnapshot => true,
     }
