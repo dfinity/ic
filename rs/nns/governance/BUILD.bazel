@@ -51,6 +51,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
