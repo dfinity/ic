@@ -19,10 +19,7 @@ use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
-use ic_canonical_state::{
-    encoding::types::{Cycles, SubnetMetrics},
-    Label,
-};
+use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
     serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
 };
@@ -1075,18 +1072,17 @@ fn test_http_1_requests_are_accepted() {
     assert_eq!(response.version(), reqwest::Version::HTTP_11);
 }
 
-/// Test that the V3 call endpoint handles multiple requests with the same ingress message,
-/// by returning `202` for subsequent concurrent requests.
+/// Test that the V3 call endpoint returns early without submitting the ingress message to the
+/// unvalidated pool if the message is already in the certified state. The endpoint should also
+/// return the certificate in the response with a 200 status code.
 #[test]
-fn test_duplicate_concurrent_requests_return_early() {
+fn test_call_handler_returns_early_for_ingress_message_already_in_certified_state() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
         ..Default::default()
     };
-
-    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let mut mock_state_manager = MockStateManager::new();
     mock_state_manager
@@ -1124,36 +1120,61 @@ fn test_duplicate_concurrent_requests_return_early() {
                 ) -> Option<(MixedHashTree, Certification)> {
                     let message_id = match paths {
                         LabeledTree::SubTree(flat_map) => {
-                            let request_status = flat_map.get(b"request_status").unwrap();
+                            let request_status = flat_map
+                                .get(&CryptoTreeHashLabel::from("request_status"))
+                                .unwrap();
 
                             match request_status {
-                                LabeledTree::Leaf(request_id) => todo!(),
+                                LabeledTree::Leaf(_) => panic!("request status can not be leaf"),
                                 LabeledTree::SubTree(flat_map) => flat_map.keys().first().unwrap(),
                             }
                         }
                         _ => panic!("Must be subtree."),
                     };
 
-                    let request_status = Label::from("request_status");
-                    let content = Label::from("Some ingress status bytes.");
-
-                    MixedHashTree::Labeled(
-                        request_status,
-                        MixedHashTree::Labeled(
+                    let hash_tree = MixedHashTree::Labeled(
+                        CryptoTreeHashLabel::from(b"request_status"),
+                        Box::new(MixedHashTree::Labeled(
                             message_id.clone(),
-                            MixedHashTree::Leaf(b"hello world canister response."),
-                        ),
-                    )
+                            Box::new(MixedHashTree::Labeled(
+                                CryptoTreeHashLabel::from(b"status"),
+                                Box::new(MixedHashTree::Leaf(
+                                    b"hello world canister response.".to_vec(),
+                                )),
+                            )),
+                        )),
+                    );
+
+                    let (certificate, _, _) = CertificateBuilder::new(CertificateData::CustomTree(
+                        LabeledTree::Leaf(b"test".to_vec()),
+                    ))
+                    .build();
+
+                    let certification = Certification {
+                        height: Height::from(1),
+                        signed: Signed {
+                            signature: ThresholdSignature {
+                                signer: NiDkgId {
+                                    start_block_height: Height::from(0),
+                                    dealer_subnet: subnet_test_id(0),
+                                    dkg_tag: NiDkgTag::HighThreshold,
+                                    target_subnet: NiDkgTargetSubnet::Local,
+                                },
+                                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(
+                                    certificate.signature().to_vec(),
+                                )),
+                            },
+                            content: CertificationContent::new(CryptoHashOfPartialState::from(
+                                CryptoHash(hash_tree.digest().to_vec()),
+                            )),
+                        },
+                    };
+
+                    Some((hash_tree, certification))
                 }
             }
 
-            let (state, hash_tree, certification) = mock_certified_state(certificate.clone());
-
-            Some(Box::new(FakeCertifiedStateSnapshot(
-                state,
-                hash_tree,
-                certification,
-            )))
+            Some(Box::new(FakeCertifiedStateSnapshot))
         });
 
     let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
@@ -1207,13 +1228,18 @@ fn test_duplicate_concurrent_requests_return_early() {
         };
 
         let _: Certificate = serde_cbor::from_slice(certificate).expect("Valid certificate");
+
+        assert!(
+            handlers.ingress_rx.is_empty(),
+            "No ingress messages should be sent to unvalidated pool."
+        );
     });
 }
 
 /// Test that the V3 call endpoint handles multiple requests with the same ingress message,
 /// by returning `202` for subsequent concurrent requests.
 #[test]
-fn test_ingress_message_already_in_certified_state_returns_early() {
+fn test_duplicate_concurrent_requests_return_early() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
