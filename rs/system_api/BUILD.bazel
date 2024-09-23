@@ -10,9 +10,9 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/config",
-        "//rs/constants",
         "//rs/cycles_account_manager",
         "//rs/interfaces",
+        "//rs/limits",
         "//rs/monitoring/logger",
         "//rs/nns/constants",
         "//rs/registry/routing_table",
@@ -50,9 +50,9 @@ INTEGRATION_TEST_DEPS = [
     # Keep sorted.
     ":system_api",
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/nns/constants",
     "//rs/registry/routing_table",

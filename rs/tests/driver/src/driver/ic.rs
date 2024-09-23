@@ -50,7 +50,7 @@ pub struct InternetComputer {
     pub with_mainnet_config: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum VmAllocationStrategy {
     #[serde(rename = "distributeToArbitraryHost")]
     DistributeToArbitraryHost,
@@ -399,7 +399,7 @@ impl InternetComputer {
 }
 
 /// A builder for the initial configuration of a subnetwork.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct Subnet {
     pub default_vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -700,7 +700,7 @@ pub enum MemoryKiB {}
 pub enum SizeGiB {}
 
 /// Resources that the VM will use like number of virtual CPUs and memory.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct VmResources {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
@@ -721,7 +721,7 @@ impl VmResources {
 }
 
 /// A builder for the initial configuration of a node.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize)]
 pub struct Node {
     pub vm_resources: VmResources,
     pub vm_allocation: Option<VmAllocationStrategy>,

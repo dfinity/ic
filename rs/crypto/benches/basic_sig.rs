@@ -25,7 +25,7 @@ const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
 // \[small, medium, large\]
 const MSG_SIZES: [usize; 3] = [32, 10_000, 1_000_000];
 
-#[derive(strum_macros::EnumIter, PartialEq, Copy, Clone, Default)]
+#[derive(Copy, Clone, PartialEq, Default, strum_macros::EnumIter)]
 enum VaultType {
     Local,
     #[default]

@@ -68,7 +68,7 @@ async fn all_peers_up(transport: Arc<dyn Transport>, peers: Vec<NodeId>) {
         let mut one_peer_down = false;
         for peer in &peers {
             if transport
-                .push(
+                .rpc(
                     peer,
                     Request::builder().uri("/").body(Bytes::new()).unwrap(),
                 )
@@ -224,7 +224,7 @@ fn bench_inner(
                         let t = transport_c.clone();
                         let p = *peer;
                         futs.push(async move {
-                            t.push(&p, Request::builder().uri("/").body(bytes).unwrap())
+                            t.rpc(&p, Request::builder().uri("/").body(bytes).unwrap())
                                 .await
                                 .unwrap();
                         });

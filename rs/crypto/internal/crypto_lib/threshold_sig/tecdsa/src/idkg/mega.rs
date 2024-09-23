@@ -12,7 +12,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 mod tests;
 
 /// The type of MEGa ciphertext
-#[derive(Debug, Copy, Clone, EnumIter, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, EnumIter, Serialize)]
 pub enum MEGaCiphertextType {
     Single,
     Pairs,
@@ -34,7 +34,7 @@ impl MEGaCiphertextType {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MEGaPublicKey {
     point: EccPoint,
 }
@@ -74,7 +74,7 @@ impl MEGaPublicKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct MEGaPrivateKey {
     secret: EccScalar,
 }
@@ -120,7 +120,7 @@ impl Debug for MEGaPrivateKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MEGaCiphertextSingle {
     pub ephemeral_key: EccPoint,  // "v" in the paper
     pub pop_public_key: EccPoint, // "v'" in the paper
@@ -128,7 +128,7 @@ pub struct MEGaCiphertextSingle {
     pub ctexts: Vec<EccScalar>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MEGaCiphertextPair {
     pub ephemeral_key: EccPoint,  // "v" in the paper
     pub pop_public_key: EccPoint, // "v'" in the paper
@@ -137,7 +137,7 @@ pub struct MEGaCiphertextPair {
 }
 
 /// Some type of MEGa ciphertext
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum MEGaCiphertext {
     Single(MEGaCiphertextSingle),
     Pairs(MEGaCiphertextPair),
@@ -759,7 +759,7 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Debug, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+            #[derive(Clone, Eq, PartialEq, Debug, Zeroize, ZeroizeOnDrop)]
             pub struct [<MEGaPublicKey $curve Bytes>]([u8; Self::SIZE]);
             ic_crypto_internal_types::derive_serde!([<MEGaPublicKey $curve Bytes>], [<MEGaPublicKey $curve Bytes>]::SIZE);
 
@@ -792,7 +792,7 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+            #[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
             pub struct [<MEGaPrivateKey $curve Bytes>](SecretArray<{ $priv_size }>);
 
             impl [<MEGaPrivateKey $curve Bytes>] {
@@ -826,7 +826,9 @@ macro_rules! generate_serializable_keyset {
                 }
             }
 
-            #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+            #[derive(
+                Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Zeroize, ZeroizeOnDrop,
+            )]
             pub struct [<MEGaKeySet $curve Bytes>] {
                 pub public_key: [<MEGaPublicKey $curve Bytes>],
                 pub private_key: [<MEGaPrivateKey $curve Bytes>],

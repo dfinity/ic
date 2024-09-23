@@ -20,7 +20,7 @@ criterion = { workspace = true }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-crypto-tree-hash-test-utils = { path = "test_utils" }
 maplit = "1.0.2"
-proptest = "1.0"
+proptest = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde_cbor = { workspace = true }

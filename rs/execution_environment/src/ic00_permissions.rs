@@ -5,7 +5,7 @@ use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 pub(crate) struct Ic00MethodPermissions {
     method: Ic00Method,
 

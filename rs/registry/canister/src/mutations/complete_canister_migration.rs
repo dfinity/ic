@@ -30,7 +30,7 @@ impl Registry {
 }
 
 /// The argument for the `complete_canister_migrations` update call.
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct CompleteCanisterMigrationPayload {
     /// The list of canister ID ranges to be removed from canister migrations.
     pub canister_id_ranges: Vec<CanisterIdRange>,

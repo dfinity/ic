@@ -1,6 +1,7 @@
 {
   "deployment": {
-    "name": "mainnet"
+    "name": "mainnet",
+    "mgmt_mac": null
   },
   "logging": {
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
@@ -9,6 +10,7 @@
     "url": "NNS_URL"
   },
   "resources": {
-    "memory": "490"
+    "memory": "490",
+    "cpu": "kvm"
   }
 }

@@ -139,7 +139,6 @@ type SetDappControllersResponse = record {
 type SnsRootCanister = record {
   dapp_canister_ids : vec principal;
   testflight : bool;
-  latest_ledger_archive_poll_timestamp_seconds : opt nat64;
   archive_canister_ids : vec principal;
   governance_canister_id : opt principal;
   index_canister_id : opt principal;

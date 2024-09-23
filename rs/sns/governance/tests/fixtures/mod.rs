@@ -201,7 +201,7 @@ impl LedgerFixtureBuilder {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone, Default)]
 pub struct CmcFixture {
     pub maturity_modulation: Arc<Mutex<i32>>,
 }
@@ -398,7 +398,7 @@ impl NeuronBuilder {
 /// The GovernanceState is used to capture all of the salient details of the Governance
 /// canister, so that we can compute the "delta", or what changed between
 /// actions.
-#[derive(Clone, Default, comparable::Comparable, Debug)]
+#[derive(Clone, Debug, Default, comparable::Comparable)]
 #[compare_default]
 pub struct GovernanceState {
     pub now: u64,
@@ -854,6 +854,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
+                migrated_root_wasm_memory_limit: Some(true),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),
@@ -1073,6 +1074,11 @@ impl GovernanceCanisterFixtureBuilder {
 
         // Set up the canister fixture with our neuron.
         self.add_neuron(neuron)
+    }
+
+    pub fn set_migrated_root_wasm_memory_limit(mut self, value: bool) -> Self {
+        self.governance.migrated_root_wasm_memory_limit = Some(value);
+        self
     }
 }
 

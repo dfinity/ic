@@ -140,3 +140,6 @@ mod subnet_rental_canister;
 
 #[cfg(test)]
 mod stop_or_start_canister;
+
+#[cfg(test)]
+mod api_boundary_node_queries;

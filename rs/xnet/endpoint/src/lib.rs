@@ -20,10 +20,9 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
-use threadpool::ThreadPool;
 use tokio::{
     runtime,
-    sync::{oneshot, Notify},
+    sync::{Notify, Semaphore},
 };
 use url::Url;
 
@@ -46,7 +45,7 @@ const RESOURCE_STREAM: &str = "stream";
 const RESOURCE_STREAMS: &str = "streams";
 const RESOURCE_UNKNOWN: &str = "unknown";
 
-const XNET_ENDPOINT_NUM_WORKER_THREADS: usize = 4;
+const XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS: usize = 4;
 
 impl XNetEndpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
@@ -75,26 +74,7 @@ impl XNetEndpointMetrics {
     }
 }
 
-/// The messages processed by the background worker.
-#[allow(clippy::large_enum_variant)]
-enum WorkerMessage {
-    /// Handle a request and send the result to the reply channel.
-    HandleRequest {
-        /// Incoming XNet HTTP request.
-        request: Request<Body>,
-        /// The channel that should be used to handle the reply to the user.
-        response_sender: oneshot::Sender<Response<Body>>,
-    },
-    /// Stop processing requests.
-    Stop,
-}
-
 /// HTTPS endpoint for fetching XNet stream slices.
-///
-/// Spawns a request handler thread, which holds a reference to the
-/// `StateManager`; and an async task that runs the HTTPS server and accepts
-/// incoming requests. The two are connected via a bounded `crossbeam::channel`,
-/// also used for signaling shutdown on drop.
 ///
 /// Exposed APIs:
 /// * `/api/v1/streams`
@@ -106,9 +86,7 @@ enum WorkerMessage {
 ///     (`msg_begin` if missing), of up to `byte_limit` bytes.
 pub struct XNetEndpoint {
     server_address: SocketAddr,
-    handler_thread_pool: threadpool::ThreadPool,
     shutdown_notify: Arc<Notify>,
-    request_sender: crossbeam_channel::Sender<WorkerMessage>,
     log: ReplicaLogger,
 }
 
@@ -120,15 +98,6 @@ impl Drop for XNetEndpoint {
 
         // Request graceful shutdown of the HTTP server and the background thread.
         self.shutdown_notify.notify_one();
-
-        for _ in 0..XNET_ENDPOINT_NUM_WORKER_THREADS {
-            self.request_sender
-                .send(WorkerMessage::Stop)
-                .expect("failed to send stop signal!");
-        }
-
-        // Join the background workers.
-        self.handler_thread_pool.join();
 
         info!(self.log, "XNet Endpoint shut down");
     }
@@ -153,90 +122,88 @@ impl XNetEndpoint {
 
         let metrics = Arc::new(XNetEndpointMetrics::new(metrics));
 
-        // The bounded channel for queuing requests between the HTTP server and the
-        // background worker.
-        //
-        // We use a background worker because building streams is CPU and memory
-        // bound and can take a few dozens of milliseconds, which is too long to execute
-        // on the event handling thread.
-        //
-        // We do not use [tokio::runtime::Handle::spawn_blocking] because it's designed
-        // for I/O bound tasks and can spawn extra threads when needed, which is
-        // not the best strategy for CPU-bound tasks.
-        //
-        // We use a crossbeam channel instead of [tokio::sync::mpsc] because we want the
-        // receiver to be blocking, and [tokio::sync::mpsc::Receiver::blocking_recv] is
-        // only available in tokio ≥ 0.3.
-        let (request_sender, request_receiver) =
-            crossbeam_channel::bounded(XNET_ENDPOINT_NUM_WORKER_THREADS);
+        // Spawn a request handler. We pass the certified stream store, which is
+        // currently realized by the state manager.
 
-        let make_service = make_service_fn({
-            #[derive(Clone)]
-            struct Context {
-                log: ReplicaLogger,
-                request_sender: crossbeam_channel::Sender<WorkerMessage>,
-                metrics: Arc<XNetEndpointMetrics>,
-            }
-
-            let ctx = Context {
-                log: log.clone(),
-                metrics: Arc::clone(&metrics),
-                request_sender: request_sender.clone(),
-            };
-
-            fn ok<T>(t: T) -> Result<T, Infallible> {
-                Ok(t)
-            }
-
-            move |tls_conn: &TlsConnection| {
-                let ctx = ctx.clone();
-                debug!(
-                    ctx.log,
-                    "Serving XNet streams to peer {:?}",
-                    tls_conn.peer()
-                );
-
-                async move {
-                    let ctx = ctx.clone();
-                    ok(service_fn({
-                        move |request: Request<Body>| {
-                            let ctx = ctx.clone();
-
-                            async move {
-                                let _ = &ctx;
-                                let (response_sender, response_receiver) = oneshot::channel();
-                                let task = WorkerMessage::HandleRequest {
-                                    request,
-                                    response_sender,
-                                };
-
-                                // NOTE: we must use non-blocking send here, otherwise we might
-                                // delay the event thread.
-                                if ctx.request_sender.try_send(task).is_err() {
-                                    ctx.metrics
-                                        .request_duration
-                                        .with_label_values(&[
-                                            RESOURCE_UNKNOWN,
-                                            StatusCode::SERVICE_UNAVAILABLE.as_str(),
-                                        ])
-                                        .observe(0.0);
-
-                                    return ok(Response::builder()
-                                        .status(StatusCode::SERVICE_UNAVAILABLE)
-                                        .body(Body::from("Queue full"))
-                                        .unwrap());
-                                }
-
-                                ok(response_receiver.await.unwrap_or_else(|e| {
-                                    panic!("XNet Endpoint Handler shut down unexpectedly: {}", e)
-                                }))
-                            }
-                        }
-                    }))
+        let make_service_closure = |address: SocketAddr| {
+            make_service_fn({
+                let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
+                #[derive(Clone)]
+                struct Context {
+                    log: ReplicaLogger,
+                    semaphore: Arc<Semaphore>,
+                    metrics: Arc<XNetEndpointMetrics>,
                 }
-            }
-        });
 
+                let ctx = Context {
+                    log: log.clone(),
+                    metrics: Arc::clone(&metrics),
+                    semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS)),
+                };
+
+                fn ok<T>(t: T) -> Result<T, Infallible> {
+                    Ok(t)
+                }
+
+                move |tls_conn: &TlsConnection| {
+                    let ctx = ctx.clone();
+                    let certified_stream_store = certified_stream_store.clone();
+                    let base_url = base_url.clone();
+
+                    debug!(
+                        ctx.log,
+                        "Serving XNet streams to peer {:?}",
+                        tls_conn.peer()
+                    );
+
+                    async move {
+                        ok(service_fn({
+                            move |request: Request<Body>| {
+                                let ctx = ctx.clone();
+                                let certified_stream_store = certified_stream_store.clone();
+                                let base_url = base_url.clone();
+
+                                async move {
+                                    let owned_permit = match ctx.semaphore.try_acquire_owned() {
+                                        Ok(permit) => permit,
+                                        Err(_) => {
+                                            ctx.metrics
+                                                .request_duration
+                                                .with_label_values(&[
+                                                    RESOURCE_UNKNOWN,
+                                                    StatusCode::SERVICE_UNAVAILABLE.as_str(),
+                                                ])
+                                                .observe(0.0);
+
+                                            return ok(Response::builder()
+                                                .status(StatusCode::SERVICE_UNAVAILABLE)
+                                                .body(Body::from("Queue full"))
+                                                .unwrap());
+                                        }
+                                    };
+                                    let metrics = ctx.metrics.clone();
+                                    let log = ctx.log.clone();
+
+                                    Ok(tokio::task::spawn_blocking(move || {
+                                        let _permit = owned_permit;
+
+                                        handle_http_request(
+                                            request,
+                                            certified_stream_store.as_ref(),
+                                            &base_url,
+                                            &metrics,
+                                            &log,
+                                        )
+                                    })
+                                    .await
+                                    .expect("Processing http request panicked!"))
+                                }
+                            }
+                        }))
+                    }
+                }
+            })
+        };
         let (address, server) = {
             let _guard = runtime_handle.enter();
 
@@ -253,11 +220,12 @@ impl XNetEndpoint {
                         config.address, e
                     )
                 });
+
             (
                 addr,
                 builder
                     .executor(ExecuteOnRuntime(runtime_handle.clone()))
-                    .serve(make_service),
+                    .serve(make_service_closure(addr)),
             )
         };
 
@@ -279,56 +247,15 @@ impl XNetEndpoint {
             }
         });
 
-        // Spawn a request handler. We pass the certified stream store, which is
-        // currently realized by the state manager.
-        let handler_log = log.clone();
-        let base_url = Url::parse(&format!("http://{}/", address)).unwrap();
-        let handler_thread_pool = ThreadPool::with_name(
-            "XNet Endpoint Handler".to_string(),
-            XNET_ENDPOINT_NUM_WORKER_THREADS,
-        );
-        for _ in 0..XNET_ENDPOINT_NUM_WORKER_THREADS {
-            let request_receiver = request_receiver.clone();
-            let base_url = base_url.clone();
-            let handler_log = handler_log.clone();
-            let metrics = Arc::clone(&metrics);
-            let certified_stream_store = Arc::clone(&certified_stream_store);
-            handler_thread_pool.execute(move || {
-                while let Ok(WorkerMessage::HandleRequest {
-                    request,
-                    response_sender,
-                }) = request_receiver.recv()
-                {
-                    let response = handle_http_request(
-                        request,
-                        certified_stream_store.as_ref(),
-                        &base_url,
-                        &metrics,
-                        &handler_log,
-                    );
-                    response_sender.send(response).unwrap_or_else(|res| {
-                        info!(
-                            handler_log,
-                            "Failed to respond with {:?}",
-                            res.into_parts().0
-                        )
-                    });
-                }
-                debug!(handler_log, "  ...XNet Endpoint Handler shut down");
-            });
-        }
-
         Self {
             server_address: address,
             shutdown_notify,
-            handler_thread_pool,
-            request_sender,
             log,
         }
     }
 
     pub fn num_workers() -> usize {
-        XNET_ENDPOINT_NUM_WORKER_THREADS
+        XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS
     }
 
     /// Returns the port that the HTTP server is listening on.
@@ -565,7 +492,7 @@ fn range_not_satisfiable<T: Into<Body>>(msg: T) -> Response<Body> {
 }
 
 /// The socket address for `XNetEndpoint` to listen on.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct XNetEndpointConfig {
     address: SocketAddr,
 }

@@ -31,7 +31,7 @@ url = { workspace = true }
 [dev-dependencies]
 actix-rt = "2.10.0"
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
-proptest = "1.0"
+proptest = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

@@ -10,10 +10,7 @@ use ic_interfaces::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{
-    artifact::CanisterHttpResponseId, canister_http::CanisterHttpResponseShare,
-    messages::CallbackId,
-};
+use ic_types::{artifact::CanisterHttpResponseId, messages::CallbackId};
 use std::{collections::BTreeSet, sync::Arc};
 
 // We are aiming for about 100 req/s for http outcalls. Assuming that the priority function gets
@@ -43,7 +40,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseShare, Pool>
+impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseId, Pool>
     for CanisterHttpGossipImpl
 {
     fn new_bouncer(&self, _canister_http_pool: &Pool) -> Bouncer<CanisterHttpResponseId> {
@@ -91,5 +88,9 @@ impl<Pool: CanisterHttpPool> BouncerFactory<CanisterHttpResponseShare, Pool>
                 BouncerValue::Unwanted
             }
         })
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }

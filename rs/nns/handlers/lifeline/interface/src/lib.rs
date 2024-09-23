@@ -3,14 +3,14 @@ use ic_crypto_sha2::Sha256;
 use serde::{Deserialize, Serialize};
 
 /// Payload to upgrade the root canister.
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Eq, PartialEq, Hash, CandidType, Deserialize, Serialize)]
 pub struct UpgradeRootProposal {
     pub wasm_module: Vec<u8>,
     pub module_arg: Vec<u8>,
     pub stop_upgrade_start: bool,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Eq, PartialEq, Hash, CandidType, Deserialize, Serialize)]
 pub struct HardResetNnsRootToVersionPayload {
     pub wasm_module: Vec<u8>,
     pub init_arg: Vec<u8>,

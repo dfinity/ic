@@ -177,23 +177,11 @@ impl RosettaClient {
 
         // We need to wait for the transaction to be added to the blockchain
         let mut tries = 0;
+        let request = SearchTransactionsRequest::builder(network_identifier.clone())
+            .with_transaction_identifier(submit_response.transaction_identifier.clone())
+            .build();
         while tries < 10 {
-            let transaction = self
-                .search_transactions(
-                    network_identifier.clone(),
-                    Some(submit_response.transaction_identifier.clone()),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
-                .await?;
-            println!("Transaction: {:?}", transaction);
-            println!(
-                "Transaction hash looked for: {:?}",
-                submit_response.transaction_identifier
-            );
+            let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
@@ -513,33 +501,9 @@ impl RosettaClient {
 
     pub async fn search_transactions(
         &self,
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-        type_: Option<String>,
-        max_block: Option<i64>,
-        limit: Option<i64>,
-        offset: Option<i64>,
+        request: &SearchTransactionsRequest,
     ) -> Result<SearchTransactionsResponse, Error> {
-        self.call_endpoint(
-            "/search/transactions",
-            &SearchTransactionsRequest {
-                network_identifier,
-                transaction_identifier,
-                account_identifier,
-                coin_identifier: None,
-                address: None,
-                type_,
-                success: None,
-                currency: None,
-                operator: None,
-                status: None,
-                offset,
-                max_block,
-                limit,
-            },
-        )
-        .await
+        self.call_endpoint("/search/transactions", request).await
     }
 
     pub async fn mempool(

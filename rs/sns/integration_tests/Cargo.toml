@@ -42,7 +42,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 pretty-bytes = "0.2.2"
-proptest = "1.0"
+proptest = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde_bytes = { workspace = true }

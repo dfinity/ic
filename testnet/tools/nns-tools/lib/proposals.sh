@@ -39,7 +39,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 \`\`\`
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type swap).wasm.gz
 \`\`\`
 ## Current Version
@@ -140,13 +140,13 @@ git fetch
 git checkout $NEXT_COMMIT
 
 # 2. Build canisters.
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
             echo "
 
 
@@ -234,13 +234,13 @@ git fetch
 git checkout $NEXT_COMMIT
 
 # 2. Build canisters.
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.
+This should match \`wasm\` field of this proposal.
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 

@@ -75,7 +75,6 @@ type ClaimOrRefreshResponse = record {
 
 type ClaimSwapNeuronsRequest = record {
   neuron_recipes : opt NeuronRecipes;
-  neuron_parameters : vec NeuronParameters;
 };
 
 type ClaimSwapNeuronsResponse = record {
@@ -284,6 +283,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  migrated_root_wasm_memory_limit : opt bool;
 };
 
 type GovernanceCachedMetrics = record {

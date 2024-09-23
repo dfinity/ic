@@ -6,6 +6,7 @@ set -e
 # Successful boot is defined as a boot where GuestOS can be booted.
 # This script is executed by HostOS right before booting GuestOS VM.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -31,16 +32,6 @@ Arguments:
             ;;
     esac
 done
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function print_to_terminal() {
     local message=$1

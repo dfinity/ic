@@ -11,11 +11,14 @@ use ic_sns_init::{
 // against the sum of intermediate limits set for various types of SNS neurons. These intermediate
 // limits are not checked within just one canister, so testing their inter-consistency is done here.
 //
+// Many SNS neurons may be created after a swap succeeds. The number of such neurons is limited to
+// `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`. This limit is enforced only *during* the swap. In effect,
+// this limits the maximum number of swap participants to `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS` /
+// #number of SNS neurons per participant (a.k.a., the SNS basket count).
+//
 // If a `CreateServiceNervousSystem` proposal is valid, its parameters must comply, in particular,
 // with the following limits (checked at the time of proposal submission):
 // - The number of SNS neurons per basket does not exceed `MAX_SNS_NEURONS_PER_BASKET`.
-// - The number of SNS neurons created for direct swap participants in the worst case cannot exceed
-//   `MAX_NEURONS_FOR_DIRECT_PARTICIPANTS`.
 // - The number of SNS neurons granted to the dapp developers doe snot exceed
 //   `MAX_DEVELOPER_DISTRIBUTION_COUNT`.
 //

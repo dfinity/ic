@@ -19,7 +19,7 @@ const MAX_NUM_SLICES: i64 = 400;
 // Indicates the current state of execution.
 // It start with `Running` and may transition to `Paused`.
 // From `Paused` it transitions either to `Running` or `Aborted`.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 enum ExecutionStatus {
     Running,
     Aborted,

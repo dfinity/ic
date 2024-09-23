@@ -34,7 +34,7 @@ pub type UserKey = PublicKey;
 pub type Timestamp = u64;
 type Signature = ByteBuf;
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 struct DeviceData {
     pub pubkey: DeviceKey,
     pub alias: String,
@@ -44,7 +44,7 @@ struct DeviceData {
     pub protection: DeviceProtection,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum Purpose {
     #[serde(rename = "recovery")]
     Recovery,
@@ -52,7 +52,7 @@ pub enum Purpose {
     Authentication,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum RegisterResponse {
     #[serde(rename = "registered")]
     Registered { user_number: AnchorNumber },
@@ -62,7 +62,7 @@ enum RegisterResponse {
     BadChallenge,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 enum KeyType {
     #[serde(rename = "unknown")]
     Unknown,
@@ -74,7 +74,7 @@ enum KeyType {
     SeedPhrase,
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum DeviceProtection {
     #[serde(rename = "protected")]
     Protected,

@@ -13,7 +13,7 @@ use minicbor::{Decode, Encode};
 use std::fmt;
 use thiserror::Error;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
 pub struct ReceivedEthEvent {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -29,7 +29,7 @@ pub struct ReceivedEthEvent {
     pub principal: Principal,
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
 pub struct ReceivedErc20Event {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -47,7 +47,7 @@ pub struct ReceivedErc20Event {
     pub erc20_contract_address: Address,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ReceivedEvent {
     Eth(ReceivedEthEvent),
     Erc20(ReceivedErc20Event),
@@ -94,7 +94,7 @@ impl fmt::Debug for ReceivedErc20Event {
 
 /// A unique identifier of the event source: the source transaction hash and the log
 /// entry index.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Decode, Encode)]
 pub struct EventSource {
     #[n(0)]
     pub transaction_hash: Hash,
@@ -238,7 +238,7 @@ pub fn report_transaction_error(error: ReceivedEventError) {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ReceivedEventError {
     PendingLogEntry,
     InvalidEventSource {
@@ -247,7 +247,7 @@ pub enum ReceivedEventError {
     },
 }
 
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Error)]
 pub enum EventSourceError {
     #[error("failed to decode principal from bytes {invalid_principal}")]
     InvalidPrincipal { invalid_principal: FixedSizeData },

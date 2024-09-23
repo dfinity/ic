@@ -56,7 +56,7 @@ ic-config = { path = "../../../config" }
 ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-proptest = "1.0"
+proptest = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [features]

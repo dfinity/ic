@@ -14,7 +14,7 @@ futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-config = { path = "../../../config" }
-ic-constants = { path = "../../../constants" }
+ic-limits = { path = "../../../limits" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }

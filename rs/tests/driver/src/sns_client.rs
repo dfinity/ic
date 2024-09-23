@@ -59,7 +59,7 @@ use std::{str::FromStr, time::SystemTime};
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
 pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnsClient {
     pub sns_canisters: SnsCanisterIds,
     pub wallet_canister_id: PrincipalId,

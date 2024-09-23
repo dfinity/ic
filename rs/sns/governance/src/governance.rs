@@ -6,7 +6,7 @@ use crate::pb::v1::{
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        upgrade_canister_directly,
+        update_root_canister_settings, upgrade_canister_directly,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -84,6 +84,7 @@ use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -96,7 +97,10 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_nns_constants::{
+    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
+};
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -459,7 +463,7 @@ impl GovernanceProto {
 
 /// This follows the following pattern:
 /// https://willcrichton.net/rust-api-type-patterns/witnesses.html
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct ValidGovernanceProto(GovernanceProto);
 
 impl ValidGovernanceProto {
@@ -3894,16 +3898,6 @@ impl Governance {
             return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
         };
 
-        // TODO(NNS1-3198): Remove this after `NeuronParameters` is fully removed
-        #[allow(deprecated)]
-        if !request.neuron_parameters.is_empty() {
-            log!(
-                ERROR,
-                "NeuronParameters is obselete. Please use NeuronRecipes instead."
-            );
-            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
-        }
-
         for neuron_recipe in Vec::<_>::from(neuron_recipes) {
             match neuron_recipe.validate(
                 neuron_minimum_stake_e8s,
@@ -4360,45 +4354,46 @@ impl Governance {
 
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        // Filter all the neurons that have some disbursing maturity in progress.
-        let neurons_with_disbursal: Vec<Neuron> = self
+        // Filter all the neurons that are ready to disburse.
+        let neuron_id_and_disbursements: Vec<(NeuronId, DisburseMaturityInProgress)> = self
             .proto
             .neurons
             .values()
-            .filter(|n| !n.disburse_maturity_in_progress.is_empty())
-            .cloned()
-            .collect();
-        for neuron in neurons_with_disbursal {
-            // The first entry is the oldest one, check whether it can be completed.
-            let disbursement = match neuron.disburse_maturity_in_progress.first() {
-                Some(disbursement) => disbursement.clone(),
-                None => continue,
-            };
-
-            match disbursement.finalize_disbursement_timestamp_seconds {
-                Some(finalize_disbursement_timestamp_seconds) => {
-                    if now_seconds < finalize_disbursement_timestamp_seconds {
-                        // It's not time to disbuse yet
-                        continue;
+            .filter_map(|neuron| {
+                let id = match neuron.id.as_ref() {
+                    Some(id) => id,
+                    None => {
+                        log!(
+                            ERROR,
+                            "NeuronId is not set for neuron. This should never happen. \
+                             Cannot disburse."
+                        );
+                        return None;
                     }
+                };
+                // The first entry is the oldest one, check whether it can be completed.
+                let first_disbursement = neuron.disburse_maturity_in_progress.first()?;
+                let finalize_disbursement_timestamp_seconds =
+                    match first_disbursement.finalize_disbursement_timestamp_seconds {
+                        Some(finalize_disbursement_timestamp_seconds) => {
+                            finalize_disbursement_timestamp_seconds
+                        }
+                        None => {
+                            log!(
+                                ERROR,
+                                "Finalize disbursement timestamp is not set. Cannot disburse."
+                            );
+                            return None;
+                        }
+                    };
+                if now_seconds >= finalize_disbursement_timestamp_seconds {
+                    Some((id.clone(), first_disbursement.clone()))
+                } else {
+                    None
                 }
-                None => {
-                    log!(
-                        ERROR,
-                        "Finalize disbursement timestamp is not set. Cannot disburse."
-                    );
-                    continue;
-                }
-            }
-
-            let neuron_id = match neuron.id.as_ref() {
-                None => {
-                    log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
-                    continue;
-                }
-                Some(id) => id,
-            };
-
+            })
+            .collect();
+        for (neuron_id, disbursement) in neuron_id_and_disbursements.into_iter() {
             let maturity_to_disburse_after_modulation_e8s: u64 = match apply_maturity_modulation(
                 disbursement.amount_e8s,
                 maturity_modulation_basis_points,
@@ -4426,7 +4421,7 @@ impl Governance {
                     fdm,
                 )),
             };
-            let _neuron_lock = match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+            let _neuron_lock = match self.lock_neuron_for_command(&neuron_id, in_flight_command) {
                 Ok(neuron_lock) => neuron_lock,
                 Err(_) => continue, // if locking fails, try next neuron
             };
@@ -4472,7 +4467,7 @@ impl Governance {
                                 "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
                                 disbursement, neuron_id, block_index
                             );
-                    let neuron = match self.get_neuron_result_mut(neuron_id) {
+                    let neuron = match self.get_neuron_result_mut(&neuron_id) {
                         Ok(neuron) => neuron,
                         Err(e) => {
                             log!(
@@ -4593,6 +4588,32 @@ impl Governance {
         true
     }
 
+    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
+        if self
+            .proto
+            .migrated_root_wasm_memory_limit
+            .unwrap_or_default()
+        {
+            return;
+        }
+
+        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
+        self.proto.migrated_root_wasm_memory_limit = Some(true);
+
+        let settings = CanisterSettings {
+            wasm_memory_limit: Some(candid::Nat::from(
+                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+            )),
+            ..Default::default()
+        };
+
+        // Set root settings
+        match update_root_canister_settings(self, settings).await {
+            Ok(_) => (),
+            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
+        }
+    }
+
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         self.process_proposals();
@@ -4630,6 +4651,8 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+
+        self.maybe_migrate_root_wasm_memory_limit().await;
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5521,7 +5544,7 @@ fn err_if_another_upgrade_is_in_progress(
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
-#[derive(PartialEq, Eq, Clone, Copy, Debug, candid::CandidType, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
 pub struct TimeWarp {
     pub delta_s: i64,
 }

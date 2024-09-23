@@ -138,10 +138,8 @@ pub async fn start_rosetta(
         )
     }));
 
-    let mut tries_left = NUM_TRIES;
-    while tries_left > 0 && !port_file.exists() {
+    while !port_file.exists() {
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
-        tries_left -= 1;
     }
 
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");

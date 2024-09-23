@@ -15,7 +15,7 @@ use x509_parser::certificate::X509Certificate;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Serialize)]
 /// An X.509 certificate
 pub struct TlsPublicKeyCert {
     // rename, to match previous serializations (which used X509PublicKeyCert)
@@ -61,7 +61,7 @@ impl TlsPublicKeyCert {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 #[error("{0}")]
 pub struct TlsPublicKeyCertCreationError(String);
 
@@ -217,7 +217,7 @@ impl Display for TlsConfigError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// A list of node IDs or all nodes present in the registry.
 pub enum SomeOrAllNodes {
     Some(BTreeSet<NodeId>),
@@ -239,7 +239,7 @@ impl SomeOrAllNodes {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 /// An authenticated Node ID
 pub enum AuthenticatedPeer {
     /// Authenticated Node ID

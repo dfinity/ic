@@ -96,7 +96,7 @@ impl ChunkingWitness {
 }
 
 /// Creating or verifying a proof of correct chunking failed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ZkProofChunkingError {
     InvalidProof,
     InvalidInstance,

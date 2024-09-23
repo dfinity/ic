@@ -13,7 +13,7 @@ candid = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-interfaces = { path = "../interfaces" }

@@ -247,10 +247,11 @@ fn install_code_validate_input_compute_allocation() {
 
     // Start execution of install code.
     test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested a compute allocation of 90% which cannot be satisfied because the Subnet's remaining compute capacity is 49%."))
+    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    result.assert_contains(
+        ErrorCode::SubnetOversubscribed,
+        "Canister requested a compute allocation of 90% which cannot be satisfied \
+            because the Subnet's remaining compute capacity is 49%.",
     );
 }
 
@@ -296,10 +297,11 @@ fn install_code_validate_input_memory_allocation() {
 
     // Start execution of install code.
     test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet."))
+    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    result.assert_contains(
+        ErrorCode::SubnetOversubscribed,
+        "Canister requested 260.00 MiB of memory but only 250.00 MiB \
+         are available in the subnet.",
     );
 }
 
@@ -333,13 +335,14 @@ fn install_code_validate_input_controller() {
         NextExecution::None,
     );
     test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterInvalidController,
-            format!("Only the controllers of the canister {} can control it.\nCanister's controllers: {}\nSender's ID: {}", canister_id, controller,  sender)
-        ))
+    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterInvalidController,
+        &format!(
+            "Only the controllers of the canister {} can control it.\n\
+            Canister's controllers: {}\nSender's ID: {}",
+            canister_id, controller, sender
+        ),
     );
 }
 
@@ -378,11 +381,14 @@ fn install_code_validates_execution_state() {
     // Install code on non-empty canister fails.
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
     test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id));
-    assert_eq!(result,
-               Err(UserError::new(
-                   ErrorCode::CanisterNonEmpty,
-                   format!("Canister {} cannot be installed because the canister is not empty. Try installing with mode='reinstall' instead.", canister_id)))
+    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterNonEmpty,
+        &format!(
+            "Canister {} cannot be installed because the canister is not empty. \
+                   Try installing with mode='reinstall' instead.",
+            canister_id
+        ),
     );
 }
 
@@ -773,13 +779,17 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let minimum_balance = test.install_code_reserved_execution_cycles();
 
     // Check reserve execution cycles fails due to not enough balance.
-    assert_eq!(
-        check_ingress_status(test.ingress_status(&message_id)),
-        Err(UserError::new(
+    check_ingress_status(test.ingress_status(&message_id))
+        .unwrap_err()
+        .assert_contains(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: please top up the canister with at least {} additional cycles`.", canister_id, (freezing_threshold_cycles + minimum_balance) - original_balance)
-        ))
-    );
+            &format!(
+                "Canister installation failed with `Canister {} is out of cycles: \
+                please top up the canister with at least {} additional cycles`.",
+                canister_id,
+                (freezing_threshold_cycles + minimum_balance) - original_balance
+            ),
+        );
 }
 
 #[test]
