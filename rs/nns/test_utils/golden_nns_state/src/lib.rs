@@ -106,7 +106,7 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         .with_routing_table(routing_table);
 
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
-        subnet_config: SubnetConfig::new(subnet_type),
+        SubnetConfig::new(subnet_type),
         hypervisor_config.unwrap_or_default(),
     )));
 
