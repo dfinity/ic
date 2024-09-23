@@ -5,3 +5,23 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
+ic-types = { path = "../../types/types" }
+clap = { workspace = true }
+utils = { path = "../utils" }
+url = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+serde_with = "1.6.2"
+regex = { workspace = true }
+
+[dev-dependencies]
+once_cell = "1.8"
+tempfile = { workspace = true }
+
+[lib]
+name = "config"
+path = "src/lib.rs"
+
+[[bin]]
+name = "config"
+path = "src/main.rs"

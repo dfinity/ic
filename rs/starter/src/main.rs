@@ -82,12 +82,21 @@ fn main() -> Result<()> {
         // At the moment, this always regenerates the node key.
         // TODO: Only regenerate if necessary, depends on CRP-359
 
+        let public_api = config.http_listen_addr;
+        // We put a fake xnet endpoint into the registry.
+        // The registry canister expects the public and xnet endpoints to be distinct
+        // and thus we modify the fake xnet endpoint if they are equal.
+        let mut xnet_api = SocketAddr::from_str("127.0.0.1:2497").unwrap();
+        if public_api == xnet_api {
+            xnet_api = SocketAddr::from_str("127.0.0.1:2197").unwrap();
+        }
+
         let mut subnet_nodes: BTreeMap<NodeIndex, NodeConfiguration> = BTreeMap::new();
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: SocketAddr::from_str("127.0.0.1:0").unwrap(),
-                public_api: config.http_listen_addr,
+                xnet_api,
+                public_api,
                 node_operator_principal_id: None,
                 secret_key_store: None,
             },
