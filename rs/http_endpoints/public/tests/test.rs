@@ -19,7 +19,10 @@ use hyper::{body::Incoming, Method, Request, StatusCode};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::{parse_subnet_read_state_response, prepare_read_state};
 use ic_canister_client_sender::Sender;
-use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
+use ic_canonical_state::{
+    encoding::types::{Cycles, SubnetMetrics},
+    Label,
+};
 use ic_certification_test_utils::{
     serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
 };
@@ -1075,7 +1078,142 @@ fn test_http_1_requests_are_accepted() {
 /// Test that the V3 call endpoint handles multiple requests with the same ingress message,
 /// by returning `202` for subsequent concurrent requests.
 #[test]
-fn test_duplicate_requests_are_handled() {
+fn test_duplicate_concurrent_requests_return_early() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    let mut mock_state_manager = MockStateManager::new();
+    mock_state_manager
+        .expect_get_latest_state()
+        .returning(default_get_latest_state);
+
+    mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
+    // Inject the mock certified state snapshot
+    mock_state_manager
+        .expect_get_certified_state_snapshot()
+        .return_once(move || {
+            struct FakeCertifiedStateSnapshot;
+
+            impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
+                type State = ReplicatedState;
+
+                fn get_state(&self) -> &ReplicatedState {
+                    unimplemented!();
+                }
+
+                fn get_height(&self) -> Height {
+                    unimplemented!();
+                }
+
+                fn read_certified_state(
+                    &self,
+                    paths: &LabeledTree<()>,
+                ) -> Option<(MixedHashTree, Certification)> {
+                    let message_id = match paths {
+                        LabeledTree::SubTree(flat_map) => {
+                            let request_status = flat_map.get(b"request_status").unwrap();
+
+                            match request_status {
+                                LabeledTree::Leaf(request_id) => todo!(),
+                                LabeledTree::SubTree(flat_map) => flat_map.keys().first().unwrap(),
+                            }
+                        }
+                        _ => panic!("Must be subtree."),
+                    };
+
+                    let request_status = Label::from("request_status");
+                    let content = Label::from("Some ingress status bytes.");
+
+                    MixedHashTree::Labeled(
+                        request_status,
+                        MixedHashTree::Labeled(
+                            message_id.clone(),
+                            MixedHashTree::Leaf(b"hello world canister response."),
+                        ),
+                    )
+                }
+            }
+
+            let (state, hash_tree, certification) = mock_certified_state(certificate.clone());
+
+            Some(Box::new(FakeCertifiedStateSnapshot(
+                state,
+                hash_tree,
+                certification,
+            )))
+        });
+
+    let mut handlers = HttpEndpointBuilder::new(rt.handle().clone(), config)
+        .with_state_manager(mock_state_manager)
+        .run();
+
+    // Mock ingress filter to always accept the message.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = handlers.ingress_filter.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&addr).await.unwrap();
+
+        let message = IngressMessage::default();
+
+        let response = test_agent::Call::V3.call(addr, message).await;
+
+        assert_eq!(
+            StatusCode::OK,
+            response.status(),
+            "{:?}",
+            response.text().await
+        );
+
+        assert_eq!(
+            response.headers().get(CONTENT_TYPE).unwrap(),
+            APPLICATION_CBOR,
+        );
+
+        let response_body = response.bytes().await.unwrap();
+        let response =
+            serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
+
+        let CBOR::Map(response_map) = response else {
+            panic!("Expected a map, got {:?}", response);
+        };
+
+        assert_eq!(
+            response_map.get(&CBOR::Text("status".to_string())),
+            Some(&CBOR::Text("replied".to_string()))
+        );
+
+        let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
+            Some(CBOR::Bytes(certificate)) => certificate,
+            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            _ => panic!("Reply is missing."),
+        };
+
+        let _: Certificate = serde_cbor::from_slice(certificate).expect("Valid certificate");
+    });
+}
+
+/// Test that the V3 call endpoint handles multiple requests with the same ingress message,
+/// by returning `202` for subsequent concurrent requests.
+#[test]
+fn test_ingress_message_already_in_certified_state_returns_early() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
