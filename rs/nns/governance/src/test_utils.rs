@@ -1,5 +1,5 @@
 use crate::{
-    governance::{Environment, HeapGrowthPotential},
+    governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError, OpenSnsTokenSwap},
 };
 use async_trait::async_trait;
@@ -193,11 +193,11 @@ impl Environment for MockEnvironment {
         *self.now.lock().unwrap()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         unimplemented!();
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         unimplemented!();
     }
 

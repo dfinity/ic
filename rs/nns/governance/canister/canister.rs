@@ -20,7 +20,7 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
+    governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -206,14 +206,14 @@ impl Environment for CanisterEnv {
         self.time_warp = new_time_warp;
     }
 
-    fn random_u64(&mut self) -> u64 {
-        self.rng.next_u64()
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        Ok(self.rng.next_u64())
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         let mut bytes = [0u8; 32];
         self.rng.fill_bytes(&mut bytes);
-        bytes
+        Ok(bytes)
     }
 
     fn execute_nns_function(

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
 use ic_nns_governance::{
-    governance::{Environment, HeapGrowthPotential},
+    governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError},
 };
 use ic_sns_root::GetSnsCanistersSummaryRequest;
@@ -145,15 +145,16 @@ impl Environment for EnvironmentFixture {
         self.environment_fixture_state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
-        self.environment_fixture_state
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        Ok(self
+            .environment_fixture_state
             .try_lock()
             .unwrap()
             .rng
-            .next_u64()
+            .next_u64())
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         unimplemented!()
     }
 

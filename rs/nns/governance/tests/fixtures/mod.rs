@@ -20,7 +20,8 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
+        governance_minting_account, neuron_subaccount, Environment, Governance,
+        HeapGrowthPotential, RngError,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
@@ -485,11 +486,11 @@ impl Environment for NNSFixture {
         self.nns_state.try_lock().unwrap().environment.now()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         self.nns_state.try_lock().unwrap().environment.random_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.nns_state
             .try_lock()
             .unwrap()
@@ -942,11 +943,11 @@ impl Environment for NNS {
         self.fixture.now()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         self.fixture.random_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.fixture.random_byte_array()
     }
 
