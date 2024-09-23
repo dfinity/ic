@@ -68,11 +68,12 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
-use dfn_core::api::spawn;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-use dfn_protobuf::ToProto;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::println;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -88,7 +89,10 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SUBNET_RENTAL_CANISTER_ID,
 };
-use ic_nns_governance_api::subnet_rental::SubnetRentalRequest;
+use ic_nns_governance_api::{
+    pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem, proposal_validation,
+    subnet_rental::SubnetRentalRequest,
+};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -113,6 +117,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
+    future::Future,
     ops::RangeInclusive,
     string::ToString,
 };
@@ -124,16 +129,6 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
-// The limits on NNS proposal title len (in bytes).
-const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
-const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
-// Proposal validation
-// 30000 B
-const PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
-// 2048 characters
-const PROPOSAL_URL_CHAR_MAX: usize = 2048;
-// 10 characters
-const PROPOSAL_URL_CHAR_MIN: usize = 10;
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
@@ -404,14 +399,20 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::ReviseElectedGuestosVersions | NnsFunction::DeployGuestosToAllSubnetNodes
+            NnsFunction::NnsRootUpgrade
+                | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
+                | NnsFunction::ReviseElectedGuestosVersions
+                | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterInstall
+            NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsCanisterInstall
+                | NnsFunction::NnsRootUpgrade
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
@@ -427,8 +428,6 @@ impl NnsFunction {
                 | NnsFunction::UpdateNodesHostosVersion
                 | NnsFunction::BlessReplicaVersion
                 | NnsFunction::RetireReplicaVersion
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsRootUpgrade
         )
     }
 }
@@ -1491,9 +1490,9 @@ pub trait Environment: Send + Sync {
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
 
-    /// Basically, the same as dfn_core::api::call.
+    /// Basically, the same as ic_cdk::api::call_raw.
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -1521,6 +1520,13 @@ struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     fn drop(&mut self) {
         if self.retain {
+            return;
+        }
+        // In the case of a panic, the state of the ledger account representing the neuron's stake
+        // may be inconsistent with the internal state of governance.  In that case,
+        // we want to prevent further operations with that neuron until the issue can be
+        // investigated and resolved, which will require code changes.
+        if ic_cdk::api::call::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -1701,6 +1707,24 @@ impl XdrConversionRatePb {
             timestamp_seconds: Some(0),
             xdr_permyriad_per_icp: Some(10_000),
         }
+    }
+}
+
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.s
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
     }
 }
 
@@ -4049,7 +4073,7 @@ impl Governance {
         //
         // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(pid, action.clone()));
+        spawn_in_canister_env(governance.perform_action(pid, action.clone()));
     }
 
     /// Mints node provider rewards to a neuron or to a ledger account.
@@ -4726,7 +4750,9 @@ impl Governance {
             )
         }?;
 
-        let sns_init_payload = SnsInitPayload::try_from(create_service_nervous_system)?;
+        let sns_init_payload = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            create_service_nervous_system,
+        ))?;
 
         Ok(SnsInitPayload {
             neurons_fund_participation_constraints,
@@ -4869,13 +4895,6 @@ impl Governance {
             ));
         }
 
-        let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Failed to validate ManageNeuron {}", e),
-            )
-        })?;
-
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
             .ok_or_else(|| {
@@ -4968,7 +4987,9 @@ impl Governance {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }
 
-        validate_user_submitted_proposal_fields(proposal)?;
+        proposal_validation::validate_user_submitted_proposal_fields(
+            &ic_nns_governance_api::pb::v1::Proposal::from(proposal.clone()),
+        )?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
@@ -5177,7 +5198,9 @@ impl Governance {
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) -> Result<(), GovernanceError> {
         // Must be able to convert to a valid SnsInitPayload.
-        let conversion_result = SnsInitPayload::try_from(create_service_nervous_system.clone());
+        let conversion_result = SnsInitPayload::try_from(ApiCreateServiceNervousSystem::from(
+            create_service_nervous_system.clone(),
+        ));
         if let Err(err) = conversion_result {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
@@ -8022,74 +8045,6 @@ async fn call_deploy_new_sns(
         )),
         None => Ok(deploy_new_sns_response),
     }
-}
-
-/// Validates the user submitted proposal fields.
-pub fn validate_user_submitted_proposal_fields(proposal: &Proposal) -> Result<(), String> {
-    validate_proposal_title(&proposal.title)?;
-    validate_proposal_summary(&proposal.summary)?;
-    validate_proposal_url(&proposal.url)?;
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. proposal must have a title.
-///   2. title len (bytes, not characters) is between min and max.
-pub fn validate_proposal_title(title: &Option<String>) -> Result<(), String> {
-    // Require that proposal has a title.
-    let len = title.as_ref().ok_or("Proposal lacks a title")?.len();
-
-    // Require that title is not too short.
-    if len < PROPOSAL_TITLE_BYTES_MIN {
-        return Err(format!(
-            "Proposal title is too short (must be at least {} bytes)",
-            PROPOSAL_TITLE_BYTES_MIN,
-        ));
-    }
-
-    // Require that title is not too long.
-    if len > PROPOSAL_TITLE_BYTES_MAX {
-        return Err(format!(
-            "Proposal title is too long (can be at most {} bytes)",
-            PROPOSAL_TITLE_BYTES_MAX,
-        ));
-    }
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. summary len (bytes, not characters) is below the max.
-pub fn validate_proposal_summary(summary: &str) -> Result<(), String> {
-    if summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
-        return Err(format!(
-            "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
-            PROPOSAL_SUMMARY_BYTES_MAX,
-            summary.len(),
-        ));
-    }
-
-    Ok(())
-}
-
-/// Returns whether the following requirements are met:
-///   1. If a url is provided, it is between the max and min
-///   2. If a url is specified, it must be from the list of allowed domains.
-pub fn validate_proposal_url(url: &str) -> Result<(), String> {
-    // An empty string will fail validation as it is not a valid url,
-    // but it's fine for us.
-    if !url.is_empty() {
-        ic_nervous_system_common::validate_proposal_url(
-            url,
-            PROPOSAL_URL_CHAR_MIN,
-            PROPOSAL_URL_CHAR_MAX,
-            "Proposal url",
-            Some(vec!["forum.dfinity.org"]),
-        )?
-    }
-
-    Ok(())
 }
 
 fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {

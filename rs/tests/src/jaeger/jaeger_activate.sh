@@ -1,4 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
+
+# Load the jaeger docker image and start the service
+
+set -euo pipefail
 
 docker load -i /config/jaeger.tar
 docker run -d --name jaeger \

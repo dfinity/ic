@@ -44,6 +44,7 @@ use std::{
     string::ToString,
 };
 
+mod create_service_nervous_system;
 pub mod distributions;
 pub mod pb;
 

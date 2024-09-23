@@ -109,6 +109,8 @@ pub struct CallContextManager {
     pub call_contexts: ::prost::alloc::vec::Vec<CallContextEntry>,
     #[prost(message, repeated, tag = "4")]
     pub callbacks: ::prost::alloc::vec::Vec<CallbackEntry>,
+    #[prost(uint64, repeated, tag = "5")]
+    pub unexpired_callbacks: ::prost::alloc::vec::Vec<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CyclesAccount {
