@@ -11,7 +11,7 @@ package(default_visibility = [
 
 rust_library(
     name = "dfn_json",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [
         # Keep sorted.
         "//rs/rust_canisters/on_wire",

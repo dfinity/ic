@@ -20,7 +20,7 @@ SetupOS validates, sanitizes, and copies all of its configuration files to the H
   deployment.json                 # Deployment-specific configurations
   nns_public_key.pem              # NNS public key
 
-Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh]
+Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] & link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh]
 
 === HostOS -> GuestOS
 
