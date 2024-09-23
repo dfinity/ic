@@ -70,18 +70,21 @@ fi
 
 # An awk (mawk) program used to process STDERR to make it easier
 # to find the build event URL when going through logs.
-stderr_awk_program='
+# Finally we record the URL to 'url_out' (passed via variable)
+url_out=$(mktemp)
+stream_awk_program='
   # When seeing the stream info line, grab the url and save it as stream_url
   match($0, /Streaming build results to/) \
     { stream_info_line = $0; \
       match(stream_info_line, /https:\/\/[a-zA-Z0-9\/-.]*/); \
-      stream_url = substr(stream_info_line, RSTART, RLENGTH) } \
+      stream_url = substr(stream_info_line, RSTART, RLENGTH); \
+  } \
   # In general, forward every line to the output
   // { print } \
   # Every N lines, repeat the stream info line
-  // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line }
-  # Finally, print a GitHub notice
-  END { print "::notice title=Build Events for "job_name"::"stream_url }'
+  // { if ( stream_info_line != null && NR % 20 == 0 ) print stream_info_line } \
+  # Finally, record the URL
+  END { if (stream_url != null) print stream_url > url_out }'
 
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
@@ -96,4 +99,9 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --s3_upload="${s3_upload:-"False"}" \
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
-    2> >(awk >&2 -v job_name="$CI_JOB_NAME" "$stderr_awk_program")
+    2>&1 | awk -v url_out="$url_out" "$stream_awk_program"
+
+# Write the bes link & GitHub notice
+echo "Build results uploaded to $(<"$url_out")"
+echo "::notice title=Build Events for $CI_JOB_NAME::$(<"$url_out")"
+rm "$url_out"

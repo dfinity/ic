@@ -5,6 +5,8 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use ic_adapter_metrics_server::start_metrics_grpc;
+use ic_async_utils::incoming_from_nth_systemd_socket;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
@@ -49,19 +51,15 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use blockchainmanager::BlockchainManager;
+use crate::{config::IncomingSource, router::start_main_event_loop, stream::StreamEvent};
 pub use blockchainstate::BlockchainState;
-use common::BlockHeight;
 pub use get_successors_handler::GetSuccessorsHandler;
-pub use router::start_main_event_loop;
 pub use rpc_server::start_grpc_server;
-use stream::StreamEvent;
-pub use transaction_store::TransactionStore;
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Command {
+struct Command {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
@@ -72,7 +70,7 @@ pub struct Command {
 /// This enum is used to represent errors that could occur while dispatching an
 /// event.
 #[derive(Debug)]
-pub enum ProcessBitcoinNetworkMessageError {
+enum ProcessBitcoinNetworkMessageError {
     /// This variant is used to represent when an invalid message has been
     /// received from a Bitcoin node.
     InvalidMessage,
@@ -80,14 +78,10 @@ pub enum ProcessBitcoinNetworkMessageError {
 
 /// This enum is used to represent errors that  
 #[derive(Debug)]
-pub enum ChannelError {
-    /// This variant is used to indicate that the send failed to push
-    /// the outgoing message to the BTC node.
-    NotAvailable,
-}
+enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-pub trait Channel {
+trait Channel {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
     fn send(&mut self, command: Command) -> Result<(), ChannelError>;
@@ -102,7 +96,7 @@ pub trait Channel {
 
 /// This trait provides an interface to anything that may need to react to a
 /// [StreamEvent](crate::stream::StreamEvent).
-pub trait ProcessEvent {
+trait ProcessEvent {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_event(
@@ -114,7 +108,7 @@ pub trait ProcessEvent {
 /// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
-pub trait ProcessBitcoinNetworkMessage {
+trait ProcessBitcoinNetworkMessage {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_bitcoin_network_message(
@@ -122,13 +116,6 @@ pub trait ProcessBitcoinNetworkMessage {
         addr: SocketAddr,
         message: &NetworkMessage,
     ) -> Result<(), ProcessBitcoinNetworkMessageError>;
-}
-
-/// This trait provides an interface to anything that may need to get the
-/// active tip's height.
-pub trait HasHeight {
-    /// This function returns the active tip's height.
-    fn get_height(&self) -> BlockHeight;
 }
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
@@ -193,16 +180,31 @@ impl AdapterState {
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.
-pub fn start_grpc_server_and_router(
-    config: &config::Config,
+pub fn start_server(
+    log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    logger: ReplicaLogger,
-    adapter_state: AdapterState,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config,
 ) {
+    let _enter = rt_handle.enter();
+
+    // Metrics server should only be started if we are managed by systemd and receive the
+    // metrics socket as FD(4).
+    // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
+    // Additionally this function is only called once here.
+    // Systemd Socket config: ic-https-outcalls-adapter.socket
+    // Systemd Service config: ic-https-outcalls-adapter.service
+    if config.incoming_source == IncomingSource::Systemd {
+        let stream = unsafe { incoming_from_nth_systemd_socket(2) };
+        start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
+    }
+
+    let adapter_state = AdapterState::new(config.idle_seconds);
+
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(config, metrics_registry)));
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
     let get_successors_handler = GetSuccessorsHandler::new(
-        config,
+        &config,
         // The get successor handler should be low latency, and instead of not sharing state and
         // offloading the computation to an event loop here we directly access the shared state.
         blockchain_state.clone(),
@@ -214,7 +216,7 @@ pub fn start_grpc_server_and_router(
 
     start_grpc_server(
         config.clone(),
-        logger.clone(),
+        log.clone(),
         adapter_state.clone(),
         get_successors_handler,
         transaction_manager_tx,
@@ -222,8 +224,8 @@ pub fn start_grpc_server_and_router(
     );
 
     start_main_event_loop(
-        config,
-        logger,
+        &config,
+        log.clone(),
         blockchain_state,
         transaction_manager_rx,
         adapter_state,
