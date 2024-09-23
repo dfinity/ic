@@ -37,12 +37,12 @@ impl FetchStrippedConsensusArtifactMetrics {
             ),
             download_missing_ingress_messages_duration: metrics_registry.histogram(
                     "ic_stripped_consensus_artifact_downloader_missing_stripped_ingress_messages_fetch_duration",
-                    "Download time for all the missing ingress messages in the block",
+                    "Download time for all the missing ingress messages in the block, in seconds",
                     decimal_buckets_with_zero(-2, 1),
             ),
             total_block_assembly_duration: metrics_registry.histogram(
                     "ic_stripped_consensus_artifact_total_block_assembly_duration",
-                    "Total time to download and assemble a block",
+                    "Total time to download and assemble a block, in seconds",
                     decimal_buckets_with_zero(-2, 1),
             ),
         }
