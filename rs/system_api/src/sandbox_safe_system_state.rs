@@ -32,6 +32,24 @@ use std::str::FromStr;
 
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
+/// The information that canisters can see about their own status.
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub enum CanisterStatusView {
+    Running,
+    Stopping,
+    Stopped,
+}
+
+impl CanisterStatusView {
+    pub fn from_canister_status_type(status: CanisterStatusType) -> Self {
+        match status {
+            CanisterStatusType::Running { .. } => Self::Running,
+            CanisterStatusType::Stopping { .. } => Self::Stopping,
+            CanisterStatusType::Stopped => Self::Stopped,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
@@ -519,7 +537,7 @@ pub struct SandboxSafeSystemState {
     #[doc(hidden)]
     pub system_state_changes: SystemStateChanges,
     pub(super) canister_id: CanisterId,
-    pub(super) status: CanisterStatusType,
+    pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_size: usize,
     dirty_page_overhead: NumInstructions,
@@ -553,7 +571,7 @@ impl SandboxSafeSystemState {
     #[allow(clippy::too_many_arguments)]
     pub fn new_internal(
         canister_id: CanisterId,
-        status: CanisterStatusType,
+        status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
         wasm_memory_threshold: NumBytes,
@@ -668,7 +686,7 @@ impl SandboxSafeSystemState {
 
         Self::new_internal(
             system_state.canister_id,
-            system_state.status(),
+            CanisterStatusView::from_canister_status_type(system_state.status()),
             system_state.freeze_threshold,
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
@@ -1247,7 +1265,6 @@ mod tests {
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_cycles_account_manager::CyclesAccountManager;
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-    use ic_management_canister_types::CanisterStatusType;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
@@ -1260,7 +1277,9 @@ mod tests {
 
     use crate::{
         cycles_balance_change::CyclesBalanceChange,
-        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
+        sandbox_safe_system_state::{
+            CanisterStatusView, SandboxSafeSystemState, SystemStateChanges,
+        },
     };
 
     #[test]
@@ -1328,7 +1347,7 @@ mod tests {
     fn helper_msg_deadline(call_context_deadline: Option<CoarseTime>) -> CoarseTime {
         let sandbox_state = SandboxSafeSystemState::new_internal(
             canister_test_id(0),
-            CanisterStatusType::Running,
+            CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
             NumBytes::new(0),
