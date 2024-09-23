@@ -11144,7 +11144,7 @@ fn assert_calls_eq(
 #[async_trait]
 impl Environment for MockEnvironment<'_> {
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

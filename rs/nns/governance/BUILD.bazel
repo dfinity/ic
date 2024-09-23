@@ -29,6 +29,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/temporary",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
@@ -77,7 +78,6 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
@@ -87,7 +87,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
