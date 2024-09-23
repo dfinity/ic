@@ -277,7 +277,7 @@ fn test_load_from_storage() {
                     )
                     .await;
 
-                    // Now we restart rosetta in online mode and with persistent storage and check that making transactiosn still works
+                    // Now we restart rosetta in online mode and with persistent storage and check that making transactions still works
                     env = env
                         .restart_rosetta_node(
                             RosettaOptions::builder(replica_url.clone().unwrap().to_string())
