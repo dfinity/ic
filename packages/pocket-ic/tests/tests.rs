@@ -1543,4 +1543,19 @@ fn subnet_metrics() {
 
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 17) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 18));
+
+    pic.uninstall_canister(canister_id, None).unwrap();
+    pic.stop_canister(canister_id, None).unwrap();
+
+    let metrics = pic.get_subnet_metrics(app_subnet);
+
+    assert_eq!(metrics.num_canisters, 2);
+    assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
+
+    pic.delete_canister(canister_id, None).unwrap();
+
+    let metrics = pic.get_subnet_metrics(app_subnet);
+
+    assert_eq!(metrics.num_canisters, 1);
+    assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
