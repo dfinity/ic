@@ -870,8 +870,7 @@ impl PocketIc {
     }
 
     /// Returns subnet metrics for a given subnet.
-    /// Panics if the subnet does not exist.
-    pub fn get_subnet_metrics(&self, subnet_id: Principal) -> SubnetMetrics {
+    pub fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
     }

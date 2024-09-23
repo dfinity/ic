@@ -1025,8 +1025,7 @@ impl PocketIc {
     }
 
     /// Returns subnet metrics for a given subnet.
-    /// Panics if the subnet does not exist.
-    pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> SubnetMetrics {
+    pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
         #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
         struct ReadStateResponse {
             #[serde(with = "serde_bytes")]
@@ -1072,11 +1071,11 @@ impl PocketIc {
             .await
             .unwrap();
         let read_state_response: ReadStateResponse =
-            serde_cbor::from_slice(&resp.bytes().await.unwrap()).unwrap();
+            serde_cbor::from_slice(&resp.bytes().await.unwrap()).ok()?;
         let cert: ic_agent::Certificate =
             serde_cbor::from_slice(&read_state_response.certificate).unwrap();
 
-        let metrics = ic_agent::lookup_value(&cert, path).unwrap();
+        let metrics = ic_agent::lookup_value(&cert, path).ok()?;
         serde_cbor::from_slice(metrics).unwrap()
     }
 

@@ -1526,11 +1526,15 @@ fn subnet_metrics() {
     let topology = pic.topology();
     let app_subnet = topology.get_app_subnets()[0];
 
+    assert!(pic
+        .get_subnet_metrics(Principal::management_canister())
+        .is_none());
+
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
     pic.install_canister(canister_id, counter_wasm(), vec![], None);
 
-    let metrics = pic.get_subnet_metrics(app_subnet);
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
 
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
@@ -1539,7 +1543,7 @@ fn subnet_metrics() {
     pic.add_cycles(canister_id, INIT_CYCLES);
     pic.install_canister(canister_id, counter_wasm(), vec![], None);
 
-    let metrics = pic.get_subnet_metrics(app_subnet);
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
 
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 17) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 18));
@@ -1547,14 +1551,14 @@ fn subnet_metrics() {
     pic.uninstall_canister(canister_id, None).unwrap();
     pic.stop_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet);
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
 
     assert_eq!(metrics.num_canisters, 2);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 
     pic.delete_canister(canister_id, None).unwrap();
 
-    let metrics = pic.get_subnet_metrics(app_subnet);
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
 
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
