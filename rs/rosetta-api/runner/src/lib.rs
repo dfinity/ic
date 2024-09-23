@@ -179,7 +179,6 @@ pub async fn start_rosetta(
 
     RosettaContext {
         proc,
-        _tempdir,
         state_directory,
         port,
     }
