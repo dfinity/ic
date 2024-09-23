@@ -1,3 +1,4 @@
+use crate::candid::{encode_upgrade_args, UpgradeArgs};
 use crate::canister::TargetCanister;
 use candid::Principal;
 use std::fmt::{Display, Formatter};
@@ -70,6 +71,22 @@ impl GitRepository {
         assert!(git_clone.success());
 
         GitRepository { dir: repo }
+    }
+
+    pub fn encode_args_batch(
+        &self,
+        canisters: &[TargetCanister],
+        args: Option<String>,
+    ) -> Vec<UpgradeArgs> {
+        canisters
+            .iter()
+            .map(|canister| {
+                encode_upgrade_args(
+                    &self.candid_file(canister),
+                    args.clone().unwrap_or(canister.default_upgrade_args()),
+                )
+            })
+            .collect()
     }
 
     pub fn candid_file(&self, canister: &TargetCanister) -> PathBuf {

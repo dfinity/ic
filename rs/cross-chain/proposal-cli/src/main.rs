@@ -5,7 +5,6 @@ mod git;
 mod ic_admin;
 mod proposal;
 
-use crate::candid::encode_upgrade_args;
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
 use crate::git::{GitCommitHash, GitRepository};
@@ -112,15 +111,7 @@ async fn main() {
             let dashboard = DashboardClient::new();
             let release_notes = ic_repo.release_notes_batch(&canisters, &from, &to);
             ic_repo.checkout(&to);
-            let upgrade_args: Vec<_> = canisters
-                .iter()
-                .map(|canister| {
-                    encode_upgrade_args(
-                        &ic_repo.candid_file(canister),
-                        args.clone().unwrap_or(canister.default_upgrade_args()),
-                    )
-                })
-                .collect();
+            let upgrade_args: Vec<_> = ic_repo.encode_args_batch(&canisters, args);
             let canister_ids = ic_repo.parse_canister_id_batch(&canisters);
             let last_upgrade_proposal_ids: Vec<_> = dashboard
                 .list_canister_upgrade_proposals_batch(&canister_ids)
@@ -156,15 +147,7 @@ async fn main() {
             let mut ic_repo = GitRepository::clone_ic();
 
             ic_repo.checkout(&at);
-            let install_args: Vec<_> = canisters
-                .iter()
-                .map(|canister| {
-                    encode_upgrade_args(
-                        &ic_repo.candid_file(canister),
-                        args.clone().unwrap_or(canister.default_upgrade_args()),
-                    )
-                })
-                .collect();
+            let install_args: Vec<_> = ic_repo.encode_args_batch(&canisters, args);
             let canister_ids = ic_repo.parse_canister_id_batch(&canisters);
             let compressed_wasm_hashes = ic_repo.build_canister_artifact_batch(&canisters);
 
