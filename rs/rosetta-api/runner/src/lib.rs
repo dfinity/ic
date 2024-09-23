@@ -10,7 +10,7 @@ use tokio::time::sleep;
 struct KillOnDrop(Child);
 
 pub struct RosettaContext {
-    _proc: KillOnDrop,
+    proc: KillOnDrop,
     pub state_directory: TempDir,
     pub port: u16,
 }
@@ -20,17 +20,11 @@ impl RosettaContext {
         self.port
     }
 
-    /// Kills the rosetta process and deletes the state directory.
-    /// All traces of the rosetta process will be removed.
-    pub fn kill_rosetta_context(self) {
-        drop(self._proc);
-    }
-
     /// Kills the process in which the rosetta server and blocks synchronizer are running.
     /// Leaves the state directory untouched.
     /// This is useful when you want to restart the rosetta server with the same state directory. (Load existing blocks from storage)
     pub fn kill_rosetta_process(&mut self) {
-        self._proc.0.kill().expect("Failed to kill rosetta process");
+        self.proc.0.kill().expect("Failed to kill rosetta process");
     }
 }
 
@@ -147,7 +141,7 @@ pub async fn start_rosetta(
         cmd.arg("--offline");
     }
 
-    let _proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
+    let proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-rosetta-api (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
@@ -184,7 +178,8 @@ pub async fn start_rosetta(
     }
 
     RosettaContext {
-        _proc,
+        proc,
+        _tempdir,
         state_directory,
         port,
     }

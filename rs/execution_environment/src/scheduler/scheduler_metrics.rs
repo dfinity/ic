@@ -37,7 +37,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) instructions_consumed_per_message: Histogram,
     pub(super) instructions_consumed_per_round: Histogram,
     pub(super) executable_canisters_per_round: Histogram,
-    pub(super) executed_canisters_per_round: IntGauge,
+    pub(super) executed_canisters_per_round: Histogram,
     pub(super) expired_ingress_messages_count: IntCounter,
     pub(super) ingress_history_length: IntGauge,
     pub(super) msg_execution_duration: Histogram,
@@ -220,9 +220,11 @@ impl SchedulerMetrics {
                 // 1, 2, 5, …, 10000, 20000, 50000
                 decimal_buckets(0, 4),
             ),
-            executed_canisters_per_round: metrics_registry.int_gauge(
+            executed_canisters_per_round: metrics_registry.histogram(
                 "scheduler_executed_canisters_per_round",
                 "Number of canisters that were actually executed in the last round.",
+                // 1, 2, 5, …, 10000, 20000, 50000
+                decimal_buckets(0, 4),
             ),
             expired_ingress_messages_count: metrics_registry.int_counter(
                 "scheduler_expired_ingress_messages_count",
