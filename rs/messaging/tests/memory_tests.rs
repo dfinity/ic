@@ -155,6 +155,26 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     fixture.expect_guaranteed_response_message_memory_taken_at_most("Final check", 0, 0)
 }
 
+/// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
+/// remote subnet with 1 canister installed.
+///
+/// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
+/// 'chatter' enabled, i.e. the installed canisters are making random calls (including downstream calls).
+///
+/// For the second phase, all canisters are put into stopping state, this disables
+/// For the second phase, the 'chatter' is disabled and additional rounds are executed until all
+/// calls have received a reply.
+///
+/// Checks that the guaranteed response message memory never exceeds the limit; that all calls eventually
+/// receive a reply (or were rejected synchronously when issued); and that the message memory goes
+/// back to 0 after all in-flight messages have been dealt with.
+fn check_reject_signals_for_requests_all_calls_are_concluded_impl(
+    seeds: &[u64],
+) -> Result<(), (String, DebugInfo)> {
+
+}
+
+
 #[derive(Debug)]
 struct FixtureConfig {
     local_canisters_count: u64,
