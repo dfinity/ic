@@ -2,8 +2,7 @@
 // a self signed certificate.
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
-    use futures::TryFutureExt;
-    use ic_https_outcalls_adapter::{AdapterServer, Config};
+    use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
         https_outcalls_service_client::HttpsOutcallsServiceClient, HttpMethod, HttpsOutcallRequest,
     };
@@ -17,7 +16,6 @@ mod test {
     use tokio::net::UnixStream;
     use tonic::transport::{Channel, Endpoint, Uri};
     use tower::service_fn;
-    use unix::UnixListenerDrop;
     use uuid::Uuid;
     use warp::{
         filters::BoxedFilter,
@@ -140,7 +138,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_canister_http_server() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
         let url = start_server(CERT_INIT.get_or_init(generate_certs));
@@ -163,7 +163,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_canister_http_http_protocol() {
         // Check that error is returned if a `http` url is specified.
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -193,7 +195,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_canister_http_http_protocol_allowed() {
         // Check that error is returned if a `http` url is specified.
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -215,7 +219,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_canister_http_server_post() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -239,7 +245,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[tokio::test]
     async fn test_canister_http_server_head() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -264,7 +272,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     async fn test_response_limit_exceeded() {
         // Check if response with higher than allowed response limit is rejected.
         let response_limit: u64 = 512;
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -294,7 +304,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_within_response_limit() {
         let response_size: u64 = 512;
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -319,7 +331,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     async fn test_request_timeout() {
         // Check if response with higher than allowed response limit is rejected.
         let delay: u64 = 512;
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -349,10 +363,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_connect_timeout() {
         // Test that adapter hits connect timeout when connecting to unreachable host.
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
             http_connect_timeout_secs: 1,
             // Set to high value to make sure connect timeout kicks in.
             http_request_timeout_secs: 6000,
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -382,7 +398,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_nonascii_header() {
         let response_limit: u64 = 512;
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -405,7 +423,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[tokio::test]
     async fn test_missing_protocol() {
         // Test that missing http protocol specification returns error.
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
         let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
 
@@ -426,35 +446,24 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     // Spawn grpc server and return canister http client
     fn spawn_grpc_server(config: Config) -> HttpsOutcallsServiceClient<Channel> {
-        let uuid = Uuid::new_v4();
-        let path = "/tmp/canister-http-test-".to_string() + &uuid.to_string();
+        ic_https_outcalls_adapter::start_server(
+            &no_op_logger(),
+            &MetricsRegistry::default(),
+            &tokio::runtime::Handle::current(),
+            config.clone(),
+        );
+        if let IncomingSource::Path(path) = config.incoming_source {
+            // port can be ignored
+            let channel = Endpoint::try_from("http://[::]:50151")
+                .unwrap()
+                .connect_with_connector_lazy(service_fn(move |_: Uri| {
+                    // Connect to a Uds socket
+                    UnixStream::connect(path.clone())
+                }));
 
-        // anonymous type that implements stream trait with item type: Result<UnixStream, Error>.
-        let incoming = {
-            let uds = UnixListenerDrop::bind(path.clone()).unwrap();
-
-            async_stream::stream! {
-                loop {
-                    let item = uds.accept().map_ok(|(st, _)| unix::UnixStream(st)).await;
-                    yield item;
-                }
-            }
-        };
-
-        let server = AdapterServer::new(config, no_op_logger(), &MetricsRegistry::default());
-
-        // spawn gRPC server
-        tokio::spawn(async move { server.serve(incoming).await.expect("server shutdown") });
-
-        // port can be ignored
-        let channel = Endpoint::try_from("http://[::]:50151")
-            .unwrap()
-            .connect_with_connector_lazy(service_fn(move |_: Uri| {
-                // Connect to a Uds socket
-                UnixStream::connect(path.clone())
-            }));
-
-        HttpsOutcallsServiceClient::new(channel)
+            return HttpsOutcallsServiceClient::new(channel);
+        }
+        panic!("Bad incoming path.");
     }
 
     // implements unix listener that removes socket file when done
