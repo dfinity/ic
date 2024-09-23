@@ -1,5 +1,5 @@
 {
-  "checksum": "1a71cd15faad6d063bb365e238d8e57fe6df234d506241b7630655616a119d17",
+  "checksum": "69f608e3c94460cdd4fa815962baf0dbeaf2d1f7cb05c8efffae1d0276473ae9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18434,6 +18434,10 @@
             {
               "id": "rust_decimal 1.30.0",
               "target": "rust_decimal"
+            },
+            {
+              "id": "rustc-demangle 0.1.23",
+              "target": "rustc_demangle"
             },
             {
               "id": "rustc-hash 1.1.0",
@@ -79234,6 +79238,7 @@
     "rusqlite 0.28.0",
     "rust_decimal 1.30.0",
     "rust_decimal_macros 1.30.0",
+    "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.12",
     "rustls-native-certs 0.7.0",
