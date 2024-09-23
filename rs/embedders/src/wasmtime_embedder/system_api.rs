@@ -1,9 +1,12 @@
-use crate::wasm_utils::instrumentation::WasmMemoryType;
-use crate::wasmtime_embedder::{
-    system_api_complexity::{overhead, overhead_native},
-    StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+use crate::{
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        convert_backtrace,
+        system_api_complexity::{overhead, overhead_native},
+        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+    },
+    InternalErrorCode,
 };
-use crate::InternalErrorCode;
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -19,8 +22,10 @@ use ic_system_api::SystemApiImpl;
 use ic_types::{Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError;
 use num_traits::ops::saturating::SaturatingAdd;
+
+use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
+
 use std::convert::TryFrom;
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -33,8 +38,9 @@ fn unexpected_err(s: String) -> HypervisorError {
 
 fn process_err(
     store: &mut impl AsContextMut<Data = StoreData>,
-    e: HypervisorError,
+    mut e: HypervisorError,
 ) -> anyhow::Error {
+    add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
             let result = anyhow::Error::msg(format! {"{}", e});
@@ -44,6 +50,24 @@ fn process_err(
         Err(_) => anyhow::Error::msg(
             format! {"Failed to access system api while processing error: {}", e},
         ),
+    }
+}
+
+fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
+    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
+        match e {
+            HypervisorError::Trapped {
+                trap_code: _,
+                backtrace,
+            }
+            | HypervisorError::CalledTrap {
+                message: _,
+                backtrace,
+            } => {
+                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1250,14 +1274,16 @@ pub(crate) fn syscalls<
                             stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
                         ))
                     }
-                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap(
-                        "Internal error: `memory.grow` instruction failed to grow stable memory"
-                            .to_string(),
-                    ),
-                    InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
-                        "Trapped with internal error code: {}",
-                        err_code
-                    )),
+                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
+                        message:
+                            "Internal error: `memory.grow` instruction failed to grow stable memory"
+                                .to_string(),
+                        backtrace: None,
+                    },
+                    InternalErrorCode::Unknown => HypervisorError::CalledTrap {
+                        message: format!("Trapped with internal error code: {}", err_code),
+                        backtrace: None,
+                    },
                 };
                 Err(process_err(&mut caller, err))
             }
