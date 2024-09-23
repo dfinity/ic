@@ -1095,6 +1095,10 @@ impl SystemState {
     /// matching `CallbackId`). The missing callback will generate a critical error
     /// when the response is about to be executed, regardless.
     fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        const UNKNOWN_CANISTER_ID: CanisterId =
+            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+        const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
+
         let call_context_manager = self.call_context_manager().unwrap();
         let (originator, respondent, deadline) =
             match call_context_manager.callbacks().get(&callback_id) {
@@ -1104,11 +1108,7 @@ impl SystemState {
                 // This should be unreachable, but if we somehow end up here, we can populate
                 // the reject response with arbitrary values, as trying to execute it it will
                 // fail anyway and produce a critical error. This is safer than panicking.
-                None => (
-                    CanisterId::ic_00(),
-                    CanisterId::ic_00(),
-                    CoarseTime::from_secs_since_unix_epoch(1),
-                ),
+                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
             };
 
         CanisterMessage::Response(
