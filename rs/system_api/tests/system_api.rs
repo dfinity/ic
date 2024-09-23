@@ -1032,9 +1032,10 @@ fn test_canister_cycle_balance() {
     // Check ic0_canister_cycle_balance.
     assert_eq!(
         api.ic0_canister_cycle_balance(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None
+        })
     );
 
     let mut heap = vec![0; 16];
@@ -1066,9 +1067,10 @@ fn test_msg_cycles_available_traps() {
 
     assert_eq!(
         api.ic0_msg_cycles_available(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None,
+        })
     );
 
     let mut heap = vec![0; 16];
@@ -1090,9 +1092,10 @@ fn test_msg_cycles_refunded_traps() {
 
     assert_eq!(
         api.ic0_msg_cycles_refunded(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None,
+        })
     );
 
     let mut heap = vec![0; 16];
