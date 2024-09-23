@@ -1,7 +1,7 @@
 //! The execution environment public interface.
 mod errors;
 
-pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
+pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_management_canister_types::MasterPublicKeyId;
