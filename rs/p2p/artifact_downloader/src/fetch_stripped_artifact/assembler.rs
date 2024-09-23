@@ -17,14 +17,14 @@ use ic_types::{
     batch::IngressPayload,
     consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
-    NodeId,
+    CountBytes, NodeId,
 };
 
 use crate::FetchArtifact;
 
 use super::{
     download::download_ingress,
-    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource},
+    metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
     stripper::Strippable,
     types::stripped::{
         MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
@@ -87,7 +87,7 @@ pub struct FetchStrippedConsensusArtifact {
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
-    metrics: FetchStrippedConsensusArtifactMetrics,
+    metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
 }
 
 impl FetchStrippedConsensusArtifact {
@@ -106,6 +106,7 @@ impl FetchStrippedConsensusArtifact {
         let router = super::download::build_axum_router(super::download::Pools {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
+            metrics: IngressSenderMetrics::new(&metrics_registry),
         });
 
         let (fetch_stripped_fn, subrouter) = FetchArtifact::new(
@@ -127,7 +128,9 @@ impl FetchStrippedConsensusArtifact {
                 fetch_stripped,
                 transport,
                 node_id,
-                metrics: FetchStrippedConsensusArtifactMetrics::new(&metrics_registry),
+                metrics: Arc::new(FetchStrippedConsensusArtifactMetrics::new(
+                    &metrics_registry,
+                )),
             }
         };
 
@@ -181,6 +184,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
                 self.transport.clone(),
                 id.as_ref().clone(),
                 self.log.clone(),
+                self.metrics.clone(),
                 self.node_id,
                 peer_rx.clone(),
             ));
@@ -197,6 +201,9 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             if peer_id == self.node_id {
                 ingress_messages_from_ingress_pool += 1;
             } else {
+                self.metrics
+                    .missing_ingress_messages_bytes
+                    .observe(ingress.count_bytes() as f64);
                 ingress_messages_from_peers += 1;
             }
 
@@ -250,6 +257,7 @@ async fn get_or_fetch<P: Peers>(
     // Id of the *full* artifact which should contain the missing data
     full_consensus_message_id: ConsensusMessageId,
     log: ReplicaLogger,
+    metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
     node_id: NodeId,
     peer_rx: P,
 ) -> (SignedIngress, NodeId) {
@@ -263,6 +271,7 @@ async fn get_or_fetch<P: Peers>(
         ingress_message_id,
         full_consensus_message_id,
         &log,
+        &metrics,
         peer_rx,
     )
     .await
