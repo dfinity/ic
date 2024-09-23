@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- Support for IC Bitcoin API via the management canister if the bitcoin canister is installed as the bitcoin testnet canister
+  (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configured with `Network::Regtest`
+  and a `bitcoind` process is listening at an address and port specified in an additional argument
+  of the endpoint `/instances/` to create a new PocketIC instance.
+
 ### Fixed
 - Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
 - Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
