@@ -845,6 +845,7 @@ mod tests {
     #[tokio::test]
     async fn slot_table_limit_exceeded() {
         let (mut mgr, _channels) = ReceiverManagerBuilder::new().with_slot_limit(2).build();
+        let cancellation = CancellationToken::new();
 
         mgr.handle_advert_receive(
             SlotUpdate {
@@ -854,6 +855,7 @@ mod tests {
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         mgr.handle_advert_receive(
             SlotUpdate {
@@ -863,6 +865,7 @@ mod tests {
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(mgr.slot_table.len(), 1);
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
@@ -876,6 +879,7 @@ mod tests {
             },
             NODE_1,
             ConnId::from(1),
+            cancellation.clone(),
         );
         assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 2);
         assert_eq!(mgr.active_assembles.len(), 2);
