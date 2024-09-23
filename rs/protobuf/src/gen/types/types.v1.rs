@@ -324,6 +324,7 @@ pub enum RejectCode {
     DestinationInvalid = 3,
     CanisterReject = 4,
     CanisterError = 5,
+    SysUnknown = 6,
 }
 impl RejectCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -338,6 +339,7 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
             RejectCode::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
             RejectCode::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+            RejectCode::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -349,6 +351,7 @@ impl RejectCode {
             "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
             "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
             "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
+            "REJECT_CODE_SYS_UNKNOWN" => Some(Self::SysUnknown),
             _ => None,
         }
     }
@@ -1491,7 +1494,20 @@ pub struct GetIngressMessageInBlockResponse {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedBlockProposal {}
+pub struct StrippedBlockProposal {
+    #[prost(message, optional, tag = "1")]
+    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    #[prost(message, repeated, tag = "2")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    #[prost(message, optional, tag = "3")]
+    pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedIngressMessage {
+    #[prost(message, optional, tag = "1")]
+    pub stripped: ::core::option::Option<IngressMessageId>,
+}
 #[allow(clippy::large_enum_variant)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

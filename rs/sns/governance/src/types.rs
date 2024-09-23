@@ -46,9 +46,10 @@ use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
-    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger_validation::MAX_LOGO_LENGTH, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
+use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,

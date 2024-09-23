@@ -4,8 +4,6 @@ use tikv_jemallocator::Jemalloc;
 
 use crate::cli::Cli;
 
-#[cfg(feature = "tls")]
-mod acme;
 mod bouncer;
 mod cache;
 mod check;
@@ -22,15 +20,9 @@ mod rate_limiting;
 mod retry;
 mod routes;
 mod snapshot;
-mod socket;
 #[cfg(any(test, feature = "bench"))]
 pub mod test_utils;
 mod tls_verify;
-
-#[cfg(feature = "tls")]
-mod configuration;
-#[cfg(feature = "tls")]
-mod tls;
 
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;

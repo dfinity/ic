@@ -252,6 +252,29 @@ impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
     }
 }
 
+impl From<icp_ledger::AccountIdentifier> for AccountIdentifier {
+    fn from(value: icp_ledger::AccountIdentifier) -> Self {
+        Self {
+            address: value.to_hex(),
+            sub_account: None,
+            metadata: None,
+        }
+    }
+}
+
+impl TryFrom<AccountIdentifier> for icp_ledger::AccountIdentifier {
+    type Error = anyhow::Error;
+    fn try_from(value: AccountIdentifier) -> Result<Self, Self::Error> {
+        icp_ledger::AccountIdentifier::from_hex(&value.address).map_err(|err| {
+                anyhow!(
+                    "Unable to convert accountidentifier.address {:?} to AccountIdentifier. Error: {:?}",
+                    &value.address,
+                    err
+                )
+            })
+    }
+}
+
 /// An account may have state specific to a contract address (ERC-20 token)
 /// and/or a stake (delegated balance). The sub_account_identifier should
 /// specify which state (if applicable) an account instantiation refers to.

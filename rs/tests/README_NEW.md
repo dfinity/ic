@@ -22,7 +22,7 @@ In the current (transitional) period, system tests can co-exist in two flavours:
 ## Running a bazelified flavour of a system test
 [basic_health_test.rs](https://github.com/dfinity/ic/blob/master/rs/tests/bin/basic_health_test.rs) can serve as an example of a bazelified system test. Bazel [rule](https://bazel.build/extending/rules) needed for building the test target binary from the underlying Rust source code is defined in the [BUILD.bazel](https://github.com/dfinity/ic/blob/master/rs/tests/BUILD.bazel) file. In order to run this test with [Bazel](https://bazel.build/), first enter the docker container:
 ```
-/ic$ ./gitlab-ci/container/container-run.sh
+/ic$ ./ci/container/container-run.sh
 ```
 this container provides all the necessary environment setup for building and running Bazel targets.
 ### Via native Bazel commands

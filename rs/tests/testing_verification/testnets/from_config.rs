@@ -23,7 +23,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create --lifetime-mins=180 --from-ic-config-path <(cat <<EOF
 // {
 //   "subnets": [

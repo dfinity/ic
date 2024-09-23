@@ -20,12 +20,12 @@ use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
-use ic_nervous_system_clients::ledger_client::LedgerCanister;
+use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_clients::{
+    canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
+};
 use ic_nervous_system_common::{
-    cmc::CMCCanister,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_runtime::DfnRuntime;
@@ -223,7 +223,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
-            Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
+            Box::new(IcpLedgerCanister::<DfnRuntime>::new(NNS_LEDGER_CANISTER_ID)),
             Box::new(CMCCanister::<DfnRuntime>::new()),
         ));
     }

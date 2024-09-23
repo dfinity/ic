@@ -1,5 +1,5 @@
 use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -23,7 +23,7 @@ use ic_state_layout::{
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
-use ic_utils::thread::parallel_map;
+use ic_utils::thread::maybe_parallel_map;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -103,7 +103,7 @@ pub(crate) fn make_checkpoint(
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 })
                 .unwrap();
@@ -250,39 +250,20 @@ pub fn load_checkpoint(
 
         let mut canister_states = BTreeMap::new();
         let canister_ids = checkpoint_layout.canister_ids()?;
-        match thread_pool {
-            Some(ref mut thread_pool) => {
-                let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
-                    load_canister_state_from_checkpoint(
-                        checkpoint_layout,
-                        canister_id,
-                        Arc::clone(&fd_factory),
-                        metrics,
-                    )
-                });
+        let results = maybe_parallel_map(&mut thread_pool, canister_ids.iter(), |canister_id| {
+            load_canister_state_from_checkpoint(
+                checkpoint_layout,
+                canister_id,
+                Arc::clone(&fd_factory),
+                metrics,
+            )
+        });
 
-                for canister_state in results.into_iter() {
-                    let (canister_state, durations) = canister_state?;
-                    canister_states
-                        .insert(canister_state.system_state.canister_id(), canister_state);
+        for canister_state in results.into_iter() {
+            let (canister_state, durations) = canister_state?;
+            canister_states.insert(canister_state.system_state.canister_id(), canister_state);
 
-                    durations.apply(metrics);
-                }
-            }
-            None => {
-                for canister_id in canister_ids.iter() {
-                    let (canister_state, durations) = load_canister_state_from_checkpoint(
-                        checkpoint_layout,
-                        canister_id,
-                        Arc::clone(&fd_factory),
-                        metrics,
-                    )?;
-                    canister_states
-                        .insert(canister_state.system_state.canister_id(), canister_state);
-
-                    durations.apply(metrics);
-                }
-            }
+            durations.apply(metrics);
         }
 
         canister_states
@@ -296,38 +277,22 @@ pub fn load_checkpoint(
 
         let mut canister_snapshots = BTreeMap::new();
         let snapshot_ids = checkpoint_layout.snapshot_ids()?;
-        match thread_pool {
-            Some(thread_pool) => {
-                let results = parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
-                    (
-                        **snapshot_id,
-                        load_snapshot_from_checkpoint(
-                            checkpoint_layout,
-                            snapshot_id,
-                            Arc::clone(&fd_factory),
-                        ),
-                    )
-                });
+        let results = maybe_parallel_map(&mut thread_pool, snapshot_ids.iter(), |snapshot_id| {
+            (
+                **snapshot_id,
+                load_snapshot_from_checkpoint(
+                    checkpoint_layout,
+                    snapshot_id,
+                    Arc::clone(&fd_factory),
+                ),
+            )
+        });
 
-                for (snapshot_id, canister_snapshot) in results.into_iter() {
-                    let (canister_snapshot, durations) = canister_snapshot?;
-                    canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+        for (snapshot_id, canister_snapshot) in results.into_iter() {
+            let (canister_snapshot, durations) = canister_snapshot?;
+            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
 
-                    durations.apply(metrics);
-                }
-            }
-            None => {
-                for snapshot_id in snapshot_ids.iter() {
-                    let (canister_snapshot, durations) = load_snapshot_from_checkpoint(
-                        checkpoint_layout,
-                        snapshot_id,
-                        Arc::clone(&fd_factory),
-                    )?;
-                    canister_snapshots.insert(*snapshot_id, Arc::new(canister_snapshot));
-
-                    durations.apply(metrics);
-                }
-            }
+            durations.apply(metrics);
         }
 
         CanisterSnapshots::new(canister_snapshots)

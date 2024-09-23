@@ -67,8 +67,8 @@ A nice writeup about async and blocking operations can be found in https://ryhl.
 
 == Implementation design decisions ==
 
-1. Use QUIC to statisfy the first two requirements ("Reliable data delivery" and "Multiplexing").
-2. Open new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
+1. Use QUIC to satisfy the first two requirements ("Reliable data delivery" and "Multiplexing").
+2. Open a new QUIC stream for each message, instead of one stream per handler/URI. TODO: explain.
 3. Handlers are always ready to process messages, hence the router is always ready to accept streams. TODO: explain.
 
 === Breaking dependency cycles in P2P protocols ===
@@ -98,3 +98,13 @@ if a route is missing it should not be considered a failure in transport.
 For comparison, https://grpc.io/docs/what-is-grpc/core-concepts/#rpc-life-cycle[all `+gRPC+` methods contain a response from the application receive side].
 In addition, no +gRPC+ implementation will return https://grpc.github.io/grpc/core/md_doc_statuscodes.html[`+NOT_FOUND+`],
 which is the most appropriate return code if a route is missing.
+
+=== Using HTTP request/response as API types ===
+
+gRPC implementations use Interface Definition Language (IDL) for describing both the service interface and the structure of the payload messages.
+Since the QUIC transport is a lightweight library, no IDL is used. 
+
+The QUIC transport library directly exposes the HTTP request and response to the client instead of introducing a custom type that wraps the payload.
+There are two main reasons for this design decision:
+* Reuse the HTTP request and response types to keep the code compact. This also eliminates the need to implement https://docs.rs/axum/latest/axum/index.html#extractors[extractors].
+* Existing HTTP client-server can be transitioned more easily to the QUIC transport. For example, the server router can be completely reused; request building and response handling on the client stay unchanged

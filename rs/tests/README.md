@@ -31,7 +31,7 @@ document.
 ### How can I run system tests in Bazel?
 In order to run system tests, enter the build docker container:
 ```
-/ic$ ./gitlab-ci/container/container-run.sh
+/ic$ ./ci/container/container-run.sh
 ```
 To launch a test target (`my_test_target` in this case) within the docker run:
 ```

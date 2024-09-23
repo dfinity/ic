@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 const PORT: u32 = 8106;
-const VM_NAME: &str = "rosetta-neuron-spawn";
+const VM_NAME: &str = "neuron-spawn";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

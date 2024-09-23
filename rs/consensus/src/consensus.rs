@@ -36,12 +36,14 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{
+        ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
+    },
     dkg::DkgPool,
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -135,7 +137,7 @@ impl ConsensusImpl {
     pub fn new(
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
-        membership: Arc<Membership>,
+        consensus_cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
@@ -153,6 +155,12 @@ impl ConsensusImpl {
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
+        let membership = Arc::new(Membership::new(
+            consensus_cache,
+            registry_client.clone(),
+            replica_config.subnet_id,
+        ));
+
         let stable_registry_version_age =
             POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
@@ -278,14 +286,14 @@ impl ConsensusImpl {
 
     /// Call the given sub-component's `on_state_change` function, mark the
     /// time it takes to complete, increment its invocation counter, and mark
-    /// the size of the [`ChangeSet`] result.
+    /// the size of the [`Mutations`] result.
     fn call_with_metrics<F>(
         &self,
         sub_component: ConsensusSubcomponent,
         on_state_change: F,
-    ) -> ChangeSet
+    ) -> Mutations
     where
-        F: FnOnce() -> ChangeSet,
+        F: FnOnce() -> Mutations,
     {
         self.last_invoked
             .borrow_mut()
@@ -363,17 +371,17 @@ impl ConsensusImpl {
     }
 }
 
-impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
-    type ChangeSet = ChangeSet;
+impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
+    type Mutations = Mutations;
     /// Invoke `on_state_change` on each subcomponent in order.
-    /// Return the first non-empty [ChangeSet] as returned by a subcomponent.
-    /// Otherwise return an empty [ChangeSet] if all subcomponents return
+    /// Return the first non-empty [Mutations] as returned by a subcomponent.
+    /// Otherwise return an empty [Mutations] if all subcomponents return
     /// empty.
     ///
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    non-empty [Mutations]. It is important that a [Mutations] is fully
     ///    applied to the pool or timer before another subcomponent uses
     ///    them, because each subcomponent expects to see full state in order to
     ///    make correct decisions on what to do next.
@@ -390,7 +398,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     ///    on the memory consumption of our advertised validated pool.
     ///    The order of the rest subcomponents decides whom is given
     ///    a priority, but it should not affect liveness or correctness.
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> Mutations {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
 
@@ -407,7 +415,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 self.log,
                 "consensus is halted by instructions of the subnet record in the registry"
             );
-            return ChangeSet::new();
+            return Mutations::new();
         }
 
         // Log some information about the state of consensus
@@ -478,7 +486,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             })
         };
 
-        let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
+        let calls: [&'_ dyn Fn() -> Mutations; 10] = [
             &finalize,
             &make_catch_up_package,
             &aggregate,
@@ -552,7 +560,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
 pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
     timestamp: Time,
     messages: Vec<T>,
-) -> ChangeSet {
+) -> Mutations {
     messages
         .into_iter()
         .map(|msg| {
@@ -564,7 +572,7 @@ pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
         .collect()
 }
 
-fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> ChangeSet {
+fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> Mutations {
     msg.map(|msg| {
         ChangeAction::AddToValidated(ValidatedConsensusArtifact {
             msg: msg.into_message(),
@@ -634,7 +642,6 @@ mod tests {
     ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
-            membership,
             registry,
             crypto,
             time_source,
@@ -662,7 +669,7 @@ mod tests {
         let consensus_impl = ConsensusImpl::new(
             replica_config,
             registry,
-            membership,
+            pool.get_cache(),
             crypto.clone(),
             Arc::new(FakeIngressSelector::new()),
             Arc::new(FakeXNetPayloadBuilder::new()),

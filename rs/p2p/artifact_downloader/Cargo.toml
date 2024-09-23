@@ -22,6 +22,7 @@ prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 

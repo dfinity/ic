@@ -62,7 +62,7 @@ use ic_nns_governance_api::{
         NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
         UpdateCanisterSettings,
     },
-    proposal_helpers::{
+    proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
@@ -963,6 +963,10 @@ struct ProposeToChangeNnsCanisterCmd {
     /// If set, it will update the canister's memory allocation to this value.
     /// See `MemoryAllocation` for the semantics of this field.
     memory_allocation: Option<u64>,
+
+    /// Keeping it around so that scripts that alreay pass this flag don't break.
+    #[clap(long, default_value = "true")]
+    use_explicit_action_type: bool,
 
     /// If true, the proposal will be sent as `ExecuteNnsFunction` instead of `InstallCode`.
     #[clap(long)]
@@ -3067,12 +3071,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
-        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
-
         // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result.into())
+        Ok(result)
     }
 }
 

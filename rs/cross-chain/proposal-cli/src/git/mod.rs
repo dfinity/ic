@@ -37,8 +37,18 @@ impl<const N: usize> Display for Hash<N> {
     }
 }
 
+impl Hash<32> {
+    pub fn sha256(data: &[u8]) -> Self {
+        use sha2::Digest;
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(data);
+        Self(hasher.finalize().into())
+    }
+}
+
 pub type GitCommitHash = Hash<20>;
 pub type CompressedWasmHash = Hash<32>;
+pub type ArgsHash = Hash<32>;
 
 #[derive(Debug)]
 pub struct GitRepository {
@@ -134,7 +144,7 @@ impl GitRepository {
     }
 
     pub fn build_canister_artifact(&mut self, canister: &TargetCanister) -> CompressedWasmHash {
-        let build = Command::new("./gitlab-ci/container/build-ic.sh")
+        let build = Command::new("./ci/container/build-ic.sh")
             .arg("--canisters")
             .current_dir(self.dir.path())
             .status()

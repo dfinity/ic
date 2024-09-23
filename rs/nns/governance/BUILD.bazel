@@ -11,7 +11,7 @@ exports_files(["canister/governance.did"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -29,16 +29,15 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/temporary",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
+    "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/root",
     "//rs/types/base_types",
@@ -50,6 +49,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
@@ -69,15 +70,15 @@ BASE_DEPENDENCIES = [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "@crate_index//:csv",
+        # Keep sorted.
         "//rs/nervous_system/common/test_keys",
+        "@crate_index//:csv",
     ],
 })
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
@@ -87,7 +88,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
     "//rs/sns/swap:swap--test_feature",
@@ -98,6 +98,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -115,7 +116,6 @@ DEV_DEPENDENCIES = [
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:candid_parser",
-    "@crate_index//:futures",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
@@ -184,7 +184,6 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES + [
         "@crate_index//:canbench-rs",
-        "@crate_index//:ic-cdk",
     ],
 )
 
@@ -216,6 +215,7 @@ rust_canister(
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -230,6 +230,7 @@ rust_canister(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -263,6 +264,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -276,6 +278,7 @@ rust_test(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 

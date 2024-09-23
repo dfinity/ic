@@ -16,9 +16,7 @@ use ic_consensus::{
     dkg, idkg,
 };
 use ic_consensus_manager::ConsensusManagerBuilder;
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -260,7 +258,6 @@ fn start_consensus(
 
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
-    let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
@@ -305,15 +302,10 @@ fn start_consensus(
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
 
     {
-        let membership = Arc::new(Membership::new(
-            consensus_pool_cache.clone(),
-            registry_client.clone(),
-            subnet_id,
-        ));
         let consensus_impl = ConsensusImpl::new(
             replica_config.clone(),
             Arc::clone(&registry_client),
-            Arc::clone(&membership) as Arc<_>,
+            consensus_pool_cache.clone(),
             Arc::clone(&consensus_crypto),
             Arc::clone(&ingress_manager) as Arc<_>,
             xnet_payload_builder,
@@ -462,7 +454,7 @@ fn start_consensus(
             idkg_tx,
             idkg::IDkgImpl::new(
                 node_id,
-                Arc::clone(&consensus_block_cache),
+                consensus_pool.read().unwrap().get_block_cache(),
                 Arc::clone(&consensus_crypto),
                 Arc::clone(&state_reader),
                 metrics_registry.clone(),
@@ -478,7 +470,7 @@ fn start_consensus(
 
         let bouncer = Arc::new(idkg::IDkgBouncer::new(
             subnet_id,
-            Arc::clone(&consensus_block_cache),
+            consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&state_reader),
         ));
         let assembler = ic_artifact_downloader::FetchArtifact::new(

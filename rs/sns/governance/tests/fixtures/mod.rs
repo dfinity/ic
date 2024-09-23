@@ -854,6 +854,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                     current_basis_points: Some(0),
                     updated_at_timestamp_seconds: Some(1),
                 }),
+                migrated_root_wasm_memory_limit: Some(true),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),
@@ -1073,6 +1074,11 @@ impl GovernanceCanisterFixtureBuilder {
 
         // Set up the canister fixture with our neuron.
         self.add_neuron(neuron)
+    }
+
+    pub fn set_migrated_root_wasm_memory_limit(mut self, value: bool) -> Self {
+        self.governance.migrated_root_wasm_memory_limit = Some(value);
+        self
     }
 }
 
