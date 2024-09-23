@@ -105,10 +105,8 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         .with_current_time()
         .with_routing_table(routing_table);
 
-    let mut subnet_config = SubnetConfig::new(subnet_type);
-    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
-        subnet_config,
+        subnet_config: SubnetConfig::new(subnet_type),
         hypervisor_config.unwrap_or_default(),
     )));
 
