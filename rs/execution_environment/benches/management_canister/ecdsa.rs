@@ -9,7 +9,7 @@ use ic_state_machine_tests::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct ECDSAArgs {
     pub ecdsa_key: EcdsaKeyId,
     pub calls: u64,

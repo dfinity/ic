@@ -4,19 +4,14 @@ use ic_icp_rosetta_runner::start_rosetta;
 use ic_icp_rosetta_runner::RosettaOptionsBuilder;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
 use pocket_ic::PocketIcBuilder;
 use reqwest::StatusCode;
-use std::path::PathBuf;
 use tokio::runtime::Runtime;
 
-fn path_from_env(var: &str) -> PathBuf {
-    std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
-        .unwrap()
-}
-
 #[test]
-fn test() {
+fn smoke_test() {
     let rt = Runtime::new().unwrap();
     let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
     let endpoint = pocket_ic.make_live(None);

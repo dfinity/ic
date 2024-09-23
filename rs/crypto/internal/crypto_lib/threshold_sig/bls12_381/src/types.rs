@@ -47,7 +47,7 @@ impl CombinedSignatureBytes {
 pub(super) type SecretKey = Scalar;
 
 /// A serialized BLS secret key.
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub(crate) SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = Scalar::BYTES;
@@ -61,11 +61,11 @@ impl SecretKeyBytes {
 ///
 /// Doing this (instead of a type) allows for From conversions in
 /// this crate.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey(pub G2Projective);
 
 /// Interpolation failed because of duplicate x-coordinates.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdError {
     DuplicateX,
 }

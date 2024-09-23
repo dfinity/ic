@@ -8,8 +8,10 @@ use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use ic_ledger_core::Tokens;
+use ic_ledger_core::{
+    tokens::{CheckedAdd, CheckedSub},
+    Tokens,
+};
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use num_traits::ops::inv::Inv;
@@ -113,6 +115,17 @@ macro_rules! assert_is_err {
     };
 }
 
+pub fn obsolete_string_field<T: AsRef<str>>(obselete_field: T, replacement: Option<T>) -> String {
+    match replacement {
+        Some(replacement) => format!(
+            "The field `{}` is obsolete. Please use `{}` instead.",
+            obselete_field.as_ref(),
+            replacement.as_ref(),
+        ),
+        None => format!("The field `{}` is obsolete.", obselete_field.as_ref()),
+    }
+}
+
 /// Besides dividing, this also converts to Decimal (from u64).
 ///
 /// The only way this can fail is if denominations_per_token is 0. Therefore, if you pass a positive
@@ -172,7 +185,7 @@ impl fmt::Debug for NervousSystemError {
 
 /// A more convenient (but explosive) way to do token math. Not suitable for
 /// production use! Only for use in tests.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ExplosiveTokens(Tokens);
 
 impl Display for ExplosiveTokens {
@@ -326,7 +339,7 @@ fn query_parameters_map(url: &str) -> HashMap<String, String> {
     result
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, serde::Serialize)]
 enum LogSeverity {
     Info,
     Error,
@@ -709,75 +722,6 @@ pub fn serve_metrics(
     }
 }
 
-/// Verifies that the url is within the allowed length, and begins with
-/// `http://` or `https://`. In addition, it will return an error in case of a
-/// possibly "dangerous" condition, such as the url containing a username or
-/// password, or having a port, or not having a domain name.
-pub fn validate_proposal_url(
-    url: &str,
-    min_length: usize,
-    max_length: usize,
-    field_name: &str,
-    allowed_domains: Option<Vec<&str>>,
-) -> Result<(), String> {
-    // // Check that the URL is a sensible length
-    if url.len() > max_length {
-        return Err(format!(
-            "{field_name} must be less than {max_length} characters long, but it is {} characters long. (Field was set to `{url}`.)",
-            url.len(),
-        ));
-    }
-    if url.len() < min_length {
-        return Err(format!(
-            "{field_name} must be greater or equal to than {min_length} characters long, but it is {} characters long. (Field was set to `{url}`.)",
-            url.len(),
-        ));
-    }
-
-    //
-
-    if !url.starts_with("https://") {
-        return Err(format!(
-            "{field_name} must begin with https://. (Field was set to `{url}`.)",
-        ));
-    }
-
-    let parts_url: Vec<&str> = url.split("://").collect();
-    if parts_url.len() > 2 {
-        return Err(format!(
-            "{field_name} contains an invalid sequence of characters"
-        ));
-    }
-
-    if parts_url.len() < 2 {
-        return Err(format!("{field_name} is missing content after protocol."));
-    }
-
-    if url.contains('@') {
-        return Err(format!(
-            "{field_name} cannot contain authentication information"
-        ));
-    }
-
-    let parts_past_protocol = parts_url[1].split_once('/');
-
-    let (domain, _path) = match parts_past_protocol {
-        Some((domain, path)) => (domain, Some(path)),
-        None => (parts_url[1], None),
-    };
-
-    match allowed_domains {
-        Some(allowed) => match allowed.iter().any(|allowed| domain == *allowed) {
-            true => Ok(()),
-            false => Err(format!(
-                "{field_name} was not in the list of allowed domains: {:?}",
-                allowed
-            )),
-        },
-        None => Ok(()),
-    }
-}
-
 /// Returns the total amount of memory (heap, stable memory, etc) that the calling canister has allocated.
 #[cfg(target_arch = "wasm32")]
 pub fn total_memory_size_bytes() -> usize {
@@ -813,14 +757,10 @@ pub fn stable_memory_size_bytes() -> u64 {
 
 // Given 2 numbers `dividend`` and `divisor`, break the dividend to `divisor * quotient + remainder`
 // where `remainder < divisor`, using safe arithmetic. Returns `(quotient, remainder)`.
-fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
-    let quotient = dividend
-        .checked_div(divisor)
-        .expect("Failed to calculate quotient");
-    let remainder = dividend
-        .checked_rem(divisor)
-        .expect("Failed to calculate remainder");
-    (quotient, remainder)
+fn checked_div_mod(dividend: usize, divisor: usize) -> Option<(usize, usize)> {
+    let quotient = dividend.checked_div(divisor)?;
+    let remainder = dividend.checked_rem(divisor)?;
+    Some((quotient, remainder))
 }
 
 #[cfg(test)]

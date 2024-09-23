@@ -37,7 +37,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 lazy_static = { workspace = true }
 nix = { workspace = true }
-parking_lot = "0.12.1"
+parking_lot = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
@@ -46,11 +46,11 @@ socket2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-test-utilities-logger = { path = "./logger" }
 ic-test-utilities-registry = { path = "./registry" }
 rusty-fork = "0.3.0"
-wasmprinter = "0.2.45"
+wasmprinter = { workspace = true }

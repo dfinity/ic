@@ -46,7 +46,7 @@ const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height"
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
     size_level: usize,

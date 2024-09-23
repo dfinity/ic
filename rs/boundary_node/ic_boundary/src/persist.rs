@@ -46,7 +46,7 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 // This is more efficient than lexographically sorted hexadecimal strings as done in JS router
 // Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
 // But going u256 makes it future proof and according to spec
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct RouteSubnet {
     pub id: Principal,
     pub range_start: u256,
@@ -96,7 +96,7 @@ impl RouteSubnet {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct Routes {
     pub node_count: u32,
     // subnets should be sorted by `range_start` field for the binary search to work

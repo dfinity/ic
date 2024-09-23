@@ -67,10 +67,8 @@ fn test_add_wasm_can_be_called_directly_if_access_controls_are_disabled() {
     );
 }
 
-// TODO[NNS1-3289]: Remove this test. Alternatively, change it to check that the metadata is still
-// there after an upgrade.
 #[test]
-fn test_metadata_migration() {
+fn test_sns_w_saves_metadata_on_upgrade() {
     use get_wasm_metadata_response::{Ok, Result};
 
     // Prepare a WASM module to be stored inside SNS-W. Make sure it has known metadata.
@@ -91,17 +89,17 @@ fn test_metadata_migration() {
         let candid_service = metadata::get_metadata(&wasm_module, "candid:service")
             .unwrap()
             .to_vec();
-        assert_eq!(candid_service.len(), 4_149);
+        assert!(
+            !candid_service.is_empty(),
+            "Expected some bytes for candid:service, got none."
+        );
 
         let git_commit_id = metadata::get_metadata(&wasm_module, "git_commit_id")
             .unwrap()
             .to_vec();
-        assert_eq!(
-            git_commit_id,
-            vec![
-                48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48,
-                48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 10
-            ]
+        assert!(
+            !git_commit_id.is_empty(),
+            "Expected some bytes for git_commit_id, got none."
         );
 
         let expected_metadata = vec![
@@ -147,17 +145,22 @@ fn test_metadata_migration() {
         );
     }
 
-    // Check tha the metadata is not yet available.
+    // Check that the metadata is populated.
     {
         let response = get_wasm_metadata(&machine, sns_wasm_canister_id, &root_hash);
-        assert_eq!(
-            response,
-            GetWasmMetadataResponse {
-                result: Some(Result::Error(SnsWasmError {
-                    message: "get_wasm_metadata is not implemented yet.".to_string(),
-                })),
-            }
-        );
+
+        // Unwrap response.
+        let GetWasmMetadataResponse {
+            result: Some(Result::Ok(Ok { sections })),
+        } = response
+        else {
+            panic!(
+                "Unexpected response from SnsW.get_wasm_metadata: {:?}",
+                response
+            );
+        };
+
+        assert_eq!(sections, expected_metadata);
     }
 
     // Upgrade SNS-W; this should trigger the metadata migration.
@@ -168,7 +171,7 @@ fn test_metadata_migration() {
             .unwrap();
     }
 
-    // Check that the metadata is now populated.
+    // Check that the metadata is now still populated.
     {
         let response = get_wasm_metadata(&machine, sns_wasm_canister_id, &root_hash);
         let GetWasmMetadataResponse {

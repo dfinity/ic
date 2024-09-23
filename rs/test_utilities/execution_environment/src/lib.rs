@@ -7,7 +7,6 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
@@ -25,6 +24,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -1976,6 +1976,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
+        self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self
@@ -1999,21 +2004,6 @@ impl ExecutionTestBuilder {
             .embedders_config
             .feature_flags
             .best_effort_responses = status;
-        self
-    }
-
-    pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
-        self
-    }
-
-    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_schnorr_public_key = status;
-        self
-    }
-
-    pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_sign_with_schnorr = status;
         self
     }
 

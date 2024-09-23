@@ -22,4 +22,6 @@ pub struct CanisterSnapshotBits {
     pub wasm_memory_size: u64,
     #[prost(uint64, tag = "10")]
     pub total_size: u64,
+    #[prost(message, repeated, tag = "11")]
+    pub exported_globals: ::prost::alloc::vec::Vec<super::super::canister_state_bits::v1::Global>,
 }

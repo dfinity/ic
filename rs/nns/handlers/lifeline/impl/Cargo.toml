@@ -27,4 +27,4 @@ ic-nervous-system-clients = { path="../../../../nervous_system/clients" }
 ic-nervous-system-root = { path="../../../../nervous_system/root" }
 ic-nns-common ={path="../../../common"}
 ic-nns-test-utils = { path = "../../../../nns/test_utils" }
-wasmprinter = "0.2.45"
+wasmprinter = { workspace = true }

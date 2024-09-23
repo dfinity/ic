@@ -35,7 +35,10 @@ fn should_encode_non_empty_ledger_upgrade_args() {
 #[test]
 fn should_parse_constructor_parameters() {
     for canister in TargetCanister::iter() {
-        if canister == TargetCanister::IcpArchive1 || canister == TargetCanister::IcpArchive2 {
+        if canister == TargetCanister::IcpArchive1
+            || canister == TargetCanister::IcpArchive2
+            || canister == TargetCanister::IcpArchive3
+        {
             continue;
         }
 

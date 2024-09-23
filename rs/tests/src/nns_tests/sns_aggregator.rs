@@ -90,7 +90,7 @@ pub fn config_fast(env: TestEnv) {
     install_aggregator(&env);
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AggregatorClient {
     canister_id: PrincipalId,
 }

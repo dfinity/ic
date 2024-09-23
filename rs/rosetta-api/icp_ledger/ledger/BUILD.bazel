@@ -27,8 +27,8 @@ rust_library(
         # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/constants",
         "//rs/crypto/sha2",
+        "//rs/limits",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
@@ -144,6 +144,7 @@ rust_ic_test(
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
+        "//rs/rosetta-api/icrc1/test_utils",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
@@ -153,7 +154,20 @@ rust_ic_test(
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:hex",
+        "@crate_index//:ic-agent",
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
     ],
+)
+
+# Deploys the ledger canister to a running local replica.
+sh_binary(
+    name = "dfx_deploy",
+    srcs = ["scripts/dfx_deploy.sh"],
+    data = [
+        "dfx.json",
+        ":ledger-canister-wasm",
+        "//rs/rosetta-api/icp_ledger:ledger.did",
+    ],
+    visibility = ["//visibility:public"],
 )

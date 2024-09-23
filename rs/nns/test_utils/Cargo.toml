@@ -71,4 +71,3 @@ rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }
-walrus = "0.19.0"

@@ -38,7 +38,6 @@ ALIASES = {}
 
 rust_library(
     name = "subnet_splitting",
-    testonly = True,
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
@@ -53,7 +52,6 @@ rust_library(
 
 rust_binary(
     name = "subnet-splitting-tool",
-    testonly = True,
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

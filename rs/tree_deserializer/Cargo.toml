@@ -13,5 +13,5 @@ serde = { workspace = true }
 
 [dev-dependencies]
 maplit = "1.0.2"
-proptest = "1.0"
-proptest-derive = "0.3.0"
+proptest = { workspace = true }
+proptest-derive = { workspace = true }

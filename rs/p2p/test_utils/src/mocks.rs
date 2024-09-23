@@ -42,12 +42,6 @@ mock! {
             request: Request<Bytes>,
         ) -> Result<Response<Bytes>, anyhow::Error>;
 
-        async fn push(
-            &self,
-            peer_id: &NodeId,
-            request: Request<Bytes>,
-        ) -> Result<(), anyhow::Error>;
-
         fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }
 }
@@ -75,13 +69,18 @@ mock! {
 mock! {
     pub BouncerFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A, MockValidatedPoolReader<A>> for BouncerFactory<A> {
+    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A::Id, MockValidatedPoolReader<A>> for BouncerFactory<A> {
         fn new_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
+        fn refresh_period(&self) -> std::time::Duration;
     }
 }
 
 mock! {
     pub Peers {}
+
+    impl Clone for Peers {
+        fn clone(&self) -> Self;
+    }
 
     impl Peers for Peers {
         fn peers(&self) -> Vec<NodeId>;

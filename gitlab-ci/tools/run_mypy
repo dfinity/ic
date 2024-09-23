@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -eEou pipefail
-# mypy check of "Policy Monitoring" project.
-mypy --ignore-missing-imports ./policy-monitoring/main.py ./policy-monitoring/tests/*.py
-
-# mypy check of other projects ...

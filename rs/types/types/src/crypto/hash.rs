@@ -417,7 +417,7 @@ impl CryptoHashDomain for CryptoHashableTestDummy {
 /// Ideally, this struct would be annotated with `#[cfg(test)]` so that it is
 /// only available in test code, however, then it would not be visible outside
 /// of this crate where it is needed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct CryptoHashableTestDummy(pub Vec<u8>);
 
 /// A cryptographically hashable type.

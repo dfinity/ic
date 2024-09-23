@@ -12,7 +12,6 @@ use ic_nns_governance_api::pb::v1::GovernanceError;
 use sha3::{Digest, Keccak256};
 use std::{collections::HashSet, time::SystemTime};
 
-pub mod init;
 pub mod pb;
 
 pub const LOG_PREFIX: &str = "[GTC] ";

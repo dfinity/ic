@@ -1575,7 +1575,7 @@ mod validate_pks_and_sks {
         dkg_dealing_encryption_key
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     struct LocalKeyIds {
         node_signing_key_id: Option<KeyId>,
         committee_signing_key_id: Option<KeyId>,

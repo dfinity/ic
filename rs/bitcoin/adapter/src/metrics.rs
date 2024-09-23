@@ -8,7 +8,7 @@ pub(crate) const LABEL_GET_SUCCESSOR: &str = "get_successor";
 pub(crate) const LABEL_REQUEST_TYPE: &str = "type";
 pub(crate) const LABEL_SEND_TRANSACTION: &str = "send_transaction";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ServiceMetrics {
     pub request_duration: HistogramVec,
 }
@@ -27,7 +27,7 @@ impl ServiceMetrics {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct GetSuccessorMetrics {
     pub processed_block_hashes: Histogram,
     pub response_blocks: Histogram,
@@ -52,7 +52,7 @@ impl GetSuccessorMetrics {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct RouterMetrics {
     pub idle: IntCounter,
     pub bitcoin_messages_sent: IntCounterVec,
@@ -89,7 +89,7 @@ impl RouterMetrics {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct BlockchainStateMetrics {
     pub tip_height: IntGauge,
     pub block_cache_size: IntGauge,
@@ -117,7 +117,7 @@ impl BlockchainStateMetrics {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct TransactionMetrics {
     pub txn_ops: IntCounterVec,
 }

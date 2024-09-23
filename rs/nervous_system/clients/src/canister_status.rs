@@ -19,7 +19,7 @@ impl TryFrom<PrincipalId> for CanisterIdRecord {
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusType.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub enum CanisterStatusType {
     // The rename statements are mandatory to comply with the candid interface
     // of the IC management canister. For more details, see:
@@ -43,7 +43,7 @@ impl std::fmt::Display for CanisterStatusType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Default, CandidType, Deserialize)]
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
@@ -57,7 +57,7 @@ pub enum LogVisibility {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettings {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: Option<candid::Nat>,
@@ -73,7 +73,7 @@ pub struct DefiniteCanisterSettings {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which are simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResult {
     pub status: CanisterStatusType,
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
@@ -86,7 +86,7 @@ pub struct CanisterStatusResult {
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusResult.
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterStatusResultFromManagementCanister {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
@@ -102,7 +102,7 @@ pub struct CanisterStatusResultFromManagementCanister {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsFromManagementCanister {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: candid::Nat,
@@ -213,7 +213,7 @@ where
 }
 
 /// Copy-and-paste of types from management_canister_types, without deprecated fields.
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
@@ -311,7 +311,7 @@ impl CanisterStatusResultV2 {
 ///     compute_allocation: nat;
 ///     memory_allocation: opt nat;
 /// })`
-#[derive(CandidType, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
     pub controllers: Vec<PrincipalId>,
     pub compute_allocation: candid::Nat,

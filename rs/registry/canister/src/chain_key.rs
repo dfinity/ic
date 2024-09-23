@@ -7,7 +7,7 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
 use serde::{Deserialize, Serialize};
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub(crate) struct InitialChainKeyConfigInternal {
     pub key_configs: Vec<KeyConfigRequestInternal>,
     pub signature_request_timeout_ns: Option<u64>,
@@ -23,7 +23,7 @@ impl InitialChainKeyConfigInternal {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub(crate) struct KeyConfigRequestInternal {
     pub key_config: KeyConfigInternal,
     pub subnet_id: PrincipalId,

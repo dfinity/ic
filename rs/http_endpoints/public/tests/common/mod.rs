@@ -497,6 +497,7 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            true,
         );
 
         HttpEndpointHandles {
@@ -578,13 +579,13 @@ pub mod test_agent {
             .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Copy, Clone, Debug)]
     pub enum Call {
         V2,
         V3,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub struct IngressMessage {
         canister_id: PrincipalId,
         effective_canister_id: PrincipalId,

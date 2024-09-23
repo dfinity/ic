@@ -1552,8 +1552,8 @@ message NeuronsFundSnapshot {
     // The principals that can vote, propose, and follow on behalf of this neuron.
     repeated ic_base_types.pb.v1.PrincipalId hotkeys = 7;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional ic_base_types.pb.v1.PrincipalId hotkey_principal = 4 [deprecated = true];
+    reserved 4;
+    reserved "hotkey_principal";
   }
 
   repeated NeuronsFundNeuronPortion neurons_fund_neuron_portions = 1;
@@ -2719,8 +2719,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

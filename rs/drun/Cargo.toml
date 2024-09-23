@@ -45,7 +45,7 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-wasmparser = "0.201.0"
+wasmparser = { workspace = true }
 
 [[bin]]
 name = "drun"

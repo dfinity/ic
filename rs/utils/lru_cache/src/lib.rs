@@ -153,7 +153,7 @@ where
 mod tests {
     use super::*;
 
-    #[derive(Debug, Eq, Hash, PartialEq)]
+    #[derive(Eq, PartialEq, Hash, Debug)]
     struct ValueSize(u32, usize);
 
     impl CountBytes for ValueSize {
@@ -162,7 +162,7 @@ mod tests {
         }
     }
 
-    #[derive(Debug, Eq, Hash, PartialEq)]
+    #[derive(Eq, PartialEq, Hash, Debug)]
     struct Key(u32);
 
     impl CountBytes for Key {

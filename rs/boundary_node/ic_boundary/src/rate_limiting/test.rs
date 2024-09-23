@@ -3,8 +3,7 @@ use super::*;
 use anyhow::Error;
 use axum::{
     body::Body,
-    extract::ConnectInfo,
-    http::Request,
+    extract::Request,
     middleware::Next,
     middleware::{self},
     response::IntoResponse,
@@ -12,15 +11,16 @@ use axum::{
     Router,
 };
 use http::StatusCode;
+use ic_bn_lib::http::ConnInfo;
 use ic_types::{
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
     CanisterId,
 };
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::Service;
 
 use crate::{
-    routes::test::test_route_subnet_with_id, socket::TcpConnectInfo, test_utils::setup_test_router,
+    routes::{test::test_route_subnet_with_id, ApiError},
+    test_utils::setup_test_router,
 };
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
@@ -28,13 +28,16 @@ async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiErr
 }
 
 async fn body_to_subnet_context(
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let (parts, body) = request.into_parts();
-    let body_vec = hyper::body::to_bytes(body).await.unwrap().to_vec();
+    let body_vec = axum::body::to_bytes(body, usize::MAX)
+        .await
+        .unwrap()
+        .to_vec();
     let subnet_id = String::from_utf8(body_vec.clone()).unwrap();
-    let mut request = Request::from_parts(parts, hyper::Body::from(body_vec));
+    let mut request = Request::from_parts(parts, axum::body::Body::from(body_vec));
     request
         .extensions_mut()
         .insert(Arc::new(test_route_subnet_with_id(subnet_id, 0)));
@@ -43,15 +46,12 @@ async fn body_to_subnet_context(
 }
 
 async fn add_ip_to_request(
-    mut request: Request<Body>,
-    next: Next<Body>,
+    mut request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     request
         .extensions_mut()
-        .insert(ConnectInfo(TcpConnectInfo(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            8080,
-        ))));
+        .insert(Arc::new(ConnInfo::default()));
     let resp = next.run(request).await;
     Ok(resp)
 }

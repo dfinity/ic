@@ -44,6 +44,12 @@ pub struct RosettaOptions {
     pub ic_url: String,
 }
 
+impl RosettaOptions {
+    pub fn builder(ic_url: String) -> RosettaOptionsBuilder {
+        RosettaOptionsBuilder::new(ic_url)
+    }
+}
+
 pub struct RosettaOptionsBuilder {
     ledger_id: Option<Principal>,
     persistent_storage: bool,
@@ -132,10 +138,8 @@ pub async fn start_rosetta(
         )
     }));
 
-    let mut tries_left = NUM_TRIES;
-    while tries_left > 0 && !port_file.exists() {
+    while !port_file.exists() {
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
-        tries_left -= 1;
     }
 
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");

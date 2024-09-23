@@ -7,7 +7,7 @@ use std::{
 /// The identifier of a message execution. It must be unique per sandbox
 /// process. The current implementation provides stronger guarantee:
 /// it is unique across all canisters.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ExecId(usize);
 
 impl ExecId {
@@ -34,7 +34,7 @@ impl Display for ExecId {
 /// The identifier of a memory. It must be unique per sandbox process.
 /// The current implementation provides stronger guarantee: it is unique across
 /// all canisters.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct MemoryId(usize);
 
 impl MemoryId {
@@ -74,7 +74,7 @@ impl Display for MemoryId {
 /// The identifier of a compiled Wasm binary. It must be unique per sandbox
 /// process. The current implementation provides stronger guarantee: it is
 /// unique across all canisters.
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct WasmId(usize);
 
 impl WasmId {

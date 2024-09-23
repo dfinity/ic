@@ -129,8 +129,8 @@ use crate::wasmtime_embedder::{
 };
 use ic_wasm_transform::{self, Global, Module};
 use wasmparser::{
-    BlockType, CompositeType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType,
-    Operator, SubType, TypeRef, ValType,
+    BlockType, CompositeInnerType, CompositeType, Export, ExternalKind, FuncType, GlobalType,
+    Import, MemoryType, Operator, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -139,7 +139,7 @@ use std::convert::TryFrom;
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum WasmMemoryType {
+pub enum WasmMemoryType {
     Wasm32,
     Wasm64,
 }
@@ -174,11 +174,12 @@ impl InjectedImports {
 }
 
 // Gets the cost of an instruction.
-pub fn instruction_to_cost(i: &Operator) -> u64 {
+pub fn instruction_to_cost(i: &Operator, mem_type: WasmMemoryType) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
-    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // The exceptions are: atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
     // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    // Cost for certain instructions differ based on the memory type (Wasm32 vs. Wasm64).
     match i {
         // The following instructions are mostly signaling the start/end of code blocks,
         // so we assign 0 cost to them.
@@ -358,9 +359,8 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I64TruncF64S { .. }
         | Operator::I64TruncF64U { .. } => 20,
 
-        // All load/store instructions are of cost 2.
+        // All load/store instructions are of cost 1 in Wasm32 mode.
         // Validated in benchmarks.
-        // The cost is adjusted to 1 after benchmarking with real canisters.
         Operator::I32Load { .. }
         | Operator::I64Load { .. }
         | Operator::F32Load { .. }
@@ -383,7 +383,10 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
         | Operator::I32Store16 { .. }
         | Operator::I64Store8 { .. }
         | Operator::I64Store16 { .. }
-        | Operator::I64Store32 { .. } => 1,
+        | Operator::I64Store32 { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
 
         // Global get/set operations are similarly expensive to loads/stores.
         Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
@@ -455,28 +458,34 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
 
         ////////////////////////////////////////////////////////////////
         // Wasm SIMD Operators
-        Operator::V128Load { .. } => 1,
-        Operator::V128Load8x8S { .. } => 1,
-        Operator::V128Load8x8U { .. } => 1,
-        Operator::V128Load16x4S { .. } => 1,
-        Operator::V128Load16x4U { .. } => 1,
-        Operator::V128Load32x2S { .. } => 1,
-        Operator::V128Load32x2U { .. } => 1,
-        Operator::V128Load8Splat { .. } => 1,
-        Operator::V128Load16Splat { .. } => 1,
-        Operator::V128Load32Splat { .. } => 1,
-        Operator::V128Load64Splat { .. } => 1,
-        Operator::V128Load32Zero { .. } => 1,
-        Operator::V128Load64Zero { .. } => 1,
-        Operator::V128Store { .. } => 1,
-        Operator::V128Load8Lane { .. } => 2,
-        Operator::V128Load16Lane { .. } => 2,
-        Operator::V128Load32Lane { .. } => 1,
-        Operator::V128Load64Lane { .. } => 1,
-        Operator::V128Store8Lane { .. } => 1,
-        Operator::V128Store16Lane { .. } => 1,
-        Operator::V128Store32Lane { .. } => 1,
-        Operator::V128Store64Lane { .. } => 1,
+
+        // Load/store for SIMD cost 1 in Wasm32 mode and 2 in Wasm64 mode.
+        Operator::V128Load { .. }
+        | Operator::V128Load8x8S { .. }
+        | Operator::V128Load8x8U { .. }
+        | Operator::V128Load16x4S { .. }
+        | Operator::V128Load16x4U { .. }
+        | Operator::V128Load32x2S { .. }
+        | Operator::V128Load32x2U { .. }
+        | Operator::V128Load8Splat { .. }
+        | Operator::V128Load16Splat { .. }
+        | Operator::V128Load32Splat { .. }
+        | Operator::V128Load64Splat { .. }
+        | Operator::V128Load32Zero { .. }
+        | Operator::V128Load64Zero { .. }
+        | Operator::V128Store { .. }
+        | Operator::V128Load8Lane { .. }
+        | Operator::V128Load16Lane { .. }
+        | Operator::V128Load32Lane { .. }
+        | Operator::V128Load64Lane { .. }
+        | Operator::V128Store8Lane { .. }
+        | Operator::V128Store16Lane { .. }
+        | Operator::V128Store32Lane { .. }
+        | Operator::V128Store64Lane { .. } => match mem_type {
+            WasmMemoryType::Wasm32 => 1,
+            WasmMemoryType::Wasm64 => 2,
+        },
+
         Operator::V128Const { .. } => 1,
         Operator::I8x16Shuffle { .. } => 3,
         Operator::I8x16ExtractLaneS { .. } => 1,
@@ -720,7 +729,7 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeType::Func(existing_ty) = &existing_subtype.composite_type {
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
             if *existing_ty == ty {
                 return idx as u32;
             }
@@ -729,7 +738,10 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     module.types.push(SubType {
         is_final: true,
         supertype_idx: None,
-        composite_type: CompositeType::Func(ty),
+        composite_type: CompositeType {
+            inner: CompositeInnerType::Func(ty),
+            shared: false,
+        },
     });
     (module.types.len() - 1) as u32
 }
@@ -1002,7 +1014,10 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        if let CompositeType::Func(t) = &module.types[module.functions[i] as usize].composite_type {
+        if let CompositeInnerType::Func(t) = &module.types[module.functions[i] as usize]
+            .composite_type
+            .inner
+        {
             func_types.push((i, t.clone()));
         } else {
             return Err(WasmInstrumentationError::InvalidFunctionType(format!(
@@ -1350,6 +1365,7 @@ fn export_additional_symbols<'a>(
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
+            shared: false,
         },
         init_expr: Operator::I64Const { value: 0 },
     });
@@ -1360,6 +1376,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1368,6 +1385,7 @@ fn export_additional_symbols<'a>(
             ty: GlobalType {
                 content_type: ValType::I64,
                 mutable: true,
+                shared: false,
             },
             init_expr: Operator::I64Const { value: 0 },
         });
@@ -1378,7 +1396,7 @@ fn export_additional_symbols<'a>(
 
 // Represents a hint about the context of each static cost injection point in
 // wasm.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Scope {
     ReentrantBlockStart,
     NonReentrantBlockStart,
@@ -1387,7 +1405,7 @@ enum Scope {
 
 // Represents the type of the cost operand on the stack.
 // Needed to determine the correct instruction to decrement the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum CostOperandOnStack {
     X32Bit,
     X64Bit,
@@ -1396,7 +1414,7 @@ enum CostOperandOnStack {
 // `StaticCost` injection points contain information about the cost of the
 // following basic block. `DynamicCost` injection points assume there is an i32
 // on the stack which should be decremented from the instruction counter.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum InjectionPointCostDetail {
     StaticCost {
         scope: Scope,
@@ -1811,7 +1829,8 @@ fn injections(code: &[Operator], mem_type: WasmMemoryType) -> Vec<InjectionPoint
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail
+            .increment_cost(instruction_to_cost(i, mem_type));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
@@ -2001,6 +2020,7 @@ fn update_memories(
             shared: false,
             initial: wasm_bytemap_size_in_wasm_pages,
             maximum: Some(wasm_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2017,6 +2037,7 @@ fn update_memories(
             shared: false,
             initial: 0,
             maximum: Some(max_memory_size_in_wasm_pages(max_stable_memory_size)),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {
@@ -2031,6 +2052,7 @@ fn update_memories(
             shared: false,
             initial: stable_bytemap_size_in_wasm_pages,
             maximum: Some(stable_bytemap_size_in_wasm_pages),
+            page_size_log2: None,
         });
 
         module.exports.push(Export {

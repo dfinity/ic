@@ -32,17 +32,19 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 dyn-clone = "1.0.14"
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
+ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
@@ -88,7 +90,6 @@ strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { version = "0.1.4", optional = true }
-ic-cdk = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -101,18 +102,18 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-futures = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-proptest = "1.0"
+proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 
 [features]
 test = ["ic-sns-swap/test"]
-canbench-rs = ["dep:canbench-rs", "dep:ic-cdk"]
+canbench-rs = ["dep:canbench-rs"]

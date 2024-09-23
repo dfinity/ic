@@ -9,13 +9,13 @@ use serde::{Deserialize, Serialize};
 
 const KIB: usize = 1_024;
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpRequestArgs {
     pub calls: u64,
     pub headers_number: u64,

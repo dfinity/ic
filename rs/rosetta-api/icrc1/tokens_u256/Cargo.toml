@@ -16,4 +16,4 @@ serde = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true }
