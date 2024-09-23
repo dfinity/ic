@@ -102,11 +102,6 @@ impl StateMachine {
     pub fn canister_memory_usage_bytes(&self) -> u64 {
         self.sm.canister_memory_usage_bytes()
     }
-    pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
-        let res = self.sm.get_subnet_ids();
-        assert_eq!(res, vec![self.sm.get_subnet_id()]);
-        res
-    }
 
     pub fn new() -> Self {
         StateMachineBuilder::new().build()
@@ -114,6 +109,12 @@ impl StateMachine {
 
     pub fn get_subnet_id(&self) -> SubnetId {
         self.sm.get_subnet_id()
+    }
+
+    pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
+        let res = self.sm.get_subnet_ids();
+        assert_eq!(res, vec![self.sm.get_subnet_id()]);
+        res
     }
 
     pub fn tick(&self) {
