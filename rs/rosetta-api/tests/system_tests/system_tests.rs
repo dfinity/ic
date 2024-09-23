@@ -18,19 +18,3 @@ fn smoke_test() {
         assert_eq!(res.network_identifiers.len(), 1);
     });
 }
-
-#[test]
-fn test_cc() {
-    println!(
-        "Acc: {:?}",
-        icp_ledger::AccountIdentifier::new(
-            ic_types::PrincipalId(
-                candid::Principal::from_text(
-                    "iowfl-yzooa-br3dt-77erl-nlm7f-kplhq-php75-hw3an-aeqn2-swh4t-3qe",
-                )
-                .unwrap(),
-            ),
-            None,
-        )
-    );
-}
