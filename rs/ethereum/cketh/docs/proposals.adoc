@@ -32,3 +32,4 @@
 . https://dashboard.internetcomputer.org/proposal/132415[132415]: upgrade the ckETH minter canister to replace Ankr
 . https://dashboard.internetcomputer.org/proposal/132474[132474]: upgrade the ckETH minter canister to replace POKT
 . https://dashboard.internetcomputer.org/proposal/133058[133058]: upgrade the ckETH minter canister to adjust cycle fees for tECDSA signatures
+. https://dashboard.internetcomputer.org/proposal/133084[133084]: upgrade the ckERC20 ledger suite orchestrator to let the ckETH ledger suite be managed by the orchestrator and upgrade all managed ledger suites
