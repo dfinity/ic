@@ -68,7 +68,7 @@ fn test_get_effective_payload_sets_proposal_id_for_add_wasm() {
     })
     .unwrap();
 
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
+    let effective_payload = get_effective_payload(mt, payload, proposal_id, 0).unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(
@@ -97,7 +97,7 @@ fn test_get_effective_payload_overrides_proposal_id_for_add_wasm() {
     })
     .unwrap();
 
-    let effective_payload = get_effective_payload(mt, &payload, proposal_id, 0).unwrap();
+    let effective_payload = get_effective_payload(mt, payload, proposal_id, 0).unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);

@@ -18436,6 +18436,10 @@
               "target": "rust_decimal"
             },
             {
+              "id": "rustc-demangle 0.1.23",
+              "target": "rustc_demangle"
+            },
+            {
               "id": "rustc-hash 1.1.0",
               "target": "rustc_hash"
             },
@@ -79233,6 +79237,7 @@
     "rusqlite 0.28.0",
     "rust_decimal 1.30.0",
     "rust_decimal_macros 1.30.0",
+    "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.12",
     "rustls-native-certs 0.7.0",
