@@ -50,6 +50,7 @@ anchors:
   dind-small-setup: &dind-small-setup
     runs-on:
       labels: dind-small
+      group: ch1-disabled
     container:
       <<: *image
     timeout-minutes: 30
