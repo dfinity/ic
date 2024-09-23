@@ -102,10 +102,6 @@ impl StateMachine {
     pub fn canister_memory_usage_bytes(&self) -> u64 {
         self.sm.canister_memory_usage_bytes()
     }
-    // can be dropped after simple refactoring to using canister status instead
-    pub fn module_hash(&self, canister_id: CanisterId) -> Option<[u8; 32]> {
-        self.sm.module_hash(canister_id)
-    }
     pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
         let res = self.sm.get_subnet_ids();
         assert_eq!(res, vec![self.sm.get_subnet_id()]);
