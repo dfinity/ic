@@ -6,8 +6,11 @@ use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
-use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, WasmExecutionOutput,
+};
 use ic_logger::ReplicaLogger;
+use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
@@ -434,6 +437,7 @@ impl Hypervisor {
                 execution_parameters.instruction_limits.slice()
             ),
         }
+        let caller = api_type.caller();
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
@@ -445,7 +449,7 @@ impl Hypervisor {
             api_type.call_context_id(),
         );
         let api_type_str = api_type.as_str();
-        let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
+        let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
                 api_type,
                 sandbox_safe_system_state: static_system_state,
@@ -463,6 +467,49 @@ impl Hypervisor {
                 .observe_compilation_metrics(&compilation_result);
         }
         self.metrics.observe(&execution_result, api_type_str);
+
+        // If the caller does not have permission to view this canister's logs,
+        // then it shouldn't get a backtrace either. So in that case we remove
+        // the backtrace from the error.
+        fn remove_backtrace(err: &mut HypervisorError) {
+            match err {
+                HypervisorError::Trapped { backtrace, .. }
+                | HypervisorError::CalledTrap { backtrace, .. } => *backtrace = None,
+                HypervisorError::Cleanup {
+                    callback_err,
+                    cleanup_err,
+                } => {
+                    remove_backtrace(callback_err);
+                    remove_backtrace(cleanup_err);
+                }
+                _ => {}
+            }
+        }
+        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
+            if let Err(err) = &mut result.wasm_result {
+                let can_view = match &system_state.log_visibility {
+                    LogVisibilityV2::Controllers => {
+                        if let Some(caller) = caller {
+                            system_state.controllers.contains(&caller)
+                        } else {
+                            false
+                        }
+                    }
+                    LogVisibilityV2::Public => true,
+                    LogVisibilityV2::AllowedViewers(allowed) => {
+                        if let Some(caller) = caller {
+                            allowed.get().contains(&caller)
+                        } else {
+                            false
+                        }
+                    }
+                };
+                if !can_view {
+                    remove_backtrace(err);
+                }
+            }
+        }
+
         execution_result
     }
 

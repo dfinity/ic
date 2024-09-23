@@ -788,7 +788,7 @@ pub type BoundedAllowedViewers =
 ///    allowed_viewers: vec principal;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, EnumIter, Serialize)]
 pub enum LogVisibilityV2 {
     #[default]
     #[serde(rename = "controllers")]
