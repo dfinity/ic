@@ -1057,7 +1057,7 @@ fn validate_initial_wasm_memory_size(
     module: &Module,
     max_wasm_memory_size_in_bytes: NumBytes,
 ) -> Result<(), WasmValidationError> {
-    if let Some(memory) = module.memories.first() {
+    for memory in &module.memories {
         if memory.memory64 {
             let declared_size_in_wasm_pages = memory.initial;
             let allowed_size_in_wasm_pages =
