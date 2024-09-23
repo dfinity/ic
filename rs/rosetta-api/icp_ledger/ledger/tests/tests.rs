@@ -10,6 +10,7 @@ use ic_icrc1_ledger_sm_tests::{
     transfer, FEE, MINTER,
 };
 use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
@@ -207,8 +208,38 @@ fn test_anonymous_transfers() {
     assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
     assert_eq!(0u64, balance_of(&env, canister_id, anon.0));
 
-    // Transfer to the account of the anonymous principal succeeds
-    transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed");
+    // Transfer to the account of the anonymous principal using `icrc1_transfer` succeeds
+    // The expected block index after the transfer is 1 (0 is the initial mint to `p1`).
+    let mut expected_block_index = 1u64;
+    assert_eq!(
+        transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed"),
+        expected_block_index
+    );
+    expected_block_index += 1;
+
+    // Transfer to the account of the anonymous principal using the ICP-specific `transfer` succeeds
+    let transfer_args = icp_ledger::TransferArgs {
+        memo: icp_ledger::Memo(0u64),
+        amount: Tokens::from_e8s(TRANSFER_AMOUNT),
+        fee: Tokens::from_e8s(FEE),
+        from_subaccount: None,
+        to: AccountIdentifier::new(anon, None).to_address(),
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "transfer",
+        Encode!(&transfer_args).unwrap(),
+    );
+    let result = Decode!(
+        &response
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<BlockIndex, TransferError>
+    )
+    .expect("failed to decode transfer response");
+    assert_eq!(result, Ok(expected_block_index));
 
     // Transfer from the account of the anonymous principal using `icrc1_transfer` fails
     let transfer_arg = TransferArg {
@@ -255,12 +286,12 @@ fn test_anonymous_transfers() {
         assert!(err.description().contains("Canister called `ic0.trap` with message: Panicked at 'Sending from 2vxsx-fae is not allowed'"));
     }
 
-    assert_eq!(INITIAL_BALANCE - FEE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE - FEE * 2, total_supply(&env, canister_id));
     assert_eq!(
-        INITIAL_BALANCE - TRANSFER_AMOUNT - FEE,
+        INITIAL_BALANCE - (TRANSFER_AMOUNT + FEE) * 2,
         balance_of(&env, canister_id, p1.0)
     );
-    assert_eq!(TRANSFER_AMOUNT, balance_of(&env, canister_id, anon.0));
+    assert_eq!(TRANSFER_AMOUNT * 2, balance_of(&env, canister_id, anon.0));
 }
 
 #[test]
