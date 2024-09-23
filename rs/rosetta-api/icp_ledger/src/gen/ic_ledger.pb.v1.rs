@@ -409,7 +409,6 @@ pub struct Icrc1Memo {
     PartialOrd,
     Ord,
     Hash,
-    Copy,
     candid::CandidType,
     serde::Deserialize,
     serde::Serialize,

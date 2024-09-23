@@ -795,7 +795,6 @@ pub struct CfInvestment {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
-    Copy,
     Clone,
     Copy,
     PartialEq,

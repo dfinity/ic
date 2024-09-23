@@ -3,7 +3,7 @@
 /// a Neuron.
 #[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]
 #[self_describing]
-#[derive(PartialOrd, Ord, Copy, std::hash::Hash, Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(PartialOrd, Ord, std::hash::Hash, Clone, Copy, PartialEq, ::prost::Message)]
 pub struct NeuronId {
     #[prost(uint64, tag = "2")]
     pub id: u64,
@@ -11,7 +11,7 @@ pub struct NeuronId {
 /// The id of a specific proposal.
 #[derive(serde::Serialize, candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]
 #[self_describing]
-#[derive(Copy, Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct ProposalId {
     #[prost(uint64, tag = "1")]
     pub id: u64,

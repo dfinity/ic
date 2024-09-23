@@ -1677,7 +1677,7 @@ fn test_sns_lifecycle(
                 .filter_map(|recipe| {
                     if let Some(Investor::Direct(ref investment)) = recipe.investor {
                         let buyer_principal = investment.buyer_principal.clone();
-                        let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
+                        let amount_sns_e8s = recipe.sns.unwrap().amount_e8s;
                         Some((buyer_principal, amount_sns_e8s))
                     } else {
                         None
@@ -1700,7 +1700,7 @@ fn test_sns_lifecycle(
                 .filter_map(|recipe| {
                     if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
                         let controller = investment.try_get_controller().unwrap();
-                        let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
+                        let amount_sns_e8s = recipe.sns.unwrap().amount_e8s;
                         Some((controller, amount_sns_e8s))
                     } else {
                         None
