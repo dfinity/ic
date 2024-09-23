@@ -976,6 +976,15 @@ impl From<prost::DecodeError> for GovernanceError {
     }
 }
 
+impl From<prost::UnknownEnumValue> for GovernanceError {
+    fn from(unknown_enum_value: prost::UnknownEnumValue) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Unknown enum value: {}", unknown_enum_value),
+        )
+    }
+}
+
 impl From<CanisterInstallModeError> for GovernanceError {
     fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
         GovernanceError {

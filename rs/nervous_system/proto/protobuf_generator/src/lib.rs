@@ -14,13 +14,7 @@ impl ProtoPaths<'_> {
 
 /// Build protos using prost_build.
 pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
-    let copy_type_names = vec![
-        "Duration",
-        "Tokens",
-        "Percentage",
-        "Canister",
-        "GlobalTimeOfDay",
-    ];
+    // let copy_type_names = vec!["Canister"];
 
     let mut config = prost_build::Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
@@ -47,12 +41,13 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
         .join("ic_nervous_system/pb/v1/nervous_system.proto");
 
     // Most types should be Copy (currently, only Image is not Copy).
-    for type_name in copy_type_names {
-        config.type_attribute(
-            format!("ic_nervous_system.pb.v1.{}", type_name),
-            "#[derive(Copy)]",
-        );
-    }
+    // for type_name in copy_type_names {
+    //     config.type_attribute(
+    //         format!("ic_nervous_system.pb.v1.{}", type_name),
+    //         "#[derive(Copy)]",
+    //     );
+    // }
+    config.type_attribute("ic_nervous_system.pb.v1.Canister", "#[derive(Copy)]");
 
     config.type_attribute(
         "ic_nervous_system.pb.v1.Percentage",

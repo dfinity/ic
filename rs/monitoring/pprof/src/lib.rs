@@ -87,7 +87,8 @@ impl PprofCollector for Pprof {
         collect(duration, frequency)
             .await?
             .pprof()?
-            .encode(&mut body)?;
+            .encode(&mut body)
+            .map_err(|err| Error::Encode { source: err })?;
 
         Ok(body)
     }
