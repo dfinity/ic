@@ -59,7 +59,7 @@ pub use rpc_server::start_grpc_server;
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Command {
+struct Command {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
@@ -78,14 +78,10 @@ enum ProcessBitcoinNetworkMessageError {
 
 /// This enum is used to represent errors that  
 #[derive(Debug)]
-pub enum ChannelError {
-    /// This variant is used to indicate that the send failed to push
-    /// the outgoing message to the BTC node.
-    NotAvailable,
-}
+enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-pub trait Channel {
+trait Channel {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
     fn send(&mut self, command: Command) -> Result<(), ChannelError>;
