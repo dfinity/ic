@@ -25,9 +25,7 @@ use ic_certification_test_utils::{
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{
-    flatmap, Label as CryptoTreeHashLabel, LabeledTree, MixedHashTree, Path,
-};
+use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -645,7 +643,7 @@ fn test_too_long_paths_are_rejected() {
 
     let long_path: Path = (0..100)
         .map(|i| format!("hallo{}", i).into())
-        .collect::<Vec<CryptoTreeHashLabel>>()
+        .collect::<Vec<Label>>()
         .into();
 
     rt.block_on(async move {
@@ -723,9 +721,9 @@ fn can_retrieve_subnet_metrics() {
 
     let (certificate, root_pk, _cbor) =
         CertificateBuilder::new(CertificateData::CustomTree(LabeledTree::SubTree(flatmap![
-            CryptoTreeHashLabel::from("subnet") => LabeledTree::SubTree(flatmap![
-                CryptoTreeHashLabel::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    CryptoTreeHashLabel::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
+            Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                    Label::from("metrics") => LabeledTree::Leaf(serialize_to_cbor(&expected_subnet_metrics)),
                 ])
             ]),
         ])))
@@ -844,9 +842,9 @@ fn can_retrieve_subnet_metrics() {
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
-            CryptoTreeHashLabel::from("subnet"),
+            Label::from("subnet"),
             ByteBuf::from(subnet_id.get().to_vec()).into(),
-            CryptoTreeHashLabel::from("metrics"),
+            Label::from("metrics"),
         ])],
         Blob(sender.get_principal_id().to_vec()),
     )
@@ -902,9 +900,9 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
     let body = prepare_read_state(
         &sender,
         &[Path::new(vec![
-            CryptoTreeHashLabel::from("subnet"),
+            Label::from("subnet"),
             ByteBuf::from(subnet_id.get().to_vec()).into(),
-            CryptoTreeHashLabel::from("metrics"),
+            Label::from("metrics"),
         ])],
         Blob(sender.get_principal_id().to_vec()),
     )
@@ -1120,9 +1118,8 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                 ) -> Option<(MixedHashTree, Certification)> {
                     let message_id = match paths {
                         LabeledTree::SubTree(flat_map) => {
-                            let request_status = flat_map
-                                .get(&CryptoTreeHashLabel::from("request_status"))
-                                .unwrap();
+                            let request_status =
+                                flat_map.get(&Label::from("request_status")).unwrap();
 
                             match request_status {
                                 LabeledTree::Leaf(_) => panic!("request status can not be leaf"),
@@ -1133,11 +1130,11 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
                     };
 
                     let hash_tree = MixedHashTree::Labeled(
-                        CryptoTreeHashLabel::from(b"request_status"),
+                        Label::from(b"request_status"),
                         Box::new(MixedHashTree::Labeled(
                             message_id.clone(),
                             Box::new(MixedHashTree::Labeled(
-                                CryptoTreeHashLabel::from(b"status"),
+                                Label::from(b"status"),
                                 Box::new(MixedHashTree::Leaf(
                                     b"hello world canister response.".to_vec(),
                                 )),
