@@ -48,7 +48,7 @@ fn smoke_test() {
     rt.block_on(async {
         let context = start_rosetta(
             &rosetta_bin,
-            Some(rosetta_state_directory.path().to_owned()),
+            rosetta_state_directory,
             RosettaOptionsBuilder::new(replica_url).build(),
         )
         .await;
