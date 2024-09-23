@@ -35,6 +35,12 @@ impl StateMachineBuilder {
             sm_builder: self.sm_builder.with_routing_table(routing_table),
         }
     }
+    // need to support loading state dir for all subnet kinds in PocketIC
+    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
+        Self {
+            sm_builder: self.sm_builder.with_state_machine_state_dir(state_dir),
+        }
+    }
 
     // can be refactored into specifying the desired PocketIC subnet kind, e.g., II or fiduciary
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
@@ -56,12 +62,6 @@ impl StateMachineBuilder {
     pub fn new() -> Self {
         Self {
             sm_builder: ic_state_machine_tests::StateMachineBuilder::new(),
-        }
-    }
-
-    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_state_machine_state_dir(state_dir),
         }
     }
 
