@@ -539,6 +539,29 @@ pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account
     .unwrap()
 }
 
+pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16) {
+    let is_ledger_ready = || {
+        Decode!(
+            &env.query(ledger, "is_ledger_ready", Encode!().unwrap())
+                .expect("failed to call is_ledger_ready")
+                .bytes(),
+            bool
+        )
+        .expect("failed to decode balance_of response")
+    };
+    for i in 0..num_waits {
+        if is_ledger_ready() {
+            println!("ready after {} waits", i);
+            return;
+        }
+        env.advance_time(Duration::from_secs(10));
+        env.tick();
+    }
+    if !is_ledger_ready() {
+        panic!("canister not ready!");
+    }
+}
+
 pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
     Decode!(
         &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
@@ -2543,6 +2566,7 @@ pub fn test_upgrade_serialization(
                 let mut test_upgrade = |ledger_wasm: Vec<u8>| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
+                    wait_ledger_ready(&env, ledger_id, 10);
                     add_tx_and_verify();
                 };
 
@@ -2660,6 +2684,8 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
             Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
         )
         .unwrap();
+
+        wait_ledger_ready(&env, canister_id, 10);
 
         let mut allowances = vec![];
         for i in 0..accounts.len() {

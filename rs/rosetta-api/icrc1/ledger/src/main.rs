@@ -492,12 +492,18 @@ fn icrc1_minting_account() -> Option<Account> {
 #[query(name = "icrc1_balance_of")]
 #[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| ledger.balances().account_balance(&account).into())
 }
 
 #[query(name = "icrc1_total_supply")]
 #[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
 
@@ -634,6 +640,9 @@ fn execute_transfer_not_async(
 #[update]
 #[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
@@ -661,6 +670,9 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 #[update]
 #[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let spender_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.spender_subaccount,
@@ -687,6 +699,9 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 
 #[query]
 fn archives() -> Vec<ArchiveInfo> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| {
         ledger
             .blockchain()
@@ -736,6 +751,9 @@ fn supported_standards() -> Vec<StandardRecord> {
 #[query]
 #[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -746,6 +764,9 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 #[query]
 #[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
@@ -755,6 +776,9 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 #[query]
 #[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
     ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
@@ -767,6 +791,9 @@ fn get_data_certificate() -> DataCertificate {
 #[update]
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let block_idx = Access::with_ledger_mut(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
@@ -845,6 +872,9 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 #[query]
 #[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let allowance = ledger
@@ -860,12 +890,18 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 #[query]
 #[candid_method(query)]
 fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| ledger.icrc3_get_archives(args))
 }
 
 #[query]
 #[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
     let mut tree_buf = vec![];
@@ -908,6 +944,9 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 #[query]
 #[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
@@ -922,6 +961,9 @@ fn icrc10_supported_standards() -> Vec<StandardRecord> {
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
+    if !is_ready() {
+        ic_cdk::trap("The Ledger is not ready");
+    }
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
@@ -934,6 +976,16 @@ fn icrc21_canister_call_consent_message(
         token_symbol,
         decimals,
     )
+}
+
+fn is_ready() -> bool {
+    Access::with_ledger(|ledger| ledger.is_ready())
+}
+
+#[query]
+#[candid_method(query)]
+fn is_ledger_ready() -> bool {
+    is_ready()
 }
 
 candid::export_service!();
