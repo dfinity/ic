@@ -7,7 +7,9 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
+use crate::{
+    CallError, PocketIcBuilder, SubnetMetrics, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS,
+};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -1022,6 +1024,56 @@ impl PocketIc {
         result.map(|RawSubnetId { subnet_id }| SubnetId::from_slice(&subnet_id))
     }
 
+    /// Returns subnet metrics for a given subnet.
+    /// Panics if the subnet does not exist.
+    pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> SubnetMetrics {
+        let path = vec![
+            "subnet".into(),
+            ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
+            "metrics".into(),
+        ];
+        let paths = vec![path.clone()];
+        let content = ic_agent::agent::EnvelopeContent::ReadState {
+            ingress_expiry: self
+                .get_time()
+                .await
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+                + 240_000_000_000,
+            sender: Principal::anonymous(),
+            paths,
+        };
+        let envelope = ic_agent::agent::Envelope {
+            content: std::borrow::Cow::Borrowed(&content),
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+
+        let mut serialized_bytes = Vec::new();
+        let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+        serializer.self_describe().unwrap();
+        envelope.serialize(&mut serializer).unwrap();
+
+        let endpoint = format!("api/v2/subnet/{}/read_state", subnet_id.to_text());
+        let resp = self
+            .reqwest_client
+            .post(self.instance_url().join(&endpoint).unwrap())
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .body(serialized_bytes)
+            .send()
+            .await
+            .unwrap();
+        let read_state_response: ReadStateResponse =
+            serde_cbor::from_slice(&resp.bytes().await.unwrap()).unwrap();
+        let cert: ic_agent::Certificate =
+            serde_cbor::from_slice(&read_state_response.certificate).unwrap();
+
+        let metrics = ic_agent::lookup_value(&cert, path).unwrap();
+        serde_cbor::from_slice(metrics).unwrap()
+    }
+
     /// This (asynchronous) drop function must be called to drop the PocketIc instance.
     /// It must be called manually as Rust doesn't support asynchronous drop.
     pub async fn drop(mut self) {
@@ -1404,4 +1456,12 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
+}
+
+// Fetching subnet metrics via read_state request
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+struct ReadStateResponse {
+    #[serde(with = "serde_bytes")]
+    pub certificate: Vec<u8>,
 }
