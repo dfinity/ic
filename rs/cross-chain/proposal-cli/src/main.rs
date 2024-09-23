@@ -56,8 +56,8 @@ enum Commands {
     /// install a canister
     #[command(arg_required_else_help = true)]
     Install {
-        /// The canister to install
-        canister: TargetCanister,
+        /// The canister(s) to install
+        canisters: Vec<TargetCanister>,
 
         /// The git commit hash at which the canister should be installed
         #[arg(long)]
@@ -147,7 +147,7 @@ async fn main() {
             }
         }
         Commands::Install {
-            canister,
+            canisters,
             at,
             args,
             output_dir,
@@ -156,23 +156,31 @@ async fn main() {
             let mut ic_repo = GitRepository::clone_ic();
 
             ic_repo.checkout(&at);
-            let install_args = encode_upgrade_args(
-                &ic_repo.candid_file(&canister),
-                args.unwrap_or(canister.default_upgrade_args()),
-            );
-            let canister_id = ic_repo.parse_canister_id(&canister);
-            let compressed_wasm_hash = ic_repo.build_canister_artifact(&canister);
-            let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
+            let install_args: Vec<_> = canisters
+                .iter()
+                .map(|canister| {
+                    encode_upgrade_args(
+                        &ic_repo.candid_file(canister),
+                        args.clone().unwrap_or(canister.default_upgrade_args()),
+                    )
+                })
+                .collect();
+            let canister_ids = ic_repo.parse_canister_id_batch(&canisters);
+            let compressed_wasm_hashes = ic_repo.build_canister_artifact_batch(&canisters);
 
-            let proposal = InstallProposalTemplate {
-                canister,
-                at,
-                compressed_wasm_hash,
-                canister_id,
-                install_args,
-            };
+            for (index, canister) in canisters.into_iter().enumerate() {
+                let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
 
-            write_to_disk(output_dir, proposal, submit, &ic_repo);
+                let proposal = InstallProposalTemplate {
+                    canister,
+                    at: at.clone(),
+                    compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
+                    canister_id: canister_ids[index],
+                    install_args: install_args[index].clone(),
+                };
+
+                write_to_disk(output_dir, proposal, submit.clone(), &ic_repo);
+            }
         }
     }
 }
