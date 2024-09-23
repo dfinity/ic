@@ -107,8 +107,9 @@ impl StateMachine {
         self.sm.module_hash(canister_id)
     }
     pub fn get_subnet_ids(&self) -> Vec<SubnetId> {
-        self.sm.get_subnet_ids()
-        // try: vec![self.sm.get_subnet_id()]
+        let res = self.sm.get_subnet_ids();
+        assert_eq!(res, vec![self.sm.get_subnet_id()]);
+        res
     }
 
     pub fn new() -> Self {
