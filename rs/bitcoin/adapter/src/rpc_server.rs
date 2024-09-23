@@ -120,7 +120,7 @@ impl BtcService for BtcServiceImpl {
     }
 }
 
-/// Spawns in a separate Tokio task the BTC adapter gRPC service.
+/// Blocks until the server binds to the socket
 pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
@@ -136,26 +136,29 @@ pub fn start_grpc_server(
         logger,
         metrics: ServiceMetrics::new(metrics_registry),
     };
-    tokio::spawn(async move {
-        match config.incoming_source {
-            IncomingSource::Path(uds_path) => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    .serve_with_incoming(incoming_from_path(uds_path))
-                    .await
-                    .expect("gRPC server crashed");
-            }
-            IncomingSource::Systemd => {
-                Server::builder()
-                    .add_service(BtcServiceServer::new(btc_adapter_impl))
-                    // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
-                    // Additionally this function is only called once here.
-                    // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
-                    // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
-                    .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
-                    .await
-                    .expect("gRPC server crashed");
-            }
-        };
-    });
+
+    match config.incoming_source {
+        IncomingSource::Path(uds_path) => {
+            let incoming = incoming_from_path(uds_path);
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+        IncomingSource::Systemd => {
+            let incoming = unsafe { incoming_from_first_systemd_socket() };
+            let server_fut = Server::builder()
+                .add_service(BtcServiceServer::new(btc_adapter_impl))
+                // SAFETY: The process is managed by systemd and is configured to start with at least one socket.
+                // Additionally this function is only called once here.
+                // Systemd Socket config: ic-btc-<testnet,mainnet>-adapter.socket
+                // Systemd Service config: ic-btc-<testnet,mainnet>-adapter.service
+                .serve_with_incoming(incoming);
+            tokio::spawn(async move {
+                server_fut.await.expect("gRPC server crashed");
+            });
+        }
+    };
 }

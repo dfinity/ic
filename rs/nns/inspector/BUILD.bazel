@@ -21,7 +21,7 @@ DEPENDENCIES = [
 
 rust_binary(
     name = "inspector",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = {},
     crate_name = "ic_nns_inspector",
     proc_macro_deps = [],

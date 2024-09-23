@@ -170,6 +170,7 @@ members = [
     "rs/nervous_system/common/test_utils",
     "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/initial_supply",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -625,6 +626,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 ] }
 rolling-file = "0.2.0"
 rstest = "0.19.0"
+rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",
