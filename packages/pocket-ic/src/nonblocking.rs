@@ -1025,6 +1025,7 @@ impl PocketIc {
     }
 
     /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
     pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
         #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
         struct ReadStateResponse {

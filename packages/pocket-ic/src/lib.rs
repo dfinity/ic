@@ -870,6 +870,7 @@ impl PocketIc {
     }
 
     /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
     pub fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
