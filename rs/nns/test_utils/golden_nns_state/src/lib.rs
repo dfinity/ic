@@ -95,11 +95,6 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         subnet_id,
         subnet_type,
     } = setup_config;
-    // TODO, remove when this is the value set in the normal IC build This is to
-    // uncover issues in testing that might affect performance in production.
-    // Application subnets have this set to 2 billion.
-    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000);
-
     let state_machine_builder = StateMachineBuilder::new()
         .with_current_time()
         .with_routing_table(routing_table);
