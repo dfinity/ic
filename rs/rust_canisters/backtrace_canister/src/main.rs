@@ -1,8 +1,8 @@
 use candid::candid_method;
 use ic_cdk_macros::update;
 
-/// Macro to create a chain of function calls resulting in the passed in
-/// expression and expose it via an update with the passed in name.
+/// Macro to create a chain of function calls resulting in the provided
+/// expression and expose it via an update with the provided name.
 ///
 /// This just allows us to make a non-trivial backtrace without needed to write
 /// out several functions each time.
