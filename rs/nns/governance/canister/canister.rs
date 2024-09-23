@@ -326,17 +326,6 @@ fn debug_log(s: &str) {
     }
 }
 
-fn panic_with_probability(probability: f64, message: &str) {
-    // We cannot use the `CanisterEnv::random_u64` method here, since panicking rolls back the
-    // state, which makes sure that the next time still panics, unless some other operation modifies
-    // the `rng` successfully, such as spawning a neuron.
-    let random = ChaCha20Rng::seed_from_u64(now_seconds()).next_u64();
-    let should_panic = (random as f64) / (u64::MAX as f64) < probability;
-    if should_panic {
-        panic!("{}", message);
-    }
-}
-
 // TODO - can we migrate the canister_init to use candid later?
 #[export_name = "canister_init"]
 fn canister_init() {
@@ -738,24 +727,7 @@ async fn heartbeat() {
 #[export_name = "canister_update manage_neuron_pb"]
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
-    panic_with_probability(
-        0.7,
-        "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
-    );
-
-    let input = arg_data_raw();
-
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
-        let request =
-            ManageNeuronRequest::decode(&input[..]).expect("Could not decode ManageNeuronRequest");
-        let res: ManageNeuronResponse = manage_neuron(request).await;
-        let mut buf = Vec::with_capacity(res.encoded_len());
-        res.encode(&mut buf)
-            .map_err(|e| e.to_string())
-            .expect("Could not encode response");
-        ic_cdk::api::call::reply_raw(&buf)
-    })
+    panic!("manage_neuron_pb is deprecated. Please use manage_neuron instead.",);
 }
 
 #[export_name = "canister_update claim_or_refresh_neuron_from_account_pb"]
@@ -773,19 +745,7 @@ fn list_proposals_pb() {
 #[export_name = "canister_query list_neurons_pb"]
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
-    panic_with_probability(
-        0.7,
-        "list_neurons_pb is deprecated. Please use list_neurons instead.",
-    );
-
-    ic_cdk::setup();
-    let request = ListNeurons::decode(&arg_data_raw()[..]).expect("Could not decode ListNeurons");
-    let res: ListNeuronsResponse = list_neurons(request);
-    let mut buf = Vec::with_capacity(res.encoded_len());
-    res.encode(&mut buf)
-        .map_err(|e| e.to_string())
-        .expect("Could not encode response");
-    ic_cdk::api::call::reply_raw(&buf);
+    panic!("list_neurons_pb is deprecated. Please use list_neurons instead.",);
 }
 
 #[update]
