@@ -3,7 +3,7 @@ use ic_management_canister_types::{Method, Payload, UpdateSettingsArgs};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use libfuzzer_sys::{fuzz_target, Corpus};
 
-// This fuzz tries to execute the UpdateSettings management canister method
+// This fuzz tries to execute system API call.
 //
 // The fuzz test is only compiled but not executed by CI.
 //
