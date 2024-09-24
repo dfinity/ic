@@ -348,10 +348,12 @@ thread_local! {
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
     // (from, spender) -> allowance - map storing ledger allowances.
+    #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(Account, Account), Allowance<Tokens>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_MEMORY_ID))));
 
     // (timestamp, (from, spender)) - expiration set used for removing expired allowances.
+    #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_EXPIRATIONS_MEMORY: RefCell<StableBTreeMap<(TimeStamp, (Account, Account)), (), VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
@@ -526,17 +528,11 @@ impl Ledger {
     }
 
     pub fn is_migrating(&self) -> bool {
-        match self.state {
-            LedgerState::Ready => false,
-            _ => true,
-        }
+        !matches!(self.state, LedgerState::Ready)
     }
 
     pub fn is_ready(&self) -> bool {
-        match self.state {
-            LedgerState::Ready => true,
-            _ => false,
-        }
+        matches!(self.state, LedgerState::Ready)
     }
 }
 
@@ -638,7 +634,7 @@ impl Ledger {
     }
 
     pub fn transfer_fee(&self) -> Tokens {
-        self.transfer_fee.clone()
+        self.transfer_fee
     }
 
     pub fn max_memo_length(&self) -> u16 {
