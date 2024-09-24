@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api:ic-rosetta-api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:clap",
