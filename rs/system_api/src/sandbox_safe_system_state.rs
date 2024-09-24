@@ -1220,6 +1220,14 @@ impl SandboxSafeSystemState {
         }
     }
 
+    /// Check if the condition for triggering `OnLowWasmMemoryHook`
+    /// is satisfied:
+    /// 1. In the case of `memory_allocation`
+    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    /// 2. Without memory allocation
+    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    /// and updates its status accordingly.
+    /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_on_low_wasm_memory_hook_status(
         &mut self,
         memory_allocation: Option<NumBytes>,
