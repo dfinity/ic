@@ -5,13 +5,6 @@ package(default_visibility = ["//visibility:private"])
 
 MACRO_DEPENDENCIES = []
 
-UPDATE_SETTINGS_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/execution_environment",
-    "//rs/types/management_canister_types",
-    "@crate_index//:libfuzzer-sys",
-]
-
 rust_library(
     name = "execution_fuzzers",
     testonly = True,
@@ -61,7 +54,12 @@ rust_fuzz_test_binary(
         "fuzz_targets/execute_subnet_message_update_settings.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = UPDATE_SETTINGS_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/management_canister_types",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
 
 rust_fuzz_test_binary(
@@ -70,5 +68,11 @@ rust_fuzz_test_binary(
         "fuzz_targets/execute_system_api_call.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":execution_fuzzers"] + UPDATE_SETTINGS_DEPENDENCIES,
+    deps = [":execution_fuzzers"] + [
+        # Keep sorted.
+        "//rs/embedders/fuzz:wasm_fuzzers",
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/management_canister_types",
+        "@crate_index//:libfuzzer-sys",
+    ],
 )
