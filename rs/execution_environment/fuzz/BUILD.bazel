@@ -19,3 +19,12 @@ rust_fuzz_test_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = UPDATE_SETTINGS_DEPENDENCIES,
 )
+
+rust_fuzz_test_binary(
+    name = "execute_system_api_call",
+    srcs = [
+        "fuzz_targets/execute_system_api_call.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = UPDATE_SETTINGS_DEPENDENCIES,
+)
