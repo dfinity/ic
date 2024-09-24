@@ -41,6 +41,7 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "rosetta_core" }
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -52,7 +53,6 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
-rusqlite = { version = "~0.28.0", features = ["bundled"] }
 
 [dev-dependencies]
 futures = { workspace = true }

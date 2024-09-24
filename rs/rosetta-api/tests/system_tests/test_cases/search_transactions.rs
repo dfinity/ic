@@ -311,13 +311,13 @@ fn test_search_transactions_by_account() {
                                     },
                                 )
                             }));
+
+                            assert!(!result.is_empty());
                             // Make sure every fetched transaction is unique
                             assert_eq!(
                                 result.len(),
-                                result.clone().into_iter().collect::<HashSet<_>>().len()
+                                result.into_iter().collect::<HashSet<_>>().len()
                             );
-
-                            assert!(!result.is_empty());
                         }
 
                         search_transactions_request.account_identifier = Some(
@@ -421,12 +421,12 @@ fn test_search_transactions_by_operation_type() {
                                 )
                             }));
 
+                            assert_eq!(result.len(), *operation_counts.get(operation).unwrap());
                             // Make sure every fetched transaction is unique
                             assert_eq!(
                                 result.len(),
-                                result.clone().into_iter().collect::<HashSet<_>>().len()
+                                result.into_iter().collect::<HashSet<_>>().len()
                             );
-                            assert_eq!(result.len(), *operation_counts.get(operation).unwrap());
                         }
 
                         search_transactions_request.type_ = Some("INVALID_OPERATION".to_string());
