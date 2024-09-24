@@ -90,11 +90,10 @@ impl ConnectionHandle {
             .connection_handle_bytes_received_total
             .with_label_values(&[request.uri().path()]);
 
-        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|err| {
+        let (send_stream, recv_stream) = self.connection.open_bi().await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-            err
         })?;
 
         let mut send_stream_guard = SendStreamDropGuard::new(send_stream);
@@ -107,36 +106,32 @@ impl ConnectionHandle {
             .unwrap_or_default();
         let _ = send_stream.set_priority(priority.into());
 
-        write_request(send_stream, request).await.map_err(|err| {
+        write_request(send_stream, request).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE])
                 .inc();
-            err
         })?;
 
-        send_stream.finish().map_err(|err| {
+        send_stream.finish().inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH])
                 .inc();
-            err
         })?;
 
-        send_stream.stopped().await.map_err(|err| {
+        send_stream.stopped().await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_STOPPED])
                 .inc();
-            err
         })?;
 
-        let mut response = read_response(recv_stream).await.map_err(|err| {
+        let mut response = read_response(recv_stream).await.inspect_err(|_| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ])
                 .inc();
-            err
         })?;
 
         // Propagate PeerId from this request to upper layers.

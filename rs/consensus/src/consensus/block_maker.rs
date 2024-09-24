@@ -136,7 +136,7 @@ impl BlockMaker {
                         self.time_source.as_ref(),
                     )
                 {
-                    self.propose_block(pool, rank, parent).map(|proposal| {
+                    self.propose_block(pool, rank, parent).inspect(|proposal| {
                         debug!(
                             self.log,
                             "Make proposal {:?} {:?} {:?}",
@@ -145,7 +145,6 @@ impl BlockMaker {
                             proposal.as_ref().payload.as_ref()
                         );
                         self.log_block(proposal.as_ref());
-                        proposal
                     })
                 } else {
                     None

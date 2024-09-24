@@ -22,7 +22,7 @@ where
         sender_canister_version: None,
     };
 
-    Rt::call(IC_00, "install_code", /*cycles=*/ 0, (install_code,)).await?;
+    () = Rt::call(IC_00, "install_code", /*cycles=*/ 0, (install_code,)).await?;
 
     Ok(())
 }

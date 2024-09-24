@@ -13,7 +13,7 @@ hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
-ic-icrc1-tokens-u256 = { path = "tokens_u256", optional = true }
+ic-icrc1-tokens-u256 = { path = "tokens_u256" }
 ic-icrc1-tokens-u64 = { path = "tokens_u64" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
@@ -42,4 +42,4 @@ rand = { workspace = true }
 
 [features]
 default = []
-u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+# u256-tokens = ["dep:ic-icrc1-tokens-u256"]
