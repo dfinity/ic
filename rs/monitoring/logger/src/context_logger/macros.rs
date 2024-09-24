@@ -3,12 +3,12 @@
 //! # Example
 //! ```
 //! use ic_context_logger::{Logger, LogMetadata, ContextLogger, info, new_logger};
-//! #[derive(Clone, Debug, Default, PartialEq)]
+//! #[derive(Clone, PartialEq, Debug, Default)]
 //! struct ExampleContext {
 //!     sub_context: Option<ExampleSubContext>,
 //! }
 //!
-//! #[derive(Clone, Debug, Default, PartialEq)]
+//! #[derive(Clone, PartialEq, Debug, Default)]
 //! struct ExampleSubContext {
 //!     pub field_u64: u64,
 //!     pub field_opt_i32: Option<i32>,
@@ -17,7 +17,7 @@
 //!
 //! /// A ContextLogger that, instead of logging, checks expectations of what
 //! /// would be logged
-//! #[derive(Clone, Debug, PartialEq)]
+//! #[derive(Clone, PartialEq, Debug)]
 //! struct ExampleLogger {
 //!     context: ExampleContext,
 //! }

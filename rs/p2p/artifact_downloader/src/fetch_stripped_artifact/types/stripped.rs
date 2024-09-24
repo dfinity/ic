@@ -8,13 +8,13 @@ use ic_types::{
 };
 
 /// Stripped version of the [`IngressPayload`].
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct StrippedIngressPayload {
     pub(crate) ingress_messages: Vec<IngressMessageId>,
 }
 
 /// Stripped version of the [`BlockProposal`].
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct StrippedBlockProposal {
     pub(crate) block_proposal_without_ingresses_proto: pb::BlockProposal,
     pub(crate) stripped_ingress_payload: StrippedIngressPayload,
@@ -22,7 +22,7 @@ pub struct StrippedBlockProposal {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum MaybeStrippedConsensusMessage {
     StrippedBlockProposal(StrippedBlockProposal),
     Unstripped(ConsensusMessage),
