@@ -330,6 +330,8 @@ pub struct ExecutionEnvironment {
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
+    // Global registry of all the paused executions and install code executions
+    // on the current subnet.
     paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
     // This scaling factor accounts for the execution threads running in
     // parallel and potentially reserving resources. It should be initialized to
@@ -3150,6 +3152,48 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
+    fn abort_paused_executions_and_return_tasks(
+        &self,
+        paused_tasks: Vec<&ExecutionTask>,
+        log: &ReplicaLogger,
+    ) -> HashMap<PausedExecutionId, ExecutionTask> {
+        paused_tasks
+            .into_iter()
+            .map(|paused_task| match *paused_task {
+                ExecutionTask::PausedExecution { id, .. } => {
+                    let paused = self.take_paused_execution(id).unwrap();
+                    let (input, prepaid_execution_cycles) = paused.abort(log);
+                    (
+                        id,
+                        ExecutionTask::AbortedExecution {
+                            input,
+                            prepaid_execution_cycles,
+                        },
+                    )
+                }
+                ExecutionTask::PausedInstallCode(id) => {
+                    let paused = self.take_paused_install_code(id).unwrap();
+                    let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
+                    (
+                        id,
+                        ExecutionTask::AbortedInstallCode {
+                            message,
+                            call_id,
+                            prepaid_execution_cycles,
+                        },
+                    )
+                }
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => {
+                    unreachable!("Here must be a paused task.")
+                }
+            })
+            .collect()
+    }
+
     /// Registers the given paused execution and returns its id.
     fn register_paused_execution(&self, paused: Box<dyn PausedExecution>) -> PausedExecutionId {
         let mut guard = self.paused_execution_registry.lock().unwrap();
@@ -3174,36 +3218,19 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let task_queue = std::mem::take(&mut canister.system_state.task_queue);
-            canister.system_state.task_queue = task_queue
-                .into_iter()
-                .map(|task| match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. }
-                    | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer
-                    | ExecutionTask::OnLowWasmMemory => task,
-                    ExecutionTask::PausedExecution { id, .. } => {
-                        let paused = self.take_paused_execution(id).unwrap();
-                        let (input, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedExecution {
-                            input,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                    ExecutionTask::PausedInstallCode(id) => {
-                        let paused = self.take_paused_install_code(id).unwrap();
-                        let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedInstallCode {
-                            message,
-                            call_id,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                })
-                .collect();
+            let paused_tasks = canister.system_state.task_queue.get_all_paused_tasks();
+
+            self.metrics
+                .executions_aborted
+                .inc_by(paused_tasks.len().try_into().unwrap());
+
+            let aborted_tasks = self.abort_paused_executions_and_return_tasks(paused_tasks, log);
+
+            canister
+                .system_state
+                .task_queue
+                .replace_paused_with_aborted_tasks(aborted_tasks);
+
             canister.apply_priority_credit();
             // Aborting a long-running execution moves the canister to the
             // default execution mode because the canister does not have a

@@ -35,6 +35,7 @@ use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -398,6 +399,53 @@ impl TaskQueue {
             | ExecutionTask::AbortedInstallCode { .. }
             | ExecutionTask::OnLowWasmMemory => true,
         });
+    }
+
+    pub fn get_all_paused_tasks(&self) -> Vec<&ExecutionTask> {
+        let mut res = Vec::new();
+        for task in self.queue.iter() {
+            match task {
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(..) => {
+                    res.push(task)
+                }
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::OnLowWasmMemory => (),
+            }
+        }
+        res
+    }
+
+    pub fn replace_paused_with_aborted_tasks(
+        &mut self,
+        mut aborted_tasks: HashMap<PausedExecutionId, ExecutionTask>,
+    ) {
+        let task_queue = std::mem::take(&mut self.queue);
+
+        self.queue = task_queue
+            .into_iter()
+            .map(|task| match task {
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => task,
+                ExecutionTask::PausedExecution { id, .. } => {
+                    let aborted = aborted_tasks.remove(&id).unwrap();
+                    debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
+                    aborted
+                }
+                ExecutionTask::PausedInstallCode(id) => {
+                    let aborted = aborted_tasks.remove(&id).unwrap();
+                    debug_assert!(matches!(aborted, ExecutionTask::AbortedInstallCode { .. }));
+                    aborted
+                }
+            })
+            .collect();
+
+        debug_assert!(aborted_tasks.is_empty());
     }
 }
 
