@@ -170,6 +170,8 @@ impl FromStr for Account {
     }
 }
 
+const MAX_SERIALIZATION_LEN: u32 = 62;
+
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buffer: Vec<u8> = vec![];
@@ -212,7 +214,7 @@ impl Storable for Account {
     }
 
     const BOUND: Bound = Bound::Bounded {
-        max_size: 62,
+        max_size: MAX_SERIALIZATION_LEN,
         is_fixed_size: false,
     };
 }
@@ -220,11 +222,14 @@ impl Storable for Account {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use ic_stable_structures::Storable;
     use std::str::FromStr;
 
     use candid::Principal;
 
-    use crate::icrc1::account::{Account, ICRC1TextReprError};
+    use crate::icrc1::account::{
+        Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
+    };
 
     #[test]
     fn test_account_display_default_subaccount() {
@@ -357,5 +362,25 @@ mod tests {
             Account::from_str(str),
             Err(ICRC1TextReprError::InvalidChecksum { expected: _ })
         );
+    }
+
+    #[test]
+    fn test_account_max_serialization_length() {
+        let owner =
+            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+                .unwrap();
+        let subaccount = Some(
+            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        );
+        let account = Account { owner, subaccount };
+        let serialized_len = account.to_bytes().len();
+        assert_eq!(
+            serialized_len,
+            1 + DEFAULT_SUBACCOUNT.len() + Principal::MAX_LENGTH_IN_BYTES
+        );
+        assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
     }
 }
