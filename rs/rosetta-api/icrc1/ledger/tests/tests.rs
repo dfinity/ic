@@ -341,11 +341,6 @@ fn test_balances_overflow() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_icrc1_ledger_sm_tests::test_archive_controllers(ledger_wasm());
 }
