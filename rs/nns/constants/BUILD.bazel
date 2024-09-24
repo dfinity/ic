@@ -15,12 +15,3 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
-
-rust_library(
-    name = "constants--test_feature",
-    srcs = glob(["src/**/*.rs"]),
-    crate_features = ["test"],
-    crate_name = "ic_nns_constants",
-    version = "0.9.0",
-    deps = DEPENDENCIES,
-)

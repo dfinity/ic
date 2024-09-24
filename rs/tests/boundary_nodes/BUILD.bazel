@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -91,7 +91,7 @@ system_test_nns(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test_nns(
+system_test(
     name = "mainnet_bn_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
@@ -111,8 +111,8 @@ system_test_nns(
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
-system_test_nns(
-    name = "mainnet_bn_icx_proxy_performance_test",
+system_test(
+    name = "mainnet_bn_ic_gateway_performance_test",
     colocated_test_driver_vm_required_host_features = ["performance"],
     colocated_test_driver_vm_resources = {
         "vcpus": 64,

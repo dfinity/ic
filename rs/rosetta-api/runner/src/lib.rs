@@ -2,7 +2,6 @@ pub mod constants;
 use crate::constants::{NUM_TRIES, WAIT_BETWEEN_ATTEMPTS};
 use candid::Principal;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tempfile::TempDir;
@@ -11,9 +10,8 @@ use tokio::time::sleep;
 struct KillOnDrop(Child);
 
 pub struct RosettaContext {
-    _proc: KillOnDrop,
-    _tempdir: Option<TempDir>,
-    pub state_directory: PathBuf,
+    proc: KillOnDrop,
+    pub state_directory: TempDir,
     pub port: u16,
 }
 
@@ -22,8 +20,11 @@ impl RosettaContext {
         self.port
     }
 
-    pub fn kill(self) {
-        drop(self._proc);
+    /// Kills the process in which the rosetta server and blocks synchronizer are running.
+    /// Leaves the state directory untouched.
+    /// This is useful when you want to restart the rosetta server with the same state directory. (Load existing blocks from storage)
+    pub fn kill_rosetta_process(&mut self) {
+        self.proc.0.kill().expect("Failed to kill rosetta process");
     }
 }
 
@@ -42,6 +43,8 @@ pub struct RosettaOptions {
     pub store_type: String,
 
     pub ic_url: String,
+
+    pub offline: bool,
 }
 
 impl RosettaOptions {
@@ -54,6 +57,7 @@ pub struct RosettaOptionsBuilder {
     ledger_id: Option<Principal>,
     persistent_storage: bool,
     ic_url: String,
+    offline: bool,
 }
 
 impl RosettaOptionsBuilder {
@@ -62,6 +66,7 @@ impl RosettaOptionsBuilder {
             ledger_id: None,
             persistent_storage: false,
             ic_url,
+            offline: false,
         }
     }
 
@@ -75,6 +80,11 @@ impl RosettaOptionsBuilder {
         self
     }
 
+    pub fn offline(mut self) -> Self {
+        self.offline = true;
+        self
+    }
+
     pub fn build(self) -> RosettaOptions {
         RosettaOptions {
             ledger_id: self.ledger_id,
@@ -84,13 +94,14 @@ impl RosettaOptionsBuilder {
                 "sqlite-in-memory".to_string()
             },
             ic_url: self.ic_url,
+            offline: self.offline,
         }
     }
 }
 
 pub async fn start_rosetta(
     rosetta_bin: &Path,
-    state_directory: Option<PathBuf>,
+    state_directory: TempDir,
     arguments: RosettaOptions,
 ) -> RosettaContext {
     assert!(
@@ -99,15 +110,7 @@ pub async fn start_rosetta(
         rosetta_bin.display()
     );
 
-    let (state_directory, _tempdir) = state_directory.map_or_else(
-        || {
-            let tempdir = tempfile::TempDir::new().expect("failed to create a temporary directory");
-            let state_directory = tempdir.path().to_owned();
-            (state_directory, Some(tempdir))
-        },
-        |state_dir| (state_dir, None),
-    );
-    let port_file = state_directory.join("port");
+    let port_file = state_directory.path().join("port");
     if port_file.exists() {
         if let Err(e) = std::fs::remove_file(port_file.clone()) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -122,11 +125,20 @@ pub async fn start_rosetta(
         .arg("--port-file")
         .arg(port_file.clone())
         .arg("--store-type")
-        .arg(arguments.store_type);
+        .arg(arguments.store_type.clone());
+
+    if arguments.store_type == "sqlite" {
+        cmd.arg("--store-location")
+            .arg(std::fs::canonicalize(&state_directory).unwrap());
+    }
 
     if arguments.ledger_id.is_some() {
         cmd.arg("--canister-id")
             .arg(arguments.ledger_id.unwrap().to_string());
+    }
+
+    if arguments.offline {
+        cmd.arg("--offline");
     }
 
     let _proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
@@ -166,8 +178,7 @@ pub async fn start_rosetta(
     }
 
     RosettaContext {
-        _proc,
-        _tempdir,
+        proc: _proc,
         state_directory,
         port,
     }
