@@ -10,6 +10,4 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 // To execute the fuzzer run
 // bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call
 
-fuzz_target!(|_args: UpdateSettingsArgs| -> Corpus {
-    Corpus::Reject
-}
+fuzz_target!(|_args: UpdateSettingsArgs| -> Corpus { Corpus::Reject });
