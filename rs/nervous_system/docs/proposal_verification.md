@@ -14,9 +14,9 @@ technical savvy is required to follow these instructions.
 Alternatively, the following videos cover mostly the same information as this
 page:
 
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/BsIg4JZobqU?si=xmwxFzcfcQKlQcyx" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[![How to Verify NNS Canister Upgrade Proposals](https://img.youtube.com/vi/BsIg4JZobqU/0.jpg)](https://www.youtube.com/watch?v=BsIg4JZobqU)
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/i_ANhb0E1Io?si=4Jrf4YBCS303iqL0" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+[![How to Verify NNS Canister Upgrade Proposals](https://img.youtube.com/vi/i_ANhb0E1Io/0.jpg)](https://www.youtube.com/watch?v=i_ANhb0E1Io)
 
 
 ## Why?
