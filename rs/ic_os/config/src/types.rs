@@ -58,12 +58,12 @@ pub struct GuestOSSettings {
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
     pub ic_registry_local_store_path: Option<PathBuf>,
-    pub guestos_dev: GuestosDevConfig,
+    pub guestos_dev_settings: GuestosDevSettings,
 }
 
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
-pub struct GuestosDevConfig {
+pub struct GuestosDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
     pub query_stats_epoch_length: Option<String>,
@@ -93,7 +93,6 @@ pub struct NetworkSettings {
     pub ipv4_gateway: Option<Ipv4Addr>,
     pub ipv4_prefix_length: Option<u8>,
     pub domain: Option<String>,
-    pub mgmt_mac: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -114,6 +113,12 @@ pub struct ICOSSettings {
     /// backup and readonly can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
     pub ssh_authorized_keys_path: Option<PathBuf>,
+    pub icos_dev_settings: ICOSDevSettings,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ICOSDevSettings {
+    pub mgmt_mac: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]

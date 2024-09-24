@@ -47,8 +47,8 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use types::{
-        GuestOSConfig, GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings,
-        ICOSSettings, Logging, NetworkSettings, SetupOSConfig, SetupOSSettings,
+        GuestOSConfig, GuestOSSettings, GuestosDevSettings, HostOSConfig, HostOSSettings,
+        ICOSDevSettings, ICOSSettings, Logging, NetworkSettings, SetupOSConfig, SetupOSSettings,
     };
 
     #[test]
@@ -62,7 +62,6 @@ mod tests {
             ipv4_gateway: None,
             ipv4_prefix_length: None,
             domain: None,
-            mgmt_mac: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [
@@ -74,6 +73,7 @@ mod tests {
             .join(" "),
             elasticsearch_tags: None,
         };
+        let icos_dev_settings = ICOSDevSettings { mgmt_mac: None };
         let icos_settings = ICOSSettings {
             logging,
             nns_public_key_path: PathBuf::from("/path/to/key"),
@@ -81,6 +81,7 @@ mod tests {
             hostname: "mainnet".to_string(),
             node_operator_private_key_path: None,
             ssh_authorized_keys_path: None,
+            icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;
         let hostos_settings = HostOSSettings {
@@ -92,7 +93,7 @@ mod tests {
             ic_crypto_path: None,
             ic_state_path: None,
             ic_registry_local_store_path: None,
-            guestos_dev: GuestosDevConfig::default(),
+            guestos_dev_settings: GuestosDevSettings::default(),
         };
 
         let setupos_config_struct = SetupOSConfig {

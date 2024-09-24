@@ -7,8 +7,8 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use config::types::{
-    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, NetworkSettings,
-    SetupOSConfig, SetupOSSettings,
+    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSDevSettings, ICOSSettings, Logging,
+    NetworkSettings, SetupOSConfig, SetupOSSettings,
 };
 
 #[derive(Subcommand)]
@@ -75,9 +75,6 @@ pub fn main() -> Result<()> {
                 verbose,
             } = config_ini_settings;
 
-            // get deployment.json variables
-            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
-
             let network_settings = NetworkSettings {
                 ipv6_prefix,
                 ipv6_address,
@@ -87,12 +84,18 @@ pub fn main() -> Result<()> {
                 ipv4_gateway,
                 ipv4_prefix_length,
                 domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
             };
+
+            // get deployment.json variables
+            let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
             let logging = Logging {
                 elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
                 elasticsearch_tags: None,
+            };
+
+            let icos_dev_settings = ICOSDevSettings {
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
             };
 
             let icos_settings = ICOSSettings {
@@ -106,6 +109,7 @@ pub fn main() -> Result<()> {
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
+                icos_dev_settings,
             };
 
             let setupos_settings = SetupOSSettings;
