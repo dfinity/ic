@@ -1129,7 +1129,7 @@ fn helper_test_on_low_wasm_memory_hook(
             {
                 for used_stable_memory in [0, GIB] {
                     for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-                        let mut hook_status = start_status.clone();
+                        let mut hook_status = start_status;
 
                         hook_status.update(
                             wasm_memory_threshold.into(),
@@ -1148,7 +1148,7 @@ fn helper_test_on_low_wasm_memory_hook(
                                 used_stable_memory,
                                 used_wasm_memory
                             ) {
-                                status_if_condition_satisfied.clone()
+                                status_if_condition_satisfied
                             } else {
                                 OnLowWasmMemoryHookStatus::ConditionNotSatisfied
                             }
