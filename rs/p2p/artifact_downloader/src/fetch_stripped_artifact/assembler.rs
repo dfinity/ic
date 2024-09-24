@@ -277,7 +277,7 @@ async fn get_or_fetch<P: Peers>(
     .await
 }
 
-#[derive(PartialEq, Debug, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub(crate) enum InsertionError {
     #[error("Trying to insert an ingress message which was never missing")]
     NotNeeded,

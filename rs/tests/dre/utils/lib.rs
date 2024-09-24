@@ -172,7 +172,7 @@ fn fetch_shasum_for_img(version: String, image: &str, logger: Logger) -> String 
     sha
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct IcConfig {
     pub subnets: Option<Vec<ConfigurableSubnet>>,
     pub unassigned_nodes: Option<ConfigurableUnassignedNodes>,
@@ -180,32 +180,32 @@ pub struct IcConfig {
     pub initial_version: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ConfigurableSubnet {
     Simple(SubnetSimple),
     Complex(Box<Subnet>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct SubnetSimple {
     pub subnet_type: SubnetType,
     pub num_nodes: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ConfigurableBoundaryNode {
     Simple(BoundaryNodeSimple),
     Complex(Box<BoundaryNode>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct BoundaryNodeSimple {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ConfigurableUnassignedNodes {
     Simple(usize),

@@ -843,7 +843,7 @@ pub(crate) fn new_response_message_id(generator: u64, class: Class) -> Id {
     Id::new(Kind::Response, Context::Inbound, class, generator)
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(PartialEq, Eq)]
 enum QueueOp {
     Push,
     Pop,

@@ -3,7 +3,7 @@ use ic_nns_governance_api::pb::v1::ListNeuronsResponse as Response;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
-#[derive(Clone, std::fmt::Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, serde::Deserialize, serde::Serialize, std::fmt::Debug)]
 pub struct ListNeuronsResponse(pub Response);
 
 impl TryFrom<ListNeuronsResponse> for ObjectMap {

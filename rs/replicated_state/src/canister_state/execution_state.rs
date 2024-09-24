@@ -581,7 +581,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, serde::Deserialize, EnumIter, serde::Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter, serde::Deserialize, serde::Serialize)]
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,

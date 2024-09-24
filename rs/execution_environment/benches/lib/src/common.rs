@@ -48,7 +48,7 @@ pub const USER_ID: u64 = 0;
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
 
 /// Enables Wasm64 benchmarks.
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Wasm64 {
     Enabled,
     Disabled,

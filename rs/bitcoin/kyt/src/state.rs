@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 mod tests;
 
 /// Error returned by calling `http_get_tx`.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum HttpGetTxError {
     TxEncoding(String),
     TxidMismatch {
@@ -25,7 +25,7 @@ pub enum HttpGetTxError {
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
 /// It transitions from `PendingOutcall` to any one of the three
 /// possible outcomes: `PendingRetry`, `Error`, or `Fetched`.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
@@ -38,7 +38,7 @@ pub enum FetchTxStatus {
 /// that is initialized as `None`. Once a corresponding input
 /// transaction is fetched (see function `check_fetched`), its
 /// input address will be computed and filled in.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct FetchedTx {
     pub tx: Transaction,
     pub input_addresses: Vec<Option<Address>>,
