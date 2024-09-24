@@ -3224,6 +3224,8 @@ impl ExecutionEnvironment {
                 .executions_aborted
                 .inc_by(paused_tasks.len().try_into().unwrap());
 
+            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
+            // we can abort all exectuions on it without `paused_tasks`.
             let aborted_tasks = self.abort_paused_executions_and_return_tasks(paused_tasks, log);
 
             canister
