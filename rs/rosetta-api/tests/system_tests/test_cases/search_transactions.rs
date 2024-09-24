@@ -408,7 +408,7 @@ fn test_search_transactions_by_operation_type() {
                             search_transactions_request.clone(),
                         )
                         .await;
-                        // If the account does not exist the service should return an empty list
+                        // If the operation type does not exist the service should return an empty list
                         assert_eq!(result.len(), 0);
                     }
                 });
