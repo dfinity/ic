@@ -79,10 +79,10 @@ pub fn setup(env: TestEnv) {
             .await
             .context("failed to generate pebble certificate")?;
 
-        // Certificates
-        let cert_pair = generate_leaf_certificate_pair(&remote_docker_host, &ca_pair, "ic0.app")
+        // Certificates (Nginx)
+        let nginx_pair = generate_leaf_certificate_pair(&remote_docker_host, &ca_pair, "ic0.app")
             .await
-            .context("failed to generate BN certificate")?;
+            .context("failed to generate nginx certificate")?;
 
         // CoreDNS + Cloudflare API Work Directory
         let work_dir = exec_ssh_mktemp(&remote_docker_host, MkTempMode::Dir)?;
@@ -161,11 +161,11 @@ pub fn setup(env: TestEnv) {
         )
         .await?;
 
-        // Install self-signed certificates
+        // Install self-signed certificates (pebble and nginx)
         configure_boundary_node_trust_certificate(&boundary_node, &ca_pair.certificate).await?;
 
-        // Update TLS Certificates
-        update_tls_certificate(&boundary_node, &cert_pair).await?;
+        // Update Nginx TLS Certificates
+        update_nginx_tls_certificate(&boundary_node, &nginx_pair).await?;
 
         // Update /etc/hosts on Boundary Node
         update_etc_hosts(&boundary_node, "ic0.app", &boundary_node.ipv6().to_string()).await?;
@@ -510,6 +510,7 @@ async fn setup_boundary_node(
         task_delay_sec: Some(5),
         task_error_delay_sec: Some(10),
         peek_sleep_sec: Some(5),
+        polling_interval_sec: Some(1),
     };
 
     // Start Boundary Node
@@ -723,7 +724,10 @@ async fn update_etc_hosts(vm: &dyn SshSession, name: &str, ip: &str) -> Result<(
     Ok(())
 }
 
-async fn update_tls_certificate(vm: &dyn SshSession, pair: &CertificatePair) -> Result<(), Error> {
+async fn update_nginx_tls_certificate(
+    vm: &dyn SshSession,
+    pair: &CertificatePair,
+) -> Result<(), Error> {
     let CertificatePair {
         key,
         certificate: cert,
@@ -732,18 +736,23 @@ async fn update_tls_certificate(vm: &dyn SshSession, pair: &CertificatePair) -> 
     vm.block_on_bash_script(&indoc::formatdoc! {r#"
         set -euo pipefail
 
-        echo "--> Installing private key"
-        sudo bash -c 'cat > /run/ic-node/etc/ic-gateway/certs/cert.key <<EOF
+        echo "--> Installing nginx private key"
+        sudo bash -c 'cat > /run/ic-node/etc/nginx/keys/privkey.pem <<EOF
         {key}
         EOF'
 
-        echo "--> Installing certificate chain"
-        sudo bash -c 'cat > /run/ic-node/etc/ic-gateway/certs/cert.pem <<EOF
+        echo "--> Installing nginx certificate chain"
+        sudo bash -c 'cat > /run/ic-node/etc/nginx/certs/chain.pem <<EOF
         {cert}
         EOF'
 
-        echo "--> Restarting ic-gateway"
-        sudo systemctl restart ic-gateway
+        echo "--> Installing nginx full certificate chain"
+        sudo bash -c 'cat > /run/ic-node/etc/nginx/certs/fullchain.pem <<EOF
+        {cert}
+        EOF'
+
+        echo "--> Restarting Nginx"
+        sudo nginx -s reload
     "#})?;
 
     Ok(())
@@ -1283,6 +1292,13 @@ pub async fn get_registration_status(
             .expect("failed to get the text from the response");
         Ok(GetRequestState::Rejected(response_text.to_string()))
     }
+}
+
+pub fn get_certificate_syncer_state(vm: &dyn SshSession, domain_name: &str) -> String {
+    let cmd = format!(
+        r#"cat /var/opt/nginx/domain_canister_mappings.js | grep -o '"{domain_name}":"[^"]*' | sed 's/"{domain_name}":"//'"#
+    );
+    vm.block_on_bash_script(&cmd).unwrap().trim().to_string()
 }
 
 fn get_service_status(vm: &dyn SshSession, service: &str) -> String {
