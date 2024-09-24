@@ -1222,3 +1222,64 @@ fn provisional_create_canister_with_cycles() {
     let app_subnet = topology.get_app_subnets()[0];
     assert_eq!(pic.get_subnet(canister_id).unwrap(), app_subnet);
 }
+
+#[test]
+fn http_gateway_route_underscore() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway = pic.make_live(None);
+
+    let client = Client::new();
+
+    // If a canister ID can be found,
+    // then the HTTP gateway tries to handle the request
+    // (which fails because the canister does not exist).
+
+    let invalid_url = gateway
+        .join("_/dashboard?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    let invalid_url = gateway
+        .join("_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    let invalid_url = gateway
+        .join("foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    // If no canister ID can be found,
+    // then requests to paths starting with `/_/` are routed directly to the PocketIC instance/replica.
+
+    let dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
+    let dashboard = client.get(dashboard_url).send().unwrap();
+    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("<h1>PocketIC Dashboard</h1>"));
+
+    let invalid_url = gateway.join("_/foo").unwrap().to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
+    assert!(error_page.bytes().unwrap().is_empty());
+
+    // If no canister ID can be found and the request's path does not start with `/_/`,
+    // then the HTTP gateway complains that it could not find a canister ID.
+
+    let invalid_url = gateway.join("foo").unwrap().to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("canister_id_not_found"));
+}
