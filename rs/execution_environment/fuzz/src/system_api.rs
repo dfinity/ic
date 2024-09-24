@@ -1,4 +1,25 @@
+use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::subnet_config::SubnetConfig;
+use ic_management_canister_types::{
+    self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
+    CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload,
+};
+use ic_state_machine_tests::{
+    ErrorCode, PrincipalId, StateMachine, StateMachineBuilder, StateMachineConfig,
+    SubmitIngressError, UserError,
+};
+use ic_types::{
+     CanisterId, Cycles, NumInstructions,
+};
+use ic_registry_subnet_type::SubnetType;
 use wasm_fuzzers::ic_wasm::ICWasmModule;
+
+// Change limits in order not to duplicate prod values.
+const B: u64 = 1_000_000_000;
+const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(5 * B);
+const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
+const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(B);
 
 #[inline(always)]
 pub fn run_fuzzer(module: ICWasmModule) {

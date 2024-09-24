@@ -1,5 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING", "rust_fuzz_test_binary")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -30,12 +30,14 @@ rust_library(
         "//rs/monitoring/metrics",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
+        "//rs/state_machine_tests",
         "//rs/system_api",
         "//rs/test_utilities",
         "//rs/test_utilities/embedders",
         "//rs/test_utilities/state",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
@@ -71,8 +73,6 @@ rust_fuzz_test_binary(
     deps = [":execution_fuzzers"] + [
         # Keep sorted.
         "//rs/embedders/fuzz:wasm_fuzzers",
-        "//rs/test_utilities/execution_environment",
-        "//rs/types/management_canister_types",
         "@crate_index//:libfuzzer-sys",
     ],
 )
