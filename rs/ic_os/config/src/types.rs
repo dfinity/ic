@@ -6,7 +6,7 @@ use url::Url;
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SetupOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -16,7 +16,7 @@ pub struct SetupOSConfig {
 }
 
 /// HostOS configuration. In production, this struct inherits settings from `SetupOSConfig`.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HostOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -25,7 +25,7 @@ pub struct HostOSConfig {
 }
 
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -33,11 +33,11 @@ pub struct GuestOSConfig {
 }
 
 /// Placeholder for SetupOS-specific settings.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
@@ -45,7 +45,7 @@ pub struct HostOSSettings {
 }
 
 /// GuestOS-specific settings.
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GuestOSSettings {
     /// Externally generated cryptographic keys.
     /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
@@ -62,7 +62,7 @@ pub struct GuestOSSettings {
 }
 
 /// GuestOS development configuration. These settings are strictly used for development images.
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct GuestosDevConfig {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
@@ -73,7 +73,7 @@ pub struct GuestosDevConfig {
 }
 
 /// Configures the usage of the backup spool directory.
-#[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct BackupSpoolSettings {
     /// The maximum age of any file or directory kept in the backup spool.
     pub backup_retention_time_seconds: Option<String>,
@@ -81,7 +81,7 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<String>,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NetworkSettings {
     // Config.ini can specify ipv6_prefix and ipv6_gateway, or just an ipv6_address.
     // ipv6_address takes precedence. Some tests provide only ipv6_address.
@@ -96,7 +96,7 @@ pub struct NetworkSettings {
     pub mgmt_mac: Option<String>,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ICOSSettings {
     pub logging: Logging,
     /// This file must be a text file containing the public key of the NNS to be used.
@@ -116,7 +116,7 @@ pub struct ICOSSettings {
     pub ssh_authorized_keys_path: Option<PathBuf>,
 }
 
-#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
     pub elasticsearch_hosts: String,

@@ -16,15 +16,15 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".messaging.xnet.v1", "::ic_protobuf::messaging::xnet::v1");
     config.type_attribute(
         "ic_registry_transport.pb.v1.RegistryAtomicMutateRequest",
-        "#[derive(Eq, candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
     );
     config.type_attribute(
         "ic_registry_transport.pb.v1.RegistryMutation",
-        "#[derive(Eq, candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
     );
     config.type_attribute(
         "ic_registry_transport.pb.v1.Precondition",
-        "#[derive(Eq, candid::CandidType, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, Eq)]",
     );
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);

@@ -2,12 +2,12 @@ use crate::proxy::{ProtoProxy, ProxyDecodeError};
 use prost::Message;
 use std::convert::TryFrom;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Height(u64);
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Blob(Vec<u8>);
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
     pub height: Height,
     pub payload: Blob,
@@ -15,7 +15,7 @@ struct Block {
 
 mod pb {
     // Pretend Prost-generated message,
-    #[derive(Clone, Eq, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, ::prost::Message)]
     pub struct Block {
         #[prost(uint64, tag = "1")]
         pub height: u64,

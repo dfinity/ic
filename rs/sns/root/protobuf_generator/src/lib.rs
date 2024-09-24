@@ -14,7 +14,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Make all PB types also Candid types.
     config.type_attribute(
         ".",
-        ["#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize)]"].join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
 
     // Imported stuff.

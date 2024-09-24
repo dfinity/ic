@@ -7,7 +7,7 @@ use std::ops::RangeInclusive;
 
 /// A full config for generating random calls and replies. Ranges are stored as individual u32
 /// because ranges don't implement `CandidType`.
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, CandidType)]
 pub struct Config {
     pub receivers: Vec<CanisterId>,
     pub call_bytes_min: u32,
@@ -77,7 +77,7 @@ impl Config {
 }
 
 /// Records the outcome of an outgoing call.
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub enum Reply {
     /// A response including a data payload of a distinct size was received.
     Bytes(u32),
@@ -90,7 +90,7 @@ pub enum Reply {
 
 /// Record for one outgoing call. Records how many bytes were sent out; and what kind of
 /// reply was received (either data or a synchronous or asynchronous rejection).
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Serialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, CandidType)]
 pub struct Record {
     pub receiver: CanisterId,
     pub sent_bytes: u32,
@@ -128,7 +128,7 @@ impl std::fmt::Debug for Record {
 }
 
 /// Basic metrics extracted from the records.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Metrics {
     pub hanging_calls: u32,
     pub calls_attempted: u32,

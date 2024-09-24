@@ -15,14 +15,14 @@ pub fn generate_prost_files(paths: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_ledger.pb.v1.AccountIdentifier",
         [
-            "#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize, serde::Serialize)]",
+            "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]",
         ]
         .join(" "),
     );
 
     config.type_attribute(
         "ic_ledger.pb.v1.TimeStamp",
-        "#[derive(Copy, Eq, Ord, PartialOrd, Hash, candid::CandidType, serde::Deserialize, serde::Serialize)]",
+        "#[derive(Eq, PartialOrd, Ord, Hash, Copy, candid::CandidType, serde::Deserialize, serde::Serialize)]",
     );
 
     std::fs::create_dir_all(out).expect("failed to create output directory");

@@ -7,7 +7,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub struct VarAssignment(pub BTreeMap<String, TlaValue>);
 
 impl VarAssignment {
@@ -155,7 +155,7 @@ pub struct StatePair {
 }
 
 /// A pair of states with local variable names resolved to functions from the process ID
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct ResolvedStatePair {
     pub start: GlobalState,
     pub end: GlobalState,

@@ -12,7 +12,7 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
 
     config.type_attribute(
         "ic_base_types.pb.v1.PrincipalId",
-        ["#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize)]"].join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.compile_protos(&[proto_file], &[def]).unwrap();
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");

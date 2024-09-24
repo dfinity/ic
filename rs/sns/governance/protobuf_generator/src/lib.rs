@@ -32,7 +32,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Make all PB types also Candid types.
     config.type_attribute(
         ".",
-        ["#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize)]"].join(" "),
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
 
     // Misc Attributes
@@ -44,7 +44,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_sns_governance.pb.v1.NeuronId",
         "#[derive(Eq, std::hash::Hash)]",
     );
-    config.type_attribute("ic_sns_governance.pb.v1.ProposalId", "#[derive(Copy, Eq)]");
+    config.type_attribute("ic_sns_governance.pb.v1.ProposalId", "#[derive(Eq, Copy)]");
 
     let mut apply_attribute = |attribute, type_names| {
         for type_name in type_names {

@@ -6,7 +6,7 @@ use std::{
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, CandidType, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub enum TlaValue {
     Set(BTreeSet<TlaValue>),
     Record(BTreeMap<String, TlaValue>),
@@ -91,7 +91,7 @@ impl fmt::Debug for TlaValue {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Debug)]
 pub struct TlaConstantAssignment {
     pub constants: BTreeMap<String, TlaValue>,
 }
