@@ -1,6 +1,6 @@
 use crate::DataSize;
 use candid::{CandidType, Deserialize};
-use serde::{Deserializer, Serialize};
+use serde::Deserializer;
 use std::fmt;
 
 /// Indicates that `BoundedVec<...>` template parameter (eg. length, total data size, etc) is unbounded.
@@ -10,7 +10,7 @@ pub const UNBOUNDED: usize = usize::MAX;
 /// - number of elements
 /// - total data size in bytes
 /// - single element data size in bytes
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct BoundedVec<
     const MAX_ALLOWED_LEN: usize,
     const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
