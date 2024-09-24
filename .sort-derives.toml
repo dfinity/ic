@@ -1,0 +1,18 @@
+# Define the custom order of derive attributes, separated by commas (e.g. "Debug, Clone, Copy")
+# The command line option `--order` will override this setting if specified.
+# type: string
+#order = "Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Display, Default, Args, CandidType, Comparable, Decode, Deserialize, Encode, Enumeration, EnumIter, Error, Hash, Message, Oneof, Parser, ProposalMetadata, Serialize, ValidateEq, Zeroize, ZeroizeOnDrop" 
+order = "Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Display, Default"
+
+# Preserve the original order for unspecified derive attributes (only applies when custom order is used)
+# The command line option `--preserve` will override this setting if specified.
+# type: boolean
+preserve = false
+
+# Specify file path patterns to exclude from processing using the .gitignore format.
+# https://git-scm.com/docs/gitignore/en#_pattern_format
+# type: array of strings
+exclude = [
+  "*.pb.*.rs",
+  "rs/protobuf/src/gen",
+]
