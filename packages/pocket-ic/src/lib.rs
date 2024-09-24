@@ -54,6 +54,7 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
+    net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -76,6 +77,7 @@ pub struct PocketIcBuilder {
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
+    bitcoind_addr: Option<SocketAddr>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -88,6 +90,7 @@ impl PocketIcBuilder {
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
+            bitcoind_addr: None,
         }
     }
 
@@ -100,6 +103,7 @@ impl PocketIcBuilder {
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
     }
 
@@ -112,6 +116,7 @@ impl PocketIcBuilder {
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
         .await
     }
@@ -145,6 +150,13 @@ impl PocketIcBuilder {
     pub fn with_log_level(mut self, log_level: Level) -> Self {
         self.log_level = Some(log_level);
         self
+    }
+
+    pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
+        Self {
+            bitcoind_addr: Some(bitcoind_addr),
+            ..self
+        }
     }
 
     /// Add an empty NNS subnet
@@ -302,6 +314,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -321,6 +334,7 @@ impl PocketIc {
                 state_dir,
                 nonmainnet_features,
                 log_level,
+                bitcoind_addr,
             )
             .await
         });
@@ -818,6 +832,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet(canister_id).await })
     }
 
+    /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
+    }
+
     fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
@@ -1234,6 +1255,16 @@ pub enum WasmResult {
     Reject(String),
 }
 
+/// This struct describes the result of retrieving subnet metrics via a read state request.
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SubnetMetrics {
+    pub num_canisters: u64,
+    pub canister_state_bytes: u64,
+    #[serde(with = "map_u128")]
+    pub consumed_cycles_total: u128,
+    pub update_transactions_total: u64,
+}
+
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
@@ -1283,5 +1314,46 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             }
         }
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+mod map_u128 {
+    use serde::{
+        de::{Error, IgnoredAny, MapAccess, Visitor},
+        ser::SerializeMap,
+        Deserializer, Serializer,
+    };
+    use std::fmt;
+
+    pub fn serialize<S: Serializer>(val: &u128, s: S) -> Result<S::Ok, S::Error> {
+        let low = *val & u64::MAX as u128;
+        let high = *val >> 64;
+        let mut map = s.serialize_map(Some(2))?;
+        map.serialize_entry(&0, &low)?;
+        map.serialize_entry(&1, &(high != 0).then_some(high))?;
+        map.end()
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u128, D::Error> {
+        d.deserialize_map(MapU128Visitor)
+    }
+
+    struct MapU128Visitor;
+
+    impl<'de> Visitor<'de> for MapU128Visitor {
+        type Value = u128;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a map of low and high")
+        }
+
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+            let (_, low): (IgnoredAny, u64) = map
+                .next_entry()?
+                .ok_or_else(|| A::Error::missing_field("0"))?;
+            let opt: Option<(IgnoredAny, Option<u64>)> = map.next_entry()?;
+            let high = opt.and_then(|x| x.1).unwrap_or(0);
+            Ok((high as u128) << 64 | low as u128)
+        }
     }
 }

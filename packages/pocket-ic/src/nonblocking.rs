@@ -7,7 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
+use crate::{CallError, PocketIcBuilder, SubnetMetrics, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 use slog::Level;
 use std::fs::File;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
@@ -84,6 +85,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -96,6 +98,7 @@ impl PocketIc {
             state_dir,
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
+            bitcoind_addr,
         };
 
         let parent_pid = std::os::unix::process::parent_id();
@@ -977,6 +980,62 @@ impl PocketIc {
             )
             .await;
         result.map(|RawSubnetId { subnet_id }| SubnetId::from_slice(&subnet_id))
+    }
+
+    /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
+        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
+        struct ReadStateResponse {
+            #[serde(with = "serde_bytes")]
+            pub certificate: Vec<u8>,
+        }
+
+        let path = vec![
+            "subnet".into(),
+            ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
+            "metrics".into(),
+        ];
+        let paths = vec![path.clone()];
+        let content = ic_agent::agent::EnvelopeContent::ReadState {
+            ingress_expiry: self
+                .get_time()
+                .await
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+                + 240_000_000_000,
+            sender: Principal::anonymous(),
+            paths,
+        };
+        let envelope = ic_agent::agent::Envelope {
+            content: std::borrow::Cow::Borrowed(&content),
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+
+        let mut serialized_bytes = Vec::new();
+        let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+        serializer.self_describe().unwrap();
+        envelope.serialize(&mut serializer).unwrap();
+
+        let endpoint = format!("api/v2/subnet/{}/read_state", subnet_id.to_text());
+        let resp = self
+            .reqwest_client
+            .post(self.instance_url().join(&endpoint).unwrap())
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .body(serialized_bytes)
+            .send()
+            .await
+            .unwrap();
+        let read_state_response: ReadStateResponse =
+            serde_cbor::from_slice(&resp.bytes().await.unwrap()).ok()?;
+        let cert: ic_agent::Certificate =
+            serde_cbor::from_slice(&read_state_response.certificate).unwrap();
+
+        let metrics = ic_agent::lookup_value(&cert, path).ok()?;
+        serde_cbor::from_slice(metrics).unwrap()
     }
 
     /// This (asynchronous) drop function must be called to drop the PocketIc instance.

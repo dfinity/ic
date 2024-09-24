@@ -22,7 +22,6 @@ slog = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-ic-consensus = { path = "../" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-test-utilities = { path = "../../test_utilities" }
