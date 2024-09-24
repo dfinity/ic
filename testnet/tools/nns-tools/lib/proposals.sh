@@ -96,11 +96,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
 
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -204,11 +199,6 @@ __Proposer__: $PROPOSER\\
 __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
-
-
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
 
 
 ## New Commits
