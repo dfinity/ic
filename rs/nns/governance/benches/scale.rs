@@ -56,6 +56,10 @@ impl Environment for MockEnvironment {
         todo!()
     }
 
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+        todo!()
+    }
+
     fn execute_nns_function(
         &self,
         _proposal_id: u64,

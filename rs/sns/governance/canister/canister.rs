@@ -56,7 +56,11 @@ use ic_sns_governance::{
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{boxed::Box, convert::TryFrom, time::SystemTime};
+use std::{
+    boxed::Box,
+    convert::TryFrom,
+    time::{Duration, SystemTime},
+};
 
 /// Size of the buffer for stable memory reads and writes.
 ///

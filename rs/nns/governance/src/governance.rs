@@ -1468,7 +1468,7 @@ impl From<RngError> for GovernanceError {
 }
 
 /// A general trait for the environment in which governance is running.
-#[automock]
+/// DO NOT MERGE - re-add automock
 #[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
@@ -1487,6 +1487,9 @@ pub trait Environment: Send + Sync {
     ///
     /// This number is the same in all replicas.
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError>;
+
+    // Seed the random number generator from the IC (or some other source in tests)
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)>;
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the

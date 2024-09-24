@@ -57,7 +57,6 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
-    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
@@ -151,23 +150,12 @@ fn set_governance(gov: Governance) {
         .expect("Error initializing the governance canister.");
 }
 
-thread_local! {
-    static RNG: RefCell<Option<ChaCha20Rng>> = RefCell::new(None);
-}
-
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
-
-async fn seed_randomness() {
-    let (seed,): ([u8; 32],) = CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ())
-        .await
-        .expect("Failed to call the management canister");
-    RNG.with_borrow_mut(|rng| *rng = Some(ChaCha20Rng::from_seed(seed)));
-}
 
 fn schedule_seeding(duration: Duration) {
     ic_cdk_timers::set_timer(duration, || {
         spawn(async {
-            seed_randomness().await;
+            governance_mut().env.seed_rng().await;
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
@@ -176,6 +164,7 @@ fn schedule_seeding(duration: Duration) {
 
 struct CanisterEnv {
     time_warp: GovTimeWarp,
+    rng: Option<ChaCha20Rng>,
 }
 
 fn now_nanoseconds() -> u64 {
@@ -199,6 +188,7 @@ impl CanisterEnv {
     fn new() -> Self {
         CanisterEnv {
             time_warp: GovTimeWarp { delta_s: 0 },
+            rng: None,
         }
     }
 }
@@ -214,21 +204,27 @@ impl Environment for CanisterEnv {
     }
 
     fn random_u64(&mut self) -> Result<u64, RngError> {
-        RNG.with_borrow_mut(|rng| match rng.as_mut() {
+        match self.rng.as_mut() {
             Some(rand) => Ok(rand.next_u64()),
             None => Err(RngError::RngNotInitialized),
-        })
+        }
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         let mut bytes = [0u8; 32];
-        RNG.with_borrow_mut(|rng| match rng.as_mut() {
+        match self.rng.as_mut() {
             Some(rand) => {
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }
             None => Err(RngError::RngNotInitialized),
-        })
+        }
+    }
+
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+        let (seed,): ([u8; 32],) = CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await?;
+        self.rng.replace(ChaCha20Rng::from_seed(seed));
+        Ok(())
     }
 
     fn execute_nns_function(

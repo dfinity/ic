@@ -498,6 +498,15 @@ impl Environment for NNSFixture {
             .random_byte_array()
     }
 
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .seed_rng()
+            .await
+    }
+
     fn execute_nns_function(
         &self,
         proposal_id: u64,
@@ -949,6 +958,10 @@ impl Environment for NNS {
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.fixture.random_byte_array()
+    }
+
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+        self.fixture.seed_rng().await
     }
 
     fn execute_nns_function(

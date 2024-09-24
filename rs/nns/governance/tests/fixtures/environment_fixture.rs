@@ -46,7 +46,7 @@ where
 /// This state is used to respond to environment calls from Governance in a deterministic way.
 pub struct EnvironmentFixtureState {
     pub now: u64,
-    pub rng: StdRng,
+    pub rng: Option<StdRng>,
     pub observed_canister_calls: VecDeque<CanisterCallRequest>,
     pub mocked_canister_replies: VecDeque<CanisterCallReply>,
 }
@@ -155,6 +155,10 @@ impl Environment for EnvironmentFixture {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        unimplemented!()
+    }
+
+    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
         unimplemented!()
     }
 
