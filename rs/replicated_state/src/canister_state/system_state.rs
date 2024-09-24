@@ -388,7 +388,7 @@ pub enum OnLowWasmMemoryHookStatus {
 impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
     fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
         use OnLowWasmMemoryHookStatus::*;
-        
+
         match *item {
             ConditionNotSatisfied => Self::ConditionNotSatisfied,
             Ready => Self::Ready,
