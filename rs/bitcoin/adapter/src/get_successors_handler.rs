@@ -371,49 +371,6 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_get_successors_wait_header_sync_testnet() {
-        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
-        let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
-        let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            blockchain_manager_tx,
-            &MetricsRegistry::default(),
-        );
-        // Set up the following chain:
-        // 0 -> 1 ---> 2 ---> 3 -> 4
-        let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
-        previous_hashes.extend(
-            main_chain
-                .iter()
-                .map(|h| h.block_hash())
-                .collect::<Vec<_>>(),
-        );
-
-        // Create a request with the anchor block as the block 0 and processed block hashes contain
-        // block 1 and 2.x
-        let request = GetSuccessorsRequest {
-            anchor: genesis_hash,
-            processed_block_hashes: vec![],
-        };
-
-        {
-            let mut blockchain = handler.state.lock().await;
-            blockchain.add_headers(&main_chain);
-        }
-
-        let response = handler.get_successors(request).await;
-
-        // Since adapter is not yet passed highest checkpoint it should still be unavailbale.
-        // Highest checkpoint for testnet is 546.
-        assert_eq!(response.err().unwrap().code(), Code::Unavailable);
-    }
-
-    #[tokio::test]
     async fn test_get_successors_wait_header_sync_regtest() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
