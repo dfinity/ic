@@ -33,14 +33,13 @@ use ic_system_test_driver::{
             RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    retry_with_msg_async,
     util::{
         agent_observes_canister_module, agent_using_call_v2_endpoint, assert_create_agent, block_on,
     },
 };
 use std::{env, iter, net::SocketAddrV6, time::Duration};
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{
     agent::http_transport::{
@@ -50,17 +49,11 @@ use ic_agent::{
     export::Principal,
     Agent,
 };
-use reqwest::{redirect::Policy, ClientBuilder, Method};
 use serde::Deserialize;
 use slog::{error, info, Logger};
-use tokio::{runtime::Runtime, time::sleep};
-
+use tokio::runtime::Runtime;
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
 const CANISTER_RETRY_BACKOFF: Duration = Duration::from_secs(2);
-
-fn runtime() -> Runtime {
-    Runtime::new().expect("Could not create tokio runtime")
-}
 
 async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Principal, Error> {
     let install_node = env
@@ -88,7 +81,7 @@ async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Pr
         .expect("Could not create http_counter canister");
 
     info!(&logger, "Waiting for canisters to finish installing...");
-    retry_with_msg_async!(
+    ic_system_test_driver::retry_with_msg_async!(
         format!(
             "agent of {} observes canister module {}",
             install_node.0.to_string(),
@@ -143,7 +136,7 @@ pub fn canister_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
@@ -162,7 +155,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "created canister={canister_id}");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0.to_string(),
@@ -182,7 +175,7 @@ pub fn canister_test(env: TestEnv) {
         .unwrap();
 
         info!(&logger, "Creating BN agent...");
-        let agent = retry_with_msg_async!(
+        let agent = ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "build agent for BoundaryNode {}",
                 boundary_node.get_public_url().to_string()
@@ -198,7 +191,7 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "Calling read...");
         // We must retry the first request to a canister.
         // This is because a new canister might take a few seconds to show up in the BN's routing tables
-        let read_result = retry_with_msg_async!(
+        let read_result = ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "calling read on canister {} on BoundaryNode {}",
                 canister_id.to_string(),
@@ -239,7 +232,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
         info!(&logger, "Deploying asset canister...");
@@ -249,7 +242,7 @@ pub fn asset_canister_test(env: TestEnv) {
             .expect("Could not install asset canister");
 
 
-        let http_client_builder = ClientBuilder::new();
+        let http_client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
             (
                 http_client_builder,
@@ -265,7 +258,7 @@ pub fn asset_canister_test(env: TestEnv) {
         };
         let http_client = client_builder.build().unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a small asset with the correct hash succeeds and is verified without streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -304,7 +297,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a small, gzipped asset with the correct hash succeeds and is verified without streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -346,7 +339,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 4mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -368,20 +361,20 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: None,
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting 4mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/4mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .bytes()
-                    .await.context("unable to download asset body")?
+                    .await?
                     .to_vec();
 
                 if res != req_body {
-                    bail!("4mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("4mb response did not match uploaded content")
                 }
 
                 Ok(())
@@ -390,7 +383,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 6mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified".to_string(),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -412,20 +405,20 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: None,
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting 6mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/6mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .bytes()
-                    .await.context("unable to download asset body")?
+                    .await?
                     .to_vec();
 
                 if res != req_body {
-                    bail!("6mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("6mb response did not match uploaded content")
                 }
 
                 Ok(())
@@ -434,7 +427,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting an 8mb asset with the correct hash succeeds and is within the limit that we can safely verify while streaming so it is verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -456,20 +449,20 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: None,
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting 8mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/8mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .bytes()
-                    .await.context("unable to download asset body")?
+                    .await?
                     .to_vec();
 
                 if res != req_body {
-                    bail!("8mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("8mb response did not match uploaded content")
                 }
 
                 Ok(())
@@ -477,7 +470,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 10mb asset with the correct hash succeeds but the asset is larger than the limit that we can safely verify while streaming so it is not verified",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -499,20 +492,20 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: None,
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting 10mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/10mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .bytes()
-                    .await.context("unable to download asset body")?
+                    .await?
                     .to_vec();
 
                 if res != req_body {
-                    bail!("10mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("10mb response did not match uploaded content")
                 }
 
                 Ok(())
@@ -521,7 +514,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 4mb asset with the incorrect hash fails because the asset is within the limit that we can safely verify while streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -543,18 +536,18 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: Some(vec![0; 32]),
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting invalid 4mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/invalid-4mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .text()
-                    .await.context("unable to download asset body")?;
+                    .await?;
 
-                if !res.contains("Response verification failed") {
+                if res != "Body does not pass verification" {
                     bail!("invalid 4mb asset did not fail verification")
                 }
 
@@ -564,7 +557,7 @@ pub fn asset_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             "Requesting a 10mb asset with an invalid hash succeeds because the asset is larger than what we can safely verify while streaming",
             &logger,
             READY_WAIT_TIMEOUT,
@@ -586,20 +579,20 @@ pub fn asset_canister_test(env: TestEnv) {
                         content_encoding: "identity".to_string(),
                         sha_override: Some(vec![0; 32]),
                     })
-                    .await.context("unable to upload asset")?;
+                    .await?;
 
                 info!(&logger, "Requesting invalid 10mb asset...");
                 let res = http_client
                     .get(format!("https://{host}/invalid-10mb.txt"))
                     .header("accept-encoding", "gzip")
                     .send()
-                    .await.context("unable to request asset")?
+                    .await?
                     .bytes()
-                    .await.context("unable to download asset body")?
+                    .await?
                     .to_vec();
 
                 if res != req_body {
-                    bail!("invalid 10mb response did not match uploaded content: expected size: {}, got: {}", req_body.len(), res.len())
+                    bail!("invalid 10mb response did not match uploaded content")
                 }
 
                 Ok(())
@@ -642,7 +635,7 @@ pub fn http_canister_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
@@ -658,11 +651,10 @@ pub fn http_canister_test(env: TestEnv) {
         info!(&logger, "created kv_store canister={canister_id}");
 
         // Wait for the canisters to finish installing
-
         // TODO: maybe this should be status calls?
-        sleep(Duration::from_secs(5)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let client_builder = ClientBuilder::new().redirect(Policy::none());
+        let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host, invalid_host) =
             if let Some(playnet) = boundary_node.get_playnet() {
                 (
@@ -683,7 +675,7 @@ pub fn http_canister_test(env: TestEnv) {
         let client = client_builder.build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -709,8 +701,9 @@ pub fn http_canister_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -728,7 +721,7 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -746,7 +739,7 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -772,7 +765,7 @@ pub fn http_canister_test(env: TestEnv) {
 
         // Check that `canisterId` parameters go unused
         let url = &format!("https://{invalid_host}/?canisterId={canister_id}");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 400)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -824,7 +817,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
@@ -840,7 +833,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         info!(&logger, "created kv_store canister={canister_id}");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.0.to_string(),
@@ -859,7 +852,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .await
         .unwrap();
 
-        let client_builder = ClientBuilder::new();
+        let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
             (
                 client_builder,
@@ -876,7 +869,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         let client = client_builder.build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting foo not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -902,8 +895,9 @@ pub fn prefix_canister_id_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -912,7 +906,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 let res = client.put(url).body("bar").send().await?.text().await?;
 
                 if res != "'/foo' set to 'bar'" {
-                    bail!("expected set to bar, got '{res}'");
+                    bail!("expected set to bar");
                 }
 
                 Ok(())
@@ -921,7 +915,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -930,7 +924,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                 let res = client.get(url).send().await?.text().await?;
 
                 if res != "bar" {
-                    bail!("expected bar, got '{res}'");
+                    bail!("expected bar");
                 }
 
                 Ok(())
@@ -939,7 +933,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -954,7 +948,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
                     .await?;
 
                 if res != "bar" {
-                    bail!("expected bar, got '{res}'");
+                    bail!("expected bar");
                 }
 
                 Ok(())
@@ -997,7 +991,8 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
     rt.block_on(async move {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.0.as_str()).await;
@@ -1013,9 +1008,9 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 
         // Wait for the canisters to finish installing
         // TODO: maybe this should be status calls?
-        sleep(Duration::from_secs(5)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
-        let client_builder = ClientBuilder::new();
+        let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host, invalid_host) =
             if let Some(playnet) = boundary_node.get_playnet() {
                 (
@@ -1039,7 +1034,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         let client = client_builder.proxy(proxy).build().unwrap();
 
         let url = &format!("https://{host}/foo");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting foo not found)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1054,7 +1049,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                     .await?;
 
                 if res != "'/foo' not found" {
-                    bail!("expected 'foo not found' got '{res}'");
+                    bail!("expected foo not found");
                 }
 
                 Ok(())
@@ -1065,8 +1060,9 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 
         // "x-ic-test", "no-certificate"
         // "x-ic-test", "streaming-callback"
+        // "x-icx-require-certification", "1"
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("PUT {} (expecting set to bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1075,7 +1071,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 let res = client.put(url).body("bar").send().await?.text().await?;
 
                 if res != "'/foo' set to 'bar'" {
-                    bail!("expected \"'/foo' set to 'bar'\" to bar, got '{res}'");
+                    bail!("expected set to bar");
                 }
 
                 Ok(())
@@ -1084,7 +1080,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1093,7 +1089,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 let res = client.get(url).send().await?.text().await?;
 
                 if res != "bar" {
-                    bail!("expected 'bar' got '{res}'");
+                    bail!("expected bar");
                 }
 
                 Ok(())
@@ -1102,7 +1098,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .await
         .unwrap();
 
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting bar)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1117,7 +1113,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                     .await?;
 
                 if res != "bar" {
-                    bail!("expected 'bar' got '{res}'");
+                    bail!("expected bar");
                 };
 
                 Ok(())
@@ -1128,7 +1124,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
 
         // Check that `canisterId` parameters go unused
         let url = &format!("https://{invalid_host}/?canisterId={canister_id}");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 400)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1137,7 +1133,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
                 let res = client.get(url).send().await?;
 
                 if res.status() != StatusCode::BAD_REQUEST {
-                    bail!("expected 400 got '{}'", res.status());
+                    bail!("expected 400");
                 }
 
                 Ok(())
@@ -1146,6 +1142,42 @@ pub fn proxy_http_canister_test(env: TestEnv) {
         .await
         .unwrap();
     });
+}
+
+/* tag::catalog[]
+Title:: Boundary nodes valid Nginx configuration test
+
+Goal:: Verify that nginx configuration is valid by running `nginx -T` on the boundary node.
+
+Runbook:
+. Set up a subnet with 4 nodes and a boundary node.
+. SSH into the boundary node and execute `sudo nginx -t`
+
+Success:: The output contains the string
+`nginx: configuration file /etc/nginx/nginx.conf test is successful`
+
+Coverage:: NGINX configuration is not broken
+
+end::catalog[] */
+
+pub fn nginx_valid_config_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let cmd_output = boundary_node
+        .block_on_bash_script("sudo nginx -t 2>&1")
+        .unwrap();
+
+    info!(logger, "nginx test result = '{}'", cmd_output.trim());
+
+    if !cmd_output.trim().contains("test is successful") {
+        panic!("nginx config failed validation");
+    }
 }
 
 /* tag::catalog[]
@@ -1179,7 +1211,7 @@ pub fn denylist_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
@@ -1192,7 +1224,7 @@ pub fn denylist_test(env: TestEnv) {
             .expect("Could not create http_counter canister");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0,
@@ -1213,8 +1245,8 @@ pub fn denylist_test(env: TestEnv) {
 
         info!(&logger, "created canister={canister_id}");
 
-        // Update the denylist and restart ic-gateway
-        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/ic-gateway/denylist.json && sudo service ic-gateway restart"#, canister_id);
+        // Update the denylist and restart icx-proxy
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
             "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
@@ -1224,9 +1256,9 @@ pub fn denylist_test(env: TestEnv) {
         }
 
         // Wait a bit for the restart to complete
-        sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
-        let client_builder = ClientBuilder::new();
+        let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
             (client_builder, playnet)
         } else {
@@ -1241,7 +1273,7 @@ pub fn denylist_test(env: TestEnv) {
 
         // Probe the blocked canister, we should get a 451
         let url = &format!("https://{canister_id}.raw.{host}/");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 451)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1253,7 +1285,7 @@ pub fn denylist_test(env: TestEnv) {
                     .await?
                     .status();
 
-                if res != StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
+                if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
                     bail!("expected 451, got {res}");
                 }
 
@@ -1290,7 +1322,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on(async move {
         info!(&logger, "creating replica agent");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
@@ -1303,7 +1335,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
             .expect("Could not create http_counter canister");
 
         info!(&logger, "Waiting for canisters to finish installing...");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!(
                 "agent of {} observes canister module {}",
                 install_node.as_ref().unwrap().0,
@@ -1324,7 +1356,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
         info!(&logger, "created canister={canister_id}");
 
-        let client_builder = ClientBuilder::new();
+        let client_builder = reqwest::ClientBuilder::new();
         let (client_builder, host) = if let Some(playnet) = boundary_node.get_playnet() {
             (client_builder, playnet)
         } else {
@@ -1339,7 +1371,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
         // Check canister is available
         let url = &format!("https://{canister_id}.raw.{host}/");
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1352,7 +1384,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
                     .expect("Could not perform get request.")
                     .status();
 
-                if res != StatusCode::OK {
+                if res != reqwest::StatusCode::OK {
                     bail!("expected OK, got {}", res);
                 }
 
@@ -1360,8 +1392,8 @@ pub fn canister_allowlist_test(env: TestEnv) {
             }
         ).await.unwrap();
 
-        // Update the denylist and restart ic-gateway
-        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/ic-gateway/denylist.json && sudo service ic-gateway restart"#, canister_id);
+        // Update the denylist and restart icx-proxy
+        let denylist_command = format!(r#"echo "{{\"canisters\":{{\"{}\": {{}}}}}}" | sudo tee /run/ic-node/etc/icx-proxy/denylist.json && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
             "update denylist {BOUNDARY_NODE_NAME} with {denylist_command}"
@@ -1371,10 +1403,10 @@ pub fn canister_allowlist_test(env: TestEnv) {
         }
 
         // Wait a bit for the restart to complete
-        sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is restricted
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {} (expecting 451)", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1387,7 +1419,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
                     .expect("Could not perform get request.")
                     .status();
 
-                if res != StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
+                if res != reqwest::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS {
                     bail!("expected 451, got {}", res);
                 }
 
@@ -1395,8 +1427,8 @@ pub fn canister_allowlist_test(env: TestEnv) {
             }
         ).await.unwrap();
 
-        // Update the allowlist and restart ic-gateway
-        let allowlist_command = format!(r#"echo "{}" | sudo tee /run/ic-node/etc/ic-gateway/allowlist.txt && sudo service ic-gateway restart"#, canister_id);
+        // Update the allowlist and restart icx-proxy
+        let allowlist_command = format!(r#"echo "{}" | sudo tee /run/ic-node/etc/icx-proxy/allowlist.txt && sudo service icx-proxy restart"#, canister_id);
         info!(
             logger,
             "update allowlist {BOUNDARY_NODE_NAME} with {allowlist_command}"
@@ -1406,10 +1438,10 @@ pub fn canister_allowlist_test(env: TestEnv) {
         }
 
         // Wait a bit for the restart to complete
-        sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Check canister is available
-        retry_with_msg_async!(
+        ic_system_test_driver::retry_with_msg_async!(
             format!("GET {}", url),
             &logger,
             READY_WAIT_TIMEOUT,
@@ -1422,7 +1454,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
                     .expect("Could not perform get request.")
                     .status();
 
-                if res != StatusCode::OK {
+                if res != reqwest::StatusCode::OK {
                     bail!("expected OK, got {}", res);
                 }
 
@@ -1441,7 +1473,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -1455,7 +1487,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
     };
     let client = client_builder.build().unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let futs = FuturesUnordered::new();
 
@@ -1468,7 +1500,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         async move {
             let res = client.get(format!("http://{host}/")).send().await?;
 
-            if res.status() != StatusCode::PERMANENT_REDIRECT {
+            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1490,7 +1522,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         async move {
             let res = client.get(format!("http://raw.{host}/")).send().await?;
 
-            if res.status() != StatusCode::PERMANENT_REDIRECT {
+            if res.status() != reqwest::StatusCode::MOVED_PERMANENTLY {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1538,9 +1570,9 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let client_builder = ClientBuilder::new()
+    let client_builder = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(boundary_node.uses_snake_oil_certs())
-        .redirect(Policy::none());
+        .redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -1553,7 +1585,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
     };
     let client = client_builder.build().unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let futs = FuturesUnordered::new();
 
@@ -1566,7 +1598,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         async move {
             let res = client.get(format!("https://{host}/")).send().await?;
 
-            if res.status() != StatusCode::TEMPORARY_REDIRECT {
+            if res.status() != reqwest::StatusCode::FOUND {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1588,7 +1620,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         async move {
             let res = client.get(format!("https://raw.{host}/")).send().await?;
 
-            if res.status() != StatusCode::TEMPORARY_REDIRECT {
+            if res.status() != reqwest::StatusCode::FOUND {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1627,7 +1659,162 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-// this tests the HTTP endpoint of the boundary node
+pub fn redirect_to_non_raw_test(env: TestEnv) {
+    let logger = env.logger();
+
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
+    let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
+        (client_builder, playnet)
+    } else {
+        let host = "ic0.app";
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let client_builder = client_builder
+            .danger_accept_invalid_certs(true)
+            .resolve(&format!("raw.{host}"), bn_addr.into());
+        (client_builder, host.to_string())
+    };
+    let client = client_builder.build().unwrap();
+
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+
+    let futs = FuturesUnordered::new();
+
+    let host = host_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect status to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .get(format!("https://raw.{host}/api/v2/status"))
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != format!("https://{host}/api/v2/status") {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    let host = host_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect query to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post(format!("https://raw.{host}/api/v2/canister/CID/query"))
+                .body("body")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != format!("https://{host}/api/v2/canister/CID/query") {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    let host = host_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "redirect call to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post(format!("https://raw.{host}/api/v2/canister/CID/call"))
+                .body("body")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != format!("https://{host}/api/v2/canister/CID/call") {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    let host = host_orig;
+    futs.push(rt.spawn({
+        let client = client;
+        let name = "redirect read_state to non-raw domain";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let res = client
+                .post(format!("https://raw.{host}/api/v2/canister/CID/read_state"))
+                .body("body")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::TEMPORARY_REDIRECT {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let location_hdr = res.headers().get("Location").unwrap().to_str().unwrap();
+            if location_hdr != format!("https://{host}/api/v2/canister/CID/read_state") {
+                bail!("{name} failed: wrong location header: {}", location_hdr)
+            }
+
+            Ok(())
+        }
+    }));
+
+    rt.block_on(async move {
+        let mut cnt_err = 0;
+        info!(&logger, "Waiting for subtests");
+
+        for fut in futs {
+            match fut.await {
+                Ok(Err(err)) => {
+                    error!(logger, "test failed: {}", err);
+                    cnt_err += 1;
+                }
+                Err(err) => {
+                    error!(logger, "test panicked: {}", err);
+                    cnt_err += 1;
+                }
+                _ => {}
+            }
+        }
+
+        match cnt_err {
+            0 => Ok(()),
+            _ => bail!("failed with {cnt_err} errors"),
+        }
+    })
+    .expect("test suite failed");
+}
+
+// this tests the HTTP endpoint of the boundary node (anything that goes to icx-proxy)
 pub fn http_endpoint_test(env: TestEnv) {
     let logger_orig = env.logger();
 
@@ -1637,11 +1824,11 @@ pub fn http_endpoint_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let asset_canister_orig = rt.block_on(env.deploy_asset_canister()).unwrap();
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -1657,7 +1844,7 @@ pub fn http_endpoint_test(env: TestEnv) {
 
     let futs = FuturesUnordered::new();
 
-    // fetching standard assets (html page)
+    // fetching standard assets (html page, JS script) through icx-proxy
     let host = host_orig.clone();
     let logger = logger_orig.clone();
     let asset_canister = asset_canister_orig.clone();
@@ -1684,7 +1871,7 @@ pub fn http_endpoint_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1692,7 +1879,7 @@ pub fn http_endpoint_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Hello World!") {
-                bail!("{name} failed: expected response but got {body}")
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             let hello_world_js = vec![
@@ -1718,25 +1905,15 @@ pub fn http_endpoint_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
-            }
-
-            if let Some(v) = res.headers().get("x-ic-canister-id") {
-                let hdr = v.to_str().unwrap();
-                let id = asset_canister.canister_id.to_string();
-                if hdr != id {
-                    bail!("{name} failed: header x-ic-canister-id is incorrect ({hdr} != {id})",);
-                }
-            } else {
-                bail!("{name} failed: header x-ic-canister-id not found");
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains(r#"console.log("Hello World!")"#) {
-                bail!("{name} failed: expected response but got {body}")
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
@@ -1776,7 +1953,7 @@ pub fn http_endpoint_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1784,7 +1961,7 @@ pub fn http_endpoint_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Do re mi, A B C, 1 2 3") {
-                bail!("{name} failed: expected response but got {body}")
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
@@ -1818,7 +1995,7 @@ pub fn http_endpoint_test(env: TestEnv) {
     .expect("test suite failed");
 }
 
-pub fn ic_gateway_test(env: TestEnv) {
+pub fn icx_proxy_test(env: TestEnv) {
     let logger = env.logger();
 
     let boundary_node = env
@@ -1827,7 +2004,7 @@ pub fn ic_gateway_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     let canister_id = rt
         .block_on(install_canister(
@@ -1837,7 +2014,7 @@ pub fn ic_gateway_test(env: TestEnv) {
         ))
         .unwrap();
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -1856,7 +2033,7 @@ pub fn ic_gateway_test(env: TestEnv) {
     let host = host_orig.clone();
     futs.push(rt.spawn({
         let client = client.clone();
-        let name = "get sent to ic-gateway via /_/raw/";
+        let name = "get sent to icx-proxy via /_/raw/";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -1865,15 +2042,15 @@ pub fn ic_gateway_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::INTERNAL_SERVER_ERROR {
+            if res.status() != reqwest::StatusCode::INTERNAL_SERVER_ERROR {
                 bail!("{name} failed: {}", res.status())
             }
 
             let body = res.bytes().await?.to_vec();
             let body = String::from_utf8_lossy(&body);
 
-            if !body.contains("Response verification failed") {
-                bail!("{name} failed: expected 'Response verification failed' but got {body}")
+            if !body.contains("Body does not pass verification") {
+                bail!("{name} failed: expected 'Body does not pass verification' but got {body}")
             }
 
             Ok(())
@@ -1883,7 +2060,7 @@ pub fn ic_gateway_test(env: TestEnv) {
     let host = host_orig;
     futs.push(rt.spawn({
         let client = client;
-        let name = "get sent to ic-gateway via raw domain";
+        let name = "get sent to icx-proxy via raw domain";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -1892,7 +2069,7 @@ pub fn ic_gateway_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -1900,7 +2077,7 @@ pub fn ic_gateway_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Counter is 0") {
-                bail!("{name} failed: expected response but got {body}")
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())
@@ -1942,7 +2119,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
         .get_snapshot()
         .expect("failed to get BN snapshot");
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -1974,7 +2151,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -2020,7 +2197,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2081,7 +2258,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2159,7 +2336,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
         .get_snapshot()
         .expect("failed to get BN snapshot");
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -2193,7 +2370,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2222,39 +2399,29 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
     struct TestCase {
         name: String,
         path: String,
-        method: Method,
-        expect: StatusCode,
         allowed_methods: String,
     }
 
     let test_cases = [
         TestCase {
             name: "status OPTIONS".into(),
-            method: Method::GET,
-            expect: StatusCode::OK,
             path: "/api/v2/status".into(),
             allowed_methods: "HEAD, GET".into(),
         },
         TestCase {
             name: "query OPTIONS".into(),
-            method: Method::POST,
-            expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/query"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
         TestCase {
             name: "call OPTIONS".into(),
-            method: Method::POST,
-            expect: StatusCode::BAD_REQUEST,
             path: format!("/api/v2/canister/{cid}/call"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
         TestCase {
-            name: "read_state OPTIONS".into(),
-            method: Method::POST,
-            expect: StatusCode::BAD_REQUEST,
+            name: "read_status OPTIONS".into(),
             path: format!("/api/v2/canister/{cid}/read_state"),
-            allowed_methods: "POST".into(),
+            allowed_methods: "HEAD, POST".into(),
         },
     ];
 
@@ -2264,8 +2431,6 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
 
         let TestCase {
             name,
-            method,
-            expect,
             path,
             allowed_methods,
         } = tc;
@@ -2276,26 +2441,20 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
 
             let mut url = reqwest::Url::parse(&format!("https://{host}"))?;
             url.set_path(&path);
-            let req = reqwest::Request::new(Method::OPTIONS, url);
+
+            let req = reqwest::Request::new(reqwest::Method::OPTIONS, url);
+
             let res = client.execute(req).await?;
 
-            // Both 200 and 204 are valid OPTIONS codes
-            if ![StatusCode::NO_CONTENT, StatusCode::OK].contains(&res.status())  {
+            if res.status() != reqwest::StatusCode::NO_CONTENT {
                 bail!("{name} failed: {}", res.status())
             }
 
-            // Normalize & sort header values so that they can be compared regardless of their order
-            fn normalize(hdr: &str) -> String {
-                let mut hdr = hdr.split(',').map(|x| x.trim().to_ascii_lowercase()).collect::<Vec<_>>();
-                hdr.sort();
-                hdr.join(",")
-            }
-
-            // Check pre-flight CORS headers
             for (k, v) in [
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", &allowed_methods),
                 ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie,X-Ic-Canister-Id"),
+                ("Access-Control-Expose-Headers", "Accept-Ranges,Content-Length,Content-Range,X-Request-Id,X-Ic-Canister-Id"),
                 ("Access-Control-Max-Age", "600"),
             ] {
                 let hdr = res
@@ -2303,38 +2462,8 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
                     .get(k)
                     .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
 
-                let hdr = normalize(hdr);
-                let expect = normalize(v);
-
-                if hdr != expect {
-                    bail!("wrong {k} header: {hdr} expected {expect}")
-                }
-            }
-
-            // Check non-pre-flight CORS headers
-            let mut url = reqwest::Url::parse(&format!("https://{host}"))?;
-            url.set_path(&path);
-            let req = reqwest::Request::new(method, url);
-            let res = client.execute(req).await?;
-
-            if res.status() != expect {
-                bail!("{name} failed: expected {expect}, got {}", res.status())
-            }
-
-            for (k, v) in [
-                ("Access-Control-Allow-Origin", "*"),
-                ("Access-Control-Expose-Headers", "Accept-Ranges,Content-Length,Content-Range,X-Request-Id,X-Ic-Canister-Id"),
-            ] {
-                let hdr = res
-                    .headers()
-                    .get(k)
-                    .ok_or_else(|| anyhow!("missing {k} header"))?.to_str()?;
-
-                let hdr = normalize(hdr);
-                let expect = normalize(v);
-
-                if hdr != expect {
-                    bail!("wrong {k} header: {hdr} expected {expect}")
+                if hdr != v {
+                    bail!("wrong {k} header: {hdr}, expected {v}")
                 }
             }
 
@@ -2379,9 +2508,9 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
 
     let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
 
-    let client = ClientBuilder::new()
+    let client = reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(true)
-        .redirect(Policy::none())
+        .redirect(reqwest::redirect::Policy::none())
         .resolve("rosetta.dfinity.network", bn_addr.into())
         .build()
         .expect("failed to build http client");
@@ -2404,7 +2533,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -2449,7 +2578,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2510,7 +2639,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             info!(&logger, "Waiting for canisters to finish installing...");
-            retry_with_msg_async!(
+            ic_system_test_driver::retry_with_msg_async!(
                 format!(
                     "agent of {} observes canister module {}",
                     install_url.to_string(),
@@ -2588,12 +2717,12 @@ pub fn seo_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let rt = runtime();
+    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
 
     // create an asset canister for the test
     let asset_canister_orig = rt.block_on(env.deploy_asset_canister()).unwrap();
 
-    let client_builder = ClientBuilder::new().redirect(Policy::none());
+    let client_builder = reqwest::ClientBuilder::new().redirect(reqwest::redirect::Policy::none());
     let (client_builder, host_orig) = if let Some(playnet) = boundary_node.get_playnet() {
         (client_builder, playnet)
     } else {
@@ -2614,7 +2743,7 @@ pub fn seo_test(env: TestEnv) {
     let asset_canister = asset_canister_orig.clone();
 
     futs.push(rt.spawn({
-        let name = "get sent to ic-gateway if you're a bot";
+        let name = "get sent to icx-proxy if you're a bot";
         info!(&logger, "Starting subtest {}", name);
 
         async move {
@@ -2639,7 +2768,7 @@ pub fn seo_test(env: TestEnv) {
                 .send()
                 .await?;
 
-            if res.status() != StatusCode::OK {
+            if res.status() != reqwest::StatusCode::OK {
                 bail!("{name} failed: {}", res.status())
             }
 
@@ -2647,7 +2776,7 @@ pub fn seo_test(env: TestEnv) {
             let body = String::from_utf8_lossy(&body);
 
             if !body.contains("Hello World!") {
-                bail!("{name} failed: expected response but got {body}")
+                bail!("{name} failed: expected icx-response but got {body}")
             }
 
             Ok(())

@@ -3,6 +3,7 @@ Description=Vector
 After=network-online.target
 Wants=network-online.target
 After=setup-vector.service
+Before=nginx.service
 BindsTo=setup-vector.service
 
 [Service]

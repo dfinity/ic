@@ -1,12 +1,12 @@
 /* tag::catalog[]
 Title:: Custom domains end-to-end test
 
-Goal:: Verify that custom domains is working end-to-end (certificate orchestrator, certificate issuer)
+Goal:: Verify that custom domains is working end-to-end (certificate orchestrator, certificate issuer, certificate syncer)
 
 Runbook:
 . Set up the certificate orhcestrator on the IC.
 . Start a UVM exposing a nameserver, a mock Cloudflare API, a mock certificate authority
-. Start a boundary node running the certificate issuer
+. Start a boundary node running the certificate issuer and syncer
 . Register some custom domains
 
 Success:: All custom domain services on the boundary node come up healthy and process the registration requests successfully
@@ -16,10 +16,11 @@ Coverage:: End-to-end registration processing
 end::catalog[] */
 
 use crate::custom_domains_integration::setup::{
-    access_domain, create_bn_http_client, get_registration_status, get_service_errors,
-    remove_dns_records, remove_registration, setup_asset_canister, setup_dns_records,
-    submit_registration_request, update_dns_records, update_registration, GetRequestState,
-    RegistrationRequestState, RemoveRequestState, UpdateRequestState, BOUNDARY_NODE_VM_ID,
+    access_domain, create_bn_http_client, get_certificate_syncer_state, get_registration_status,
+    get_service_errors, remove_dns_records, remove_registration, setup_asset_canister,
+    setup_dns_records, submit_registration_request, update_dns_records, update_registration,
+    GetRequestState, RegistrationRequestState, RemoveRequestState, UpdateRequestState,
+    BOUNDARY_NODE_VM_ID,
 };
 use ic_system_test_driver::{
     driver::boundary_node::BoundaryNodeVm, driver::test_env::TestEnv, util::block_on,
@@ -92,7 +93,7 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             }
         }
 
-        // wait a bit
+        // wait for the certificate syncer to update the nginx config
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // check that the custom domain is being served by the BN by checking the content of the canister
@@ -100,6 +101,13 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             access_domain(bn_http_client.clone(), domain_name).await?,
             "canister1",
             "Site content of the custom domain is not correct"
+        );
+
+        // check that the syncer sees the custom domain and maps it to the right canister
+        assert_eq!(
+            get_certificate_syncer_state(&boundary_node, domain_name),
+            asset_canister_id.to_string(),
+            "Certificate syncer does not know about the custom domain or maps it to the wrong canister"
         );
 
         // need to wait a second to prevent being rate-limited
@@ -139,7 +147,7 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             UpdateRequestState::Rejected(reason) => panic!("Failed to update the custom domain: {reason}"),
         };
 
-        // wait a bit
+        // wait for the certificate syncer to update the nginx config
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // check that the custom domain is being served by the BN by checking the content of the canister
@@ -147,6 +155,13 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             access_domain(bn_http_client.clone(), domain_name).await?,
             "canister2",
             "Site content of the custom domain is not correct"
+        );
+
+        // check that the syncer sees the custom domain and maps it to the right canister
+        assert_eq!(
+            get_certificate_syncer_state(&boundary_node, domain_name),
+            new_asset_canister_id.to_string(),
+            "Certificate syncer does not know about the custom domain or maps it to the wrong canister"
         );
 
         info!(
@@ -180,12 +195,25 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             GetRequestState::Rejected(reason) => panic!("Failed to delete the custom domain: {reason}"),
         };
 
+        // make sure the certificate syncer removed the domain
+        assert_eq!(
+            get_certificate_syncer_state(&boundary_node, domain_name),
+            "",
+            "Certificate syncer still has an entry for the deleted custom domain"
+        );
+
         info!(
             logger,
             "Custom domain has been successfully removed"
         );
 
-        // check that there are no issues with the issuer (failed certification)
+        // check that there are no issues with the syncer (failed certification)
+        assert_eq!(
+            get_service_errors(&boundary_node, "certificate-syncer"),
+            "-- No entries --",
+            "There were errors in the syncer"
+        );
+
         assert_eq!(
             get_service_errors(&boundary_node, "certificate-issuer"),
             "-- No entries --",
