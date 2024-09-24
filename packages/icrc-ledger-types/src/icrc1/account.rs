@@ -383,4 +383,34 @@ mod tests {
         );
         assert_eq!(serialized_len as u32, MAX_SERIALIZATION_LEN);
     }
+
+    #[test]
+    fn test_account_serialization() {
+        let owner =
+            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+                .unwrap();
+        let subaccount = Some(
+            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        );
+        let account1 = Account { owner, subaccount };
+        let account2 = Account {
+            owner,
+            subaccount: None,
+        };
+        let account3 = Account {
+            owner: Principal::anonymous(),
+            subaccount,
+        };
+        let account4 = Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        };
+        let accounts = vec![account1, account2, account3, account4];
+        for account in accounts {
+            assert_eq!(Account::from_bytes(account.to_bytes()), account);
+        }
+    }
 }
