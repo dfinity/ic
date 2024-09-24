@@ -58,39 +58,29 @@ pub fn main() -> Result<()> {
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file));
-            let deployment_name: Option<&str> = match &deployment_settings {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
-
-            let mgmt_mac: Option<&str> = match &deployment_settings {
-                Ok(deployment) => deployment.deployment.mgmt_mac.as_deref(),
-                Err(_) => None,
-            };
-
-            generate_network_config(
-                &network_info,
-                mgmt_mac,
-                deployment_name,
-                NodeType::SetupOS,
-                Path::new(&output_directory),
-            )
-        }
-        Some(Commands::GenerateIpv6Address { node_type }) => {
             let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
                 .context("Please specify a valid deployment file with '--deployment-file'")?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
+            let deployment_name = deployment_settings.deployment.name.as_str();
+            let mgmt_mac = deployment_settings.deployment.mgmt_mac.as_deref();
+            let generated_mac =
+                generate_mac_address(deployment_name, &NodeType::SetupOS, mgmt_mac)?;
+            eprintln!("Using generated mac (unformatted) {}", generated_mac.get());
+
+            generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
+        }
+        Some(Commands::GenerateIpv6Address { node_type }) => {
             let config_map = config_map_from_path(Path::new(&opts.config))
                 .context("Please specify a valid config file with '--config'")?;
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
+
+            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
+                .context("Please specify a valid deployment file with '--deployment-file'")?;
+            eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
 
