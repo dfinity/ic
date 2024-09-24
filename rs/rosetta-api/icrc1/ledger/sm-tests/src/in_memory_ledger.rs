@@ -70,7 +70,6 @@ pub trait InMemoryLedgerState {
     fn validate_invariants(&self);
 }
 
-#[derive(Eq, PartialEq, Debug)]
 pub struct InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord + Hash,
@@ -81,6 +80,106 @@ where
     total_supply: Tokens,
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
+}
+
+impl<K, AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<K, AccountId, Tokens>
+where
+    K: Ord + Hash + std::fmt::Debug,
+    AccountId: Hash + Eq + std::fmt::Debug,
+    Tokens: PartialEq + std::fmt::Debug,
+{
+    fn eq(&self, other: &Self) -> bool {
+        if self.balances.len() != other.balances.len() {
+            println!(
+                "Mismatch in number of balances: {} vs {}",
+                self.balances.len(),
+                other.balances.len()
+            );
+            return false;
+        }
+        if self.allowances.len() != other.allowances.len() {
+            println!(
+                "Mismatch in number of allowances: {} vs {}",
+                self.allowances.len(),
+                other.allowances.len()
+            );
+            return false;
+        }
+        if self.total_supply != other.total_supply {
+            println!(
+                "Mismatch in total supply: {:?} vs {:?}",
+                self.total_supply, other.total_supply
+            );
+            return false;
+        }
+        if self.fee_collector != other.fee_collector {
+            println!(
+                "Mismatch in fee collector: {:?} vs {:?}",
+                self.fee_collector, other.fee_collector
+            );
+            return false;
+        }
+        if self.burns_without_spender != other.burns_without_spender {
+            println!(
+                "Mismatch in burns without spender: {:?} vs {:?}",
+                self.burns_without_spender, other.burns_without_spender
+            );
+            return false;
+        }
+        for (account_id, balance) in &self.balances {
+            if !self.balances.iter().all(|(key, value)| {
+                other.balances.get(key).map_or_else(
+                    || {
+                        println!(
+                            "Mismatch in balance for account {:?}: {:?} vs None",
+                            account_id, balance
+                        );
+                        false
+                    },
+                    |v| {
+                        if *value != *v {
+                            println!(
+                                "Mismatch in balance for account {:?}: {:?} vs {:?}",
+                                account_id, balance, v
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    },
+                )
+            }) {
+                return false;
+            }
+        }
+        for (account_id, allowance) in &self.allowances {
+            if !self.allowances.iter().all(|(key, value)| {
+                other.allowances.get(key).map_or_else(
+                    || {
+                        println!(
+                            "Mismatch in allowance for account {:?}: {:?} vs None",
+                            account_id, allowance
+                        );
+                        false
+                    },
+                    |v| {
+                        if *value != *v {
+                            println!(
+                                "Mismatch in allowance for account {:?}: {:?} vs {:?}",
+                                account_id, allowance, v
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    },
+                )
+            }) {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>

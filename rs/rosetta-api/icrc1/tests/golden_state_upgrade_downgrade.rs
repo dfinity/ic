@@ -274,7 +274,11 @@ fn build_in_memory_ledger_and_compare_to_previous(
     in_memory_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     in_memory_ledger_state.verify_balances_and_allowances(state_machine, canister_id);
     if let Some(previous_ledger_state) = previous_ledger_state {
-        assert_eq!(previous_ledger_state, in_memory_ledger_state);
+        assert!(
+            previous_ledger_state == in_memory_ledger_state,
+            "In-memory ledger state does not match previous state for canister {:?}",
+            canister_id
+        );
     }
     in_memory_ledger_state
 }
