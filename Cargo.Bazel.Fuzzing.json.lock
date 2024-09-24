@@ -1,5 +1,5 @@
 {
-  "checksum": "7059ee8ebf23a06427b529a3b7d636561f31d7f874d553442922453110341f6e",
+  "checksum": "2debd702b24f7c7c56d40695d32c74e12a292344893ba7f1a2441756723febfc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18199,6 +18199,10 @@
             {
               "id": "ic-test-state-machine-client 3.0.1",
               "target": "ic_test_state_machine_client"
+            },
+            {
+              "id": "ic-transport-types 0.37.1",
+              "target": "ic_transport_types"
             },
             {
               "id": "ic-utils 0.37.0",
@@ -78949,6 +78953,7 @@
     "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
+    "ic-transport-types 0.37.1",
     "ic-utils 0.37.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.8.4",

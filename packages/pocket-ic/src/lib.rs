@@ -46,6 +46,7 @@ use candid::{
 };
 pub use ic_cdk::api::management_canister::main::CanisterSettings;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
+use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -1255,16 +1256,6 @@ pub enum WasmResult {
     Reject(String),
 }
 
-/// This struct describes the result of retrieving subnet metrics via a read state request.
-#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SubnetMetrics {
-    pub num_canisters: u64,
-    pub canister_state_bytes: u64,
-    #[serde(with = "map_u128")]
-    pub consumed_cycles_total: u128,
-    pub update_transactions_total: u64,
-}
-
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
@@ -1314,46 +1305,5 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
             }
         }
         std::thread::sleep(Duration::from_millis(20));
-    }
-}
-
-mod map_u128 {
-    use serde::{
-        de::{Error, IgnoredAny, MapAccess, Visitor},
-        ser::SerializeMap,
-        Deserializer, Serializer,
-    };
-    use std::fmt;
-
-    pub fn serialize<S: Serializer>(val: &u128, s: S) -> Result<S::Ok, S::Error> {
-        let low = *val & u64::MAX as u128;
-        let high = *val >> 64;
-        let mut map = s.serialize_map(Some(2))?;
-        map.serialize_entry(&0, &low)?;
-        map.serialize_entry(&1, &(high != 0).then_some(high))?;
-        map.end()
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u128, D::Error> {
-        d.deserialize_map(MapU128Visitor)
-    }
-
-    struct MapU128Visitor;
-
-    impl<'de> Visitor<'de> for MapU128Visitor {
-        type Value = u128;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a map of low and high")
-        }
-
-        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
-            let (_, low): (IgnoredAny, u64) = map
-                .next_entry()?
-                .ok_or_else(|| A::Error::missing_field("0"))?;
-            let opt: Option<(IgnoredAny, Option<u64>)> = map.next_entry()?;
-            let high = opt.and_then(|x| x.1).unwrap_or(0);
-            Ok((high as u128) << 64 | low as u128)
-        }
     }
 }
