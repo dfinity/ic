@@ -1,7 +1,7 @@
 #![no_main]
-use ic_management_canister_types::{Method, Payload, UpdateSettingsArgs};
-use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-use libfuzzer_sys::{fuzz_target, Corpus};
+use libfuzzer_sys::fuzz_target;
+use wasm_fuzzers::ic_wasm::ICWasmModule;
+use execution_fuzzers::system_api::run_fuzzer;
 
 // This fuzz tries to execute system API call.
 //
@@ -10,4 +10,6 @@ use libfuzzer_sys::{fuzz_target, Corpus};
 // To execute the fuzzer run
 // bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call
 
-fuzz_target!(|_args: UpdateSettingsArgs| -> Corpus { Corpus::Reject });
+fuzz_target!(|module: ICWasmModule| {
+    run_fuzzer(module);
+});

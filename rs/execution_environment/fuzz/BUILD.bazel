@@ -1,4 +1,5 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -10,6 +11,49 @@ UPDATE_SETTINGS_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:libfuzzer-sys",
 ]
+
+rust_library(
+    name = "execution_fuzzers",
+    testonly = True,
+    srcs = glob(["src/*.rs"]),
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = select({
+        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+        "//conditions:default": [],
+    }),
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/cycles_account_manager",
+        "//rs/embedders",
+        "//rs/embedders/fuzz:wasm_fuzzers",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/registry/subnet_type",
+        "//rs/replicated_state",
+        "//rs/system_api",
+        "//rs/test_utilities",
+        "//rs/test_utilities/embedders",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "@crate_index//:arbitrary",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libfuzzer-sys",
+        "@crate_index//:tokio",
+        "@crate_index//:wasm-encoder",
+        "@crate_index//:wasm-smith",
+        "@crate_index//:wasmparser",
+    ],
+)
 
 rust_fuzz_test_binary(
     name = "execute_subnet_message_update_settings",
@@ -26,5 +70,5 @@ rust_fuzz_test_binary(
         "fuzz_targets/execute_system_api_call.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = UPDATE_SETTINGS_DEPENDENCIES,
+    deps = [":execution_fuzzers"] + UPDATE_SETTINGS_DEPENDENCIES,
 )

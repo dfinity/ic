@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
-package(default_visibility = ["//visibility:private"])
+package(default_visibility = ["__subpackages__", "//rs/execution_environment/fuzz:__subpackages__"])
 
 MACRO_DEPENDENCIES = []
 
