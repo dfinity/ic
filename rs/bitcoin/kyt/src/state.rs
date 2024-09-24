@@ -62,16 +62,16 @@ const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 //
 // TODO(XC-191): persist canister state
 thread_local! {
-    static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
-    static FETCH_TX_CACHE: RefCell<FetchTxCache<FetchTxStatus>> = RefCell::new(
+    pub(crate) static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
+    pub(crate) static FETCH_TX_CACHE: RefCell<FetchTxCache<FetchTxStatus>> = RefCell::new(
         FetchTxCache::new(MAX_FETCH_TX_ENTRIES)
     );
 }
 
 // Time in nanoseconds since the epoch (1970-01-01).
-type Timestamp = u64;
+pub(crate) type Timestamp = u64;
 
-struct FetchTxCache<T> {
+pub(crate) struct FetchTxCache<T> {
     max_entries: usize,
     status: BTreeMap<Txid, T>,
     created: VecDeque<(Txid, Timestamp)>,
@@ -127,8 +127,7 @@ impl<T> FetchTxCache<T> {
         self.created.retain(|(id, _)| *id != txid);
     }
 
-    #[cfg(test)]
-    fn iter(&self) -> impl Iterator<Item = (Txid, Timestamp, &T)> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (Txid, Timestamp, &T)> + '_ {
         self.created
             .iter()
             .map(|(txid, timestamp)| (*txid, *timestamp, self.status.get(txid).unwrap()))

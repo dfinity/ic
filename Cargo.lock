@@ -5879,6 +5879,7 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
+ "askama",
  "bitcoin 0.32.2",
  "candid",
  "candid_parser",
@@ -5886,13 +5887,16 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
+ "scraper",
  "serde",
+ "time",
  "tokio",
 ]
 

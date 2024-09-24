@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>KYT Canister Dashboard for Bitcoin {{ btc_network }}</title>
+    <style>
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        table table {
+            font-size: small;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background">
+        <div class="content">
+            <h2>KYT Canister Dashboard for Bitcoin {{ btc_network }}</h2>
+            <h3>Metadata</h3>
+            <table>
+                <tbody>
+                    <tr id="outcall-capacity">
+                        <th>Outcall Capacity</th>
+                        <td><code>{{ outcall_capacity }}</code></td>
+                    </tr>
+                </tbody>
+            </table>
+            <h3 id="fetch-tx-status">Fetch Transaction Status</h3>
+            <table>
+                <thead>
+                    <th>Txid</th>
+                    <td>Created</th>
+                    <th>Status</th>
+                </thead>
+                <tbody>
+                    {% for (txid, timestamp, status) in fetch_tx_status %}
+                    <tr>
+                        <td>{{ txid.to_string() }}</td>
+                        <td>{{ timestamp|timestamp_to_datetime }}</td>
+                        <td>
+                          <table><thead><th>{{ status.to_str() }}</th></thead>
+                            {% if status.is_fetched() %}
+                            <tbody>
+                              {% for address in status.as_fetched().input_addresses %}
+                              <tr><td><code>{{ address }}</code></td></tr>
+                              {% endfor %}
+                            </tbody>
+                            {% endif %}
+                            {% if status.is_error() %}
+                            <tbody><tr><td>{{ status.as_error() }}</td></tr></tbody>
+                            {% endif %}
+                          </table>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <body>
+</html>
