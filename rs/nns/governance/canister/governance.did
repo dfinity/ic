@@ -377,11 +377,13 @@ type InstallCode = record {
   skip_stopping_before_installing : opt bool;
   wasm_module_hash : opt blob;
   canister_id : opt principal;
+  // The hash of the upgrade args. If the upgrade args is empty, then the hash is also empty.
   arg_hash : opt blob;
   install_mode : opt int32;
 };
 
 type InstallCodeRequest = record {
+  // The upgrade arguments passed to the target canister. Required.
   arg : opt blob;
   wasm_module : opt blob;
   skip_stopping_before_installing : opt bool;
