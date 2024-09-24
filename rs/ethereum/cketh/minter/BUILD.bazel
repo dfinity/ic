@@ -232,6 +232,10 @@ rust_binary(
 closure_js_library(
     name = "principal_to_bytes",
     srcs = ["templates/principal_to_bytes.js"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 closure_js_test(
@@ -242,5 +246,9 @@ closure_js_test(
         ":principal_to_bytes",
         "@com_google_javascript_closure_library//closure/goog/testing:asserts",
         "@com_google_javascript_closure_library//closure/goog/testing:jsunit",
+    ],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
     ],
 )
