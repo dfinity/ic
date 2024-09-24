@@ -1280,5 +1280,3 @@ fn http_gateway_route_underscore() {
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("canister_id_not_found"));
 }
-=======
->>>>>>> parent of 117ef9fec3 (fix(PocketIC): provisional canister creation with management effective canister ID (#1571))
