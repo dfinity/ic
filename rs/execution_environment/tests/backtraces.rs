@@ -47,9 +47,6 @@ Canister Backtrace:
 _wasm_backtrace_canister::unreachable::inner_2
 _wasm_backtrace_canister::unreachable::inner
 _wasm_backtrace_canister::unreachable::outer
-_wasm_backtrace_canister::__canister_method_unreachable::{{closure}}
-canister_update unreachable
-.
 "#,
     )
 }
@@ -83,8 +80,7 @@ Canister Backtrace:
 _wasm_backtrace_canister::oob::inner_2
 _wasm_backtrace_canister::oob::inner
 _wasm_backtrace_canister::oob::outer
-canister_update oob
-."#,
+"#,
     )
 }
 
@@ -102,15 +98,12 @@ ic_cdk::api::trap
 ic_cdk::printer::set_panic_hook::{{closure}}
 std::panicking::rust_panic_with_hook
 std::panicking::begin_panic_handler::{{closure}}
-std::sys_common::backtrace::__rust_end_short_backtrace
+std::sys::backtrace::__rust_end_short_backtrace
 rust_begin_unwind
 core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::__canister_method_ic0_trap::{{closure}}
-canister_update ic0_trap
-.
 "#,
     )
 }
@@ -129,8 +122,6 @@ ic0::ic0::stable_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer
-canister_update stable_oob
-.
 "#,
     )
 }
