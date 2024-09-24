@@ -9369,7 +9369,6 @@ dependencies = [
  "candid",
  "candid_parser",
  "clap 4.5.17",
- "futures",
  "hex",
  "maplit",
  "reqwest 0.12.7",
