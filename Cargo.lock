@@ -16518,6 +16518,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-cdk 0.13.5",
+ "ic-transport-types",
  "ic-universal-canister",
  "icp-ledger",
  "k256",
