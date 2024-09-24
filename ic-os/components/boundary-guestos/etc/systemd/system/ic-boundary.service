@@ -22,7 +22,6 @@ ExecStart=/bin/bash -c ' \
         --log-stdout \
         --log-failed-requests-only \
         --nftables-system-replicas-path /run/ic-node/etc/nftables/system_replicas.ruleset \
-        --disable-latency-routing \
         --retry-update-call \
         --rate-limit-per-second-per-subnet "1000" \
         --http-client-count "8" \
