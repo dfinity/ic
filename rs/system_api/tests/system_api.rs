@@ -1348,7 +1348,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1426,7 +1426,7 @@ fn helper_test_on_low_wasm_memory(
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1663,7 +1663,7 @@ fn push_output_request_respects_memory_limits() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1776,7 +1776,7 @@ fn push_output_request_oversized_request_memory_limits() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );

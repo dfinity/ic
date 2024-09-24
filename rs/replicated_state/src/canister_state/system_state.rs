@@ -376,7 +376,7 @@ pub struct SystemState {
     on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
-/// A wrapper around the different canister statuses.
+/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]

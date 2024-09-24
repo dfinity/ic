@@ -167,7 +167,7 @@ impl WasmtimeInstanceBuilder {
             embedder.config().feature_flags.canister_backtrace,
             embedder.config().max_sum_exported_function_name_lengths,
             Memory::new_for_testing(),
-            Memory::new_for_testing().size,
+            NumWasmPages::from(0),
             Rc::new(ic_system_api::DefaultOutOfInstructionsHandler::new(
                 self.num_instructions,
             )),
