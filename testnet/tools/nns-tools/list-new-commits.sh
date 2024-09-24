@@ -47,12 +47,12 @@ list_new_canister_commits() {
     )
 
     INTERESTING_COMMITS=$(
-        grep -v -E ' .{10} (chore|refactor|test)\b' <<< "$NEW_COMMITS" \
-        || true
+        grep -v -E ' .{10} (chore|refactor|test)\b' <<<"$NEW_COMMITS" \
+            || true
     )
 
-    COMMIT_COUNT=$(grep . <<< "$NEW_COMMITS" | wc -l || true)
-    INTERESTING_COMMIT_COUNT=$(grep . <<< "$INTERESTING_COMMITS" | wc -l || true)
+    COMMIT_COUNT=$(grep . <<<"$NEW_COMMITS" | wc -l || true)
+    INTERESTING_COMMIT_COUNT=$(grep . <<<"$INTERESTING_COMMITS" | wc -l || true)
 
     # Compose heading for canister.
     HEADING=$(printf "%-14s" "${CANISTER_NAME}") # Add space padding on right of canister name.
@@ -75,7 +75,7 @@ list_new_canister_commits() {
     fi
 
     # Print commits.
-    if [[ "${INTERESTING_COMMITS}" != "" ]] ; then
+    if [[ "${INTERESTING_COMMITS}" != "" ]]; then
         echo "${INTERESTING_COMMITS}"
     fi
 }
