@@ -24,6 +24,7 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
+use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
