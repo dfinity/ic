@@ -70,9 +70,11 @@ pub trait InMemoryLedgerState {
     fn validate_invariants(&self);
 }
 
+#[derive(Eq, PartialEq, Debug)]
 pub struct InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord,
+    K: Ord + Hash,
+    AccountId: Hash + Eq,
 {
     balances: HashMap<AccountId, Tokens>,
     allowances: HashMap<K, Allowance<Tokens>>,
@@ -83,9 +85,9 @@ where
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
+    K: Eq + PartialEq + Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone + Hash,
     K: Into<(AccountId, AccountId)>,
-    AccountId: PartialEq + Ord + Clone + Hash + std::fmt::Debug,
+    AccountId: Eq + PartialEq + Ord + Clone + Hash + std::fmt::Debug,
     Tokens: TokensType + Default,
 {
     type AccountId = AccountId;
@@ -524,7 +526,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct BurnsWithoutSpender<AccountId> {
     pub minter: AccountId,
     pub burn_indexes: Vec<usize>,
