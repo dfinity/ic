@@ -479,6 +479,11 @@ impl PageMap {
     pub fn is_loaded(&self) -> bool {
         self.storage.is_loaded()
     }
+
+    pub fn load(&self) {
+        self.storage.load();
+    }
+
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.
@@ -514,7 +519,7 @@ impl PageMap {
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Result<Self, PersistenceError> {
         Ok(Self {
-            storage: Storage::load(storage_layout)?,
+            storage: Storage::lazy_load(storage_layout)?,
             base_height: Some(base_height),
             page_delta: Default::default(),
             unflushed_delta: Default::default(),

@@ -122,7 +122,6 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    #[cfg(debug_assertions)]
     ValidateReplicatedState {
         checkpointed_state: Box<ReplicatedState>,
         execution_state: Box<ReplicatedState>,
@@ -449,7 +448,6 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        #[cfg(debug_assertions)]
                         TipRequest::ValidateReplicatedState {
                             checkpointed_state,
                             execution_state,
@@ -460,6 +458,13 @@ pub(crate) fn spawn_tip_thread(
                                 checkpointed_state,
                                 execution_state,
                             );
+                            for (_id, canister) in checkpointed_state.canister_states.into_iter() {
+                                if let Some(execution_state) = canister.execution_state {
+                                    execution_state.wasm_memory.page_map.load();
+                                    execution_state.stable_memory.page_map.load();
+                                    canister.system_state.wasm_chunk_store.page_map().load();
+                                }
+                            }
                         }
 
                         TipRequest::Noop => {}

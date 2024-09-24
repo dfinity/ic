@@ -179,7 +179,11 @@ impl Storage {
         self.imp.get().is_some()
     }
 
-    pub fn load(
+    pub fn load(&self) {
+        self.init();
+    }
+
+    pub fn lazy_load(
         storage_layout: Arc<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
         Ok(Storage {
