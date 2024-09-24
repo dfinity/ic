@@ -228,7 +228,11 @@ rust_register_toolchains(
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
         "1.81.0",
-        "nightly/2024-07-18",
+        # Use the nightly version from the day before the branch.
+        # -
+        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
+        # only back-ported to stable, we use a more recent version.
+        "nightly/2024-09-23",
     ],
 )
 
