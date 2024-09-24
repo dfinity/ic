@@ -5,8 +5,6 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
-use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::incoming_from_nth_systemd_socket;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
@@ -51,7 +49,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-use crate::{config::IncomingSource, router::start_main_event_loop, stream::StreamEvent};
+use crate::{router::start_main_event_loop, stream::StreamEvent};
 pub use blockchainstate::BlockchainState;
 pub use get_successors_handler::GetSuccessorsHandler;
 pub use rpc_server::start_grpc_server;
@@ -187,17 +185,6 @@ pub fn start_server(
     config: config::Config,
 ) {
     let _enter = rt_handle.enter();
-
-    // Metrics server should only be started if we are managed by systemd and receive the
-    // metrics socket as FD(4).
-    // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
-    // Additionally this function is only called once here.
-    // Systemd Socket config: ic-https-outcalls-adapter.socket
-    // Systemd Service config: ic-https-outcalls-adapter.service
-    if config.incoming_source == IncomingSource::Systemd {
-        let stream = unsafe { incoming_from_nth_systemd_socket(2) };
-        start_metrics_grpc(metrics_registry.clone(), log.clone(), stream);
-    }
 
     let adapter_state = AdapterState::new(config.idle_seconds);
 
