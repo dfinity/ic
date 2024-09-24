@@ -516,6 +516,25 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
         .any(|p| p.signature.signer == this_node)
 }
 
+// To protect ourselves against the scenario where malicious peers somehow manage to consistently
+// delay the notarization of blocks from honest peers and force their blocks to be notarized first,
+// we give rank-0 block makers more time for their blocks to be notarized, before moving on to
+// higher rank blocks, when too many rank-0 blocks have been already notarized. This should
+// increase the chance that honest replicas get their blocks finalized in the aforementioned
+// scenario.
+// Notes:
+// 1) if we assume that the "dynamic delay" is never triggered, then we expect the chain
+//    quality (defined as the fraction of blocks proposed by honest nodes which were eventually
+//    finalized) to be at least 50%: if we look at any random height `h`, then we expect
+//    around 10 rank-0 blocks to be proposed by malicious nodes (assuming f = n/3) in the past
+//    30 rounds, and at most 5 non-rank-0 blocks from malicious nodes to be finalized, thus we
+//    expect at least 15 blocks from honest replica to be finalized in the last 30 rounds.
+// 2) `DYNAMIC_DELAY_LOOK_BACK_DISTANCE` cannot be too large for performance reasons.
+// 3) `DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS` cannot be too small, otherwise the condition could be
+//    triggered too easily, and lead to average round duration of more than 3s (due to 1/3 of the
+//    blocks arriving after 9s or later)
+// 4) Under "good" networking conditions (at least 300Mbit/s bandwidth and low latency), 10 seconds
+//    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
 const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
 const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 5;
 const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
