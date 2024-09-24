@@ -2517,7 +2517,7 @@ pub fn test_upgrade_serialization(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
-    downgrade_to_mainnet_possible: bool,
+    migration_to_stable_structures: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2566,7 +2566,9 @@ pub fn test_upgrade_serialization(
                 let mut test_upgrade = |ledger_wasm: Vec<u8>| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
-                    wait_ledger_ready(&env, ledger_id, 10);
+                    if migration_to_stable_structures {
+                        wait_ledger_ready(&env, ledger_id, 10);
+                    }
                     add_tx_and_verify();
                 };
 
@@ -2598,7 +2600,7 @@ pub fn test_upgrade_serialization(
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
-                if downgrade_to_mainnet_possible {
+                if !migration_to_stable_structures {
                     // Test downgrade to mainnet wasm
                     test_upgrade(ledger_wasm_mainnet.clone());
                 }
