@@ -138,7 +138,7 @@ fn test_time_warp() {
         // Advance time slightly (200 s) such that that the neuron should be fully
         // dissolved.
         delta_s += 200;
-        nns_canisters
+        () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
             .await?;
