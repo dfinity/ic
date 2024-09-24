@@ -99,6 +99,18 @@ REPOS_TO_SCAN = [
         ],
         DEFAULT_NODE_VERSION,
     ),
+    Repository(
+        "eslint-config-oisy-wallet",
+        "https://github.com/dfinity/eslint-config-oisy-wallet",
+        [
+            Project(
+                name="eslint-config-oisy-wallet",
+                path="eslint-config-oisy-wallet",
+                owner=Team.GIX_TEAM,
+            )
+        ],
+        DEFAULT_NODE_VERSION,
+    ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
 
