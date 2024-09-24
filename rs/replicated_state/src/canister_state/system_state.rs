@@ -377,7 +377,7 @@ pub struct SystemState {
 }
 
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
@@ -1655,8 +1655,8 @@ impl SystemState {
         self.on_low_wasm_memory_hook_status = status;
     }
 
-    pub fn get_on_low_wasm_memory_hook_status(&self) -> &OnLowWasmMemoryHookStatus {
-        &self.on_low_wasm_memory_hook_status
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
     }
 }
 

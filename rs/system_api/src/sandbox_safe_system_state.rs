@@ -736,7 +736,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
-            system_state.get_on_low_wasm_memory_hook_status().clone(),
+            system_state.get_on_low_wasm_memory_hook_status(),
         )
     }
 

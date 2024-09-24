@@ -12,6 +12,7 @@ use ic_interfaces::execution_environment::{
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{
     canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
     CallOrigin, Memory, NetworkTopology, SystemState,
@@ -1388,7 +1389,7 @@ fn helper_test_on_low_wasm_memory(
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
-        .on_low_wasm_memory_hook_status(start_status.clone())
+        .on_low_wasm_memory_hook_status(start_status)
         .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
 
     if let Some(memory_allocation) = memory_allocation {
@@ -1452,7 +1453,7 @@ fn helper_test_on_low_wasm_memory(
         .unwrap();
 
     assert_eq!(
-        *system_state.get_on_low_wasm_memory_hook_status(),
+        system_state.get_on_low_wasm_memory_hook_status(),
         expected_status
     );
 }
