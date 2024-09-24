@@ -16,15 +16,6 @@ pub use self::{
     },
 };
 
-/// Aborts the whole program with a core dump if a single thread panics.
-pub fn abort_on_panic() {
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        default_hook(panic_info);
-        std::process::abort();
-    }));
-}
-
 /// Returns a `Future` that completes when the service should gracefully
 /// shutdown. Completion happens if either of `SIGINT` or `SIGTERM` are
 /// received.

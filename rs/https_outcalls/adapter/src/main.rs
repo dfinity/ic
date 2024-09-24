@@ -6,8 +6,7 @@
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{
-    abort_on_panic, incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket,
-    incoming_from_path,
+    incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket, incoming_from_path,
 };
 use ic_https_outcalls_adapter::{AdapterServer, Cli, IncomingSource};
 use ic_logger::{error, info, new_replica_logger_from_config};
@@ -16,11 +15,6 @@ use serde_json::to_string_pretty;
 
 #[tokio::main]
 pub async fn main() {
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
-
     let cli = Cli::parse();
 
     let config = match cli.get_config() {

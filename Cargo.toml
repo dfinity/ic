@@ -415,17 +415,20 @@ edition = "2021"
 # Makes flamegraphs more readable.
 # https://doc.rust-lang.org/cargo/reference/manifest.html#the-profile-sections
 debug = true
+panic = 'abort'
 
 [profile.release-stripped]
 inherits = "release"
 lto = "thin"
 debug = false
+panic = 'abort'
 
 [profile.release-lto]
 inherits = "release"
 # Enable "thin" LTO to reduce both the compilation time and the binary size.
 # See: https://doc.rust-lang.org/cargo/reference/profiles.html#lto
 lto = "thin"
+panic = 'abort'
 
 [profile.canister-release]
 inherits = "release"
