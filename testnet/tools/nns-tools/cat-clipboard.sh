@@ -27,7 +27,7 @@ fi
 
 PROPOSALS_DIR="${1}"
 
-if ! which gsed &> /dev/null ; then
+if ! which gsed &>/dev/null; then
     echo 'gsed is required. Install like so: brew install gnu-sed.'
     exit 1
 fi
@@ -42,13 +42,14 @@ for FILE in $(ls "${PROPOSALS_DIR}"); do
         echo
     fi
 
-    echo '#' $(basename "${FILE}" \
-        | sed 's/.md//' \
-        | sed 's/-/ /g' \
-        | sed 's/nns/NNS/' \
-        | sed 's/sns/SNS/' \
-        | gsed -E 's/\b./\U\0/g' \
-     )
+    echo '#' $(
+        basename "${FILE}" \
+            | sed 's/.md//' \
+            | sed 's/-/ /g' \
+            | sed 's/nns/NNS/' \
+            | sed 's/sns/SNS/' \
+            | gsed -E 's/\b./\U\0/g'
+    )
     echo
     echo '``````'
     cat "${PROPOSALS_DIR}/${FILE}"
