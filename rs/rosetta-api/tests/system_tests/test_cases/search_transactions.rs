@@ -16,6 +16,7 @@ use proptest::test_runner::TestRunner;
 use rosetta_core::identifiers::TransactionIdentifier;
 use rosetta_core::objects::BlockTransaction;
 use rosetta_core::request_types::SearchTransactionsRequest;
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -313,8 +314,10 @@ fn test_search_transactions_by_account() {
                             // Make sure every fetched transaction is unique
                             assert_eq!(
                                 result.len(),
-                                result.into_iter().collect::<HashSet<_>>().len()
+                                result.clone().into_iter().collect::<HashSet<_>>().len()
                             );
+
+                            assert!(!result.is_empty());
                         }
 
                         search_transactions_request.account_identifier = Some(
@@ -366,20 +369,34 @@ fn test_search_transactions_by_operation_type() {
                         .await;
 
                     if !args_with_caller.is_empty() {
-                        let operations = vec![
-                            "TRANSFER".to_string(),
-                            "MINT".to_string(),
-                            "BURN".to_string(),
-                            "APPROVE".to_string(),
-                        ];
-
                         let mut search_transactions_request =
                             SearchTransactionsRequest::builder(env.network_identifier.clone())
                                 .build();
-
-                        for operation in operations.into_iter() {
+                        let icp_blocks = query_encoded_blocks(
+                            &get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await,
+                            0,
+                            u64::MAX,
+                        )
+                        .await
+                        .blocks
+                        .into_iter()
+                        .map(|block| icp_ledger::Block::decode(block).unwrap())
+                        .collect::<Vec<icp_ledger::Block>>();
+                        let operation_counts =
+                            icp_blocks.iter().fold(HashMap::new(), |mut ops, s| {
+                                let ops_type = match s.transaction.operation {
+                                    icp_ledger::Operation::Transfer { .. } => "Transfer",
+                                    icp_ledger::Operation::Mint { .. } => "Mint",
+                                    icp_ledger::Operation::Burn { .. } => "Burn",
+                                    icp_ledger::Operation::Approve { .. } => "Approve",
+                                }
+                                .to_string();
+                                *ops.entry(ops_type).or_insert(0) += 1;
+                                ops
+                            });
+                        for operation in operation_counts.keys().clone() {
                             // We make sure that the service returns the correct number of transactions for each account
-                            search_transactions_request.type_ = Some(operation);
+                            search_transactions_request.type_ = Some(operation.clone());
 
                             let result = traverse_all_transactions(
                                 &env.rosetta_client,
@@ -389,8 +406,17 @@ fn test_search_transactions_by_operation_type() {
                             assert!(result.clone().into_iter().all(|block_transaction| {
                                 block_transaction.transaction.operations.into_iter().any(
                                     |operation| {
-                                        operation.type_
-                                            == search_transactions_request.type_.clone().unwrap()
+                                        // ICP Rosetta returns Transfers as Transactions and not as Transfer
+                                        if operation.type_ == "TRANSACTION" {
+                                            search_transactions_request.type_
+                                                == Some("Transfer".to_string())
+                                        } else {
+                                            search_transactions_request
+                                                .type_
+                                                .clone()
+                                                .map(|t| t.to_uppercase())
+                                                == Some(operation.type_)
+                                        }
                                     },
                                 )
                             }));
@@ -398,8 +424,9 @@ fn test_search_transactions_by_operation_type() {
                             // Make sure every fetched transaction is unique
                             assert_eq!(
                                 result.len(),
-                                result.into_iter().collect::<HashSet<_>>().len()
+                                result.clone().into_iter().collect::<HashSet<_>>().len()
                             );
+                            assert_eq!(result.len(), *operation_counts.get(operation).unwrap());
                         }
 
                         search_transactions_request.type_ = Some("INVALID_OPERATION".to_string());

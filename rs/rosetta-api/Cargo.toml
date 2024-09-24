@@ -42,6 +42,7 @@ reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "rosetta_core" }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
@@ -52,7 +53,6 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
-serde_bytes = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
