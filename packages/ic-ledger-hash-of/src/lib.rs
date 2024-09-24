@@ -10,7 +10,7 @@ use std::{fmt, marker::PhantomData, str::FromStr};
 /// The length of a block/transaction hash in bytes.
 pub const HASH_LENGTH: usize = 32;
 
-#[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct HashOf<T> {
     inner: [u8; HASH_LENGTH],
     _marker: PhantomData<T>,

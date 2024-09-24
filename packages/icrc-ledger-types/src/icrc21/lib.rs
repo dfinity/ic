@@ -20,7 +20,7 @@ use strum::{Display, EnumString};
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;
 
-#[derive(Debug, EnumString, EnumIter, Display)]
+#[derive(Debug, Display, EnumIter, EnumString)]
 enum Icrc21Function {
     #[strum(serialize = "icrc1_transfer")]
     Transfer,

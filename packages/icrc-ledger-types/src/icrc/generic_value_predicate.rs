@@ -10,7 +10,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use super::generic_value::Value;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ValuePredicateFailures {
     Failures(Vec<String>),
     And(Vec<ValuePredicateFailures>),
@@ -387,7 +387,7 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
     })
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ItemRequirement {
     Required,
     Optional,

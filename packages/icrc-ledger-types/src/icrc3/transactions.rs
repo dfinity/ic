@@ -16,7 +16,7 @@ use super::{
 
 pub type GenericTransaction = Value;
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Mint {
     pub amount: Nat,
     pub to: Account,
@@ -24,7 +24,7 @@ pub struct Mint {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Burn {
     pub amount: Nat,
     pub from: Account,
@@ -33,7 +33,7 @@ pub struct Burn {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Transfer {
     pub amount: Nat,
     pub from: Account,
@@ -44,7 +44,7 @@ pub struct Transfer {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Approve {
     pub from: Account,
     pub spender: Account,
@@ -57,7 +57,7 @@ pub struct Approve {
 }
 
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct Transaction {
     pub kind: String,
     pub mint: Option<Mint>,
@@ -113,7 +113,7 @@ impl Transaction {
     }
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetTransactionsResponse {
     pub log_length: Nat,
     pub first_index: BlockIndex,
@@ -121,7 +121,7 @@ pub struct GetTransactionsResponse {
     pub archived_transactions: Vec<ArchivedRange<QueryTxArchiveFn>>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransactionRange {
     pub transactions: Vec<Transaction>,
 }

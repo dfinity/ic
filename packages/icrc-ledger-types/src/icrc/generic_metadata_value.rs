@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_bytes::ByteBuf;
 
 /// Variant type for the `metadata` endpoint values.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum MetadataValue {
     Nat(Nat),
     Int(Int),

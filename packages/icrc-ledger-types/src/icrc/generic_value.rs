@@ -15,7 +15,7 @@ pub type Map = BTreeMap<String, Value>;
 pub type ICRC3Map = BTreeMap<String, ICRC3Value>;
 pub type Hash = [u8; 32];
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub enum ICRC3Value {
     Blob(ByteBuf),
     Text(String),
@@ -40,7 +40,7 @@ impl ICRC3Value {
 }
 
 /// Deprecated, use `ICRC3Value` instead
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub enum Value {
     Blob(ByteBuf),
     Text(String),

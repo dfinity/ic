@@ -13,7 +13,7 @@ pub type GenericBlock = Value;
 pub type ICRC3GenericBlock = ICRC3Value;
 
 /// Deprecated, use `GetBlocksResult` instead
-#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksResponse {
     pub first_index: BlockIndex,
     pub chain_length: u64,
@@ -22,32 +22,32 @@ pub struct GetBlocksResponse {
     pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
 }
 
-#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct BlockWithId {
     pub id: Nat,
     pub block: ICRC3GenericBlock,
 }
 
-#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct ArchivedBlocks {
     pub args: Vec<GetBlocksRequest>,
     pub callback: QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>,
 }
 
-#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksResult {
     pub log_length: Nat,
     pub blocks: Vec<BlockWithId>,
     pub archived_blocks: Vec<ArchivedBlocks>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
     pub length: Nat,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct BlockRange {
     pub blocks: Vec<GenericBlock>,
 }
@@ -75,19 +75,19 @@ impl GetBlocksRequest {
 }
 
 /// Deprecated, use `ICRC3DataCertificate` instead"
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub hash_tree: serde_bytes::ByteBuf,
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct ICRC3DataCertificate {
     pub certificate: serde_bytes::ByteBuf,
     pub hash_tree: serde_bytes::ByteBuf,
 }
 
-#[derive(Debug, CandidType, Serialize, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct SupportedBlockType {
     pub block_type: String,
     pub url: String,

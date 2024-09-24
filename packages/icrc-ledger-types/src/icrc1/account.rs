@@ -13,7 +13,7 @@ pub type Subaccount = [u8; 32];
 pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 
 // Account representation of ledgers supporting the ICRC1 standard
-#[derive(Serialize, CandidType, Deserialize, Clone, Debug, Copy)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct Account {
     pub owner: Principal,
     pub subaccount: Option<Subaccount>,
@@ -89,7 +89,7 @@ impl From<Principal> for Account {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ICRC1TextReprError {
     DefaultSubaccountShouldBeOmitted,
     InvalidChecksum { expected: String },
