@@ -18,7 +18,7 @@ use ic_cdk::api::management_canister::main::{
     ChunkHash, ClearChunkStoreArgument, InstallChunkedCodeArgument, InstallCodeArgument,
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
-use ic_transport_types::SubnetMetrics;
+use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -1040,12 +1040,6 @@ impl PocketIc {
     /// Returns subnet metrics for a given subnet.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
     pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
-        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
-        struct ReadStateResponse {
-            #[serde(with = "serde_bytes")]
-            pub certificate: Vec<u8>,
-        }
-
         let path = vec![
             "subnet".into(),
             ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
