@@ -79,16 +79,10 @@ jobs:
           # check if PR title contains release and set timeout filters accordingly
           BAZEL_EXTRA_ARGS_RULES: ${{ env.BAZEL_EXTRA_ARGS_RULES || '' }}
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-targets
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-targets
-          retention-days: 14
-          if-no-files-found: error
-          path: |
-            bazel-targets
       - name: Upload bazel-bep
-        if: always()
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -98,6 +92,14 @@ jobs:
           path: |
             bazel-bep.pb
             profile.json
+      - name: Upload bazel-targets
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-targets
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            bazel-targets
   bazel-build-all-config-check:
     runs-on:
       labels: dind-large
@@ -131,7 +133,9 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
       - name: Upload bazel-bep
-        if: always()
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -175,7 +179,9 @@ jobs:
           BAZEL_TARGETS: "//rs/... //publish/binaries/..."
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
-        if: always()
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
@@ -217,8 +223,10 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
       - name: Upload bazel-bep
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: ${{ github.job }}-bep
           retention-days: 14
@@ -254,7 +262,9 @@ jobs:
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
       - name: Upload bazel-bep
-        if: always()
+        # runs only if previous step succeeded or failed;
+        # we avoid collecting artifacts of jobs that were cancelled
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.job }}-bep
