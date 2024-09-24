@@ -138,7 +138,7 @@ use std::convert::TryFrom;
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum WasmMemoryType {
     Wasm32,
     Wasm64,

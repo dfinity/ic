@@ -23,7 +23,7 @@ macro_rules! add_log_proto_derives {
     ($prost_build:expr, $message_type:ident, $package:expr, $log_entry_field:ident $(,$message_field:ident)*) => {{
         $prost_build.type_attribute(
             std::concat!($package, ".", std::stringify!($message_type)),
-            "#[derive(serde::Serialize, serde::Deserialize)]"
+            "#[derive(serde::Deserialize, serde::Serialize)]"
         );
 
         $prost_build.field_attribute(
@@ -66,7 +66,7 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     config.type_attribute(
         "log.log_entry.v1.LogEntry",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
 
     add_log_proto_derives!(
@@ -175,15 +175,15 @@ fn build_registry_proto(def: &Path, out: &Path) {
 
     config.type_attribute(
         ".registry.crypto",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.crypto.v1.PublicKey",
-        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+        "#[derive(Eq, Ord, PartialOrd, Hash)]",
     );
     config.type_attribute(
         ".registry.crypto.v1.X509PublicKeyCert",
-        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+        "#[derive(Eq, Ord, PartialOrd, Hash)]",
     );
     config.type_attribute(
         ".registry.crypto.v1.EcdsaCurve",
@@ -191,71 +191,71 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.crypto.v1.EcdsaKeyId",
-        "#[derive(candid::CandidType, Eq)]",
+        "#[derive(Eq, candid::CandidType)]",
     );
     config.type_attribute(
         ".registry.node_operator",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]",
+        "#[derive(Eq, Hash, candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.nns",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.node",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.firewall",
-        "#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]",
+        "#[derive(candid::CandidType, serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.routing_table",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.provisional_whitelist",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.subnet",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(candid::CandidType, Eq)]",
+        "#[derive(Eq, candid::CandidType)]",
     );
     config.type_attribute(
         ".registry.subnet.v1.SubnetFeatures",
-        "#[derive(candid::CandidType, Eq)]",
+        "#[derive(Eq, candid::CandidType)]",
     );
     config.type_attribute(
         ".registry.replica_version",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.hostos_version",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.node_rewards.v2",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.dc",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
+        "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.unassigned_nodes_config",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".registry.node.v1.ConnectionEndpoint",
-        "#[derive(Eq, PartialOrd, Ord)]",
+        "#[derive(Eq, Ord, PartialOrd)]",
     );
     config.type_attribute(
         ".registry.api_boundary_node.v1.ApiBoundaryNodeRecord",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
 
     let registry_files = [
@@ -282,7 +282,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from messaging Protobuf messages.
 fn build_messaging_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "messaging");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    config.type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]");
 
     let messaging_files = [
         def.join("messaging/xnet/v1/certification.proto"),
@@ -300,23 +300,23 @@ fn build_state_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "state");
     config.type_attribute(
         ".state.queues.v1.Funds",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".state.queues.v1.Cycles",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".state.queues.v1.RejectContext",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".state.queues.v1.response.ResponsePayload",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
     config.type_attribute(
         ".state.queues.v1.Response",
-        "#[derive(serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Deserialize, serde::Serialize)]",
     );
 
     let state_files = [
@@ -346,7 +346,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.ThresholdSignature",
         ".types.v1.ThresholdSignatureShare",
     ] {
-        config.type_attribute(path, "#[derive(serde::Serialize, serde::Deserialize)]");
+        config.type_attribute(path, "#[derive(serde::Deserialize, serde::Serialize)]");
     }
     config.type_attribute(".types.v1.CatchUpPackage", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
@@ -390,7 +390,7 @@ fn build_types_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from crypto Protobuf messages.
 fn build_crypto_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "crypto");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    config.type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]");
     let files = [def.join("crypto/v1/crypto.proto")];
     compile_protos(config, def, &files);
 }
@@ -415,7 +415,7 @@ fn build_transport_proto(def: &Path, out: &Path) {
 /// Generates Rust structs from Bitcoin adapter Protobuf messages.
 fn build_bitcoin_proto(def: &Path, out: &Path) {
     let mut config = base_config(out, "bitcoin");
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    config.type_attribute(".", "#[derive(serde::Deserialize, serde::Serialize)]");
     let files = [def.join("bitcoin/v1/bitcoin.proto")];
     compile_protos(config, def, &files);
 }

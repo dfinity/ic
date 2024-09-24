@@ -28,7 +28,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Add universally needed types to all definitions in this namespace
     config.type_attribute(
         ".ic_sns_init.pb.v1",
-        "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Eq)]",
+        "#[derive(Eq, candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
 
     config

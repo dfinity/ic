@@ -166,7 +166,7 @@ impl LogVisibility {
     }
 }
 
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManageDappCanisterSettingsRequest {
@@ -186,7 +186,7 @@ pub struct ManageDappCanisterSettingsRequest {
     pub wasm_memory_limit: ::core::option::Option<u64>,
 }
 
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ManageDappCanisterSettingsResponse {

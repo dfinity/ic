@@ -56,7 +56,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_sns_root.pb.v1", "::ic-sns-root::pb::v1");
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
-    config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]");
+    config.type_attribute(".", "#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize, serde::Serialize)]");
 
     // TODO: Consider applying these type_attribute to all (Prost-generated)
     // types, not just to specific hand-picked types.

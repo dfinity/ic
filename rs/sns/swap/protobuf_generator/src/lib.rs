@@ -39,7 +39,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Candid-ify Rust types generated from swap.proto.
     config.type_attribute(
         ".",
-        ["#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]"].join(" "),
+        ["#[derive(candid::CandidType, comparable::Comparable, candid::Deserialize, serde::Serialize)]"].join(" "),
     );
 
     config.type_attribute(".ic_sns_swap.pb.v1.TimeWindow", "#[derive(Copy)]");

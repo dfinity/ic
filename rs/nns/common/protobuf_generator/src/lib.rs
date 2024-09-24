@@ -19,7 +19,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         config.type_attribute(
             format!("ic_nns_common.pb.v1.{message_name}"),
             [
-                "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq)]",
+                "#[derive(Eq, candid::CandidType, comparable::Comparable, candid::Deserialize)]",
                 "#[self_describing]",
             ]
             .join(" "),
@@ -30,11 +30,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // decorating needs.
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
-        "#[derive(PartialOrd, Ord, Copy, std::hash::Hash)]",
+        "#[derive(Copy, Ord, PartialOrd, std::hash::Hash)]",
     );
     config.type_attribute(
         "ic_nns_common.pb.v1.PrincipalId",
-        "#[derive(PartialOrd, Ord, std::hash::Hash)]",
+        "#[derive(Ord, PartialOrd, std::hash::Hash)]",
     );
     config.type_attribute("ic_nns_common.pb.v1.ProposalId", "#[derive(Copy)]");
 
