@@ -267,12 +267,6 @@ where
             self.allowances_data.len_expirations(),
             self.allowances_data.len_allowances()
         );
-        debug_assert!(
-            self.allowances_data.len_arrivals() == self.allowances_data.len_allowances(),
-            "arrival_queue length ({}) should be equal to allowances length ({})",
-            self.allowances_data.len_arrivals(),
-            self.allowances_data.len_allowances()
-        );
     }
 
     fn with_postconditions_check<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
