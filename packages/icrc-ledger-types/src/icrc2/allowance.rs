@@ -3,13 +3,13 @@ use serde::Serialize;
 
 use super::super::icrc1::account::Account;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AllowanceArgs {
     pub account: Account,
     pub spender: Account,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Allowance {
     pub allowance: Nat,
     #[serde(default)]

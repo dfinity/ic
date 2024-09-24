@@ -11,7 +11,7 @@ use ic_cdk::api::management_canister::http_request::{
 use ic_cdk::{query, update};
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SchnorrAlgorithm {
     #[serde(rename = "bip340secp256k1")]
     Bip340Secp256k1,
@@ -19,33 +19,33 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 struct SchnorrKeyId {
     pub algorithm: SchnorrAlgorithm,
     pub name: String,
 }
 
-#[derive(Debug, CandidType, Serialize)]
+#[derive(CandidType, Serialize, Debug)]
 struct SchnorrPublicKeyArgument {
     pub canister_id: Option<Principal>,
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: SchnorrKeyId,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 struct SchnorrPublicKeyResponse {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Serialize)]
+#[derive(CandidType, Serialize, Debug)]
 struct SignWithSchnorrArgument {
     pub message: Vec<u8>,
     pub derivation_path: Vec<Vec<u8>>,
     pub key_id: SchnorrKeyId,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 struct SignWithSchnorrResponse {
     pub signature: Vec<u8>,
 }

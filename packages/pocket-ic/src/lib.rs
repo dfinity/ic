@@ -1111,7 +1111,7 @@ where
 }
 
 /// Error type for [`TryFrom<u64>`].
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TryFromError {
     ValueOutOfRange(u64),
 }
@@ -1299,7 +1299,7 @@ impl std::fmt::Display for UserError {
 }
 
 /// This enum describes the different error types when invoking a canister.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CallError {
     Reject(String),
     UserError(UserError),
@@ -1307,7 +1307,7 @@ pub enum CallError {
 
 /// This struct describes the different types that executing a WASM function in
 /// a canister can produce.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(PartialOrd, Ord, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WasmResult {
     /// Raw response, returned in a successful case.
     Reply(#[serde(with = "serde_bytes")] Vec<u8>),
@@ -1317,7 +1317,7 @@ pub enum WasmResult {
 }
 
 /// This struct describes the result of retrieving subnet metrics via a read state request.
-#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SubnetMetrics {
     pub num_canisters: u64,
     pub canister_state_bytes: u64,

@@ -105,7 +105,7 @@ impl TransportSecretKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// A derived public key
 struct DerivedPublicKey {
     point: G2Affine,
@@ -145,7 +145,7 @@ enum EncryptedKeyDeserializationError {
     InvalidEncryptedKey,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// An encrypted key
 struct EncryptedKey {
     c1: G1Affine,
@@ -215,7 +215,7 @@ impl EncryptedKey {
 
 const IBE_SEED_BYTES: usize = 32;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// An IBE (identity based encryption) ciphertext
 #[cfg_attr(feature = "js", wasm_bindgen)]
 pub struct IBECiphertext {

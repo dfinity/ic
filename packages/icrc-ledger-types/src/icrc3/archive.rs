@@ -8,14 +8,14 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 use std::marker::PhantomData;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchivedRange<Callback> {
     pub start: Nat,
     pub length: Nat,
     pub callback: Callback,
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
 pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
     pub canister_id: Principal,
@@ -108,7 +108,7 @@ impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input,
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ArchiveInfo {
     pub canister_id: Principal,
     pub block_range_start: BlockIndex,
@@ -117,7 +117,7 @@ pub struct ArchiveInfo {
 pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksRequest, BlockRange>;
 pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetArchivesArgs {
     // The last archive seen by the client.
     // The Ledger will return archives coming
@@ -126,7 +126,7 @@ pub struct GetArchivesArgs {
     pub from: Option<Principal>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ICRC3ArchiveInfo {
     // The id of the archive
     pub canister_id: Principal,

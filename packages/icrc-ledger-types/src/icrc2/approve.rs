@@ -5,7 +5,7 @@ use std::fmt;
 use super::super::icrc1::account::{Account, Subaccount};
 use super::super::icrc1::transfer::Memo;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct ApproveArgs {
     #[serde(default)]
     pub from_subaccount: Option<Subaccount>,
@@ -23,7 +23,7 @@ pub struct ApproveArgs {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ApproveError {
     BadFee { expected_fee: Nat },
     // The caller does not have enough funds to pay the approval fee.

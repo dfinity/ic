@@ -70,7 +70,7 @@ fn check_sig_path(
     Ok(())
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CanisterSignature {
     pub certificate: ByteBuf,
     pub tree: HashTree,

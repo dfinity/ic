@@ -5,7 +5,7 @@ use std::fmt;
 use super::super::icrc1::account::{Account, Subaccount};
 use super::super::icrc1::transfer::Memo;
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferFromArgs {
     #[serde(default)]
     pub spender_subaccount: Option<Subaccount>,
@@ -20,7 +20,7 @@ pub struct TransferFromArgs {
     pub created_at_time: Option<u64>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferFromError {
     BadFee { expected_fee: Nat },
     BadBurn { min_burn_amount: Nat },

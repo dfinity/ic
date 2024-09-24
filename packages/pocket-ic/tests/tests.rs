@@ -1058,7 +1058,7 @@ fn test_canister_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-#[derive(Copy, Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SchnorrAlgorithm {
     #[serde(rename = "bip340secp256k1")]
     Bip340Secp256k1,
@@ -1066,13 +1066,13 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
 struct SchnorrKeyId {
     pub algorithm: SchnorrAlgorithm,
     pub name: String,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 struct SchnorrPublicKeyResponse {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
