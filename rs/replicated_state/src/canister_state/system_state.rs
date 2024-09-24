@@ -418,51 +418,6 @@ impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
     }
 }
 
-impl OnLowWasmMemoryHookStatus {
-    pub fn update(
-        &mut self,
-        wasm_memory_threshold: NumBytes,
-        memory_allocation: Option<NumBytes>,
-        wasm_memory_limit: Option<NumBytes>,
-        used_stable_memory: NumBytes,
-        used_wasm_memory: NumBytes,
-    ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit =
-            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = memory_allocation.map_or_else(
-            || wasm_memory_limit,
-            |memory_allocation| {
-                debug_assert!(
-                    used_stable_memory <= memory_allocation,
-                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
-                    used_stable_memory,
-                    memory_allocation
-                );
-                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-            },
-        );
-
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        if wasm_capacity >= used_wasm_memory + wasm_memory_threshold {
-            *self = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-        } else if *self != OnLowWasmMemoryHookStatus::Executed {
-            *self = OnLowWasmMemoryHookStatus::Ready;
-        }
-    }
-}
-
 /// A wrapper around the different canister statuses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterStatus {
