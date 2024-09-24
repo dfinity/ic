@@ -11,7 +11,7 @@ use ic_types::{
 use bytes::Bytes;
 
 /// Parameters for the `/block/ingress/` rpc requests.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 // FIXME(kpop): check that it's a block proposal indeed
 pub(crate) struct GetIngressMessageInBlockRequest {
     pub(crate) ingress_message_id: IngressMessageId,
@@ -58,7 +58,7 @@ impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockReque
 }
 
 /// `/block/ingress/` rpc response.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub(crate) struct GetIngressMessageInBlockResponse {
     pub(crate) ingress_message: SignedIngress,
 }

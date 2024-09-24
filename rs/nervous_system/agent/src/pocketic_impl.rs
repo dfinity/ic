@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::CallCanisters;
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum PocketIcCallError {
     #[error("pocket_ic error: {0}")]
     PocketIc(pocket_ic::UserError),

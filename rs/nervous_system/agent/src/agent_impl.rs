@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::CallCanisters;
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum AgentCallError {
     #[error("agent error: {0}")]
     Agent(#[from] ic_agent::AgentError),

@@ -602,7 +602,7 @@ mod database_access {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, Deserialize, Serialize)]
 pub struct HashedBlock {
     pub block: EncodedBlock,
     pub hash: HashOf<EncodedBlock>,

@@ -14,7 +14,7 @@ pub struct ListArgs {
     json: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct SnsWithMetadata {
     name: String,
     sns: Sns,

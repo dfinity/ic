@@ -431,7 +431,7 @@ where
 }
 
 /// An error returned by [`LocalKey::try_with`](method@LocalKey::try_with).
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct AccessError {
     _private: (),
 }
