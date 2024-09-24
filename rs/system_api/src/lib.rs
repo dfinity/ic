@@ -917,30 +917,12 @@ impl MemoryUsage {
     ) -> Result<(), HypervisorError> {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
-                let (new_usage, overflow) = self
-                    .wasm_memory_usage
-                    .get()
-                    .overflowing_add(execution_bytes.get());
-
-                if overflow {
-                    return Err(HypervisorError::OutOfMemory);
-                }
-
-                self.wasm_memory_usage = NumBytes::new(new_usage);
+                add_memory(&mut self.wasm_memory_usage, execution_bytes)
             }
             ExecutionMemoryType::StableMemory => {
-                let (new_usage, overflow) = self
-                    .stable_memory_usage
-                    .get()
-                    .overflowing_add(execution_bytes.get());
-                if overflow {
-                    return Err(HypervisorError::OutOfMemory);
-                }
-                self.stable_memory_usage = NumBytes::new(new_usage);
+                add_memory(&mut self.stable_memory_usage, execution_bytes)
             }
         }
-
-        Ok(())
     }
 
     /// Tries to allocate the requested amount of message memory.
@@ -1008,6 +990,20 @@ impl MemoryUsage {
         self.allocated_message_memory -= message_bytes;
         self.current_message_usage -= message_bytes;
     }
+}
+
+fn add_memory(
+    memory_size: &mut NumBytes,
+    additional_memory: NumBytes,
+) -> Result<(), HypervisorError> {
+    let (new_usage, overflow) = memory_size.get().overflowing_add(additional_memory.get());
+
+    if overflow {
+        return Err(HypervisorError::OutOfMemory);
+    }
+
+    *memory_size = NumBytes::new(new_usage);
+    Ok(())
 }
 
 /// Struct that implements the SystemApi trait. This trait enables a canister to
