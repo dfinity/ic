@@ -31,15 +31,29 @@ fn test_account_id(n: u64) -> Account {
     }
 }
 
-fn ts(n: u64) -> TimeStamp {
-    TimeStamp::from_nanos_since_unix_epoch(n)
-}
-
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
 
 #[cfg(feature = "u256-tokens")]
 pub type Tokens = ic_icrc1_tokens_u256::U256;
+
+fn tokens(n: u64) -> Tokens {
+    Tokens::from(n)
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn tokens_to_u64(n: ic_icrc1_tokens_u64::U64) -> u64 {
+    n.to_u64()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn tokens_to_u64(n: ic_icrc1_tokens_u256::U256) -> u64 {
+    n.try_as_u64().expect("failed to convert to u64")
+}
+
+fn ts(n: u64) -> TimeStamp {
+    TimeStamp::from_nanos_since_unix_epoch(n)
+}
 
 fn default_init_args() -> InitArgs {
     InitArgs {
@@ -82,12 +96,10 @@ fn test_approvals_are_not_cumulative() {
     let from = test_account_id(1);
     let spender = test_account_id(2);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(100_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
 
-    let approved_amount = Tokens::from(150_000);
-    let fee = Tokens::from(10_000);
+    let approved_amount = tokens(150_000);
+    let fee = tokens(10_000);
 
     let tr = Transaction {
         operation: Operation::Approve {
@@ -103,8 +115,8 @@ fn test_approvals_are_not_cumulative() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(90_000));
-    assert_eq!(ctx.balances().account_balance(&spender), Tokens::from(0));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
@@ -115,7 +127,7 @@ fn test_approvals_are_not_cumulative() {
         },
     );
 
-    let new_allowance = Tokens::from(200_000);
+    let new_allowance = tokens(200_000);
 
     let expiration = now + Duration::from_secs(300);
     let tr = Transaction {
@@ -132,8 +144,8 @@ fn test_approvals_are_not_cumulative() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(80_000));
-    assert_eq!(ctx.balances().account_balance(&spender), Tokens::from(0));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000));
+    assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
@@ -154,17 +166,15 @@ fn test_approval_transfer_from() {
     let spender = test_account_id(2);
     let to = test_account_id(3);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(200_000))
-        .unwrap();
-    let fee = Tokens::from(10_000);
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = tokens(10_000);
 
     let tr = Transaction {
         operation: Operation::Transfer {
             from,
             to,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -173,7 +183,7 @@ fn test_approval_transfer_from() {
     assert_eq!(
         tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
         TxApplyError::InsufficientAllowance {
-            allowance: Tokens::from(0)
+            allowance: tokens(0)
         }
     );
 
@@ -181,7 +191,7 @@ fn test_approval_transfer_from() {
         operation: Operation::Approve {
             from,
             spender,
-            amount: Tokens::from(150_000),
+            amount: tokens(150_000),
             expected_allowance: None,
             expires_at: None,
             fee: Some(fee),
@@ -191,14 +201,14 @@ fn test_approval_transfer_from() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(190_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
 
     let tr = Transaction {
         operation: Operation::Transfer {
             from,
             to,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -206,14 +216,14 @@ fn test_approval_transfer_from() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&to), Tokens::from(100_000));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000));
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(80_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000));
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(40_000),
+            amount: tokens(40_000),
             expires_at: None,
             arrived_at: ts(0),
         },
@@ -224,7 +234,7 @@ fn test_approval_transfer_from() {
             from,
             to,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -233,20 +243,20 @@ fn test_approval_transfer_from() {
     assert_eq!(
         tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
         TxApplyError::InsufficientAllowance {
-            allowance: Tokens::from(40_000)
+            allowance: tokens(40_000)
         }
     );
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(40_000),
+            amount: tokens(40_000),
             expires_at: None,
             arrived_at: ts(0),
         },
     );
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(80_000),);
-    assert_eq!(ctx.balances().account_balance(&to), Tokens::from(100_000),);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000),);
 }
 
 #[test]
@@ -258,17 +268,15 @@ fn test_approval_expiration_override() {
     let from = test_account_id(1);
     let spender = test_account_id(2);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(200_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
 
     let approve = |amount: u64, expires_at: Option<TimeStamp>| Operation::Approve {
         from,
         spender,
-        amount: Tokens::from(amount),
+        amount: tokens(amount),
         expected_allowance: None,
         expires_at: expires_at.map(|e| e.as_nanos_since_unix_epoch()),
-        fee: Some(Tokens::from(10_000)),
+        fee: Some(tokens(10_000)),
     };
     let tr = Transaction {
         operation: approve(100_000, Some(ts(2000))),
@@ -280,7 +288,7 @@ fn test_approval_expiration_override() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
             expires_at: Some(ts(2000)),
             arrived_at: ts(0),
         },
@@ -296,7 +304,7 @@ fn test_approval_expiration_override() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(200_000),
+            amount: tokens(200_000),
             expires_at: Some(ts(1500)),
             arrived_at: ts(0),
         },
@@ -312,7 +320,7 @@ fn test_approval_expiration_override() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(300_000),
+            amount: tokens(300_000),
             expires_at: Some(ts(2500)),
             arrived_at: ts(0),
         },
@@ -332,7 +340,7 @@ fn test_approval_expiration_override() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(300_000),
+            amount: tokens(300_000),
             expires_at: Some(ts(2500)),
             arrived_at: ts(0),
         },
@@ -348,18 +356,16 @@ fn test_approval_no_fee_on_reject() {
     let from = test_account_id(1);
     let spender = test_account_id(2);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(20_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
 
     let tr = Transaction {
         operation: Operation::Approve {
             from,
             spender,
-            amount: Tokens::from(1_000),
+            amount: tokens(1_000),
             expected_allowance: None,
             expires_at: Some(1),
-            fee: Some(Tokens::from(10_000)),
+            fee: Some(tokens(10_000)),
         },
         created_at_time: Some(1000),
         memo: None,
@@ -375,7 +381,7 @@ fn test_approval_no_fee_on_reject() {
         Allowance::default(),
     );
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(20_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(20_000));
 }
 
 #[test]
@@ -387,9 +393,7 @@ fn test_self_transfer_from() {
     let from = test_account_id(1);
     let to = test_account_id(2);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(100_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
 
     assert_eq!(
         ctx.approvals().allowance(&from, &from, now),
@@ -401,16 +405,16 @@ fn test_self_transfer_from() {
             from,
             to,
             spender: Some(from),
-            amount: Tokens::from(20_000),
-            fee: Some(Tokens::from(10_000)),
+            amount: tokens(20_000),
+            fee: Some(tokens(10_000)),
         },
         created_at_time: None,
         memo: None,
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(70_000));
-    assert_eq!(ctx.balances().account_balance(&to), Tokens::from(20_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(70_000));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(20_000));
 }
 
 #[test]
@@ -423,15 +427,13 @@ fn test_approval_allowance_covers_fee() {
     let spender = test_account_id(2);
     let to = test_account_id(3);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(20_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
 
     let tr = Transaction {
         operation: Operation::Approve {
             from,
             spender,
-            amount: Tokens::from(10_000),
+            amount: tokens(10_000),
             expected_allowance: None,
             expires_at: None,
             fee: None,
@@ -441,13 +443,13 @@ fn test_approval_allowance_covers_fee() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    let fee = Tokens::from(10_000);
+    let fee = tokens(10_000);
     let tr = Transaction {
         operation: Operation::Transfer {
             from,
             to,
             spender: Some(spender),
-            amount: Tokens::from(10_000),
+            amount: tokens(10_000),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -456,7 +458,7 @@ fn test_approval_allowance_covers_fee() {
     assert_eq!(
         tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
         TxApplyError::InsufficientAllowance {
-            allowance: Tokens::from(10_000)
+            allowance: tokens(10_000)
         }
     );
 
@@ -464,7 +466,7 @@ fn test_approval_allowance_covers_fee() {
         operation: Operation::Approve {
             from,
             spender,
-            amount: Tokens::from(20_000),
+            amount: tokens(20_000),
             expected_allowance: None,
             expires_at: None,
             fee: None,
@@ -479,7 +481,7 @@ fn test_approval_allowance_covers_fee() {
             from,
             to,
             spender: Some(spender),
-            amount: Tokens::from(10_000),
+            amount: tokens(10_000),
             fee: Some(fee),
         },
         created_at_time: None,
@@ -487,13 +489,13 @@ fn test_approval_allowance_covers_fee() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(0));
-    assert_eq!(ctx.balances().account_balance(&to), Tokens::from(10_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(0));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(10_000));
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(0),
+            amount: tokens(0),
             expires_at: None,
             arrived_at: ts(0),
         },
@@ -508,25 +510,23 @@ fn test_burn_smoke() {
 
     let from = test_account_id(1);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(200_000))
-        .unwrap();
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
 
-    assert_eq!(ctx.balances().total_supply().to_u64(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Burn {
             from,
             spender: None,
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
         },
         created_at_time: None,
         memo: None,
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(100_000));
-    assert_eq!(ctx.balances().total_supply(), Tokens::from(100_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(100_000));
+    assert_eq!(ctx.balances().total_supply(), tokens(100_000));
 }
 
 #[test]
@@ -538,18 +538,16 @@ fn test_approval_burn_from() {
     let from = test_account_id(1);
     let spender = test_account_id(2);
 
-    ctx.balances_mut()
-        .mint(&from, Tokens::from(200_000))
-        .unwrap();
-    let fee = Tokens::from(10_000);
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = tokens(10_000);
 
-    assert_eq!(ctx.balances().total_supply().to_u64(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Burn {
             from,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
         },
         created_at_time: None,
         memo: None,
@@ -561,13 +559,13 @@ fn test_approval_burn_from() {
         }
     );
 
-    assert_eq!(ctx.balances().total_supply().to_u64(), 200_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 200_000);
 
     let tr = Transaction {
         operation: Operation::Approve {
             from,
             spender,
-            amount: Tokens::from(150_000),
+            amount: tokens(150_000),
             expected_allowance: None,
             expires_at: None,
             fee: Some(fee),
@@ -577,14 +575,14 @@ fn test_approval_burn_from() {
     };
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(190_000));
-    assert_eq!(ctx.balances().total_supply(), Tokens::from(190_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
+    assert_eq!(ctx.balances().total_supply(), tokens(190_000));
 
     let tr = Transaction {
         operation: Operation::Burn {
             from,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
         },
         created_at_time: None,
         memo: None,
@@ -592,13 +590,13 @@ fn test_approval_burn_from() {
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(90_000));
-    assert_eq!(ctx.balances().total_supply().to_u64(), 90_000);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 90_000);
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(50_000),
+            amount: tokens(50_000),
             expires_at: None,
             arrived_at: ts(0),
         },
@@ -608,7 +606,7 @@ fn test_approval_burn_from() {
         operation: Operation::Burn {
             from,
             spender: Some(spender),
-            amount: Tokens::from(100_000),
+            amount: tokens(100_000),
         },
         created_at_time: None,
         memo: None,
@@ -616,19 +614,19 @@ fn test_approval_burn_from() {
     assert_eq!(
         tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
         TxApplyError::InsufficientAllowance {
-            allowance: Tokens::from(50_000)
+            allowance: tokens(50_000)
         }
     );
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: Tokens::from(50_000),
+            amount: tokens(50_000),
             expires_at: None,
             arrived_at: ts(0),
         },
     );
-    assert_eq!(ctx.balances().account_balance(&from), Tokens::from(90_000));
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
     assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
-    assert_eq!(ctx.balances().total_supply().to_u64(), 90_000);
+    assert_eq!(tokens_to_u64(ctx.balances().total_supply()), 90_000);
 }
