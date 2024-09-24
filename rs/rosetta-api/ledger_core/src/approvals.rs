@@ -74,6 +74,7 @@ pub trait AllowancesData {
     #[allow(clippy::type_complexity)]
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))>;
 
+    #[allow(clippy::type_complexity)]
     fn pop_first_allowance(
         &mut self,
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
