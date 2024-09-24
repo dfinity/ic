@@ -804,7 +804,7 @@ impl RosettaRequestHandler {
         // Sort the transactions by block index in descending order
         transactions.sort_by(|a, b| b.block_identifier.index.cmp(&a.block_identifier.index));
 
-        // Is rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
+        // If rosetta blocks is empty that means the entire blockchain was traversed but no transactions were found that match the search criteria
         let last_traversed_block_index = blocks.iter().map(|block| block.index).min().unwrap_or(0);
         let num_fetched_transactions = transactions.len();
 
