@@ -4,10 +4,9 @@ use std::{
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
-use ic_btc_validation::is_beyond_last_checkpoint;
 use ic_metrics::MetricsRegistry;
 use tokio::sync::{mpsc::Sender, Mutex};
-use tonic::{Code, Status};
+use tonic::Status;
 
 use crate::{
     common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
@@ -102,15 +101,6 @@ impl GetSuccessorsHandler {
             let anchor_height = state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.height);
-
-            // Wait with downloading blocks until we synced the header chain above the last checkpoint
-            // to make sure we are following the correct chain.
-            if !is_beyond_last_checkpoint(&self.network, state.get_active_chain_tip().height) {
-                return Err(Status::new(
-                    Code::Unavailable,
-                    "Header chain not yet synced past last checkpoint",
-                ));
-            }
 
             let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
             let blocks = get_successor_blocks(
@@ -262,6 +252,7 @@ mod test {
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
     use tokio::sync::{mpsc::channel, Mutex};
+    use tonic::Code;
 
     use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
