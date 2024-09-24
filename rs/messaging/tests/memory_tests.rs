@@ -220,7 +220,7 @@ impl FixtureConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct Fixture {
     pub local_env: Arc<StateMachine>,
     pub local_canisters: Vec<CanisterId>,
