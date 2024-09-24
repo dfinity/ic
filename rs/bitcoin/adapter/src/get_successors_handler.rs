@@ -252,7 +252,6 @@ mod test {
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
     use tokio::sync::{mpsc::channel, Mutex};
-    use tonic::Code;
 
     use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
