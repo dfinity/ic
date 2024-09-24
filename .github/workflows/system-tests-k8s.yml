@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload bazel-bep
         uses: actions/upload-artifact@v4
-        if: always()
+        if: success() || failure()
         with:
           name: ${{ github.job }}-bep
           retention-days: 14
