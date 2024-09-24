@@ -9,12 +9,12 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
     """ Run a Rust benchmark using canbench. 
 
     This creates 2 executable rules: :${name} for running the benchmark and :${name}_update for
-    updating the results file.
+    updating the results file and pptionally a :${name}_test rule.
 
     Args:
         name: The name of the rule.
         results_file: The file used store the benchmark results for future comparison.
-        add_test: If True add an additional _test target that fails if canbench benchmark fails.
+        add_test: If True add an additional :${name}_test rule that fails if canbench benchmark fails.
         **kwargs: Additional arguments to pass to rust_binary.
     """
 
