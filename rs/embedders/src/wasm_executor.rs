@@ -597,6 +597,7 @@ pub fn process(
         embedder.config().feature_flags.canister_backtrace,
         embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
+        wasm_memory.size,
         out_of_instructions_handler,
         logger,
     );
