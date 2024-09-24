@@ -1,5 +1,4 @@
 use clap::Parser;
-use ic_async_utils::abort_on_panic;
 use ic_async_utils::shutdown_signal;
 use ic_btc_adapter::{cli::Cli, start_server};
 use ic_logger::{info, new_replica_logger_from_config};
@@ -8,11 +7,6 @@ use serde_json::to_string_pretty;
 
 #[tokio::main]
 pub async fn main() {
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
-
     let cli = Cli::parse();
     let config = match cli.get_config() {
         Ok(config) => config,

@@ -126,21 +126,9 @@ pub fn child_process_initialization() -> UnixStream {
     // provides the counterpart and assures safety of this operation.
     let socket = unsafe { UnixStream::from_raw_fd(3) };
 
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
-
     socket
 }
 
-fn abort_on_panic() {
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        default_hook(panic_info);
-        std::process::abort();
-    }));
-}
 /// The `main()` of the canister sandbox binary. This function is called from
 /// binaries such as `ic-replay` and `drun` to run as a canister sandbox.
 ///

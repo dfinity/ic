@@ -1,6 +1,6 @@
 //! Replica -- Internet Computer
 
-use ic_async_utils::{abort_on_panic, shutdown_signal};
+use ic_async_utils::shutdown_signal;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -160,11 +160,6 @@ fn main() -> io::Result<()> {
     if let Err(e) = &replica_args {
         e.print().expect("Failed to print CLI argument error.");
     }
-
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
 
     let config_source = setup::get_config_source(&replica_args);
     // Setup temp directory for the configuration.

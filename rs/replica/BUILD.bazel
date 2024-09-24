@@ -127,6 +127,10 @@ rust_binary(
     ],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_flags = [
+        "-C",
+        "panic=abort",
+    ],
     deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES + [":replica_lib"],
 )
 
