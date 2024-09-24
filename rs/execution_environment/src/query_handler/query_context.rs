@@ -514,15 +514,9 @@ impl<'a> QueryContext<'a> {
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> CallContextAction {
-        if let Some(callback_id) = callback_id {
-            canister
-                .system_state
-                .unregister_callback(callback_id)
-                .unwrap();
-        }
         canister
             .system_state
-            .on_canister_result(call_context_id, result, instructions_used)
+            .on_canister_result(call_context_id, callback_id, result, instructions_used)
             // This `unwrap()` cannot fail because of the non-optional `call_context_id`.
             .unwrap()
             .0

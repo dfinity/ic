@@ -474,7 +474,12 @@ impl UpdateHelper {
         let (action, call_context) = self
             .canister
             .system_state
-            .on_canister_result(self.call_context_id, output.wasm_result, instructions_used)
+            .on_canister_result(
+                self.call_context_id,
+                None,
+                output.wasm_result,
+                instructions_used,
+            )
             .unwrap();
 
         let response = action_to_response(

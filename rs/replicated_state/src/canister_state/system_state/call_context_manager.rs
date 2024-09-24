@@ -659,6 +659,7 @@ impl CallContextManager {
     pub(super) fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> (CallContextAction, Option<CallContext>) {
@@ -669,6 +670,10 @@ impl CallContextManager {
         enum Responded {
             Yes,
             No,
+        }
+
+        if let Some(callback_id) = callback_id {
+            self.unregister_callback(callback_id);
         }
 
         let outstanding_calls = if self.outstanding_calls(call_context_id) > 0 {

@@ -1040,12 +1040,13 @@ impl SystemState {
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
     ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .on_canister_result(call_context_id, result, instructions_used))
+            .on_canister_result(call_context_id, callback_id, result, instructions_used))
     }
 
     /// Marks all call contexts as deleted and produces reject responses for the
