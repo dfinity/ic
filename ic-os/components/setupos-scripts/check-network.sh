@@ -170,7 +170,7 @@ function ping_ipv6_gateway() {
 
 function assemble_nns_nodes_list() {
     NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    IFS=',' read -r -a NNS_URL_LIST <<< "$NNS_URL_STRING"
+    IFS=',' read -r -a NNS_URL_LIST <<<"$NNS_URL_STRING"
 }
 
 function query_nns_nodes() {
