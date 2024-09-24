@@ -6623,6 +6623,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rayon",
+ "rstest",
  "serde_cbor",
  "slog",
  "slog-async",
@@ -6699,7 +6700,6 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-consensus",
  "ic-consensus-mocks",
  "ic-crypto-prng",
  "ic-interfaces",
@@ -8080,6 +8080,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "rayon",
+ "rustc-demangle",
  "serde",
  "serde_bytes",
  "slog",
@@ -9369,6 +9370,7 @@ dependencies = [
  "candid",
  "candid_parser",
  "clap 4.5.17",
+ "futures",
  "hex",
  "maplit",
  "reqwest 0.12.7",
@@ -9484,8 +9486,10 @@ dependencies = [
  "mockall 0.13.0",
  "pretty_assertions",
  "prometheus",
+ "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "random-traffic-test",
  "serde",
  "slog",
  "tempfile",
@@ -9526,6 +9530,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-sns-governance",
  "ic-sns-wasm",
+ "pocket-ic",
  "serde",
  "tempfile",
  "thiserror",
@@ -9691,6 +9696,20 @@ dependencies = [
  "regex",
  "serde",
  "serde_yaml",
+]
+
+[[package]]
+name = "ic-nervous-system-initial-supply"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-base-types",
+ "ic-nervous-system-runtime",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-bigint 0.4.6",
+ "tokio",
 ]
 
 [[package]]
@@ -9926,14 +9945,13 @@ dependencies = [
  "criterion",
  "csv",
  "cycles-minting-canister",
- "dfn_candid",
- "dfn_core",
  "dfn_http_metrics",
- "dfn_protobuf",
  "dyn-clone",
  "futures",
  "ic-base-types",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
+ "ic-cdk-macros 0.9.0",
  "ic-config",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha2",
@@ -10380,6 +10398,7 @@ version = "0.0.1"
 dependencies = [
  "ic-base-types",
  "ic-config",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",
  "ic-types",
@@ -11319,7 +11338,9 @@ dependencies = [
  "reqwest 0.12.7",
  "rolling-file",
  "rosetta-core",
+ "rusqlite",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "serde_json",
  "strum",
@@ -11595,14 +11616,15 @@ dependencies = [
  "ic-base-types",
  "ic-cdk 0.13.5",
  "ic-nervous-system-common",
+ "ic-nervous-system-initial-supply",
  "ic-nervous-system-runtime",
- "ic-nervous-system-string",
  "ic-nns-constants",
  "ic-sns-swap-proto-library",
  "icrc-ledger-types",
  "lazy_static",
  "maplit",
  "mockall 0.13.0",
+ "num-traits",
  "rust_decimal",
  "tokio",
 ]
@@ -11733,6 +11755,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
+ "ic-nns-constants",
  "ic-sns-root-protobuf-generator",
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
@@ -12004,6 +12027,8 @@ dependencies = [
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
+ "ic-btc-adapter-client",
+ "ic-btc-consensus",
  "ic-config",
  "ic-consensus",
  "ic-consensus-utils",
@@ -16493,8 +16518,10 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk 0.13.5",
+ "ic-transport-types",
  "ic-universal-canister",
  "icp-ledger",
  "k256",
@@ -16503,6 +16530,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "serde_json",
  "sha2 0.10.8",
  "slog",
@@ -16525,6 +16553,8 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
+ "bitcoin 0.28.2",
+ "bitcoincore-rpc",
  "bytes",
  "candid",
  "clap 3.2.25",
@@ -16539,6 +16569,8 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-boundary",
+ "ic-btc-adapter",
+ "ic-btc-interface",
  "ic-canister-sandbox-backend-lib",
  "ic-cdk 0.13.5",
  "ic-config",
@@ -16558,6 +16590,7 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types",
  "ic-metrics",
+ "ic-nns-constants",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
@@ -17333,6 +17366,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "random-traffic-test"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-error-types",
+ "ic-types",
+ "rand 0.8.5",
+ "serde",
+]
+
+[[package]]
 name = "rangemap"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17533,6 +17579,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-string",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",

@@ -1,1 +1,6 @@
-service : { ic0_trap : () -> (); oob : () -> (); unreachable : () -> () }
+service : {
+  ic0_trap : () -> ();
+  oob : () -> ();
+  stable_oob : () -> ();
+  unreachable : () -> ();
+}

@@ -1589,10 +1589,6 @@ fn test_validate_execute_nns_function() {
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
-            nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-            payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX + 1],
-        },
-        ExecuteNnsFunction {
             nns_function: NnsFunction::IcpXdrConversionRate as i32,
             payload: Encode!(&UpdateIcpXdrConversionRatePayload {
                 xdr_permyriad_per_icp: 101,

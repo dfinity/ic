@@ -12,7 +12,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
-use dfn_protobuf::ToProto;
 use fixtures::{
     account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
@@ -61,6 +60,7 @@ use ic_nns_governance::{
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
+        install_code::CanisterInstallMode,
         manage_neuron::{
             self,
             claim_or_refresh::{By, MemoAndController},
@@ -78,8 +78,8 @@ use ic_nns_governance::{
         settle_neurons_fund_participation_request, swap_background_information,
         AddOrRemoveNodeProvider, Ballot, BallotChange, BallotInfo, BallotInfoChange,
         CreateServiceNervousSystem, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
-        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, KnownNeuron,
-        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        GovernanceChange, GovernanceError, IdealMatchedParticipationFunction, InstallCode,
+        KnownNeuron, KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
         ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, MonthlyNodeProviderRewards,
         Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState, NeuronType, NeuronsFundData,
         NeuronsFundParticipation, NeuronsFundSnapshot, NnsFunction, NodeProvider, Proposal,
@@ -110,7 +110,7 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, ListDeployedSnsesRequest,
     ListDeployedSnsesResponse, SnsWasmError,
 };
-use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
+use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
@@ -8159,7 +8159,7 @@ fn test_filter_proposals_excluding_topics() {
                 proposer: Some(NeuronId { id: 1 }),
                 proposal: Some(Proposal {
                     action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                        nns_function: NnsFunction::NnsCanisterUpgrade as i32,
+                        nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
                         payload: Vec::new(),
                     })),
                     ..new_motion_proposal()
@@ -8193,7 +8193,7 @@ fn test_filter_proposals_excluding_topics() {
             &ListProposalInfo {
                 exclude_topic: vec![
                     Topic::NetworkEconomics as i32,
-                    Topic::NetworkCanisterManagement as i32
+                    Topic::ProtocolCanisterManagement as i32
                 ],
                 ..Default::default()
             },
@@ -8563,7 +8563,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             ..Default::default()
         },
     ), Err(GovernanceError{error_type, error_message: _}) if error_type==ResourceExhausted as i32);
-    // Let's try a NnsCanisterUpgrade. This proposal type is whitelisted, so it can
+    // Let's try an Installcode for Governance itself. This proposal type is whitelisted, so it can
     // be submitted even though the max is reached.
     assert_matches!(
         gov.make_proposal(
@@ -8572,10 +8572,14 @@ async fn test_max_number_of_proposals_with_ballots() {
             &principal(1),
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
-                summary: "NnsCanisterUpgrade should go through despite the limit".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Vec::new(),
+                summary: "InstallCode for Governance should go through despite the limit"
+                    .to_string(),
+                action: Some(proposal::Action::InstallCode(InstallCode {
+                    canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+                    wasm_module: Some(vec![1, 2, 3]),
+                    install_mode: Some(CanisterInstallMode::Upgrade as i32),
+                    arg: Some(vec![4, 5, 6]),
+                    skip_stopping_before_installing: None,
                 })),
                 ..Default::default()
             },
@@ -9188,13 +9192,18 @@ fn test_update_node_provider() {
 
     let np = NodeProvider {
         id: Some(controller),
-        reward_account: Some(account.into_proto()),
+        reward_account: Some(protobuf::AccountIdentifier {
+            hash: account.to_vec(),
+        }),
     };
 
     gov.heap_data.node_providers.push(np);
 
     let hex = "b6a3539e69c6b75fe3c87b1ff82b1fc7f189a6113b77ba653b2e5eed67c95632";
-    let new_reward_account = AccountIdentifier::from_hex(hex).unwrap().into_proto();
+    let new_reward_account = AccountIdentifier::from_hex(hex).unwrap();
+    let new_reward_account = protobuf::AccountIdentifier {
+        hash: new_reward_account.to_vec(),
+    };
     let update_np = UpdateNodeProvider {
         reward_account: Some(new_reward_account.clone()),
     };
@@ -11139,7 +11148,7 @@ fn assert_calls_eq(
 #[async_trait]
 impl Environment for MockEnvironment<'_> {
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

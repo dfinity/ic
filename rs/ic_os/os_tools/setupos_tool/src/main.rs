@@ -10,7 +10,7 @@ use config::{
 };
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, FormattedMacAddress};
+use network::mac_address::generate_mac_address;
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -22,10 +22,6 @@ pub enum Commands {
         #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
         /// systemd-networkd output directory
         output_directory: String,
-    },
-    GenerateMacAddress {
-        #[arg(short, long, default_value = "SetupOS")]
-        node_type: String,
     },
     GenerateIpv6Address {
         #[arg(short, long, default_value = "SetupOS")]
@@ -94,27 +90,6 @@ pub fn main() -> Result<()> {
                 )
             );
 
-            Ok(())
-        }
-        Some(Commands::GenerateMacAddress { node_type }) => {
-            let setup_config: SetupOSConfig =
-                deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
-
-            eprintln!(
-                "Network settings config: {:?}",
-                &setup_config.network_settings
-            );
-
-            let node_type = node_type.parse::<NodeType>()?;
-
-            let mac = generate_mac_address(
-                &setup_config.icos_settings.hostname,
-                &node_type,
-                setup_config.network_settings.mgmt_mac.as_deref(),
-            )?;
-
-            let mac = FormattedMacAddress::from(&mac);
-            println!("{}", mac.get());
             Ok(())
         }
         None => Err(anyhow!(
