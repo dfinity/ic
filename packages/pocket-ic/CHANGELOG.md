@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - The function `PocketIc::get_subnet_metrics` to retrieve metrics of a given subnet.
+- The function `PocketIcBuilder::with_bitcoind_addr` to specify the address and port at which a `bitcoind` process is listening.
+- The function `PocketIcBuilder::new_with_config` to specify a custom `ExtendedSubnetConfigSet`.
+
+### Removed
+- Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
+  Use the `PocketIcBuilder` instead.
 
 
 

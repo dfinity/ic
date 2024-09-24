@@ -12,7 +12,7 @@ use icp_ledger::{
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        SubnetConfigSet, SubnetKind,
+        SubnetKind,
     },
     update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
@@ -209,12 +209,10 @@ where
 
 #[test]
 fn test_create_canister_with_id() {
-    let config = SubnetConfigSet {
-        nns: true,
-        ii: true,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config(config);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet()
+        .build();
     // goes on NNS
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let actual_canister_id = pic
@@ -608,7 +606,7 @@ fn test_root_key() {
 #[test]
 #[should_panic(expected = "SubnetConfigSet must contain at least one subnet")]
 fn test_new_pocket_ic_without_subnets_panics() {
-    let _pic: PocketIc = PocketIc::from_config(SubnetConfigSet::default());
+    let _pic: PocketIc = PocketIcBuilder::new().build();
 }
 
 #[test]
