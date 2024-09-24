@@ -14,5 +14,6 @@ preserve = false
 exclude = [
   "*.pb.*.rs",
   "rs/protobuf/src/gen",
+  "*protobuf_generator*",
   "packages/*",
 ]
