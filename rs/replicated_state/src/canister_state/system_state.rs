@@ -387,12 +387,12 @@ pub enum OnLowWasmMemoryHookStatus {
 
 impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
     fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        use OnLowWasmMemoryHookStatus::*;
+        
         match *item {
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied
-            }
-            OnLowWasmMemoryHookStatus::Ready => pb::OnLowWasmMemoryHookStatus::Ready,
-            OnLowWasmMemoryHookStatus::Executed => pb::OnLowWasmMemoryHookStatus::Executed,
+            ConditionNotSatisfied => Self::ConditionNotSatisfied,
+            Ready => Self::Ready,
+            Executed => Self::Executed,
         }
     }
 }
