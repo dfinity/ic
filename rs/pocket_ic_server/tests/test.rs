@@ -3,8 +3,6 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
-use ic_cdk::api::management_canister::main::CanisterIdRecord;
-use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
@@ -18,7 +16,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet,
 };
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -1282,3 +1280,5 @@ fn http_gateway_route_underscore() {
     let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("canister_id_not_found"));
 }
+=======
+>>>>>>> parent of 117ef9fec3 (fix(PocketIC): provisional canister creation with management effective canister ID (#1571))
