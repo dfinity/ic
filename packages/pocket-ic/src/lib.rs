@@ -94,6 +94,12 @@ impl PocketIcBuilder {
         }
     }
 
+    pub fn new_with_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
+        let mut builder = Self::new();
+        builder.config = Some(config.into());
+        builder
+    }
+
     pub fn build(self) -> PocketIc {
         let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
@@ -119,12 +125,6 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
         )
         .await
-    }
-
-    pub fn with_config(mut self, config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        assert!(self.config.is_none(), "`PocketIcBuilder::with_config` can only be used if no config was (partially) provided so far.");
-        self.config = Some(config.into());
-        self
     }
 
     pub fn with_server_url(mut self, server_url: Url) -> Self {
