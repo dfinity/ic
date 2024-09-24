@@ -165,7 +165,7 @@ impl std::str::FromStr for PrincipalId {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum PrincipalIdClass {
     Opaque = 1,
     SelfAuthenticating = 2,

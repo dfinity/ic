@@ -24,7 +24,7 @@
 //! use std::sync::Arc;
 //! use serde::{Deserialize, Serialize};
 //!
-//! #[derive(Deserialize, Serialize)]
+//! #[derive(Serialize, Deserialize)]
 //! struct Foo {
 //!     /// It is same to serialize this `Arc` field because ...
 //!     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]

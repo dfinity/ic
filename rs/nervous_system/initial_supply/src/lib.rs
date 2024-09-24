@@ -123,7 +123,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     Ok(result)
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct InitialSupplyOptions {
     /// Give up if more than this many transactions need to be scanned to come up with a result.
     pub max_transactions: u64,

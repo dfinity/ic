@@ -340,7 +340,7 @@ impl CryptoMetrics {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyType {
@@ -350,7 +350,7 @@ pub enum KeyType {
     IdkgDealingEncryptionLocal,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsDomain {
@@ -367,7 +367,7 @@ pub enum MetricsDomain {
     KeyManagement,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsScope {
@@ -375,7 +375,7 @@ pub enum MetricsScope {
     Local,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MetricsResult {
@@ -392,7 +392,7 @@ impl<T, E> From<&Result<T, E>> for MetricsResult {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum KeyRotationResult {
@@ -407,7 +407,7 @@ pub enum KeyRotationResult {
     PublicKeyNotFound,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum ServiceType {
@@ -415,7 +415,7 @@ pub enum ServiceType {
     Server,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::Display, EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum MessageType {
@@ -489,7 +489,7 @@ impl Add for KeyCounts {
 
 /// A result for operations returning booleans. Using an enum allows adding errors, and using
 /// macros for deriving the string representation needed for the dashboards.
-#[derive(strum_macros::Display, EnumIter)]
+#[derive(EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanResult {
@@ -497,7 +497,7 @@ pub enum BooleanResult {
     False,
 }
 
-#[derive(strum_macros::Display, EnumIter)]
+#[derive(EnumIter, strum_macros::Display)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(test, derive(IntoStaticStr))]
 pub enum BooleanOperation {

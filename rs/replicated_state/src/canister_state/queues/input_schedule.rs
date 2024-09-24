@@ -44,7 +44,7 @@ mod tests;
 ///  * Local canisters (including ourselves) are scheduled in the local sender
 ///    schedule. Canisters that are not known to be local (including potentially
 ///    deleted local canisters) may be scheduled in either input schedule.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct InputSchedule {
     /// The input source (local senders, ingress or remote senders) at the front
     /// of the schedule.
@@ -293,7 +293,7 @@ impl TryFrom<(i32, Vec<pb_types::CanisterId>, Vec<pb_types::CanisterId>)> for In
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterQueuesLoopDetector {
     pub local_queue_skip_count: usize,
     pub remote_queue_skip_count: usize,

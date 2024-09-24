@@ -1,24 +1,24 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
     /// Bitcoin address to be checked.
     pub address: String,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckAddressResponse {
     Passed,
     Failed,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckTransactionArgs {
     pub txid: Vec<u8>,
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckTransactionResponse {
     /// When check finishes and all input addresses passed KYT.
     Passed,
@@ -30,7 +30,7 @@ pub enum CheckTransactionResponse {
     Unknown(CheckTransactionStatus),
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckTransactionStatus {
     /// Caller should call with a minimum of `CHECK_TRANSACTION_CYCLES_REQUIRED` cycles.
     NotEnoughCycles,
@@ -40,7 +40,7 @@ pub enum CheckTransactionStatus {
     Error(CheckTransactionError),
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckTransactionPending {
     /// Work is already in progress, and the result is pending.
     Pending,
@@ -50,7 +50,7 @@ pub enum CheckTransactionPending {
     TransientInternalError(String),
 }
 
-#[derive(Debug, CandidType, Deserialize, Serialize)]
+#[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum CheckTransactionError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },

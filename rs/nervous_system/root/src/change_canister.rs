@@ -179,14 +179,14 @@ impl std::fmt::Display for AddCanisterRequest {
 }
 
 // The action to take on the canister.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub enum CanisterAction {
     Stop,
     Start,
 }
 
 /// Argument to the similarly-named methods on the NNS and SNS root canisters.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, candid::CandidType, candid::Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Serialize, candid::CandidType, candid::Deserialize)]
 pub struct StopOrStartCanisterRequest {
     pub canister_id: CanisterId,
     pub action: CanisterAction,
