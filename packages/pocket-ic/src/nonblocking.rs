@@ -7,9 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{
-    CallError, PocketIcBuilder, SubnetMetrics, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS,
-};
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -20,6 +18,7 @@ use ic_cdk::api::management_canister::main::{
     ChunkHash, ClearChunkStoreArgument, InstallChunkedCodeArgument, InstallCodeArgument,
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
+use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};

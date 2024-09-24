@@ -3147,6 +3147,7 @@ dependencies = [
  "ic-response-verification",
  "ic-stable-structures",
  "ic-test-state-machine-client",
+ "ic-transport-types",
  "ic-utils",
  "ic-verify-bls-signature 0.6.0",
  "ic-wasm",

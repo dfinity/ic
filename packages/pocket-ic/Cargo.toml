@@ -25,6 +25,7 @@ candid = "^0.10.2"
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-cdk = "0.13.5"
+ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
 serde = { workspace = true }

@@ -633,6 +633,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
             ),
+            "ic-transport-types": crate.spec(
+                version = "^0.37.1",
+            ),
             "ic-utils": crate.spec(
                 version = "^0.37.0",
                 features = ["raw"],
