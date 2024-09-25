@@ -329,10 +329,10 @@ impl TaskQueue {
         self.on_low_wasm_memory_hook_status
     }
 
-    // 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
-    // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
-    // 3. If deterministic time slicing is disabled, then there are no paused tasks.
-    //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
+    /// 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
+    /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
+    /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
+    ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
     pub fn check_dts_invariants(
         &self,
         deterministic_time_slicing: FlagStatus,
@@ -418,6 +418,7 @@ impl TaskQueue {
         });
     }
 
+    /// Returns all `PausedExecution` and `PausedInstallCode` tasks.
     pub fn get_all_paused_tasks(&self) -> Vec<&ExecutionTask> {
         let mut res = Vec::new();
         for task in self.queue.iter() {
@@ -435,6 +436,8 @@ impl TaskQueue {
         res
     }
 
+    /// Replace all `PausedExecution` and `PausedInstallCode` with corresponding
+    /// `AbortedExecution` and `AbortedInstallCode` respectively.
     pub fn replace_paused_with_aborted_tasks(
         &mut self,
         mut aborted_tasks: HashMap<PausedExecutionId, ExecutionTask>,
