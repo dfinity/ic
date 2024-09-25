@@ -11,6 +11,7 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
+use ic_bn_lib::http::client::{Client, ClientGenerator};
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -42,6 +43,7 @@ pub struct Node {
     pub subnet_type: SubnetType,
     pub addr: IpAddr,
     pub port: u16,
+    pub cli: Arc<dyn Client>,
     pub tls_certificate: Vec<u8>,
     pub avg_latency_secs: f64,
 }
@@ -149,6 +151,7 @@ pub struct Snapshotter {
     last_version_change: Instant,
     min_version_age: Duration,
     persister: Option<SnapshotPersister>,
+    client_generator: Arc<dyn ClientGenerator>,
 }
 
 pub struct SnapshotInfo {
@@ -175,6 +178,7 @@ impl Snapshotter {
         channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
         registry_client: Arc<dyn RegistryClient>,
         min_version_age: Duration,
+        client_generator: Arc<dyn ClientGenerator>,
     ) -> Self {
         Self {
             published_registry_snapshot,
@@ -185,6 +189,7 @@ impl Snapshotter {
             last_version_change: Instant::now(),
             min_version_age,
             persister: None,
+            client_generator,
         }
     }
 
@@ -289,6 +294,11 @@ impl Snapshotter {
                         X509Certificate::from_der(cert.certificate_der.as_slice())
                             .context("Unable to parse TLS certificate")?;
 
+                        let cli = self
+                            .client_generator
+                            .generate()
+                            .context("unable to create HTTP client")?;
+
                         let node = Node {
                             // init to max, this value is updated with running health checks
                             avg_latency_secs: f64::MAX,
@@ -299,6 +309,7 @@ impl Snapshotter {
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
                             tls_certificate: cert.certificate_der,
+                            cli,
                         };
                         let node = Arc::new(node);
 
@@ -466,14 +477,17 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     }
 }
 
-pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
+pub fn generate_stub_subnet(
+    nodes: Vec<SocketAddr>,
+    generator: Arc<dyn ClientGenerator>,
+) -> Result<Subnet, Error> {
     let subnet_id = subnet_test_id(0).get().0;
 
     let nodes = nodes
         .into_iter()
         .enumerate()
-        .map(|(i, x)| {
-            Arc::new(Node {
+        .map(|(i, x)| -> Result<_, _> {
+            Ok::<_, Error>(Arc::new(Node {
                 // init to max, this value is updated with running health checks
                 avg_latency_secs: f64::MAX,
                 id: node_test_id(i as u64).get().0,
@@ -482,9 +496,10 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
                 addr: x.ip(),
                 port: x.port(),
                 tls_certificate: vec![],
-            })
+                cli: generator.generate()?,
+            }))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Catch-all canister id range
     let range = CanisterRange {
@@ -492,13 +507,13 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         end: Principal::from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
     };
 
-    Subnet {
+    Ok(Subnet {
         id: subnet_id,
         subnet_type: SubnetType::Application,
         ranges: vec![range],
         nodes,
         replica_version: "".into(),
-    }
+    })
 }
 
 #[cfg(test)]

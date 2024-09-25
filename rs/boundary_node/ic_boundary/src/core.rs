@@ -49,7 +49,7 @@ use crate::{
     persist::{Persist, Persister, Routes},
     rate_limiting::{generic, RateLimit},
     retry::{retry_request, RetryParams},
-    routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
+    routes::{self, ErrorCause, Health, Lookup, ProxyRouter, RootKey},
     snapshot::{
         generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
         Snapshotter,
@@ -159,27 +159,16 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         dns_resolver: Some(dns_resolver),
     };
 
-    // HTTP client for health checks
-    let http_client_check = http::client::ReqwestClient::new(http_client_opts.clone())
-        .context("unable to create HTTP client for checks")?;
-    let http_client_check = Arc::new(http_client_check);
-
-    // HTTP client for normal requests
-    let http_client = http::client::ReqwestClientLeastLoaded::new(
-        http_client_opts,
-        cli.listen.http_client_count as usize,
-    )
-    .context("unable to create HTTP client")?;
-    let http_client = WithMetrics(
-        http_client,
-        MetricParams::new_with_opts(
-            &metrics_registry,
-            "http_client",
-            &["success", "status", "http_ver"],
-            Some(HTTP_DURATION_BUCKETS),
-        ),
+    let http_client_metric_params = MetricParams::new_with_opts(
+        &metrics_registry,
+        "http_client",
+        &["success", "status", "http_ver"],
+        Some(HTTP_DURATION_BUCKETS),
     );
-    let http_client = Arc::new(http_client);
+
+    let http_client_generator = Arc::new(crate::http::ClientGeneratorDynamic(
+        crate::http::ClientGeneratorSingle(http_client_opts.clone(), http_client_metric_params),
+    ));
 
     // Caching
     let cache = cli.cache.cache_size_bytes.map(|x| {
@@ -210,7 +199,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let router = setup_router(
         registry_snapshot.clone(),
         routing_table.clone(),
-        http_client,
         bouncer,
         Some(generic_limiter.clone()),
         &cli,
@@ -327,14 +315,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
                     &cli,
                     registry_snapshot.clone(),
                     WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
-                    http_client_check,
+                    http_client_generator,
                     &metrics_registry,
                 )?;
 
             (registry_replicator, nns_pub_key, registry_runners)
         } else {
             // Otherwise load a stub routing table and snapshot
-            let subnet = generate_stub_subnet(cli.registry.stub_replica.clone());
+            let subnet = generate_stub_subnet(cli.registry.stub_replica.clone(), http_client_generator)?;
             let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
             let _ = persister.persist(vec![subnet]);
             registry_snapshot.store(Some(Arc::new(snapshot)));
@@ -420,7 +408,7 @@ fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_check: Arc<dyn http::Client>,
+    http_client_generator: Arc<dyn http::client::ClientGenerator>,
     metrics_registry: &Registry,
 ) -> Result<RegistrySetupResult, Error> {
     // Registry Client
@@ -446,6 +434,7 @@ fn setup_registry(
                 channel_snapshot_send,
                 registry_client.clone(),
                 Duration::from_secs(cli.registry.min_version_age),
+                http_client_generator,
             );
 
             if let Some(v) = &cli.firewall.nftables_system_replicas_path {
@@ -468,10 +457,7 @@ fn setup_registry(
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
 
     // Checks
-    let checker = Checker::new(
-        http_client_check,
-        Duration::from_millis(cli.health.check_timeout),
-    );
+    let checker = Checker::new(Duration::from_millis(cli.health.check_timeout));
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
 
     let check_runner = CheckRunner::new(
@@ -657,44 +643,33 @@ fn setup_https(
 pub fn setup_router(
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn http::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::Limiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache: Option<Arc<Cache>>,
 ) -> Router {
-    let proxy_router = ProxyRouter::new(
-        http_client.clone(),
+    let proxy_router = Arc::new(ProxyRouter::new(
         Arc::clone(&routing_table),
         Arc::clone(&registry_snapshot),
-    );
+    ));
 
-    let proxy_router = Arc::new(proxy_router);
-
-    let (proxy, lookup, root_key, health) = (
-        proxy_router.clone() as Arc<dyn Proxy>,
+    let (lookup, root_key, health) = (
         proxy_router.clone() as Arc<dyn Lookup>,
         proxy_router.clone() as Arc<dyn RootKey>,
         proxy_router.clone() as Arc<dyn Health>,
     );
 
     let query_route = Router::new()
-        .route(routes::PATH_QUERY, {
-            post(routes::handle_canister).with_state(proxy.clone())
-        })
+        .route(routes::PATH_QUERY, post(routes::handle_canister))
         .layer(option_layer(cache.map(|x| {
             middleware::from_fn_with_state(x.clone(), cache_middleware)
         })));
 
     let call_route = {
         let mut route = Router::new()
-            .route(routes::PATH_CALL, {
-                post(routes::handle_canister).with_state(proxy.clone())
-            })
-            .route(routes::PATH_CALL_V3, {
-                post(routes::handle_canister).with_state(proxy.clone())
-            });
+            .route(routes::PATH_CALL, post(routes::handle_canister))
+            .route(routes::PATH_CALL_V3, post(routes::handle_canister));
 
         // will panic if ip_rate_limit is Some(0)
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
@@ -814,9 +789,8 @@ pub fn setup_router(
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-        post(routes::handle_canister).with_state(proxy.clone())
-    });
+    let canister_read_state_route =
+        Router::new().route(routes::PATH_READ_STATE, post(routes::handle_canister));
 
     let canister_read_call_query_routes = query_route
         .merge(call_route)
@@ -825,7 +799,7 @@ pub fn setup_router(
 
     let subnet_read_state_route = Router::new()
         .route(routes::PATH_SUBNET_READ_STATE, {
-            post(routes::handle_subnet).with_state(proxy.clone())
+            post(routes::handle_subnet)
         })
         .layer(service_subnet_read);
 

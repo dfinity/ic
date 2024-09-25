@@ -9,7 +9,6 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
-use ic_bn_lib::http::Client;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SumTreeSMA, SMA};
@@ -575,16 +574,12 @@ pub trait Check: Send + Sync {
 }
 
 pub struct Checker {
-    http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
-        Self {
-            http_client,
-            timeout,
-        }
+    pub fn new(timeout: Duration) -> Self {
+        Self { timeout }
     }
 }
 
@@ -599,8 +594,8 @@ impl Check for Checker {
         *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
-        let response = self
-            .http_client
+        let response = node
+            .cli
             .execute(request)
             .await
             .map_err(|err| CheckError::Network(err.to_string()))?;

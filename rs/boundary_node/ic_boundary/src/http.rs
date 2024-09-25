@@ -1,10 +1,68 @@
-use std::time::Instant;
+use std::{
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
-use ic_bn_lib::http::{http_version, Client};
+use ic_bn_lib::http::{
+    client::{Client, ClientGenerator, Options, ReqwestClient, ReqwestClientDynamic},
+    http_version,
+};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
+use crate::{
+    core::error_source,
+    dns::DnsError,
+    metrics::{MetricParams, WithMetrics},
+    routes::ErrorCause,
+};
+
+#[derive(Clone, Debug)]
+pub struct StubClient;
+
+#[async_trait]
+impl Client for StubClient {
+    async fn execute(&self, _req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+        let resp = ::http::Response::new(vec![]);
+        Ok(resp.into())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientGeneratorSingle<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static>(
+    pub Options<R>,
+    pub MetricParams,
+);
+
+impl<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static> ClientGenerator
+    for ClientGeneratorSingle<R>
+{
+    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+        Ok(Arc::new(WithMetrics(
+            ReqwestClient::new(self.0.clone())?,
+            self.1.clone(),
+        )))
+    }
+}
+
+#[derive(Debug)]
+pub struct ClientGeneratorDynamic<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static>(
+    pub ClientGeneratorSingle<R>,
+);
+
+impl<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static> ClientGenerator
+    for ClientGeneratorDynamic<R>
+{
+    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+        Ok(Arc::new(ReqwestClientDynamic::new(
+            self.0.clone(),
+            10,
+            200,
+            Duration::from_secs(90),
+        )?))
+    }
+}
 
 #[async_trait]
 impl<T: Client> Client for WithMetrics<T> {

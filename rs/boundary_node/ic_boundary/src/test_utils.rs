@@ -9,7 +9,10 @@ use axum::Router;
 use clap::Parser;
 use http;
 use ic_base_types::NodeId;
-use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::http::{
+    client::{Client, ClientGenerator},
+    Client as HttpClient, ConnInfo,
+};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -44,7 +47,7 @@ use crate::{
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct TestHttpClient(usize);
 
 #[async_trait]
@@ -61,6 +64,15 @@ impl HttpClient for TestHttpClient {
         resp.headers_mut().insert("Content-Length", self.0.into());
 
         Ok(reqwest::Response::from(resp))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StubGenerator<R: Client + Clone + 'static>(pub R);
+
+impl<R: Client + Clone + 'static> ClientGenerator for StubGenerator<R> {
+    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+        Ok(Arc::new(self.0.clone()))
     }
 }
 
@@ -297,7 +309,6 @@ pub fn setup_test_router(
     let routing_table: Arc<ArcSwapOption<Routes>> = Arc::new(ArcSwapOption::empty());
     let registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>> = Arc::new(ArcSwapOption::empty());
 
-    let http_client = Arc::new(TestHttpClient(response_size));
     let metrics_registry = Registry::new_custom(None, None).unwrap();
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
@@ -307,6 +318,7 @@ pub fn setup_test_router(
         channel_send,
         Arc::new(registry_client),
         Duration::ZERO,
+        Arc::new(StubGenerator(TestHttpClient(response_size))),
     );
     let persister = Persister::new(routing_table.clone());
 
@@ -317,7 +329,6 @@ pub fn setup_test_router(
     let router = setup_router(
         registry_snapshot,
         routing_table,
-        http_client,
         None,
         None,
         &cli,

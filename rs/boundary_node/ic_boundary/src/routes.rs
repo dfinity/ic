@@ -20,9 +20,7 @@ use axum::{
 use bytes::Bytes;
 use candid::{CandidType, Decode, Principal};
 use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{
-    body::buffer_body, headers::*, proxy, Client as HttpClient, Error as IcBnError,
-};
+use ic_bn_lib::http::{body::buffer_body, headers::*, proxy, Error as IcBnError};
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, PrincipalId, SubnetId,
@@ -33,7 +31,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use strum::{Display, IntoStaticStr};
 use tower_governor::errors::GovernorError;
-use url::Url;
 
 use crate::{
     cache::CacheStatus,
@@ -296,11 +293,6 @@ pub struct ICRequestEnvelope {
     content: ICRequestContent,
 }
 
-#[async_trait]
-pub trait Proxy: Sync + Send {
-    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause>;
-}
-
 pub trait Lookup: Sync + Send {
     fn lookup_subnet_by_canister_id(&self, id: &CanisterId)
         -> Result<Arc<RouteSubnet>, ErrorCause>;
@@ -321,34 +313,19 @@ pub trait RootKey: Sync + Send {
 // and owning HTTP client for outgoing requests
 #[derive(Clone)]
 pub struct ProxyRouter {
-    http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
 impl ProxyRouter {
     pub fn new(
-        http_client: Arc<dyn HttpClient>,
         published_routes: Arc<ArcSwapOption<Routes>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     ) -> Self {
         Self {
-            http_client,
             published_routes,
             published_registry_snapshot,
         }
-    }
-}
-
-#[async_trait]
-impl Proxy for ProxyRouter {
-    async fn proxy(&self, request: Request, url: Url) -> Result<Response, ErrorCause> {
-        // TODO map errors
-        let response = proxy::proxy(url, request, &self.http_client)
-            .await
-            .map_err(|e| error_infer(&e))?;
-
-        Ok(response)
     }
 }
 
@@ -799,7 +776,6 @@ pub async fn status(
 
 // Handler: Unified handler for query/call/read_state calls
 pub async fn handle_canister(
-    State(p): State<Arc<dyn Proxy>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
     Extension(node): Extension<Arc<Node>>,
@@ -808,14 +784,16 @@ pub async fn handle_canister(
     let url = node
         .build_url(ctx.request_type, canister_id.into())
         .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
+
     // Proxy the request
-    let resp = p.proxy(request, url).await?;
+    let resp = proxy::proxy(url, request, &node.cli)
+        .await
+        .map_err(|e| error_infer(&e))?;
 
     Ok(resp)
 }
 
 pub async fn handle_subnet(
-    State(p): State<Arc<dyn Proxy>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(subnet_id): Extension<SubnetId>,
     Extension(node): Extension<Arc<Node>>,
@@ -824,8 +802,11 @@ pub async fn handle_subnet(
     let url = node
         .build_url(ctx.request_type, subnet_id.get().into())
         .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
+
     // Proxy the request
-    let resp = p.proxy(request, url).await?;
+    let resp = proxy::proxy(url, request, &node.cli)
+        .await
+        .map_err(|e| error_infer(&e))?;
 
     Ok(resp)
 }

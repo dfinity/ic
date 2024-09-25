@@ -5,8 +5,9 @@ use std::{str::FromStr, time::Duration};
 use anyhow::Error;
 
 use crate::{
+    http::StubClient,
     snapshot::{Snapshot, Snapshotter},
-    test_utils::create_fake_registry_client,
+    test_utils::{create_fake_registry_client, StubGenerator},
 };
 
 // Check that resolver yields correct IPs
@@ -20,8 +21,13 @@ async fn test_resolve() -> Result<(), Error> {
     let dns_resolver = DnsResolver::new(Arc::clone(&snapshot));
 
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter =
-        Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+    let mut snapshotter = Snapshotter::new(
+        Arc::clone(&snapshot),
+        channel_send,
+        reg,
+        Duration::ZERO,
+        Arc::new(StubGenerator(StubClient)),
+    );
     snapshotter.snapshot()?;
 
     // Check that resolved node's IPs match expected ones

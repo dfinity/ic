@@ -1,6 +1,11 @@
 use super::*;
 
-use crate::test_utils::{create_fake_registry_client, valid_tls_certificate_and_validation_time};
+use crate::{
+    http::StubClient,
+    test_utils::{
+        create_fake_registry_client, valid_tls_certificate_and_validation_time, StubGenerator,
+    },
+};
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
@@ -10,8 +15,13 @@ async fn test_routing_table() -> Result<(), Error> {
     let reg = Arc::new(reg);
 
     let (channel_send, _) = watch::channel(None);
-    let mut snapshotter =
-        Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+    let mut snapshotter = Snapshotter::new(
+        Arc::clone(&snapshot),
+        channel_send,
+        reg,
+        Duration::ZERO,
+        Arc::new(StubGenerator(StubClient)),
+    );
     snapshotter.snapshot()?;
     let snapshot = snapshot.load_full().unwrap();
 
