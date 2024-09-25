@@ -272,12 +272,21 @@ impl CanisterHistory {
 pub struct TaskQueue {
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
-    pub queue: VecDeque<ExecutionTask>,
+    queue: VecDeque<ExecutionTask>,
+
+    /// Status of low_on_wasm_memory hook execution.
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 impl TaskQueue {
-    pub fn from_checkpoint(queue: VecDeque<ExecutionTask>) -> Self {
-        TaskQueue { queue }
+    pub fn from_checkpoint(
+        queue: VecDeque<ExecutionTask>,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        TaskQueue {
+            queue,
+            on_low_wasm_memory_hook_status,
+        }
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
@@ -310,6 +319,14 @@ impl TaskQueue {
 
     pub fn len(&self) -> usize {
         self.queue.len()
+    }
+
+    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
+        self.on_low_wasm_memory_hook_status = status;
+    }
+
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
     }
 
     // 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
@@ -555,9 +572,6 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
-
-    /// Status of low_on_wasm_memory hook execution.
-    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
@@ -969,7 +983,6 @@ impl SystemState {
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::from(0),
-            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
         }
     }
 
@@ -1016,7 +1029,7 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(task_queue),
+            task_queue: TaskQueue::from_checkpoint(task_queue, on_low_wasm_memory_hook_status),
             global_timer,
             canister_version,
             canister_history,
@@ -1029,7 +1042,6 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-            on_low_wasm_memory_hook_status,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1791,11 +1803,11 @@ impl SystemState {
     }
 
     pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
-        self.on_low_wasm_memory_hook_status = status;
+        self.task_queue.set_on_low_wasm_memory_hook_status(status);
     }
 
     pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
-        self.on_low_wasm_memory_hook_status
+        self.task_queue.get_on_low_wasm_memory_hook_status()
     }
 }
 
