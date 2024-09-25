@@ -735,6 +735,14 @@ fn advance_target_version(request: AdvanceTargetVersionRequest) {
     })
 }
 
+#[export_name = "canister_update upgrade_to_next"]
+fn upgrade_to_next(request: UpgradeToNextRequest) {
+    over(candid_one, |request: UpgradeToNextRequest| {
+        todo!();
+        UpgradeToNextResponse {}
+    })
+}
+
 /// Mints tokens for testing
 #[cfg(feature = "test")]
 #[export_name = "canister_update mint_tokens"]

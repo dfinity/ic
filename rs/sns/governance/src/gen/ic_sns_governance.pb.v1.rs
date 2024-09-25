@@ -1636,8 +1636,11 @@ pub struct Governance {
     #[prost(message, optional, tag = "23")]
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// Version SNS is in process of upgrading to.
+    /// TODO: this probably needs to go into a new field, pending_upgrades or something.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    #[prost(message, repeated, tag = "28")]
+    pub queued_versions: ::prost::alloc::vec::Vec<governance::UpgradeInProgress>,
     /// True if the heartbeat function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]

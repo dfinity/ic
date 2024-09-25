@@ -1425,7 +1425,9 @@ message Governance {
   }
 
   // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 24;
+  // TODO: this probably needs to go into a new field, pending_upgrades or something.
+  optional UpgradeInProgress pending_version = 24;
+  repeated UpgradeInProgress queued_versions = 28;
 
   // True if the heartbeat function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
@@ -2148,5 +2150,13 @@ message AdvanceTargetVersionRequest {
 }
 
 message AdvanceTargetVersionResponse {
+
+}
+
+message UpgradeToNextRequest {
+
+}
+
+message UpgradeToNextResponse {
 
 }
