@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
@@ -45,8 +46,46 @@ pub enum FetchTxStatus {
 /// input address will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
-    pub tx: Transaction,
+    pub tx: TransactionInputOutput,
     pub input_addresses: Vec<Option<Address>>,
+}
+
+/// Instead of storing the full Transaction data, we only
+/// store relevant bits, including inputs (which are previous
+/// outputs) and output addresses.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TransactionInputOutput {
+    pub inputs: Vec<PreviousOutput>,
+    pub outputs: Vec<Address>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PreviousOutput {
+    pub txid: Txid,
+    pub vout: u32,
+}
+
+impl TryFrom<Transaction> for TransactionInputOutput {
+    type Error = bitcoin::address::FromScriptError;
+
+    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+        let inputs = tx
+            .input
+            .iter()
+            .map(|input| PreviousOutput {
+                txid: Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32])),
+                vout: input.previous_output.vout,
+            })
+            .collect();
+        let mut outputs = Vec::new();
+        for output in tx.output.iter() {
+            outputs.push(Address::from_script(
+                &output.script_pubkey,
+                bitcoin::Network::Bitcoin,
+            )?)
+        }
+        Ok(Self { inputs, outputs })
+    }
 }
 
 // Max number of concurrent http outcalls.
