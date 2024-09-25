@@ -11422,6 +11422,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sha3"
+version = "0.9.0"
+dependencies = [
+ "hex",
+ "sha3",
+]
+
+[[package]]
 name = "ic-signature-verification"
 version = "0.2.0"
 dependencies = [
