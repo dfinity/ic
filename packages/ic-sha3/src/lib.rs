@@ -16,7 +16,7 @@
 /// An example of using Keccak-256 to hash data piece by piece:
 /// ```
 /// use std::io::Write;
-/// use ic_crypto_sha3::Keccak256;
+/// use ic_sha3::Keccak256;
 ///
 /// let mut hasher = Keccak256::new();
 /// hasher.write("Hello ").write("world!");
@@ -27,7 +27,7 @@
 ///
 /// An example of using Keccak-256 to hash an entire buffer in one go:
 /// ```
-/// use ic_crypto_sha3::Keccak256;
+/// use ic_sha3::Keccak256;
 ///
 /// let result = Keccak256::hash("Hello world!");
 /// assert_eq!(result[..], hex::decode("ecd0e108a98e192af1d2c25055f4e3bed784b5c877204e73219a5203251feaab")
