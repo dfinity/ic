@@ -5815,3 +5815,97 @@ fn scheduled_heap_delta_limit_scaling() {
     assert_eq!(10, scheduled_limit(50, 50, 9, 10, 5));
     assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
 }
+
+#[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
+fn can_fully_execute_multiple_canisters_in_one_round(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+) {
+    let max_instructions = 20;
+    let max_messages_per_round = 2;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: (max_instructions * max_messages_per_round).into(),
+            max_instructions_per_message: max_instructions.into(),
+            max_instructions_per_message_without_dts: max_instructions.into(),
+            max_instructions_per_slice: max_instructions.into(),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump up the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Create `max_messages_per_round * 2` canisters for each scheduler core.
+    let num_canisters = scheduler_cores as u64 * max_messages_per_round * 2;
+    let mut canisters = vec![];
+    for _ in 0..num_canisters {
+        canisters.push(test.create_canister());
+    }
+
+    // Send one messages per canister. Having `max_messages_per_round * 2` canisters,
+    // only half of them will finish in one round.
+    for canister in canisters.iter() {
+        test.send_ingress(*canister, ingress(max_instructions));
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let mut total_accumulated_priority = 0;
+    for (i, canister) in test.state().canisters_iter().enumerate() {
+        if i < num_canisters as usize / 2 {
+            // The first half of the canisters should finish their messages.
+            assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
+            assert_eq!(canister.system_state.canister_metrics.executed, 1);
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                test.last_round()
+            );
+        } else {
+            // The second half of the canisters should still have their messages.
+            assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
+            assert_eq!(canister.system_state.canister_metrics.executed, 0);
+            assert_eq!(canister.scheduler_state.last_full_execution_round, 0.into());
+        }
+        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
+    }
+    assert_eq!(total_accumulated_priority, 0);
+
+    // Send one more message for first half of the canisters.
+    for (i, canister) in canisters.iter().enumerate() {
+        if i < num_canisters as usize / 2 {
+            test.send_ingress(*canister, ingress(max_instructions));
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let mut total_accumulated_priority = 0;
+    for (i, canister) in test.state().canisters_iter().enumerate() {
+        // Now all the canisters should be executed once.
+        assert_eq!(canister.system_state.canister_metrics.executed, 1);
+        if i < num_canisters as usize / 2 {
+            // The first half of the canisters should have messages.
+            assert_eq!(canister.system_state.queues().ingress_queue_size(), 1);
+            // The first half of the canisters should be executed two round ago.
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round.get(),
+                test.last_round().get() - 1
+            );
+        } else {
+            // The second half of the canisters should finish their messages.
+            assert_eq!(canister.system_state.queues().ingress_queue_size(), 0);
+            // The second half of the canisters should be executed in the last round.
+            assert_eq!(
+                canister.scheduler_state.last_full_execution_round,
+                test.last_round()
+            );
+        }
+        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
+    }
+    assert_eq!(total_accumulated_priority, 0);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+}

@@ -216,6 +216,9 @@ impl SchedulerImpl {
         // of canisters and their compute allocations.
         let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
 
+        // Total penalty for canisters fully executed last round and not penalized yet.
+        let mut total_last_round_penalty_percent = 0;
+
         // Compute the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
         let mut accumulated_priority_deviation = 0;
@@ -232,7 +235,23 @@ impl SchedulerImpl {
             }
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
-            let accumulated_priority = canister.scheduler_state.accumulated_priority;
+            let mut accumulated_priority = canister.scheduler_state.accumulated_priority;
+
+            total_compute_allocation_percent += compute_allocation.as_percent() as i64;
+            accumulated_priority_invariant += accumulated_priority;
+            accumulated_priority_deviation +=
+                accumulated_priority.get() * accumulated_priority.get();
+
+            // Penalize canisters fully executed during the last round and not penalized yet.
+            let last_round = current_round.get().saturating_sub(1);
+            if !has_aborted_or_paused_execution
+                && canister.scheduler_state.last_full_execution_round.get() == last_round
+                && accumulated_priority > 0.into()
+            {
+                accumulated_priority -= (100 * multiplier).into();
+                total_last_round_penalty_percent += 100;
+            }
+
             round_states.push(CanisterRoundState {
                 canister_id,
                 accumulated_priority,
@@ -240,11 +259,6 @@ impl SchedulerImpl {
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
                 has_aborted_or_paused_execution,
             });
-
-            total_compute_allocation_percent += compute_allocation.as_percent() as i64;
-            accumulated_priority_invariant += accumulated_priority;
-            accumulated_priority_deviation +=
-                accumulated_priority.get() * accumulated_priority.get();
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
@@ -271,9 +285,10 @@ impl SchedulerImpl {
         // `(compute_capacity - total_compute_allocation) * multiplier / number_of_canisters`
         // can be simplified to just
         // `(compute_capacity - total_compute_allocation) * scheduler_cores`
-        let free_capacity_per_canister = (compute_capacity_percent
-            .saturating_sub(total_compute_allocation_percent))
-            * scheduler_cores as i64;
+        let free_capacity_per_canister = compute_capacity_percent
+            .saturating_add(total_last_round_penalty_percent)
+            .saturating_sub(total_compute_allocation_percent)
+            .saturating_mul(scheduler_cores as i64);
 
         // Fully divide the free allocation across all canisters.
         let mut long_executions_compute_allocation = 0;
