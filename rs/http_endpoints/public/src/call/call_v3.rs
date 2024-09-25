@@ -31,7 +31,10 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope},
+    consensus::certification::Certification,
+    messages::{
+        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpRequestEnvelope, MessageId,
+    },
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
@@ -191,10 +194,28 @@ async fn call_sync_v3(
         .await
     {
         Ok(ingress_submitter) => ingress_submitter,
-        Err(err) => return CallV3Response::from(err),
+        Err(ingress_error) => return CallV3Response::from(ingress_error),
     };
 
     let message_id = ingress_submitter.message_id();
+
+    // Check if the message is already known.
+    // If it is known, we can return the certificate without re-submitting the message
+    // to the ingress pool.
+    if let Some((tree, certification)) =
+        tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
+    {
+        if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
+            let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+            let signature = certification.signed.signature.signature.get().0;
+
+            return CallV3Response::Certificate(Certificate {
+                tree,
+                signature: Blob(signature),
+                delegation: delegation_from_nns,
+            });
+        }
+    };
 
     let certification_subscriber = match ingress_watcher_handle
         .subscribe_for_certification(message_id.clone())
@@ -272,18 +293,66 @@ async fn call_sync_v3(
         }
     }
 
+    let Some((tree, certification)) =
+        tree_and_certificate_for_message(state_reader, message_id.clone()).await
+    else {
+        return CallV3Response::Accepted(
+            "Certified state is not available. Please try /read_state.",
+        );
+    };
+
+    // Log the status of the message.
+    let status_label = match parsed_message_status(&tree, &message_id) {
+        ParsedMessageStatus::Known(status) => status,
+        ParsedMessageStatus::Unknown => "unknown".to_string(),
+    };
+
+    metrics
+        .call_v3_certificate_status_total
+        .with_label_values(&[&status_label])
+        .inc();
+
+    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let signature = certification.signed.signature.signature.get().0;
+
+    CallV3Response::Certificate(Certificate {
+        tree,
+        signature: Blob(signature),
+        delegation: delegation_from_nns,
+    })
+}
+
+enum ParsedMessageStatus {
+    Known(String),
+    Unknown,
+}
+
+fn parsed_message_status(tree: &MixedHashTree, message_id: &MessageId) -> ParsedMessageStatus {
+    let status_path = [&b"request_status"[..], message_id.as_ref(), &b"status"[..]];
+
+    match tree.lookup(&status_path) {
+        LookupStatus::Found(MixedHashTree::Leaf(status)) => ParsedMessageStatus::Known(
+            String::from_utf8(status.clone()).unwrap_or_else(|_| "invalid_utf8_status".to_string()),
+        ),
+        // This should never happen. Otherwise the tree is not following the spec.
+        // TODO: Log as error.
+        LookupStatus::Found(_) => ParsedMessageStatus::Known("Status not a leaf".to_string()),
+        LookupStatus::Absent | LookupStatus::Unknown => ParsedMessageStatus::Unknown,
+    }
+}
+
+async fn tree_and_certificate_for_message(
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    message_id: MessageId,
+) -> Option<(MixedHashTree, Certification)> {
     let certified_state_reader = match tokio::task::spawn_blocking(move || {
         state_reader.get_certified_state_snapshot()
     })
     .await
     {
-        Ok(Some(certified_state_reader)) => certified_state_reader,
-        Ok(None) | Err(_) => {
-            return CallV3Response::Accepted(
-                "Certified state is not available. Please try /read_state.",
-            );
-        }
-    };
+        Ok(Some(certified_state_reader)) => Some(certified_state_reader),
+        Ok(None) | Err(_) => None,
+    }?;
 
     // We always add time path to comply with the IC spec.
     let time_path = Path::from(Label::from("time"));
@@ -296,37 +365,7 @@ async fn call_sync_v3(
         sparse_labeled_tree_from_paths(&[time_path, request_status_path])
             .expect("Path is within length bound.");
 
-    let Some((tree, certification)) = certified_state_reader.read_certified_state(&tree) else {
-        return CallV3Response::Accepted(
-            "Certified state is not available. Please try /read_state.",
-        );
-    };
-
-    {
-        let status_path = [&b"request_status"[..], message_id.as_ref(), &b"status"[..]];
-
-        let status_label = match tree.lookup(&status_path) {
-            LookupStatus::Found(MixedHashTree::Leaf(status)) => String::from_utf8(status.clone())
-                .unwrap_or_else(|_| "invalid_utf8_status".to_string()),
-            // This should never happen. Otherwise the tree is not following the spec.
-            LookupStatus::Found(_) => "Status not a leaf".to_string(),
-            LookupStatus::Absent | LookupStatus::Unknown => "unknown".to_string(),
-        };
-
-        metrics
-            .call_v3_certificate_status_total
-            .with_label_values(&[&status_label])
-            .inc();
-    }
-
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
-    let signature = certification.signed.signature.signature.get().0;
-
-    CallV3Response::Certificate(Certificate {
-        tree,
-        signature: Blob(signature),
-        delegation: delegation_from_nns,
-    })
+    certified_state_reader.read_certified_state(&tree)
 }
 
 pub(crate) fn new_asynchronous_call_service_router(

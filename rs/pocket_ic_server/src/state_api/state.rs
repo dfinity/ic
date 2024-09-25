@@ -6,10 +6,14 @@ use crate::pocket_ic::{
     MockCanisterHttp, PocketIc,
 };
 use crate::state_api::canister_id::{self, DomainResolver, ResolvesDomain};
+use crate::state_api::routes::verify_cbor_content_header;
 use crate::{InstanceId, OpId, Operation};
 use axum::{
-    extract::{Request as AxumRequest, State},
+    body::Body,
+    extract::{DefaultBodyLimit, Path, Request as AxumRequest, State},
     response::{IntoResponse, Response},
+    routing::{get, post},
+    Router,
 };
 use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
@@ -21,9 +25,12 @@ use http::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
-    HeaderName, Method, StatusCode,
+    HeaderName, Method, StatusCode, Uri,
 };
-use http_body_util::{BodyExt, LengthLimitError, Limited};
+use http_body_util::{BodyExt, Full, LengthLimitError, Limited};
+use hyper::body::{Bytes, Incoming};
+use hyper::{Request, Response as HyperResponse};
+use hyper_util::client::legacy::{connect::HttpConnector, Client};
 use ic_http_endpoints_public::cors_layer;
 use ic_http_gateway::{CanisterRequest, HttpGatewayClient, HttpGatewayRequestArgs};
 use ic_https_outcalls_adapter::CanisterHttp;
@@ -52,7 +59,7 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle},
     time::{self, sleep, Instant},
 };
-use tonic::Request;
+use tonic::Request as TonicRequest;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
@@ -493,17 +500,43 @@ impl IntoResponse for ErrorCause {
 }
 
 pub(crate) struct HandlerState {
-    client: HttpGatewayClient,
+    http_gateway_client: HttpGatewayClient,
+    backend_client: Client<HttpConnector, Body>,
     resolver: DomainResolver,
+    replica_url: String,
 }
 
 impl HandlerState {
-    fn new(client: HttpGatewayClient, resolver: DomainResolver) -> Self {
-        Self { client, resolver }
+    fn new(
+        http_gateway_client: HttpGatewayClient,
+        backend_client: Client<HttpConnector, Body>,
+        resolver: DomainResolver,
+        replica_url: String,
+    ) -> Self {
+        Self {
+            http_gateway_client,
+            backend_client,
+            resolver,
+            replica_url,
+        }
     }
 
     pub(crate) fn resolver(&self) -> &DomainResolver {
         &self.resolver
+    }
+}
+
+enum HandlerResponse {
+    ResponseBody(Response<Body>),
+    ResponseIncoming(Response<Incoming>),
+}
+
+impl IntoResponse for HandlerResponse {
+    fn into_response(self) -> Response {
+        match self {
+            HandlerResponse::ResponseBody(response) => response.into_response(),
+            HandlerResponse::ResponseIncoming(response) => response.into_response(),
+        }
     }
 }
 
@@ -514,8 +547,8 @@ async fn handler(
     query_param_canister_id: Option<canister_id::QueryParam>,
     referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
     referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
-    request: AxumRequest,
-) -> Result<Response, ErrorCause> {
+    mut request: AxumRequest,
+) -> Result<impl IntoResponse, ErrorCause> {
     // Resolve the domain
     let lookup =
         extract_authority(&request).and_then(|authority| state.resolver.resolve(&authority));
@@ -530,41 +563,60 @@ async fn handler(
         .or(query_param_canister_id)
         .or(referer_host_canister_id)
         .or(referer_query_param_canister_id)
-        .ok_or(ErrorCause::CanisterIdNotFound)?;
+        .ok_or(ErrorCause::CanisterIdNotFound);
 
-    let (parts, body) = request.into_parts();
+    if request.uri().path().starts_with("/_/") && canister_id.is_err() {
+        *request.uri_mut() = Uri::from_str(&format!(
+            "{}{}",
+            state.replica_url,
+            request
+                .uri()
+                .path_and_query()
+                .map(|p| p.as_str())
+                .unwrap_or_default()
+        ))
+        .unwrap();
+        state
+            .backend_client
+            .request(request)
+            .await
+            .map(HandlerResponse::ResponseIncoming)
+            .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
+    } else {
+        let (parts, body) = request.into_parts();
 
-    // Collect the request body up to the limit
-    let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
-        .collect()
-        .await
-        .map_err(|e| {
-            // TODO improve the inferring somehow
-            e.downcast_ref::<LengthLimitError>().map_or_else(
-                || ErrorCause::UnableToReadBody(e.to_string()),
-                |_| ErrorCause::RequestTooLarge,
-            )
-        })?
-        .to_bytes()
-        .to_vec();
+        // Collect the request body up to the limit
+        let body = Limited::new(body, MAX_REQUEST_BODY_SIZE)
+            .collect()
+            .await
+            .map_err(|e| {
+                // TODO improve the inferring somehow
+                e.downcast_ref::<LengthLimitError>().map_or_else(
+                    || ErrorCause::UnableToReadBody(e.to_string()),
+                    |_| ErrorCause::RequestTooLarge,
+                )
+            })?
+            .to_bytes()
+            .to_vec();
 
-    let args = HttpGatewayRequestArgs {
-        canister_request: CanisterRequest::from_parts(parts, body),
-        canister_id,
-    };
+        let args = HttpGatewayRequestArgs {
+            canister_request: CanisterRequest::from_parts(parts, body),
+            canister_id: canister_id?,
+        };
 
-    let resp = {
-        // Execute the request
-        let mut req = state.client.request(args);
-        // Skip verification if it is a "raw" request.
-        req.unsafe_set_skip_verification(lookup.map(|v| !v.verify).unwrap_or_default());
-        req.send().await
-    };
+        let resp = {
+            // Execute the request
+            let mut req = state.http_gateway_client.request(args);
+            // Skip verification if it is a "raw" request.
+            req.unsafe_set_skip_verification(lookup.map(|v| !v.verify).unwrap_or_default());
+            req.send().await
+        };
 
-    // Convert it into Axum response
-    let response = resp.canister_response.into_response();
+        // Convert it into Axum response
+        let response = resp.canister_response.into_response();
 
-    Ok(response)
+        Ok(HandlerResponse::ResponseBody(response))
+    }
 }
 
 // Attempts to extract host from HTTP2 "authority" pseudo-header or from HTTP/1.1 "Host" header
@@ -692,16 +744,6 @@ impl ApiState {
         &self,
         http_gateway_config: HttpGatewayConfig,
     ) -> Result<HttpGatewayInfo, String> {
-        use crate::state_api::routes::verify_cbor_content_header;
-        use axum::extract::{DefaultBodyLimit, Path, State};
-        use axum::routing::{get, post};
-        use axum::Router;
-        use http_body_util::Full;
-        use hyper::body::{Bytes, Incoming};
-        use hyper::header::CONTENT_TYPE;
-        use hyper::{Method, Request, Response as HyperResponse, StatusCode};
-        use hyper_util::client::legacy::{connect::HttpConnector, Client};
-
         async fn handler_status(
             State(replica_url): State<String>,
             bytes: Bytes,
@@ -712,23 +754,6 @@ impl ApiState {
             let req = Request::builder()
                 .uri(url)
                 .header(CONTENT_TYPE, "application/cbor")
-                .body(Full::<Bytes>::new(bytes))
-                .unwrap();
-            client
-                .request(req)
-                .await
-                .map_err(|e| ErrorCause::ConnectionFailure(e.to_string()))
-        }
-
-        async fn handler_dashboard(
-            State(replica_url): State<String>,
-            bytes: Bytes,
-        ) -> Result<HyperResponse<Incoming>, ErrorCause> {
-            let client =
-                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
-            let url = format!("{}/_/dashboard", replica_url);
-            let req = Request::builder()
-                .uri(url)
                 .body(Full::<Bytes>::new(bytes))
                 .unwrap();
             client
@@ -880,6 +905,8 @@ impl ApiState {
             .unwrap();
         agent.fetch_root_key().await.map_err(|e| e.to_string())?;
 
+        let replica_url = replica_url.trim_end_matches('/').to_string();
+
         let mut http_gateways = self.http_gateways.write().await;
         let instance_id = http_gateways.len();
         let http_gateway_details = HttpGatewayDetails {
@@ -897,10 +924,12 @@ impl ApiState {
         let shutdown_handle = handle.clone();
         let axum_handle = handle.clone();
         spawn(async move {
-            let client = ic_http_gateway::HttpGatewayClientBuilder::new()
+            let http_gateway_client = ic_http_gateway::HttpGatewayClientBuilder::new()
                 .with_agent(agent)
                 .build()
                 .unwrap();
+            let backend_client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
             let domain_resolver = DomainResolver::new(
                 http_gateway_config
                     .domains
@@ -909,7 +938,12 @@ impl ApiState {
                     .map(|d| fqdn!(d))
                     .collect(),
             );
-            let state_handler = Arc::new(HandlerState::new(client, domain_resolver.clone()));
+            let state_handler = Arc::new(HandlerState::new(
+                http_gateway_client,
+                backend_client,
+                domain_resolver,
+                replica_url.clone(),
+            ));
 
             let router_api_v2 = Router::new()
                 .route(
@@ -942,7 +976,6 @@ impl ApiState {
                 )
                 .fallback(|| async { (StatusCode::NOT_FOUND, "") });
             let router = Router::new()
-                .route("/_/dashboard", get(handler_dashboard))
                 .nest("/api/v2", router_api_v2)
                 .nest("/api/v3", router_api_v3)
                 .fallback(
@@ -961,7 +994,7 @@ impl ApiState {
                 )
                 .layer(DefaultBodyLimit::disable())
                 .layer(cors_layer())
-                .with_state(replica_url.trim_end_matches('/').to_string())
+                .with_state(replica_url)
                 .into_make_service();
 
             let http_gateways_for_shutdown = http_gateways.clone();
@@ -1049,7 +1082,7 @@ impl ApiState {
             body: canister_http_request.body,
             socks_proxy_allowed: false,
         };
-        let request = Request::new(canister_http_request);
+        let request = TonicRequest::new(canister_http_request);
         canister_http_adapter
             .https_outcall(request)
             .await

@@ -597,6 +597,7 @@ pub fn process(
         embedder.config().feature_flags.canister_backtrace,
         embedder.config().max_sum_exported_function_name_lengths,
         stable_memory.clone(),
+        wasm_memory.size,
         out_of_instructions_handler,
         logger,
     );
@@ -773,11 +774,24 @@ pub fn process(
         }
         Err(err) => {
             if let Some(log_message) = match err {
-                HypervisorError::Trapped(trap_code) => Some(format!("[TRAP]: {}", trap_code)),
-                HypervisorError::CalledTrap(text) if text.is_empty() => {
-                    Some("[TRAP]: (no message)".to_string())
+                HypervisorError::Trapped {
+                    trap_code,
+                    backtrace,
+                } => match backtrace {
+                    Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
+                    None => Some(format!("[TRAP]: {}", trap_code)),
+                },
+                HypervisorError::CalledTrap { message, backtrace } => {
+                    let message = if message.is_empty() {
+                        "(no message)"
+                    } else {
+                        &message
+                    };
+                    match backtrace {
+                        Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
+                        None => Some(format!("[TRAP]: {}", message)),
+                    }
                 }
-                HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
                 canister_log.add_record(timestamp_nanos, log_message.into_bytes());
