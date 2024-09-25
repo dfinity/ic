@@ -1,33 +1,8 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
 
 package(default_visibility = ["//visibility:private"])
 
 MACRO_DEPENDENCIES = []
-
-rust_library(
-    name = "execution_fuzzers",
-    testonly = True,
-    srcs = glob(["src/*.rs"]),
-    crate_features = select({
-        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
-        "//conditions:default": [],
-    }),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_flags = select({
-        "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
-        "//conditions:default": [],
-    }),
-    version = "0.1.0",
-    deps = [
-        # Keep sorted.
-        "//rs/embedders/fuzz:wasm_fuzzers",
-        "//rs/registry/subnet_type",
-        "//rs/state_machine_tests",
-        "//rs/types/management_canister_types",
-        "//rs/types/types",
-    ],
-)
 
 rust_fuzz_test_binary(
     name = "execute_subnet_message_update_settings",
@@ -49,9 +24,13 @@ rust_fuzz_test_binary(
         "fuzz_targets/execute_system_api_call.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":execution_fuzzers"] + [
+    deps = [
         # Keep sorted.
         "//rs/embedders/fuzz:wasm_fuzzers",
+        "//rs/registry/subnet_type",
+        "//rs/state_machine_tests",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:libfuzzer-sys",
     ],
 )
