@@ -12,7 +12,7 @@ use icp_ledger::{
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        SubnetConfigSet, SubnetKind,
+        SubnetKind,
     },
     update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
@@ -209,12 +209,10 @@ where
 
 #[test]
 fn test_create_canister_with_id() {
-    let config = SubnetConfigSet {
-        nns: true,
-        ii: true,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config(config);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet()
+        .build();
     // goes on NNS
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let actual_canister_id = pic
@@ -608,7 +606,7 @@ fn test_root_key() {
 #[test]
 #[should_panic(expected = "SubnetConfigSet must contain at least one subnet")]
 fn test_new_pocket_ic_without_subnets_panics() {
-    let _pic: PocketIc = PocketIc::from_config(SubnetConfigSet::default());
+    let _pic: PocketIc = PocketIcBuilder::new().build();
 }
 
 #[test]
@@ -1516,4 +1514,46 @@ fn test_canister_http_with_one_additional_response() {
         })],
     };
     pic.mock_canister_http_response(mock_canister_http_response);
+}
+
+#[test]
+fn subnet_metrics() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    assert!(pic
+        .get_subnet_metrics(Principal::management_canister())
+        .is_none());
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    assert_eq!(metrics.num_canisters, 1);
+    assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, counter_wasm(), vec![], None);
+
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    assert_eq!(metrics.num_canisters, 2);
+    assert!((1 << 17) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 18));
+
+    pic.uninstall_canister(canister_id, None).unwrap();
+    pic.stop_canister(canister_id, None).unwrap();
+
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    assert_eq!(metrics.num_canisters, 2);
+    assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
+
+    pic.delete_canister(canister_id, None).unwrap();
+
+    let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
+    assert_eq!(metrics.num_canisters, 1);
+    assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
