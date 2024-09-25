@@ -126,7 +126,8 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          RUN_ON_DIFF_ONLY: "true"
+          # if the PR is labeled with RUN_ALL_BAZEL_TARGETS, set RUN_ON_DIFF_ONLY to false
+          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'RUN_ALL_BAZEL_TARGETS') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
@@ -258,7 +259,7 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
           BAZEL_COMMAND: "build"
-          RUN_ON_DIFF_ONLY: "true"
+          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'RUN_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:
