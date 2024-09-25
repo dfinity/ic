@@ -297,6 +297,7 @@ impl TaskQueue {
         self.queue.pop_front()
     }
 
+    #[cfg(test)]
     pub fn pop_back(&mut self) -> Option<ExecutionTask> {
         self.queue.pop_back()
     }
@@ -305,6 +306,7 @@ impl TaskQueue {
         self.queue.push_front(task);
     }
 
+    #[cfg(test)]
     pub fn push_back(&mut self, task: ExecutionTask) {
         self.queue.push_back(task);
     }
