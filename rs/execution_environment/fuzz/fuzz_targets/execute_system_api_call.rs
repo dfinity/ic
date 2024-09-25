@@ -17,7 +17,7 @@ fuzz_target!(|module: ICWasmModule| {
     let wasm = module.module.to_bytes();
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
-        .no_dts()
+        .no_dts()  // Disable DTS to avoid sandbox_launcher binary dependency (which does not work well with fuzz tests).
         .with_checkpoints_enabled(false)
         .build();
     let canister_id = env.create_canister_with_cycles(
