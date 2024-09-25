@@ -383,7 +383,7 @@ pub struct Ledger {
     #[serde(default)]
     pub approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
-    stable_approvals: AllowanceTable<StableAllowancesData>,
+    pub stable_approvals: AllowanceTable<StableAllowancesData>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -543,18 +543,30 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
+        if !self.is_ready() {
+            ic_cdk::trap("The Ledger is not ready");
+        }
         &self.balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
+        if !self.is_ready() {
+            ic_cdk::trap("The Ledger is not ready");
+        }
         &mut self.balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
+        if !self.is_ready() {
+            ic_cdk::trap("The Ledger is not ready");
+        }
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
+        if !self.is_ready() {
+            ic_cdk::trap("The Ledger is not ready");
+        }
         &mut self.stable_approvals
     }
 

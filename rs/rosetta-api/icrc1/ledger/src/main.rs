@@ -248,7 +248,7 @@ fn migrate_next_part(instruction_limit: u64) {
                     match ledger.approvals.allowances_data.pop_first_allowance() {
                         Some((account_spender, allowance)) => {
                             ledger
-                                .approvals_mut()
+                                .stable_approvals
                                 .allowances_data
                                 .set_allowance(account_spender, allowance);
                             migrated_allowances += 1;
@@ -263,7 +263,7 @@ fn migrate_next_part(instruction_limit: u64) {
                     match ledger.approvals.allowances_data.pop_first_expiry() {
                         Some((timestamp, account_spender)) => {
                             ledger
-                                .approvals_mut()
+                                .stable_approvals
                                 .allowances_data
                                 .insert_expiry(timestamp, account_spender);
                             migrated_expirations += 1;
