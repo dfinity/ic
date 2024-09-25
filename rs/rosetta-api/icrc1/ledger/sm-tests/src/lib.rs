@@ -1,4 +1,5 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
+use crate::metrics::parse_metric;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
@@ -2654,7 +2655,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
     const APPROVE_AMOUNT: u64 = 150_000;
     let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+        system_time_to_nanos(env.time()) + Duration::from_secs(5000 * 3600).as_nanos() as u64;
 
     let mut expected_allowances = vec![];
 
@@ -2709,6 +2710,9 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
+
+    let stable_upgrade_migration_steps = parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+    assert_eq!(stable_upgrade_migration_steps, 1);
 
     // Add some more approvals
     for a1 in &accounts {
