@@ -27,15 +27,10 @@ if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BR
     RUN_ON_DIFF_ONLY="false"
 fi
 
-# check if the workflow was triggered by a pull request and if the job requested running only on diff
-if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
-    # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
-    if [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-        s3_upload="True"
-    elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-        # get bazel targets that changed within the MR
-        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-    fi
+# check if the job requested running only on diff
+[[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file
