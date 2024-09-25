@@ -1713,4 +1713,45 @@ pub mod testing {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
     }
+
+    #[test]
+    fn future_proof_canister_snapshots_for_system_state_changes() {
+        let system_state = SystemState::new_for_testing(
+            0.into(),
+            Default::default(),
+            Default::default(),
+            0.into(),
+            CanisterStatus::Stopped,
+        );
+
+        // This is a simple catch for future system state changes.
+        // If you add a new field to the system state, consider
+        // if it should be included in the canister snapshot.
+        // Please contact the Execution Team if you have any questions.
+        let SystemState {
+            controllers: _,
+            canister_id: _,
+            queues: _,
+            memory_allocation: _,
+            wasm_memory_threshold: _,
+            freeze_threshold: _,
+            status: _,
+            certified_data: _,
+            canister_metrics: _,
+            cycles_balance: _,
+            ingress_induction_cycles_debit: _,
+            reserved_balance: _,
+            reserved_balance_limit: _,
+            task_queue: _,
+            global_timer: _,
+            canister_version: _,
+            canister_history: _,
+            wasm_chunk_store: _,
+            log_visibility: _,
+            canister_log: _,
+            wasm_memory_limit: _,
+            next_snapshot_id: _,
+            snapshots_memory_usage: _,
+        } = system_state;
+    }
 }

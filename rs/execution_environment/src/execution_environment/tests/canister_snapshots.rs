@@ -13,7 +13,9 @@ use ic_management_canister_types::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotOperation, canister_state::system_state::CyclesUseCase,
+    canister_snapshots::SnapshotOperation,
+    canister_state::{execution_state::WasmBinary, system_state::CyclesUseCase},
+    CanisterState, ExecutionState, SchedulerState,
 };
 use ic_test_utilities_execution_environment::{
     get_output_messages, ExecutionTest, ExecutionTestBuilder,
@@ -28,6 +30,7 @@ use ic_types::{
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_gt;
 use serde_bytes::ByteBuf;
+use std::borrow::Borrow;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
@@ -1907,4 +1910,61 @@ fn snapshot_must_include_globals() {
         .non_replicated_query(canister_id, "read_global", vec![])
         .unwrap();
     assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
+}
+
+#[test]
+fn future_proof_canister_snapshots_for_canister_state_changes() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_snapshots(FlagStatus::Disabled)
+        .build();
+    let uc = test.universal_canister().unwrap();
+    let canister_state = test.canister_state(uc).clone();
+
+    // This is a simple catch for future canister state changes.
+    // If you add a new field to the system state, consider
+    // if it should be included in the canister snapshot.
+    let CanisterState {
+        // There is a separate test for SystemState.
+        system_state: _,
+        execution_state,
+        scheduler_state,
+    } = canister_state;
+
+    // This is a simple catch for future execution state changes.
+    // If you add a new field to the execution state, consider
+    // if it should be included in the canister snapshot.
+    let ExecutionState {
+        canister_root: _,
+        wasm_binary,
+        wasm_memory: _,
+        stable_memory: _,
+        exported_globals: _,
+        exports: _,
+        metadata: _,
+        last_executed_round: _,
+        next_scheduled_method: _,
+    } = execution_state.unwrap();
+
+    // This is a simple catch for future wasm binary changes.
+    // If you add a new field to the wasm binary, consider
+    // if it should be included in the canister snapshot.
+    let WasmBinary {
+        binary: _,
+        embedder_cache: _,
+    } = wasm_binary.borrow();
+
+    // This is a simple catch for future scheduler state changes.
+    // If you add a new field to the scheduler state, consider
+    // if it should be included in the canister snapshot.
+    let SchedulerState {
+        last_full_execution_round: _,
+        compute_allocation: _,
+        accumulated_priority: _,
+        priority_credit: _,
+        long_execution_mode: _,
+        heap_delta_debit: _,
+        install_code_debit: _,
+        time_of_last_allocation_charge: _,
+        total_query_stats: _,
+    } = scheduler_state;
 }
