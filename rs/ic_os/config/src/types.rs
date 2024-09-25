@@ -66,7 +66,7 @@ pub struct GuestOSSettings {
 pub struct GuestOSDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
-    pub query_stats_epoch_length: Option<String>,
+    pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
@@ -76,9 +76,9 @@ pub struct GuestOSDevSettings {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct BackupSpoolSettings {
     /// The maximum age of any file or directory kept in the backup spool.
-    pub backup_retention_time_seconds: Option<String>,
+    pub backup_retention_time_seconds: Option<u64>,
     /// The interval at which the backup spool directory will be scanned for files to delete.
-    pub backup_purging_interval_seconds: Option<String>,
+    pub backup_purging_interval_seconds: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
