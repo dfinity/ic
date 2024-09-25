@@ -127,7 +127,7 @@ RUN mkdir -p /var/lib/ic/backup \
 RUN mkdir -p /mnt/var_old /mnt/var_new
 
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-RUN ln -sf bash /usr/bin/sh
+RUN ln -sf /bin/bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.
