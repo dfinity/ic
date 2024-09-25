@@ -25,6 +25,7 @@ done
 if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]] || [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
+    RUN_ON_DIFF_ONLY="false"
 fi
 
 if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
