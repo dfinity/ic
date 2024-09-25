@@ -25,11 +25,6 @@ pub fn generate_network_config(
     node_type: NodeType,
     output_directory: &Path,
 ) -> Result<()> {
-    if let Some(address) = network_info.ipv6_address {
-        eprintln!("Found ipv6 address in config");
-        return generate_systemd_config_files(output_directory, network_info, None, &address);
-    };
-
     let deployment_name = deployment_name
         .context("Error: Deployment name not found when attempting to generate mac address")?;
 

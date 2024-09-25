@@ -9,8 +9,7 @@ use anyhow::{Context, Result};
 
 pub type ConfigMap = HashMap<String, String>;
 pub struct ConfigIniSettings {
-    pub ipv6_prefix: Option<String>,
-    pub ipv6_address: Option<Ipv6Addr>,
+    pub ipv6_prefix: String,
     pub ipv6_prefix_length: u8,
     pub ipv6_gateway: Ipv6Addr,
     pub ipv4_address: Option<Ipv4Addr>,
@@ -31,33 +30,17 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 
     let ipv6_prefix = config_map
         .get("ipv6_prefix")
-        .map(|prefix| {
-            if !is_valid_ipv6_prefix(prefix) {
-                bail!("Invalid ipv6 prefix: {}", prefix);
+        .context("Missing config parameter: ipv6_prefix")
+        .and_then(|prefix| {
+            if is_valid_ipv6_prefix(prefix) {
+                Ok(prefix.clone())
+            } else {
+                bail!("Invalid ipv6 prefix: {}", prefix)
             }
-            Ok(prefix.clone())
-        })
-        .transpose()?;
+        })?;
 
     // Per PFOPS - ipv6_prefix_length will always be 64
     let ipv6_prefix_length = 64_u8;
-
-    // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
-    let ipv6_address = config_map
-        .get("ipv6_address")
-        .map(|address| {
-            // ipv6_address might be formatted with the trailing suffix. Remove it.
-            address
-                .strip_suffix(&format!("/{}", ipv6_prefix_length))
-                .unwrap_or(address)
-                .parse::<Ipv6Addr>()
-                .context(format!("Invalid IPv6 address: {}", address))
-        })
-        .transpose()?;
-
-    if ipv6_address.is_none() && ipv6_prefix.is_none() {
-        bail!("Missing config parameter: need at least one of ipv6_prefix or ipv6_address");
-    }
 
     let ipv6_gateway = config_map
         .get("ipv6_gateway")
@@ -107,7 +90,6 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
 
     Ok(ConfigIniSettings {
         ipv6_prefix,
-        ipv6_address,
         ipv6_prefix_length,
         ipv6_gateway,
         ipv4_address,
@@ -254,7 +236,6 @@ mod tests {
         writeln!(temp_file, "BAD INPUT          ")?;
         writeln!(temp_file, "\n\n\n\n")?;
         writeln!(temp_file, "ipv6_prefix=2a00:fb01:400:200")?;
-        writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::/64")?;
         writeln!(temp_file, "ipv6_gateway=2a00:fb01:400:200::1")?;
         writeln!(temp_file, "ipv4_address=212.71.124.178")?;
         writeln!(temp_file, "ipv4_gateway=212.71.124.177")?;
@@ -267,12 +248,8 @@ mod tests {
         let config_ini_settings = get_config_ini_settings(temp_file_path)?;
 
         assert_eq!(
-            config_ini_settings.ipv6_prefix.unwrap(),
+            config_ini_settings.ipv6_prefix,
             "2a00:fb01:400:200".to_string()
-        );
-        assert_eq!(
-            config_ini_settings.ipv6_address.unwrap(),
-            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
         );
         assert_eq!(
             config_ini_settings.ipv6_gateway,
@@ -290,16 +267,6 @@ mod tests {
         assert_eq!(config_ini_settings.ipv4_prefix_length.unwrap(), 28);
         assert_eq!(config_ini_settings.domain, Some("example.com".to_string()));
         assert!(!config_ini_settings.verbose);
-
-        // Test ipv6_address without ipv6_prefix_length length
-        let mut temp_file = NamedTempFile::new()?;
-        writeln!(temp_file, "ipv6_address=2a00:fb01:400:200::")?;
-        let config_ini_settings = get_config_ini_settings(temp_file_path)?;
-        assert_eq!(
-            config_ini_settings.ipv6_address.unwrap(),
-            "2a00:fb01:400:200::".parse::<Ipv6Addr>()?
-        );
-        assert_eq!(config_ini_settings.ipv6_prefix_length, 64);
 
         // Test missing ipv6
         let mut temp_file = NamedTempFile::new()?;

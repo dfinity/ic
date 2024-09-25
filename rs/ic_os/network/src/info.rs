@@ -6,11 +6,7 @@ use config::config_ini::ConfigMap;
 
 #[derive(Debug)]
 pub struct NetworkInfo {
-    // Config files can specify ipv6 prefix, address and prefix, or just address.
-    // ipv6_address takes precedence. Some tests provide only the address.
-    // Should be kept as a string until parsing later.
     pub ipv6_prefix: Option<String>,
-    pub ipv6_address: Option<Ipv6Addr>,
     pub ipv6_subnet: u8,
     pub ipv6_gateway: Ipv6Addr,
 }
@@ -65,7 +61,6 @@ impl NetworkInfo {
             ipv6_prefix,
             ipv6_subnet,
             ipv6_gateway,
-            ipv6_address,
         })
     }
 }
