@@ -28,7 +28,7 @@ if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BR
 fi
 
 # check if the job requested running only on diff
-[[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
