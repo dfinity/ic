@@ -1462,7 +1462,7 @@ impl Governance {
                 0, // Minting transfer don't pay a fee
                 None, // This is a minting transfer, no 'from' account is needed
                 self.neuron_account_id(subaccount), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await?;
 
@@ -5458,7 +5458,7 @@ impl Governance {
                     .expect("recipient must be set")
                     .try_into()
                     .unwrap(), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await
             .unwrap();
@@ -6511,7 +6511,7 @@ mod tests {
                 unimplemented!();
             }
 
-            fn random_u64(&mut self) -> u64 {
+            fn insecure_random_u64(&mut self) -> u64 {
                 unimplemented!();
             }
 

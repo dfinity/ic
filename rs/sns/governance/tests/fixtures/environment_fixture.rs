@@ -131,7 +131,7 @@ impl Environment for EnvironmentFixture {
         self.environment_fixture_state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.environment_fixture_state
             .try_lock()
             .unwrap()

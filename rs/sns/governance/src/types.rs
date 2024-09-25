@@ -1958,7 +1958,7 @@ pub trait Environment: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
-    fn random_u64(&mut self) -> u64;
+    fn insecure_random_u64(&mut self) -> u64;
 
     /// Returns a random byte array with 32 bytes.
     ///
@@ -2677,7 +2677,7 @@ pub mod test_helpers {
             self.now
         }
 
-        fn random_u64(&mut self) -> u64 {
+        fn insecure_random_u64(&mut self) -> u64 {
             rand::thread_rng().gen()
         }
 

@@ -133,7 +133,7 @@ impl Environment for CanisterEnv {
     }
 
     // Returns a random u64.
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.rng.next_u64()
     }
 
