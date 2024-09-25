@@ -2648,6 +2648,10 @@ pub struct Governance {
     /// The summary of restore aging event.
     #[prost(message, optional, tag = "27")]
     pub restore_aging_summary: ::core::option::Option<RestoreAgingSummary>,
+    /// The rng seed used before upgrade, to prevent race conditions in handling
+    /// further requests.
+    #[prost(bytes = "vec", optional, tag = "28")]
+    pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

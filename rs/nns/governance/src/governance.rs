@@ -1489,7 +1489,7 @@ pub trait Environment: Send + Sync {
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError>;
 
     // Seed the random number generator from the IC (or some other source in tests)
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)>;
+    fn seed_rng(&mut self, seed: [u8; 32]);
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
@@ -1789,7 +1789,7 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
-        let (neurons, topic_followee_index, heap_governance_proto) =
+        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         assert!(
@@ -1821,12 +1821,16 @@ impl Governance {
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
         governance_proto: GovernanceProto,
-        env: Box<dyn Environment>,
+        mut env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto) =
+        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
+
+        if let Some(rng_seed) = maybe_rng_seed {
+            env.seed_rng(rng_seed);
+        }
 
         Self {
             heap_data: heap_governance_proto,
@@ -1848,14 +1852,26 @@ impl Governance {
         let neuron_store = std::mem::take(&mut self.neuron_store);
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.random_byte_array().ok();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
-    pub fn clone_proto(&self) -> GovernanceProto {
+    pub fn clone_proto(&mut self) -> GovernanceProto {
         let neurons = self.neuron_store.clone_neurons();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.random_byte_array().ok();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
     /// Validates that the underlying protobuf is well formed.

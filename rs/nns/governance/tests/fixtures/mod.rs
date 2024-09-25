@@ -172,7 +172,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: StdRng::seed_from_u64(9539),
+                rng: Some(StdRng::seed_from_u64(9539)),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -498,13 +498,12 @@ impl Environment for NNSFixture {
             .random_byte_array()
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+    fn seed_rng(&mut self, seed: [u8; 32]) {
         self.nns_state
             .try_lock()
             .unwrap()
             .environment
-            .seed_rng()
-            .await
+            .seed_rng(seed)
     }
 
     fn execute_nns_function(
@@ -716,7 +715,8 @@ impl NNS {
         self
     }
 
-    pub(crate) fn get_state(&self) -> NNSState {
+    // Must be mut because clone_proto must be mut, but should not affect state
+    pub(crate) fn get_state(&mut self) -> NNSState {
         NNSState {
             now: self.now(),
             accounts: self
@@ -960,8 +960,8 @@ impl Environment for NNS {
         self.fixture.random_byte_array()
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
-        self.fixture.seed_rng().await
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.fixture.seed_rng(seed)
     }
 
     fn execute_nns_function(

@@ -69,7 +69,7 @@ type LedgerMap = HashMap<AccountIdentifier, u64>;
 /// `Ledger`.
 pub struct FakeState {
     pub now: u64,
-    pub rng: Option<ChaCha20Rng>,
+    pub rng: ChaCha20Rng,
     pub accounts: LedgerMap,
 }
 
@@ -322,7 +322,7 @@ impl Environment for FakeDriver {
         Ok(bytes)
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
         todo!()
     }
 

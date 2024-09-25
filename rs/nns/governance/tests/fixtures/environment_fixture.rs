@@ -146,19 +146,25 @@ impl Environment for EnvironmentFixture {
     }
 
     fn random_u64(&mut self) -> Result<u64, RngError> {
-        Ok(self
+        match self
             .environment_fixture_state
             .try_lock()
             .unwrap()
             .rng
-            .next_u64())
+            .as_mut()
+        {
+            Some(rand) => Ok(rand.next_u64()),
+            None => {
+                panic!("No RNG!")
+            } // Err(RngError::RngNotInitialized),
+        }
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         unimplemented!()
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
         unimplemented!()
     }
 

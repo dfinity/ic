@@ -2415,6 +2415,10 @@ message Governance {
 
   // The summary of restore aging event.
   optional RestoreAgingSummary restore_aging_summary = 27;
+
+  // The rng seed used before upgrade, to prevent race conditions in handling
+  // further requests.
+  optional bytes rng_seed = 28;
 }
 
 message XdrConversionRate {

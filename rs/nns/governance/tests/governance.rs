@@ -11251,7 +11251,7 @@ impl Environment for MockEnvironment<'_> {
         panic!("Unexpected call to Environment::random_byte_array");
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
         unimplemented!()
     }
 

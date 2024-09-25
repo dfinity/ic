@@ -56,7 +56,7 @@ impl Environment for MockEnvironment {
         todo!()
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
         todo!()
     }
 

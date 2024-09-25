@@ -84,6 +84,23 @@ impl From<XdrConversionRate> for XdrConversionRatePb {
     }
 }
 
+/// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
+/// or returns an error if wrong length is given
+fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
+    let boxed_slice = v.into_boxed_slice();
+    let boxed_array: Box<[u8; 32]> = match boxed_slice.try_into() {
+        Ok(hash) => hash,
+        Err(original) => {
+            return Err(format!(
+                "Expected a hash of length {} but it was {}",
+                32,
+                original.len()
+            ))
+        }
+    };
+    Ok(*boxed_array)
+}
+
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
 /// we have a dedicated struct NeuronStore owning the heap neurons.
 /// Does not guarantee round-trip equivalence between this and
@@ -94,6 +111,7 @@ pub fn split_governance_proto(
     BTreeMap<u64, Neuron>,
     HashMap<i32, FollowersMap>,
     HeapGovernanceData,
+    Option<[u8; 32]>,
 ) {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -123,6 +141,7 @@ pub fn split_governance_proto(
         topic_followee_index,
         xdr_conversion_rate,
         restore_aging_summary,
+        rng_seed,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -135,6 +154,10 @@ pub fn split_governance_proto(
         XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
             panic!("Deserialization failed for XdrConversionRate: {}", err);
         });
+
+    let rng_seed = rng_seed
+        .map(|seed| vec_to_hash(seed).ok())
+        .and_then(|seed| seed);
 
     (
         neurons,
@@ -161,6 +184,7 @@ pub fn split_governance_proto(
             xdr_conversion_rate,
             restore_aging_summary,
         },
+        rng_seed,
     )
 }
 
@@ -170,6 +194,7 @@ pub fn reassemble_governance_proto(
     neurons: BTreeMap<u64, Neuron>,
     topic_followee_index: HashMap<i32, FollowersMap>,
     heap_governance_proto: HeapGovernanceData,
+    rng_seed: Option<[u8; 32]>,
 ) -> GovernanceProto {
     // DO NOT USE THE .. CATCH-ALL SYNTAX HERE.
     // OTHERWISE, YOU WILL ALMOST CERTAINLY EXPERIENCE
@@ -226,6 +251,7 @@ pub fn reassemble_governance_proto(
         topic_followee_index,
         xdr_conversion_rate: Some(xdr_conversion_rate),
         restore_aging_summary,
+        rng_seed: rng_seed.map(|seed| seed.to_vec()),
     }
 }
 
@@ -278,6 +304,7 @@ mod tests {
                 xdr_permyriad_per_icp: Some(50_000),
             }),
             restore_aging_summary: None,
+            rng_seed: Some(vec![1u8; 32]),
         }
     }
 
@@ -285,11 +312,15 @@ mod tests {
     fn split_and_reassemble_equal() {
         let governance_proto = simple_governance_proto();
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
 
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+        );
 
         assert_eq!(reassembled_governance_proto, governance_proto);
     }
@@ -301,10 +332,14 @@ mod tests {
             ..simple_governance_proto()
         };
 
-        let (heap_neurons, topic_followee_index, heap_governance_data) =
+        let (heap_neurons, topic_followee_index, heap_governance_data, rng_seed) =
             split_governance_proto(governance_proto.clone());
-        let reassembled_governance_proto =
-            reassemble_governance_proto(heap_neurons, topic_followee_index, heap_governance_data);
+        let reassembled_governance_proto = reassemble_governance_proto(
+            heap_neurons,
+            topic_followee_index,
+            heap_governance_data,
+            rng_seed,
+        );
 
         assert_eq!(
             reassembled_governance_proto,
@@ -322,7 +357,7 @@ mod tests {
             ..GovernanceProto::default()
         };
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, _, heap_governance_proto) = split_governance_proto(governance_proto);
+        let (_, _, heap_governance_proto, _) = split_governance_proto(governance_proto);
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60

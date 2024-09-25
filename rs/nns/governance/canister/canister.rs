@@ -155,7 +155,17 @@ const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
 fn schedule_seeding(duration: Duration) {
     ic_cdk_timers::set_timer(duration, || {
         spawn(async {
-            governance_mut().env.seed_rng().await;
+            let (seed,): ([u8; 32],) = CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ())
+                .await
+                .map_err(|(code, msg)| {
+                    println!(
+                        "Error seeding RNG. Error Code: {}. Error Message: {}",
+                        code, msg
+                    )
+                })
+                .unwrap();
+
+            () = governance_mut().env.seed_rng(seed);
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
@@ -221,10 +231,8 @@ impl Environment for CanisterEnv {
         }
     }
 
-    async fn seed_rng(&mut self) -> Result<(), (i32, String)> {
-        let (seed,): ([u8; 32],) = CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await?;
+    fn seed_rng(&mut self, seed: [u8; 32]) {
         self.rng.replace(ChaCha20Rng::from_seed(seed));
-        Ok(())
     }
 
     fn execute_nns_function(
@@ -380,7 +388,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
-    schedule_seeding(SEEDING_INTERVAL);
+    schedule_seeding(Duration::from_nanos(0));
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
@@ -424,7 +432,7 @@ fn canister_post_upgrade() {
         restored_state.xdr_conversion_rate,
     );
 
-    schedule_seeding(SEEDING_INTERVAL);
+    schedule_seeding(Duration::from_nanos(0));
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
