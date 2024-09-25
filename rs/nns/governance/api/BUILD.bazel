@@ -11,7 +11,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nns/common",
     "//rs/protobuf",
-    "//rs/rosetta-api/icp_ledger",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/types",

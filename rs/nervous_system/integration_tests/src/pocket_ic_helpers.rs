@@ -1556,7 +1556,7 @@ pub mod sns {
 
         use super::*;
 
-        /// Copied from rs/rosetta-api/icrc1/index-ng/src/lib.rs
+        /// Copied from rs/ledger_suite/icrc1/index-ng/src/lib.rs
         #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
         pub struct Status {
             pub num_blocks_synced: BlockIndex,

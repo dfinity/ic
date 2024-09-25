@@ -39,7 +39,7 @@ d4c3bb26c chore: upgrade crates and use workspace version (#1207)
 ### Ledger
 
 ```
-git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/rosetta-api/icrc1/ledger
+git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/ledger_suite/icrc1/ledger
 643e4fb30c fix(ICRC-ledger): FI-1482: read magic bytes to determine if memory manager is used (#1448)
 e680d5b916 fix(ICRC-1 Ledger): add effective subaccount to ICRC-21 (#1405)
 d323465e02 feat(ICRC-Ledger): add ability to read from memory manager in post_upgrade (#746)
@@ -58,7 +58,7 @@ ca24b5d66d chore: sort dependencies in Cargo.toml files (#828)
 ### Index
 
 ```
-git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/rosetta-api/icrc1/index-ng
+git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/ledger_suite/icrc1/index-ng
 4d09678d23 chore: sort rust derive traits (#1241)
 d4c3bb26c2 chore: upgrade crates and use workspace version (#1207)
 d71e09e83a chore: add decoding quota to http_request in SNS and ICRC1 canisters (#1101)
@@ -68,7 +68,7 @@ d71e09e83a chore: add decoding quota to http_request in SNS and ICRC1 canisters 
 ### Archive
 
 ```
-git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/rosetta-api/icrc1/archive
+git log --format="%C(auto) %h %s" 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d..d4ee25b0865e89d3eaac13a60f0016d5e3296b31 -- rs/ledger_suite/icrc1/archive
 4d09678d23 chore: sort rust derive traits (#1241)
 d71e09e83a chore: add decoding quota to http_request in SNS and ICRC1 canisters (#1101)
 ```

@@ -29,7 +29,7 @@ MACRO_DEPENDENCIES = []
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rosetta-api/icp_ledger",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/universal_canister/lib",

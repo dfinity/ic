@@ -6,7 +6,7 @@ package(default_visibility = [
     "//rs/nervous_system/common:__pkg__",
     "//rs/nns:__subpackages__",
     "//rs/rosetta-api:__pkg__",
-    "//rs/rosetta-api/icp_ledger:__subpackages__",
+    "//rs/ledger_suite/icp:__subpackages__",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:__pkg__",
     "//rs/rust_canisters:__subpackages__",
     "//rs/sns/test_utils:__pkg__",

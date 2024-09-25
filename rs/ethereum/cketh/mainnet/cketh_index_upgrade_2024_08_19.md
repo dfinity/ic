@@ -19,14 +19,14 @@ Upgrade the ckETH index canister to the latest version to add support for the [I
 ```
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
-cd rs/rosetta-api/icrc1/index-ng
+cd rs/ledger_suite/icrc1/index-ng
 didc encode -d index-ng.did -t '(opt IndexArg)' '(null)'
 ```
 
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/index-ng
+git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/index-ng
 b4be567dc chore: Bump rust version to 1.80 (#642)
 eec6107fa chore: remove obsolete cost scaling feature flag (#502)
 18243444a fix(ICRC-Index): FI-1382: remove comment on removing 0 balance accounts (#341)

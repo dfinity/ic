@@ -31,7 +31,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/replicated_state",
-    "//rs/rosetta-api/icp_ledger",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/state_manager",
     "//rs/types/types",
     "@crate_index//:candid",

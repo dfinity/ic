@@ -89,8 +89,8 @@ If you deploy locally, you need to find out the compressed wasm hashes of the le
 [source,shell]
 ----
 git checkout 5553ee5f7586290a59ed372a2b7aca847520af82
-openssl sha256 bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz
-openssl sha256 bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz
+openssl sha256 bazel-bin/rs/ledger_suite/icrc1/ledger/ledger_canister_u256.wasm.gz
+openssl sha256 bazel-bin/rs/ledger_suite/icrc1/index-ng/index_ng_canister_u256.wasm.gz
 ----
 
 If you deploy from a dev env,

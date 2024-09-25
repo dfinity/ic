@@ -68,7 +68,7 @@ ic-sns-wasm = { path = "../sns-wasm" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"

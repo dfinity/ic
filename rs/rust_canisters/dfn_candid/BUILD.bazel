@@ -10,7 +10,7 @@ package(default_visibility = [
     "//rs/nns:__subpackages__",
     "//rs/registry/canister:__pkg__",
     "//rs/rosetta-api:__pkg__",
-    "//rs/rosetta-api/icp_ledger:__subpackages__",
+    "//rs/ledger_suite/icp:__subpackages__",
     "//rs/rust_canisters:__subpackages__",
     "//rs/scenario_tests:__pkg__",
     "//rs/sns:__subpackages__",

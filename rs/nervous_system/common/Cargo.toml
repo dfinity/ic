@@ -25,7 +25,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-runtime = { path = "../runtime" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-stable-structures = { workspace = true }
