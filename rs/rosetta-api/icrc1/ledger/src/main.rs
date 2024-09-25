@@ -223,7 +223,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         ledger.approvals.allowances_data.clear_arrivals();
     });
     const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 20_000_000_000;
-    migrate_next_part(MAX_INSTRUCTIONS_PER_UPGRADE);
+    migrate_next_part(MAX_INSTRUCTIONS_PER_UPGRADE - pre_upgrade_instructions_consumed);
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
