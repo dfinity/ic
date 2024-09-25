@@ -9,7 +9,6 @@ set -eufo pipefail
 # default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
 ic_version_rc_only="0000000000000000000000000000000000000000"
 s3_upload="False"
-RUN_ON_DIFF_ONLY="${RUN_ON_DIFF_ONLY:-false}"
 
 protected_branches=("master" "rc--*" "hotfix-*" "master-private")
 
@@ -30,6 +29,7 @@ fi
 
 if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
     s3_upload="False"
+    RUN_ON_DIFF_ONLY="false"
 fi
 
 if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
