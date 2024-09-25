@@ -51,15 +51,20 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
+            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
+                "Failed to get config.ini settings for path: {}",
+                &opts.config
+            ))?;
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
             let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
+                .context(format!(
+                    "Failed to get deployment settings for file: {}",
+                    &opts.deployment_file
+                ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let deployment_name = deployment_settings.deployment.name.as_str();
@@ -71,15 +76,20 @@ pub fn main() -> Result<()> {
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
+            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
+                "Failed to get config.ini settings for path: {}",
+                &opts.config
+            ))?;
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
             let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
+                .context(format!(
+                    "Failed to get deployment settings for file: {}",
+                    &opts.deployment_file
+                ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
