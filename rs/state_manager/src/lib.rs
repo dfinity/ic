@@ -2173,7 +2173,7 @@ impl StateManagerImpl {
 
     /// Wait till deallocation queue is empty.
     pub fn flush_deallocation_channel(&self) {
-        let (send, recv) = unbounded();
+        let (send, recv) = bounded(1);
         self.deallocation_sender
             .send(Box::new(NotifyWhenDeallocated { channel: send }))
             .expect("Failed to send deallocation request");
