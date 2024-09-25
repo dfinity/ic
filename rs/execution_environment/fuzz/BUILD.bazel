@@ -78,7 +78,7 @@ rust_fuzz_test_binary(
     env = {
         # "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
         #"SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-        "CARGO_MANIFEST_DIR": "//rs/execution_environment/fuzz",
+        "CARGO_MANIFEST_DIR": "rs/execution_environment/fuzz",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":execution_fuzzers"] + [

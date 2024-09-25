@@ -206,14 +206,14 @@ fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
         } else {
             println!("ABC next: {next:?} DOES NOT EXIST");
             /*
-            ABC manifest_dir: Some("//rs/execution_environment/fuzz")
-            ABC next: "//rs/execution_environment/fuzz/Cargo.toml" DOES NOT EXIST
-            ABC next: "//rs/execution_environment/Cargo.toml" DOES NOT EXIST
-            ABC next: "//rs/Cargo.toml" DOES NOT EXIST
-            ABC next: "/Cargo.toml" DOES NOT EXIST
+            ABC manifest_dir: Some("rs/execution_environment/fuzz")
+            ABC next: "rs/execution_environment/fuzz/Cargo.toml" DOES NOT EXIST
+            ABC next: "rs/execution_environment/Cargo.toml" DOES NOT EXIST
+            ABC next: "rs/Cargo.toml" DOES NOT EXIST
+            ABC next: "Cargo.toml" DOES NOT EXIST
             ABC next_parent: None
             ABC current_manifest: None
-             */
+            */
         }
         next_parent = parent.parent();
     }
