@@ -241,8 +241,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     let root_cert = CertificateParams::new(vec![
         localhost.to_string(),
         sub_localhost.to_string(),
+        sub_raw_localhost.to_string(),
         alt_domain.to_string(),
         sub_alt_domain.to_string(),
+        sub_raw_alt_domain.to_string(),
     ])
     .unwrap()
     .self_signed(&root_key_pair)
@@ -384,7 +386,6 @@ async fn test_gateway(server_url: Url, https: bool) {
     for url in test_urls {
         let res = client.get(url).send().await.unwrap();
         let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-        println!("page: {}", page);
         assert!(page.contains("<title>Internet Identity</title>"));
     }
 
