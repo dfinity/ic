@@ -13,18 +13,16 @@ fn test_canister_playground() {
     let canister_playground_wasm =
         Project::cargo_bin_maybe_from_env("canister-playground-canister", &[]);
 
-    let playground_id =
-        create_canister(&state_machine, canister_playground_wasm, Some(vec![]), None);
-
-    let _: () = update_with_sender(
+    let playground_id = create_canister(
         &state_machine,
-        playground_id,
-        "test",
-        candid_one,
-        (),
-        PrincipalId::new_anonymous(),
-    )
-    .unwrap();
+        canister_playground_wasm.clone(),
+        Some(vec![]),
+        None,
+    );
+
+    state_machine
+        .upgrade_canister(playground_id, canister_playground_wasm.bytes(), vec![])
+        .unwrap();
 
     // Up to 10 seconds of excitement
     for _ in 1..100 {
