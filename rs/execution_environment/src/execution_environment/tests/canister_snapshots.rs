@@ -1914,9 +1914,7 @@ fn snapshot_must_include_globals() {
 
 #[test]
 fn future_proof_canister_snapshots_for_canister_state_changes() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Disabled)
-        .build();
+    let mut test = ExecutionTestBuilder::new().build();
     let uc = test.universal_canister().unwrap();
     let canister_state = test.canister_state(uc).clone();
 

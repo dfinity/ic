@@ -1716,43 +1716,35 @@ pub mod testing {
 
     #[test]
     fn future_proof_canister_snapshots_for_system_state_changes() {
-        let system_state = SystemState::new_for_testing(
-            0.into(),
-            Default::default(),
-            Default::default(),
-            0.into(),
-            CanisterStatus::Stopped,
-        );
-
         // This is a simple catch for future system state changes.
         // If you add a new field to the system state, consider
         // if it should be included in the canister snapshot.
         // Please contact the Execution Team if you have any questions.
-        let SystemState {
-            controllers: _,
-            canister_id: _,
-            queues: _,
-            memory_allocation: _,
-            wasm_memory_threshold: _,
-            freeze_threshold: _,
-            status: _,
-            certified_data: _,
-            canister_metrics: _,
-            cycles_balance: _,
-            ingress_induction_cycles_debit: _,
-            reserved_balance: _,
-            reserved_balance_limit: _,
-            task_queue: _,
-            global_timer: _,
-            canister_version: _,
-            canister_history: _,
-            wasm_chunk_store: _,
-            log_visibility: _,
-            canister_log: _,
-            wasm_memory_limit: _,
-            next_snapshot_id: _,
-            snapshots_memory_usage: _,
-            on_low_wasm_memory_hook_status: _,
-        } = system_state;
+        let _system_state = SystemState {
+            controllers: Default::default(),
+            canister_id: 0.into(),
+            queues: Default::default(),
+            memory_allocation: Default::default(),
+            wasm_memory_threshold: Default::default(),
+            freeze_threshold: Default::default(),
+            status: CanisterStatus::Stopped,
+            certified_data: Default::default(),
+            canister_metrics: Default::default(),
+            cycles_balance: Default::default(),
+            ingress_induction_cycles_debit: Default::default(),
+            reserved_balance: Default::default(),
+            reserved_balance_limit: Default::default(),
+            task_queue: Default::default(),
+            global_timer: CanisterTimer::Inactive,
+            canister_version: Default::default(),
+            canister_history: Default::default(),
+            wasm_chunk_store: WasmChunkStore::new_for_testing(),
+            log_visibility: Default::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: Default::default(),
+            next_snapshot_id: Default::default(),
+            snapshots_memory_usage: Default::default(),
+            on_low_wasm_memory_hook_status: Default::default(),
+        };
     }
 }
