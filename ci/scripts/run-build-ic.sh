@@ -43,6 +43,8 @@ if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
         touch build-ic.tar
         exit 0
     fi
+    ci/container/build-ic.sh "${ARGS[@]}"
+# otherwise run full build but with no release
 else
     ci/container/build-ic.sh -i -c -b --no-release
 fi
