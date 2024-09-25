@@ -21,11 +21,14 @@ Usage: $0 <COMMIT_ID>
 
 RELEASE_CANDIDATE_COMMIT_ID="${1:-GARBAGE}"
 
+AUTO_COMMIT_ID=false
 if [[ "${RELEASE_CANDIDATE_COMMIT_ID}" == 'GARBAGE' ]]; then
-    LATEST_COMMIT_WITH_PREBUILT_ARTIFACTS=$(latest_commit_with_prebuilt_artifacts 2>/dev/null)
+    RELEASE_CANDIDATE_COMMIT_ID=$(latest_commit_with_prebuilt_artifacts 2>/dev/null)
+    AUTO_COMMIT_ID=true
+
+    COMMIT_DESCRIPTION=$(git show -s --format="%h (%cd)" --date=relative "${RELEASE_CANDIDATE_COMMIT_ID}")
     echo
-    print_yellow "The latest commit with prebuilt artifacts: ${LATEST_COMMIT_WITH_PREBUILT_ARTIFACTS}"
-    help
+    print_yellow "⚠️  Using the latest commit with prebuilt artifacts: ${COMMIT_DESCRIPTION}"
 fi
 
 NETWORK=ic
@@ -80,6 +83,9 @@ list_new_canister_commits() {
     fi
 }
 
+
+# Begin main.
+
 echo
 print_purple NNS
 print_purple =====
@@ -102,3 +108,9 @@ for CANISTER_NAME in "${SNS_CANISTERS[@]}"; do
 
     list_new_canister_commits "${CANISTER_NAME}" "${CODE_DIRECTORIES}" "${LATEST_RELEASED_COMMIT_ID}"
 done
+
+if [[ "${AUTO_COMMIT_ID}" == true ]]; then
+    echo
+    echo
+    print_yellow "⚠️  Used the latest commit with prebuilt artifacts: ${RELEASE_CANDIDATE_COMMIT_ID}"
+fi
