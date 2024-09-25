@@ -172,7 +172,7 @@ def test_override_didc_checks_failing_check_succeeds():
         res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
         assert res.returncode == 0
         assert (
-            "Found [override-didc-check] in merge request title. Skipping didc_check."
+            "Override didc check requested. Skipping didc_check."
             in res.stdout.decode("utf-8")
         )
 
