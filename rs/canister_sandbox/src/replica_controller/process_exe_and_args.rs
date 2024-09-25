@@ -98,9 +98,6 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
     let current_binary_path = current_binary_path()?;
     let current_binary_name = current_binary_path.file_name()?.to_str()?;
 
-    println!("ABC current_binary_path: {current_binary_path:?}");
-    println!("ABC current_binary_name: {current_binary_name:?}");
-
     // The order of checks performed in this function is important.
     // Please do not reorder.
     //
@@ -116,10 +113,6 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
     // use it.
     let current_binary_folder = current_binary_path.parent()?;
     let sandbox_executable_path = current_binary_folder.join(krate.executable_name());
-
-    println!("ABC current_binary_folder: {current_binary_folder:?}");
-    println!("ABC sandbox_executable_path: {sandbox_executable_path:?}");
-
     if Path::exists(&sandbox_executable_path) {
         let exec_path = sandbox_executable_path.to_str()?.to_string();
         return Some(vec![exec_path]);
@@ -145,9 +138,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     let executable_name = krate.executable_name();
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
-    println!("ABC executable_name: {executable_name:?}");
     if let Ok(exec_path) = which::which(executable_name) {
-        println!("Running sandbox with executable {:?}", exec_path);
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
@@ -160,8 +151,6 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // cargo manifest so this should succeed.
     let cargo = which::which("cargo");
     let cargo_manifest_for_testing_result = cargo_manifest_for_testing(&krate);
-    println!("ABC cargo: {cargo:?}");
-    println!("ABC cargo_manifest_for_testing_result: {cargo_manifest_for_testing_result:?}");
     match (cargo, cargo_manifest_for_testing_result) {
         (Ok(path), Some(manifest_path)) => {
             println!(
@@ -195,30 +184,16 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
 /// crate in the directory path of the current manifest.
 fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
-    println!("ABC manifest_dir: {manifest_dir:?}");
     let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
+
     while let Some(parent) = next_parent {
         let next: PathBuf = [parent, Path::new("Cargo.toml")].iter().collect();
         if next.exists() {
-            println!("ABC next: {next:?} exists");
             current_manifest = Some(next);
-        } else {
-            println!("ABC next: {next:?} DOES NOT EXIST");
-            /*
-            ABC manifest_dir: Some("rs/execution_environment/fuzz")
-            ABC next: "rs/execution_environment/fuzz/Cargo.toml" DOES NOT EXIST
-            ABC next: "rs/execution_environment/Cargo.toml" DOES NOT EXIST
-            ABC next: "rs/Cargo.toml" DOES NOT EXIST
-            ABC next: "Cargo.toml" DOES NOT EXIST
-            ABC next_parent: None
-            ABC current_manifest: None
-            */
         }
         next_parent = parent.parent();
     }
-    println!("ABC next_parent: {next_parent:?}");
-    println!("ABC current_manifest: {current_manifest:?}");
     // At this point `current_manifest` points to the top-level workspace
     // manifest. Try to get the manifest of the `canister_sandbox` crate
     // relative to it.
