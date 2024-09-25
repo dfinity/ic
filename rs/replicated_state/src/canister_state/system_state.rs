@@ -1714,12 +1714,22 @@ pub mod testing {
         }
     }
 
-    #[test]
-    fn future_proof_canister_snapshots_for_system_state_changes() {
-        // This is a simple catch for future system state changes.
-        // If you add a new field to the system state, consider
-        // if it should be included in the canister snapshot.
-        // Please contact the Execution Team if you have any questions.
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing system state fields to think about and/or ask the Execution
+    /// team to think about any repercussions to the canister snapshot logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the system state to also require changes
+    /// to the canister snapshot logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `CanisterSnapshot::from_canister()` for more context.
+    #[allow(dead_code)]
+    fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
         let _system_state = SystemState {
             controllers: Default::default(),
             canister_id: 0.into(),

@@ -1912,15 +1912,26 @@ fn snapshot_must_include_globals() {
     assert_eq!(result, WasmResult::Reply(vec![1, 0, 0, 0]));
 }
 
-#[test]
-fn future_proof_canister_snapshots_for_canister_state_changes() {
+/// Early warning system / stumbling block forcing the authors of changes adding
+/// or removing canister state fields to think about and/or ask the Execution
+/// team to think about any repercussions to the canister snapshot logic.
+///
+/// If you do find yourself having to make changes to this function, it is quite
+/// possible that you have not broken anything. But there is a non-zero chance
+/// for changes to the structure of the canister state to also require changes
+/// to the canister snapshot logic or risk breaking it. Which is why this brute
+/// force check exists.
+///
+/// See `CanisterSnapshot::from_canister()` for more context.
+#[allow(dead_code)]
+fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     let mut test = ExecutionTestBuilder::new().build();
     let uc = test.universal_canister().unwrap();
     let canister_state = test.canister_state(uc).clone();
 
-    // This is a simple catch for future canister state changes.
-    // If you add a new field to the system state, consider
-    // if it should be included in the canister snapshot.
+    //
+    // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+    //
     let CanisterState {
         // There is a separate test for SystemState.
         system_state: _,
@@ -1928,9 +1939,9 @@ fn future_proof_canister_snapshots_for_canister_state_changes() {
         scheduler_state,
     } = canister_state;
 
-    // This is a simple catch for future execution state changes.
-    // If you add a new field to the execution state, consider
-    // if it should be included in the canister snapshot.
+    //
+    // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+    //
     let ExecutionState {
         canister_root: _,
         wasm_binary,
@@ -1943,17 +1954,17 @@ fn future_proof_canister_snapshots_for_canister_state_changes() {
         next_scheduled_method: _,
     } = execution_state.unwrap();
 
-    // This is a simple catch for future wasm binary changes.
-    // If you add a new field to the wasm binary, consider
-    // if it should be included in the canister snapshot.
+    //
+    // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+    //
     let WasmBinary {
         binary: _,
         embedder_cache: _,
     } = wasm_binary.borrow();
 
-    // This is a simple catch for future scheduler state changes.
-    // If you add a new field to the scheduler state, consider
-    // if it should be included in the canister snapshot.
+    //
+    // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+    //
     let SchedulerState {
         last_full_execution_round: _,
         compute_allocation: _,
