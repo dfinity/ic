@@ -10,7 +10,6 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::OnLowWasmMemoryHookStatus;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_system_api::{
@@ -52,7 +51,6 @@ fn test_wasmtime_system_api() {
         Cycles::zero(),
         NumSeconds::from(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl),
-        OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
     );
     let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(

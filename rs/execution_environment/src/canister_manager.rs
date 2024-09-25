@@ -34,7 +34,7 @@ use ic_replicated_state::{
         execution_state::Memory,
         system_state::{
             wasm_chunk_store::{self, WasmChunkStore},
-            CyclesUseCase, OnLowWasmMemoryHookStatus, ReservationError,
+            CyclesUseCase, ReservationError,
         },
         NextExecution,
     },
@@ -1429,7 +1429,6 @@ impl CanisterManager {
             cycles,
             self.config.default_freeze_threshold,
             Arc::clone(&self.fd_factory),
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         );
 
         system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
