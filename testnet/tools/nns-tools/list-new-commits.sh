@@ -47,7 +47,7 @@ list_new_canister_commits() {
             --format="%C(auto) %h %s" \
             "${RANGE}" \
             -- \
-            ${CODE_DIRECTORIES} # No quote here is intentional, because plural.
+            ${CODE_DIRECTORIES} # No quote here is necessary, because plural.
     )
 
     INTERESTING_COMMITS=$(
