@@ -277,7 +277,7 @@ fn migrate_next_part(instruction_limit: u64) {
         }
         let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
             instruction_counter());
-        if ledger.is_migrating() {
+        if !ledger.is_ready() {
             ic_cdk::println!("Migration partially done. Scheduling the next part. {msg}");
             log!(
                 &LOG,

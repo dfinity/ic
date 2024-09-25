@@ -527,10 +527,6 @@ impl Ledger {
         ledger
     }
 
-    pub fn is_migrating(&self) -> bool {
-        !matches!(self.state, LedgerState::Ready)
-    }
-
     pub fn is_ready(&self) -> bool {
         matches!(self.state, LedgerState::Ready)
     }
