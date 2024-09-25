@@ -21,7 +21,6 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//rs/canister_sandbox:backend_lib",
         "//rs/config",
         "//rs/cycles_account_manager",
         "//rs/embedders",
@@ -71,15 +70,6 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
-    data = [
-        #"//rs/canister_sandbox",
-        #"//rs/canister_sandbox:sandbox_launcher",
-    ],
-    env = {
-        # "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
-        #"SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-        "CARGO_MANIFEST_DIR": "rs/execution_environment/fuzz",
-    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":execution_fuzzers"] + [
         # Keep sorted.
