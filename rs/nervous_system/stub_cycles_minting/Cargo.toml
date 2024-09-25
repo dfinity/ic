@@ -1,0 +1,13 @@
+[package]
+name = "ic-nervous-system-stub-cycles-minting"
+version = "0.0.1"
+edition = { workspace = true }
+
+[[bin]]
+name = "stub-cycles-minting"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+cycles-minting-canister = { path = "../../nns/cmc" }

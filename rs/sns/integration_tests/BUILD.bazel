@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -64,6 +64,7 @@ BASE_DEV_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
+    "//rs/nns/test_utils/golden_nns_state",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/http_types",
@@ -82,16 +83,17 @@ BASE_DEV_DEPENDENCIES = [
 
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEV_DEPENDENCIES`), or `TEST_DEV_DEPENDENCIES` feature previews.
-# (Currently not used)
-# DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-#     "//rs/nns/governance/api",
-#     "//rs/nns/sns-wasm",
-#     "//rs/nns/test_utils",
-#     "//rs/sns/governance",
-#     "//rs/sns/swap",
-# ]
+DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
+    # Keep sorted.
+    "//rs/nns/governance/api",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/test_utils",
+    "//rs/sns/governance",
+    "//rs/sns/swap",
+]
 
 TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
+    # Keep sorted.
     "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/test_utils:test_utils--test_feature",
@@ -201,6 +203,8 @@ rust_ic_test_suite_with_extra_srcs(
         ["src/*.rs"],
         exclude = [
             "src/lib.rs",
+            # Tests that are broken out into their own rules below.
+            "src/inflation_relaxes_treasury_proposal_limits.rs",
         ],
     ),
     aliases = ALIASES,
@@ -215,4 +219,38 @@ rust_ic_test_suite_with_extra_srcs(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "inflation_relaxes_treasury_proposal_limits",
+    # Because this downloads ~ 7 GB (via ssh). Not sure how much RAM (at peak)
+    # this uses. Might make sense for this to have a smaller size.
+    size = "enormous",
+    srcs = [
+        "src/inflation_relaxes_treasury_proposal_limits.rs",
+    ],
+
+    # This test depends on/uses the stub_cycles_minting WASM.
+    data = [
+        # Keep sorted.
+        "//rs/nervous_system/stub_cycles_minting",
+        "//rs/sns/governance:sns-governance-canister",
+    ],
+    # Project::cargo_bin_maybe_from_env locates WASMs via environment
+    # variable(s) of this form. See Wasm::env_var_name.
+    env = {
+        # Keep sorted.
+        "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
+        "STUB_CYCLES_MINTING_WASM_PATH": "$(rootpath //rs/nervous_system/stub_cycles_minting)",
+    },
+
+    aliases = ALIASES,
+    crate_root = "src/inflation_relaxes_treasury_proposal_limits.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -181,6 +181,7 @@ members = [
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
+    "rs/nervous_system/stub_cycles_minting",
     "rs/nervous_system/temporary",
     "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
     "rs/nns/constants",

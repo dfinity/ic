@@ -1,0 +1,28 @@
+// The subset of the real cycles-minting canister that we support.
+//
+// Perhaps, surprisingly, this is where we get the average price of ICP, not the
+// exchange rate canister. In particular, we partially support the
+// get_average_icp_xdr_conversion_rate. That method is not declared in cmc.did,
+// even though the canister supplies that method.
+
+type IcpXdrConversionRateResponse = record {
+  data : IcpXdrConversionRate;
+
+  // Certified responses are not supported (yet). OTOH, adding support should
+  // not throw off any existing users.
+  hash_tree : blob;
+  certificate : blob;
+};
+
+type IcpXdrConversionRate = record {
+  // Always contains the current time.
+  timestamp_seconds : nat64;
+
+  // Always contains the value 61_200, which indicates that the price of 1 ICP
+  // is 6.12 XDR, which is close to the current price (as of this writing).
+  xdr_permyriad_per_icp : nat64;
+};
+
+service {
+  get_average_icp_xdr_conversion_rate : () -> (IcpXdrConversionRateResponse) query;
+}
