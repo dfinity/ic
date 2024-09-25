@@ -2460,7 +2460,7 @@ impl StateManagerImpl {
                 self.lsmt_status,
             )
         };
-        let (cp_layout, checkpointed_state, has_downgrade) = match result {
+        let (cp_layout, mut checkpointed_state, has_downgrade) = match result {
             Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
@@ -2510,6 +2510,18 @@ impl StateManagerImpl {
                 err
             ),
         };
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["defrag_canisters_map"])
+                .start_timer();
+
+            // This step is a functional no-op, but results in a cleaner memory layout that is ultimately faster to iterate over.
+            let canisters = std::mem::take(&mut checkpointed_state.canister_states);
+            checkpointed_state.canister_states = canisters.into_iter().collect();
+        }
         {
             let _timer = self
                 .metrics
