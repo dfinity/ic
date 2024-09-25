@@ -105,6 +105,7 @@ fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
 /// we have a dedicated struct NeuronStore owning the heap neurons.
 /// Does not guarantee round-trip equivalence between this and
 /// reassemble_governance_proto if the proto has fields that are None, as they might be filled in by default values.
+#[allow(clippy::type_complexity)]
 pub fn split_governance_proto(
     governance_proto: GovernanceProto,
 ) -> (
