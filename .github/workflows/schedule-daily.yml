@@ -49,7 +49,7 @@ jobs:
           # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+            //ic-os/setupos/envs/local-base-dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
               --file_share_ssh_key "$(realpath file2)" \
@@ -60,7 +60,7 @@ jobs:
           # Run bare metal node performance benchmarks
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+            //ic-os/setupos/envs/local-base-dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
               --file_share_ssh_key "$(realpath file2)" \
