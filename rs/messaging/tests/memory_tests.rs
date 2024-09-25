@@ -15,7 +15,7 @@ use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, Cycles};
 use proptest::prelude::*;
 use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 const LOCAL_SUBNET_ID: SubnetId = SUBNET_0;
@@ -176,6 +176,88 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     fixture.expect_guaranteed_response_message_memory_taken_at_most("Final check", 0, 0)
 }
 
+/// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
+/// remote subnet with 5 canisters installed. All canisters, except one local canister referred to
+/// as `migrating_canister` is stopped.
+///
+/// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
+/// the `migrating_canister` making random calls to all installed canisters (since all calls are
+/// rejected except those to self, downstream calls are disabled).
+///
+/// For the second phase, `migrating_canister` stops making calls and is then migrated to the
+/// remote subnet. Since all other canisters are stopped, there are bound to be a number of reject
+/// signals for requests in the reverse stream to the local_subnet. But since we migrated the
+/// `migrating_canister` to the remote subnet, the locally generated reject responses fail to
+/// induct and are rerouted into the stream to the remote subnet. The remote subnet eventually picks
+/// them up and inducts them into `migrating_canister` leaving no hanging calls after some more rounds.
+///
+/// If there are hanging calls after a threshold number of rounds, there is most likely a bug
+/// connected to reject signals for requests, specifically with the corresponding exceptions due to
+/// canister migration.
+#[test]
+fn check_calls_conclude_with_migrating_canister() {
+    // The number of rounds to execute while the migrating canister is making calls.
+    const BUILDUP_PHASE_ROUND_COUNT: u64 = 10;
+    // The maximum number of rounds to execute after chatter is turned off. It it takes more than
+    // this number of rounds until there are no more hanging calls, the test fails.
+    const SHUTDOWN_PHASE_MAX_ROUNDS: u64 = 300;
+
+    let mut fixture = Fixture::new(FixtureConfig {
+        local_canisters_count: 2,
+        remote_canisters_count: 5,
+        ..FixtureConfig::default()
+    });
+
+    let migrating_canister = fixture.local_canisters.first().unwrap().clone();
+    let config = CanisterConfig::try_new(
+        fixture.canisters(), // receivers
+        0..=0,               // call_bytes
+        0..=0,               // reply_bytes
+        0..=0,               // instructions_count
+    )
+    .unwrap();
+    fixture.set_config(migrating_canister, config).unwrap();
+
+    fixture.seed_rng(migrating_canister, 73);
+    fixture.set_reply_weight(migrating_canister, 1).unwrap();
+    fixture.set_call_weight(migrating_canister, 0).unwrap();
+    fixture
+        .set_max_calls_per_heartbeat(migrating_canister, 10)
+        .unwrap();
+
+    // Stop all canisters except `migrating_canister`.
+    for canister in fixture.canisters() {
+        if canister != migrating_canister {
+            fixture.stop_canister_non_blocking(canister);
+        }
+    }
+    // Make calls on `migrating_canister`.
+    for _ in 0..BUILDUP_PHASE_ROUND_COUNT {
+        fixture.tick();
+    }
+
+    // Stop making calls and migrate `migrating_canister`.
+    fixture
+        .set_max_calls_per_heartbeat(migrating_canister, 0)
+        .unwrap();
+    fixture.migrate_canister(migrating_canister);
+
+    // Tick until all calls or concluded.
+    for counter in 0.. {
+        fixture.tick();
+        if fixture.open_call_contexts_count().values().sum::<usize>() == 0 {
+            break;
+        }
+        assert!(counter < SHUTDOWN_PHASE_MAX_ROUNDS);
+    }
+
+    // Check the records agree on 'no hanging calls'.
+    assert_eq!(
+        0,
+        extract_metrics(&fixture.force_query_records(migrating_canister)).hanging_calls
+    );
+}
+
 #[derive(Debug)]
 struct FixtureConfig {
     local_canisters_count: u64,
@@ -244,9 +326,9 @@ impl FixtureConfig {
 #[derive(Debug, Clone)]
 struct Fixture {
     pub local_env: Arc<StateMachine>,
-    pub local_canisters: Vec<CanisterId>,
+    pub local_canisters: BTreeSet<CanisterId>,
     pub remote_env: Arc<StateMachine>,
-    pub remote_canisters: Vec<CanisterId>,
+    pub remote_canisters: BTreeSet<CanisterId>,
 }
 
 impl Fixture {
@@ -495,6 +577,46 @@ impl Fixture {
             self.local_env.execute_block_with_xnet_payload(xnet_payload);
         } else {
             self.local_env.tick();
+        }
+    }
+
+    /// Migrates `canister` from the `local_env` (`remote_env)  to `remote_env` (`local_env`).
+    ///
+    /// Panics if no such canister exists.
+    pub fn migrate_canister(&mut self, canister: CanisterId) {
+        fn move_canister(
+            canister: CanisterId,
+            from_env: &StateMachine,
+            from_subnet: SubnetId,
+            to_env: &StateMachine,
+            to_subnet: SubnetId,
+        ) {
+            for env in [from_env, to_env] {
+                env.prepare_canister_migrations(canister..=canister, from_subnet, to_subnet);
+                env.reroute_canister_range(canister..=canister, to_subnet);
+            }
+            from_env.move_canister_state_to(to_env, canister).unwrap();
+        }
+
+        if self.local_canisters.remove(&canister) {
+            move_canister(
+                canister,
+                &self.local_env,
+                LOCAL_SUBNET_ID,
+                &self.remote_env,
+                REMOTE_SUBNET_ID,
+            );
+            self.remote_canisters.insert(canister);
+        } else {
+            move_canister(
+                canister,
+                &self.remote_env,
+                REMOTE_SUBNET_ID,
+                &self.local_env,
+                LOCAL_SUBNET_ID,
+            );
+            assert!(self.remote_canisters.remove(&canister));
+            self.local_canisters.insert(canister);
         }
     }
 
