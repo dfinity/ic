@@ -4,8 +4,10 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::{
-    canister_state::system_state::CanisterHistory,
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
+    canister_state::system_state::{CanisterHistory, OnLowWasmMemoryHookStatus},
+    metadata_state::subnet_call_context_manager::InstallCodeCallId,
+    page_map::Shard,
+    NumWasmPages,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
@@ -58,6 +60,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
     }
 }
 

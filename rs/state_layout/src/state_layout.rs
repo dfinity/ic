@@ -1,6 +1,3 @@
-use crate::error::LayoutError;
-use crate::utils::do_copy;
-
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
@@ -17,7 +14,10 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
+        system_state::{
+            wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
+            OnLowWasmMemoryHookStatus,
+        },
     },
     page_map::{Shard, StorageLayout, StorageResult},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
@@ -41,6 +41,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+use crate::error::LayoutError;
+use crate::utils::do_copy;
 
 #[cfg(test)]
 mod tests;
@@ -175,6 +178,7 @@ pub struct CanisterStateBits {
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2310,6 +2314,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
+            on_low_wasm_memory_hook_status: Some(
+                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
+                    &item.on_low_wasm_memory_hook_status,
+                )
+                .into(),
+            ),
         }
     }
 }
@@ -2379,6 +2389,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 NominalCycles::try_from(x.cycles.unwrap_or_default()).unwrap_or_default(),
             );
         }
+
+        let on_low_wasm_memory_hook_status: Option<
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus,
+        > = value.on_low_wasm_memory_hook_status.map(|v| {
+            pb_canister_state_bits::OnLowWasmMemoryHookStatus::try_from(v).unwrap_or_default()
+        });
 
         Ok(Self {
             controllers,
@@ -2462,6 +2478,11 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
+            on_low_wasm_memory_hook_status: try_from_option_field(
+                on_low_wasm_memory_hook_status,
+                "CanisterStateBits::on_low_wasm_memory_hook_status",
+            )
+            .unwrap_or_default(),
         })
     }
 }
