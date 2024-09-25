@@ -2171,6 +2171,7 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
+    /// Wait till deallocation queue is empty.
     pub fn flush_deallocation_channel(&self) {
         let (send, recv) = unbounded();
         self.deallocation_sender
