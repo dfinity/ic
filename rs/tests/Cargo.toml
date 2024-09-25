@@ -63,7 +63,7 @@ ic-icrc1-test-utils = { path = "../ledger_suite/icrc1/test_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
-ic-ledger-core = { path = "../rosetta-api/ledger_core" }
+ic-ledger-core = { path = "../ledger_suite/common/ledger_core" }
 ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-message = { path = "./test_canisters/message" }

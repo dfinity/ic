@@ -87,8 +87,8 @@ impl TargetCanister {
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/ledger_suite/icp/archive"),
                     PathBuf::from("rs/ledger_suite/icp/src"),
-                    PathBuf::from("rs/rosetta-api/ledger_canister_core"),
-                    PathBuf::from("rs/rosetta-api/ledger_core"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_canister_core"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_core"),
                 ]
             }
             TargetCanister::IcpIndex => {
@@ -96,8 +96,8 @@ impl TargetCanister {
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/ledger_suite/icp/index"),
                     PathBuf::from("rs/ledger_suite/icp/src"),
-                    PathBuf::from("rs/rosetta-api/ledger_canister_core/src"),
-                    PathBuf::from("rs/rosetta-api/ledger_core"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_canister_core/src"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_core"),
                     PathBuf::from("rs/rust_canisters/http_types"),
                     PathBuf::from("rs/rust_canisters/canister_log"),
                 ]
@@ -107,8 +107,8 @@ impl TargetCanister {
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/ledger_suite/icp/ledger/src"),
                     PathBuf::from("rs/ledger_suite/icp/src"),
-                    PathBuf::from("rs/rosetta-api/ledger_canister_core/src"),
-                    PathBuf::from("rs/rosetta-api/ledger_core/src"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_canister_core/src"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_core/src"),
                 ]
             }
             _ => {

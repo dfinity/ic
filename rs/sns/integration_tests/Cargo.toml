@@ -26,8 +26,8 @@ ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
-ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }

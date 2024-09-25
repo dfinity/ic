@@ -130,8 +130,8 @@ get_nns_canister_code_location() {
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
     LEDGER_COMMON="$RUST_DIR/ledger_suite/icp/src "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
     SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
@@ -160,7 +160,7 @@ get_sns_canister_code_location() {
     # Map of locations
     code_location__root="$RUST_DIR/sns/root"
     code_location__governance="$RUST_DIR/sns/governance"
-    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/rosetta-api/ledger_core $RUST_DIR/rosetta-api/ledger_canister_core"
+    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core"
     code_location__swap="$RUST_DIR/sns/swap"
     code_location__archive="$RUST_DIR/ledger_suite/icrc1"
     code_location__index="$RUST_DIR/ledger_suite/icrc1"

@@ -8,10 +8,10 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
-icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+icrc-ledger-types = { path = "../../../../../../packages/icrc-ledger-types" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-pocket-ic = { path = "../../../../../packages/pocket-ic" }
+pocket-ic = { path = "../../../../../../packages/pocket-ic" }
 reqwest = { workspace = true }

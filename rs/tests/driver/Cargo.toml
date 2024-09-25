@@ -49,7 +49,7 @@ ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }

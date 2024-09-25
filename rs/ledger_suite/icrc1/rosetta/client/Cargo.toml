@@ -25,7 +25,7 @@ ic-rosetta-api = { path = "../../.." }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }
-rosetta-core = { path = "../../../rosetta_core" }
+rosetta-core = { path = "../../../../rosetta-api/rosetta_core" }
 serde = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
