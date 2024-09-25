@@ -208,7 +208,7 @@ fn check_calls_conclude_with_migrating_canister() {
         ..FixtureConfig::default()
     });
 
-    let migrating_canister = fixture.local_canisters.first().unwrap().clone();
+    let migrating_canister = *fixture.local_canisters.first().unwrap();
     let config = CanisterConfig::try_new(
         fixture.canisters(), // receivers
         0..=0,               // call_bytes
