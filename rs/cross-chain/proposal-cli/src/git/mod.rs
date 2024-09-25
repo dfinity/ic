@@ -1,3 +1,4 @@
+use crate::candid::{encode_upgrade_args, UpgradeArgs};
 use crate::canister::TargetCanister;
 use candid::Principal;
 use std::fmt::{Display, Formatter};
@@ -37,8 +38,18 @@ impl<const N: usize> Display for Hash<N> {
     }
 }
 
+impl Hash<32> {
+    pub fn sha256(data: &[u8]) -> Self {
+        use sha2::Digest;
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(data);
+        Self(hasher.finalize().into())
+    }
+}
+
 pub type GitCommitHash = Hash<20>;
 pub type CompressedWasmHash = Hash<32>;
+pub type ArgsHash = Hash<32>;
 
 #[derive(Debug)]
 pub struct GitRepository {
@@ -62,8 +73,31 @@ impl GitRepository {
         GitRepository { dir: repo }
     }
 
+    pub fn encode_args_batch(
+        &self,
+        canisters: &[TargetCanister],
+        args: Option<String>,
+    ) -> Vec<UpgradeArgs> {
+        canisters
+            .iter()
+            .map(|canister| {
+                encode_upgrade_args(
+                    &self.candid_file(canister),
+                    args.clone().unwrap_or(canister.default_upgrade_args()),
+                )
+            })
+            .collect()
+    }
+
     pub fn candid_file(&self, canister: &TargetCanister) -> PathBuf {
         self.dir.path().join(canister.candid_file())
+    }
+
+    pub fn parse_canister_id_batch(&self, canisters: &[TargetCanister]) -> Vec<Principal> {
+        canisters
+            .iter()
+            .map(|canister| self.parse_canister_id(canister))
+            .collect()
     }
 
     pub fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
@@ -94,6 +128,18 @@ impl GitRepository {
             .status()
             .expect("failed to checkout the commit");
         assert!(git_checkout.success());
+    }
+
+    pub fn release_notes_batch(
+        &self,
+        canisters: &[TargetCanister],
+        from: &GitCommitHash,
+        to: &GitCommitHash,
+    ) -> Vec<ReleaseNotes> {
+        canisters
+            .iter()
+            .map(|canister| self.release_notes(canister, from, to))
+            .collect()
     }
 
     pub fn release_notes(
@@ -133,14 +179,29 @@ impl GitRepository {
         }
     }
 
+    pub fn build_canister_artifact_batch(
+        &mut self,
+        canister: &[TargetCanister],
+    ) -> Vec<CompressedWasmHash> {
+        self.build_canisters();
+        canister.iter().map(|c| self.sha256_artifact(c)).collect()
+    }
+
     pub fn build_canister_artifact(&mut self, canister: &TargetCanister) -> CompressedWasmHash {
+        self.build_canisters();
+        self.sha256_artifact(canister)
+    }
+
+    fn build_canisters(&mut self) {
         let build = Command::new("./ci/container/build-ic.sh")
             .arg("--canisters")
             .current_dir(self.dir.path())
             .status()
             .expect("failed to build canister artifacts");
         assert!(build.success());
+    }
 
+    fn sha256_artifact(&mut self, canister: &TargetCanister) -> Hash<32> {
         let sha256sum = Command::new("sha256sum")
             .current_dir(self.dir.path())
             .arg(canister.artifact())
@@ -170,7 +231,7 @@ impl GitRepository {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ReleaseNotes {
     pub command: String,
     pub output: String,

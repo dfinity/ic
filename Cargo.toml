@@ -168,7 +168,9 @@ members = [
     "rs/nervous_system/common/test_canister",
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
+    "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/initial_supply",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -281,7 +283,6 @@ members = [
     "rs/rosetta-api/icrc1/test_utils",
     "rs/rosetta-api/icrc1/tokens_u64",
     "rs/rosetta-api/icrc1/tokens_u256",
-    "rs/rosetta-api/hardware_wallet_tests",
     "rs/rosetta-api/test_utils",
     "rs/rosetta-api/test_utils/sender_canister",
     "rs/rosetta-api/tvl",
@@ -352,6 +353,7 @@ members = [
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
@@ -484,7 +486,7 @@ clap = { version = "4.4.6", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/cloudflare/cloudflare-rs.git", rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae", default-features = false, feature = [
+cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
     "rustls-tls",
 ] }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
@@ -539,6 +541,7 @@ ic-certification = "2.6.0"
 ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
 ic-stable-structures = "0.6.5"
+ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
 ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
     "groups",
@@ -624,6 +627,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 ] }
 rolling-file = "0.2.0"
 rstest = "0.19.0"
+rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",

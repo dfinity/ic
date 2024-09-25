@@ -347,8 +347,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "cloudflare": crate.spec(
-                git = "https://github.com/cloudflare/cloudflare-rs.git",
-                rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae",
+                git = "https://github.com/dfinity/cloudflare-rs.git",
+                rev = "a6538a036926bd756986c9c0a5de356daef48881",
                 default_features = False,
                 features = [
                     "rustls-tls",
@@ -632,6 +632,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
+            ),
+            "ic-transport-types": crate.spec(
+                version = "^0.37.1",
             ),
             "ic-utils": crate.spec(
                 version = "^0.37.0",
@@ -1071,6 +1074,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rust_decimal_macros": crate.spec(
                 version = "^1.25.0",
+            ),
+            "rustc-demangle": crate.spec(
+                version = "^0.1.16",
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",

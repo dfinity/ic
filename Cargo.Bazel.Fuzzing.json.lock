@@ -1,5 +1,5 @@
 {
-  "checksum": "ea11993298b86ef0b58d9cd313801dd48a94e002efa4f94495a0be234c3a3935",
+  "checksum": "2debd702b24f7c7c56d40695d32c74e12a292344893ba7f1a2441756723febfc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12576,9 +12576,9 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/cloudflare/cloudflare-rs.git",
+          "remote": "https://github.com/dfinity/cloudflare-rs.git",
           "commitish": {
-            "Rev": "f14720e42184ee176a97676e85ef2d2d85bc3aae"
+            "Rev": "a6538a036926bd756986c9c0a5de356daef48881"
           },
           "strip_prefix": "cloudflare"
         }
@@ -18201,6 +18201,10 @@
               "target": "ic_test_state_machine_client"
             },
             {
+              "id": "ic-transport-types 0.37.1",
+              "target": "ic_transport_types"
+            },
+            {
               "id": "ic-utils 0.37.0",
               "target": "ic_utils"
             },
@@ -18633,6 +18637,10 @@
             {
               "id": "rust_decimal 1.32.0",
               "target": "rust_decimal"
+            },
+            {
+              "id": "rustc-demangle 0.1.23",
+              "target": "rustc_demangle"
             },
             {
               "id": "rustc-hash 1.1.0",
@@ -52843,7 +52851,11 @@
           "common": [
             "__rustls",
             "__tls",
+            "async-compression",
             "blocking",
+            "brotli",
+            "deflate",
+            "gzip",
             "hyper-rustls",
             "json",
             "rustls",
@@ -52851,6 +52863,7 @@
             "rustls-tls-webpki-roots",
             "serde_json",
             "tokio-rustls",
+            "tokio-util",
             "webpki-roots"
           ],
           "selects": {}
@@ -52904,6 +52917,10 @@
           ],
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "async-compression 0.4.4",
+                "target": "async_compression"
+              },
               {
                 "id": "encoding_rs 0.8.33",
                 "target": "encoding_rs"
@@ -52963,6 +52980,10 @@
               {
                 "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
+              },
+              {
+                "id": "tokio-util 0.7.12",
+                "target": "tokio_util"
               },
               {
                 "id": "webpki-roots 0.25.2",
@@ -78932,6 +78953,7 @@
     "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
+    "ic-transport-types 0.37.1",
     "ic-utils 0.37.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.8.4",
@@ -79045,6 +79067,7 @@
     "rusqlite 0.28.0",
     "rust_decimal 1.32.0",
     "rust_decimal_macros 1.32.0",
+    "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.12",
     "rustls-native-certs 0.7.0",

@@ -1,6 +1,10 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-docker load -i /config/image.tar
+# Load the jaeger docker image and start the service
+
+set -euo pipefail
+
+docker load -i /config/jaeger.tar
 docker run -d --name jaeger \
     -e COLLECTOR_OTLP_ENABLED=true \
     -e SPAN_STORAGE_TYPE=badger \
