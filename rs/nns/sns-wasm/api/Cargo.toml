@@ -1,0 +1,22 @@
+[package]
+name = "ic-sns-wasm-api"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+ic-nervous-system-clients = { path = "../../../nervous_system/clients" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
+ic-sns-init = { path = "../../../sns/init" }
+ic-types = { path = "../../../types/types" }
+ic-utils = { path = "../../../utils" }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

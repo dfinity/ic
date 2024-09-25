@@ -32,6 +32,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
+    "//rs/nns/sns-wasm/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",

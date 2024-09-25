@@ -18,6 +18,7 @@ rust_library(
         "//rs/nns/common",
         "//rs/nns/governance/api",
         "//rs/nns/sns-wasm",
+        "//rs/nns/sns-wasm/api",
         "//rs/nns/test_utils",
         "//rs/registry/subnet_type",
         "//rs/rosetta-api/icp_ledger",

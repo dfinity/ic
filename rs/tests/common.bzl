@@ -45,6 +45,7 @@ DEPENDENCIES = [
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
     "//rs/nns/sns-wasm",
+    "//rs/nns/sns-wasm/api",
     "//rs/nns/test_utils",
     "//rs/phantom_newtype",
     "//rs/prep",

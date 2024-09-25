@@ -13,6 +13,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/sns-wasm/api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
