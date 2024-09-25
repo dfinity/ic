@@ -111,6 +111,7 @@ fn test_api_for_update(
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::new(instruction_limit)),
         log,
     )

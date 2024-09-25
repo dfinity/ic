@@ -48,6 +48,20 @@ anchors:
     env:
       DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  bazel-bep: &bazel-bep
+    name: Upload bazel-bep
+    # runs only if previous step succeeded or failed;
+    # we avoid collecting artifacts of jobs that were cancelled
+    if: success() || failure()
+    uses: actions/upload-artifact@v4
+    with:
+      name: ${{ github.job }}-bep
+      retention-days: 14
+      if-no-files-found: ignore
+      compression-level: 9
+      path: |
+        bazel-bep.pb
+        profile.json
 
 jobs:
 
@@ -115,17 +129,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
@@ -145,17 +149,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
@@ -180,17 +174,7 @@ jobs:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   dependency-scan-nightly:
     name: Dependency Scan Nightly
