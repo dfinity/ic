@@ -126,7 +126,7 @@ jobs:
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           RUN_ON_DIFF_ONLY: "true"
-          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'OVERRIDE_DIDC_CHECK') }}
+          OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
