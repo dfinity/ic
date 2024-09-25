@@ -139,6 +139,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // In CI we expect the sandbox executable to be in our path so this should
     // succeed.
     if let Ok(exec_path) = which::which(executable_name) {
+        println!("Running sandbox with executable {:?}", exec_path);
         return Some(vec![exec_path.to_str().unwrap().to_string()]);
     }
 
@@ -149,9 +150,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the `canister_sandbox` or `sandbox_launcher`
     // cargo manifest so this should succeed.
-    let cargo = which::which("cargo");
-    let cargo_manifest_for_testing_result = cargo_manifest_for_testing(&krate);
-    match (cargo, cargo_manifest_for_testing_result) {
+    match (which::which("cargo"), cargo_manifest_for_testing(&krate)) {
         (Ok(path), Some(manifest_path)) => {
             println!(
                 "Building {} with cargo {:?} and manifest {:?}",
@@ -186,7 +185,6 @@ fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok();
     let mut next_parent = manifest_dir.as_ref().map(Path::new);
     let mut current_manifest = None;
-
     while let Some(parent) = next_parent {
         let next: PathBuf = [parent, Path::new("Cargo.toml")].iter().collect();
         if next.exists() {
