@@ -1,5 +1,5 @@
 [package]
-name = "config"
+name = "config_tool"
 version = "1.0.0"
 edition = "2021"
 
@@ -19,9 +19,9 @@ once_cell = "1.8"
 tempfile = { workspace = true }
 
 [lib]
-name = "config"
+name = "config_tool_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "config"
+name = "config_tool"
 path = "src/main.rs"

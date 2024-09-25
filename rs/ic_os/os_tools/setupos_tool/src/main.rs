@@ -3,9 +3,9 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
-use config::config_ini::config_map_from_path;
-use config::deployment_json::get_deployment_settings;
-use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
+use config_tool_lib::config_ini::config_map_from_path;
+use config_tool_lib::deployment_json::get_deployment_settings;
+use config_tool_lib::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;

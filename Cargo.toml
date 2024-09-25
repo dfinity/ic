@@ -124,7 +124,7 @@ members = [
     "rs/ic_os/dev_test_tools/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
-    "rs/ic_os/config",
+    "rs/ic_os/config_tool",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",

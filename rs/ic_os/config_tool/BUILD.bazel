@@ -26,7 +26,7 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "config_lib",
+    name = "config_tool_lib",
     srcs = glob(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
@@ -37,18 +37,18 @@ rust_library(
 )
 
 rust_binary(
-    name = "config",
+    name = "config_tool",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     crate_name = "config",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [":config_lib"] + DEPENDENCIES,
+    deps = [":config_tool_lib"] + DEPENDENCIES,
 )
 
 rust_test(
-    name = "config_lib_test",
-    crate = ":config_lib",
+    name = "config_tool_lib_test",
+    crate = ":config_tool_lib",
     # You may add other deps that are specific to the test configuration
     deps = DEV_DEPENDENCIES,
 )

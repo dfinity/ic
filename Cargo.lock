@@ -2383,7 +2383,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "config"
+name = "config_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
@@ -4516,7 +4516,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.17",
- "config",
+ "config_tool",
  "indoc",
  "itertools 0.12.1",
  "network",
@@ -4852,7 +4852,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.17",
- "config",
+ "config_tool",
  "network",
  "utils",
 ]
@@ -15312,7 +15312,7 @@ name = "network"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "config",
+ "config_tool",
  "hex",
  "ping",
  "rayon",
@@ -18843,7 +18843,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.17",
- "config",
+ "config_tool",
  "partition_tools",
  "serde",
  "serde_json",
@@ -18859,7 +18859,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.17",
- "config",
+ "config_tool",
  "network",
  "utils",
 ]

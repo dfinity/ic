@@ -1,12 +1,12 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
-use config::deployment_json::get_deployment_settings;
-use config::serialize_and_write_config;
+use config_tool_lib::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config_tool_lib::deployment_json::get_deployment_settings;
+use config_tool_lib::serialize_and_write_config;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::types::{
+use config_tool_lib::types::{
     GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, NetworkSettings,
     SetupOSConfig, SetupOSSettings,
 };
@@ -15,29 +15,29 @@ use config::types::{
 pub enum Commands {
     /// Creates SetupOSConfig object
     CreateSetuposConfig {
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
         config_ini_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH, value_name = "nns_public_key.pem")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH, value_name = "nns_public_key.pem")]
         nns_public_key_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH, value_name = "ssh_authorized_keys")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH, value_name = "ssh_authorized_keys")]
         ssh_authorized_keys_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH, value_name = "node_operator_private_key.pem")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH, value_name = "node_operator_private_key.pem")]
         node_operator_private_key_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
     },
     /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
+        #[arg(long, default_value = config_tool_lib::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
     },
 }
