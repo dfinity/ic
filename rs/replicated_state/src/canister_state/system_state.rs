@@ -1752,6 +1752,7 @@ pub mod testing {
             wasm_memory_limit: _,
             next_snapshot_id: _,
             snapshots_memory_usage: _,
+            on_low_wasm_memory_hook_status: _,
         } = system_state;
     }
 }
