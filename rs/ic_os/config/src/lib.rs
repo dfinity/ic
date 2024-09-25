@@ -47,7 +47,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use types::{
-        GuestOSConfig, GuestOSSettings, GuestosDevSettings, HostOSConfig, HostOSSettings,
+        GuestOSConfig, GuestOSDevSettings, GuestOSSettings, HostOSConfig, HostOSSettings,
         ICOSDevSettings, ICOSSettings, Logging, NetworkSettings, SetupOSConfig, SetupOSSettings,
     };
 
@@ -93,7 +93,7 @@ mod tests {
             ic_crypto_path: None,
             ic_state_path: None,
             ic_registry_local_store_path: None,
-            guestos_dev_settings: GuestosDevSettings::default(),
+            guestos_dev_settings: GuestOSDevSettings::default(),
         };
 
         let setupos_config_struct = SetupOSConfig {

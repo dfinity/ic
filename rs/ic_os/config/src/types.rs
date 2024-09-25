@@ -58,12 +58,12 @@ pub struct GuestOSSettings {
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
     pub ic_registry_local_store_path: Option<PathBuf>,
-    pub guestos_dev_settings: GuestosDevSettings,
+    pub guestos_dev_settings: GuestOSDevSettings,
 }
 
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
-pub struct GuestosDevSettings {
+pub struct GuestOSDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
     pub query_stats_epoch_length: Option<String>,
