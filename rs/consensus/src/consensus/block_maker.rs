@@ -131,9 +131,11 @@ impl BlockMaker {
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
+                        parent.get_value().clone(),
                         height,
                         rank,
                         self.time_source.as_ref(),
+                        Some(&self.metrics),
                     )
                 {
                     self.propose_block(pool, rank, parent).map(|proposal| {
@@ -514,17 +516,70 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
         .any(|p| p.signature.signer == this_node)
 }
 
+// To protect ourselves against the scenario where malicious peers somehow manage to consistently
+// delay the notarization of blocks from honest peers and force their blocks to be notarized first,
+// we give rank-0 block makers more time for their blocks to be notarized, before moving on to
+// higher rank blocks, when too many rank-0 blocks have been already notarized. This should
+// increase the chance that honest replicas get their blocks finalized in the aforementioned
+// scenario.
+// Notes:
+// 1) if we assume that the "dynamic delay" is never triggered, then we expect the chain
+//    quality (defined as the fraction of blocks proposed by honest nodes which were eventually
+//    finalized) to be at least 50%: if we look at any random height `h`, then we expect
+//    around 10 rank-0 blocks to be proposed by malicious nodes (assuming f = n/3) in the past
+//    30 rounds, and at most 5 non-rank-0 blocks from malicious nodes to be finalized, thus we
+//    expect at least 15 blocks from honest replica to be finalized in the last 30 rounds.
+// 2) `DYNAMIC_DELAY_LOOK_BACK_DISTANCE` cannot be too large for performance reasons.
+// 3) `DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS` cannot be too small, otherwise the condition could be
+//    triggered too easily, and lead to average round duration of more than 3s (due to 1/3 of the
+//    blocks arriving after 9s or later)
+// 4) Under "good" networking conditions (at least 300Mbit/s bandwidth and low latency), 10 seconds
+//    should be enough to transfer a block (of size at most 4MB) to all (at most 39) peers.
+const DYNAMIC_DELAY_LOOK_BACK_DISTANCE: Height = Height::new(29);
+const DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS: usize = 5;
+const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
+
+fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
+    let max_height = block.height();
+    let min_height = if max_height > DYNAMIC_DELAY_LOOK_BACK_DISTANCE {
+        max_height - DYNAMIC_DELAY_LOOK_BACK_DISTANCE
+    } else {
+        Height::new(0)
+    };
+
+    pool.get_range(block, min_height, max_height)
+        .filter(|block| block.rank > Rank(0))
+        .count()
+}
+
 /// Calculate the required delay for block making based on the block maker's
-/// rank.
+/// rank and the number of non-0-rank blocks in its ancestry.
 pub(super) fn get_block_maker_delay(
     log: &ReplicaLogger,
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
+    pool: &PoolReader<'_>,
+    parent: Block,
     registry_version: RegistryVersion,
     rank: Rank,
+    metrics: Option<&BlockMakerMetrics>,
 ) -> Option<Duration> {
-    get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)
-        .map(|settings| settings.unit_delay * rank.0 as u32)
+    let settings =
+        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
+    // If this is not a Rank-0 block maker, check how many non-rank-0 blocks have been notarized in
+    // the past, and increase the delay if there have been too many.
+    let dynamic_delay = if rank > Rank(0)
+        && count_non_rank_0_blocks(pool, parent) > DYNAMIC_DELAY_MAX_NON_RANK_0_BLOCKS
+    {
+        if let Some(metrics) = metrics {
+            metrics.dynamic_delay_triggered.inc();
+        }
+        DYNAMIC_DELAY_EXTRA_DURATION
+    } else {
+        Duration::ZERO
+    };
+
+    Some(settings.unit_delay * rank.0 as u32 + dynamic_delay)
 }
 
 /// Return true if the time since round start is greater than the required block
@@ -534,16 +589,25 @@ pub(super) fn is_time_to_make_block(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     pool: &PoolReader<'_>,
+    parent: Block,
     height: Height,
     rank: Rank,
     time_source: &dyn TimeSource,
+    metrics: Option<&BlockMakerMetrics>,
 ) -> bool {
     let Some(registry_version) = pool.registry_version(height) else {
         return false;
     };
-    let Some(block_maker_delay) =
-        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
-    else {
+    let Some(block_maker_delay) = get_block_maker_delay(
+        log,
+        registry_client,
+        subnet_id,
+        pool,
+        parent,
+        registry_version,
+        rank,
+        metrics,
+    ) else {
         return false;
     };
 
@@ -575,6 +639,7 @@ mod tests {
         crypto::CryptoHash,
         *,
     };
+    use rstest::rstest;
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -655,13 +720,17 @@ mod tests {
                 .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
             let returned_payload =
                 dkg::Payload::Dealings(dkg::Dealings::new_empty(Height::from(0)));
+            let pool_reader = PoolReader::new(&pool);
             let expected_time = expected_payloads[0].1
                 + get_block_maker_delay(
                     &no_op_logger(),
                     registry.as_ref(),
                     subnet_id,
+                    &pool_reader,
+                    start.as_ref().clone(),
                     RegistryVersion::from(10),
                     Rank(4),
+                    /*metrics=*/ None,
                 )
                 .unwrap();
             let expected_context = ValidationContext {
@@ -999,6 +1068,119 @@ mod tests {
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(2)
             );
+        })
+    }
+
+    #[rstest]
+    #[case(Rank(0), Duration::from_secs(1), Duration::from_secs(0))]
+    #[case(Rank(1), Duration::from_secs(7), Duration::from_secs(7 + 10))]
+    #[case(Rank(2), Duration::from_secs(3), Duration::from_secs(2 * 3 + 10))]
+    fn get_block_maker_delay_many_non_rank_0_blocks(
+        #[case] rank: Rank,
+        #[case] unit_delay: Duration,
+        #[case] expected_block_maker_delay: Duration,
+    ) {
+        // there should be 6 non-rank-0 blocks in the past 30 heights
+        let initial = std::iter::repeat(Rank(1)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(24);
+        let terminal = std::iter::repeat(Rank(2)).take(5);
+
+        let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
+
+        assert_eq!(
+            block_maker_delay_test_case(&ranks, rank, unit_delay,),
+            expected_block_maker_delay,
+        );
+    }
+
+    #[rstest]
+    #[case(Rank(0), Duration::from_secs(2), Duration::from_secs(0))]
+    #[case(Rank(1), Duration::from_secs(4), Duration::from_secs(4))]
+    #[case(Rank(2), Duration::from_secs(6), Duration::from_secs(2 * 6))]
+    fn get_block_maker_delay_few_non_rank_0_blocks(
+        #[case] rank: Rank,
+        #[case] unit_delay: Duration,
+        #[case] expected_block_maker_delay: Duration,
+    ) {
+        // there should be 5 non-rank-0 blocks in the past 30 heights
+        let initial = std::iter::repeat(Rank(1)).take(5);
+        let mid = std::iter::repeat(Rank(0)).take(25);
+        let terminal = std::iter::repeat(Rank(2)).take(5);
+
+        let ranks: Vec<Rank> = initial.chain(mid).chain(terminal).collect();
+
+        assert_eq!(
+            block_maker_delay_test_case(&ranks, rank, unit_delay,),
+            expected_block_maker_delay,
+        );
+    }
+
+    #[test]
+    fn get_block_maker_delay_short_chain_few_non_rank_0_blocks_test() {
+        assert_eq!(
+            block_maker_delay_test_case(
+                &[Rank(1), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
+                Rank(1),
+                Duration::from_secs(1)
+            ),
+            Duration::from_secs(11),
+        );
+    }
+
+    #[test]
+    fn get_block_maker_delay_short_chain_many_non_rank_0_blocks_test() {
+        assert_eq!(
+            block_maker_delay_test_case(
+                &[Rank(0), Rank(1), Rank(1), Rank(1), Rank(1), Rank(1)],
+                Rank(1),
+                Duration::from_secs(1)
+            ),
+            Duration::from_secs(1),
+        );
+    }
+
+    fn block_maker_delay_test_case(
+        past_block_ranks: &[Rank],
+        block_maker_rank: Rank,
+        unit_delay: Duration,
+    ) -> Duration {
+        let subnet_id = subnet_test_id(0);
+        let node_ids: Vec<_> = (0..100).map(node_test_id).collect();
+        let registry_version = 1;
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool, registry, ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    registry_version,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_unit_delay(unit_delay)
+                        .build(),
+                )],
+            );
+
+            for rank in past_block_ranks {
+                pool.advance_round_with_block(&pool.make_next_block_with_rank(*rank));
+            }
+
+            let parent = pool.latest_notarized_blocks().next().unwrap();
+
+            let pool_reader = PoolReader::new(&pool);
+
+            get_block_maker_delay(
+                &no_op_logger(),
+                registry.as_ref(),
+                subnet_id,
+                &pool_reader,
+                parent,
+                RegistryVersion::from(registry_version),
+                block_maker_rank,
+                /*metrics=*/ None,
+            )
+            .expect("Should successfully compute the block maker delay with valid inputs")
         })
     }
 }

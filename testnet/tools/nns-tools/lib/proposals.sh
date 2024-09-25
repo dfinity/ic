@@ -95,6 +95,9 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
+[How to verify] this proposal (and others like it).
+
+[How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
 
 ## Features, Fixes, and Optimizations
 
@@ -123,47 +126,6 @@ $CANDID_ARGS
 
 - Current Git Hash: $LAST_COMMIT
 - Current Wasm Hash: $LAST_WASM_HASH
-
-
-## WASM Verification
-
-See ["Building the code"][prereqs] for prerequisites.
-
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
-
-\`\`\`
-# 1. Get a copy of the code.
-git clone git@github.com:dfinity/ic.git
-cd ic
-# Or, if you already have a copy of the ic repo,
-git fetch
-git checkout $NEXT_COMMIT
-
-# 2. Build canisters.
-./ci/container/build-ic.sh -c
-
-# 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
-\`\`\`
-
-This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
-            echo "
-
-
-## Upgrade Arguments Verification
-
-[\`didc\`][latest-didc] is required.
-
-[latest-didc]: https://github.com/dfinity/candid/releases/latest
-
-\`\`\`
-didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum
-
-\`\`\`
-
-This should match the \`arg_hash\` field of this proposal.
-"
-        fi)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
@@ -205,6 +167,10 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
+[How to verify] this proposal (and others like it).
+
+[How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
+
 
 ## Features, Fixes, and Optimizations
 
@@ -217,30 +183,6 @@ TODO TO BE FILLED OUT BY THE PROPOSER
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
-
-
-## Wasm Verification
-
-See ["Building the code"][prereqs] for prerequisites.
-
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
-
-\`\`\`
-# 1. Get a copy of the code.
-git clone git@github.com:dfinity/ic.git
-cd ic
-# Or, if you already have a copy of the ic repo,
-git fetch
-git checkout $NEXT_COMMIT
-
-# 2. Build canisters.
-./ci/container/build-ic.sh -c
-
-# 3. Fingerprint the result.
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
-\`\`\`
-
-This should match \`wasm\` field of this proposal.
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 

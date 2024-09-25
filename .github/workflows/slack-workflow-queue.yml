@@ -43,7 +43,7 @@ jobs:
 
             # exclude workflows with long wait times
             WORKFLOW_NAME=$(echo "${WORKFLOWS_IN_QUEUE}" | jq -r "select(.id == ${WORKFLOW}) | .name") # Extract name
-            if [ "$WORKFLOW_NAME" = "Schedule Daily" ]; then
+            if [ "$WORKFLOW_NAME" = "Schedule Rust Benchmarks" ]; then
               continue
             fi
 
