@@ -31,7 +31,7 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }} # Todo: remove after candid tests are updated
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 anchors:
