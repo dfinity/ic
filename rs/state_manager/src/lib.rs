@@ -779,6 +779,16 @@ impl SharedState {
 // the cost of deallocation over a longer period of time, and avoid long pauses.
 type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 
+struct NotifyWhenDeallocated {
+    channel: Sender<()>,
+}
+
+impl Drop for NotifyWhenDeallocated {
+    fn drop(&mut self) {
+        self.channel.send(()).expect("Failed to notify dellocation");
+    }
+}
+
 // We will not use the deallocation thread when the number of pending
 // deallocation objects goes above the threshold.
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
@@ -2159,6 +2169,15 @@ impl StateManagerImpl {
         // should touch.  Instead of pro-actively updating tip here, we let the
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
+    }
+
+    pub fn flush_deallocation_channel(&self) {
+        let (send, recv) = unbounded();
+        self.deallocation_sender
+            .send(Box::new(NotifyWhenDeallocated { channel: send }))
+            .expect("Failed to send deallocation request");
+        recv.recv()
+            .expect("Failed to receive deallocation notification");
     }
 
     /// Remove any inmemory state at height h with h < last_height_to_keep, and
