@@ -34,7 +34,7 @@ fi
 
 if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
-     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file
