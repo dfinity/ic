@@ -2711,7 +2711,8 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
 
-    let stable_upgrade_migration_steps = parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+    let stable_upgrade_migration_steps =
+        parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
     assert_eq!(stable_upgrade_migration_steps, 1);
 
     // Add some more approvals
