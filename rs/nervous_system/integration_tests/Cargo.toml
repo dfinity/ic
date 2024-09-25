@@ -13,6 +13,7 @@ candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-base-types = { path = "../../types/base_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-nervous-system-agent = { path = "../agent" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proto = { path = "../proto" }
