@@ -917,30 +917,12 @@ impl MemoryUsage {
     ) -> Result<(), HypervisorError> {
         match execution_memory_type {
             ExecutionMemoryType::WasmMemory => {
-                let (new_usage, overflow) = self
-                    .wasm_memory_usage
-                    .get()
-                    .overflowing_add(execution_bytes.get());
-
-                if overflow {
-                    return Err(HypervisorError::OutOfMemory);
-                }
-
-                self.wasm_memory_usage = NumBytes::new(new_usage);
+                add_memory(&mut self.wasm_memory_usage, execution_bytes)
             }
             ExecutionMemoryType::StableMemory => {
-                let (new_usage, overflow) = self
-                    .stable_memory_usage
-                    .get()
-                    .overflowing_add(execution_bytes.get());
-                if overflow {
-                    return Err(HypervisorError::OutOfMemory);
-                }
-                self.stable_memory_usage = NumBytes::new(new_usage);
+                add_memory(&mut self.stable_memory_usage, execution_bytes)
             }
         }
-
-        Ok(())
     }
 
     /// Tries to allocate the requested amount of message memory.
@@ -1008,6 +990,20 @@ impl MemoryUsage {
         self.allocated_message_memory -= message_bytes;
         self.current_message_usage -= message_bytes;
     }
+}
+
+fn add_memory(
+    memory_size: &mut NumBytes,
+    additional_memory: NumBytes,
+) -> Result<(), HypervisorError> {
+    let (new_usage, overflow) = memory_size.get().overflowing_add(additional_memory.get());
+
+    if overflow {
+        return Err(HypervisorError::OutOfMemory);
+    }
+
+    *memory_size = NumBytes::new(new_usage);
+    Ok(())
 }
 
 /// Struct that implements the SystemApi trait. This trait enables a canister to
@@ -2795,9 +2791,10 @@ impl SystemApi for SystemApiImpl {
         let resulting_size = current_size.saturating_add(additional_pages);
         if let StableMemoryApi::Stable32 = stable_memory_api {
             if current_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
-                return Err(HypervisorError::Trapped(
-                    TrapCode::StableMemoryTooBigFor32Bit,
-                ));
+                return Err(HypervisorError::Trapped {
+                    trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                    backtrace: None,
+                });
             }
             if resulting_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
                 return Ok(StableGrowOutcome::Failure);
@@ -2840,7 +2837,10 @@ impl SystemApi for SystemApiImpl {
                 .ic0_canister_cycle_balance_helper("ic0_canister_cycle_balance")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
@@ -2870,7 +2870,10 @@ impl SystemApi for SystemApiImpl {
                 .ic0_msg_cycles_available_helper("ic0_msg_cycles_available")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
@@ -2895,7 +2898,10 @@ impl SystemApi for SystemApiImpl {
                 .ic0_msg_cycles_refunded_helper("ic0_msg_cycles_refunded")?
                 .into_parts();
             if high_amount != 0 {
-                return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
+                return Err(HypervisorError::Trapped {
+                    trap_code: CyclesAmountTooBigFor64Bit,
+                    backtrace: None,
+                });
             }
             Ok(low_amount)
         };
@@ -3223,10 +3229,13 @@ impl SystemApi for SystemApiImpl {
         const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
-            let msg = valid_subslice("trap", src, size, heap)
+            let message = valid_subslice("trap", src, size, heap)
                 .map(|bytes| String::from_utf8_lossy(bytes).to_string())
                 .unwrap_or_else(|_| "(trap message out of memory bounds)".to_string());
-            CalledTrap(msg)
+            CalledTrap {
+                message,
+                backtrace: None,
+            }
         };
         trace_syscall!(self, Trap, src, size, summarize(heap, src, size));
         Err(result)

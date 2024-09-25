@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic"
-version = "4.0.0"
+version = "5.0.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
 repository = "https://github.com/dfinity/ic"
@@ -23,11 +23,14 @@ edition.workspace = true
 base64 = "^0.13.1"
 candid = "^0.10.2"
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-cdk = "0.13.5"
+ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 slog = { workspace = true }

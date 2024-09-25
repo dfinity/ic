@@ -48,20 +48,27 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// The subnets that can serve synchronous responses to update calls received
-/// on the `/api/v3/.../call`` endpoint.
-const WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3: [&str; 1] =
-    ["snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"];
+/// The subnets that serve synchronous responses to v3 update calls.
+/// The list contains all system subnets.
+const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 4] = [
+    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
+    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe",
+    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
+];
 
 /// Returns true if the subnet is whitelisted to serve synchronous responses to v3
 /// update calls.
-fn subnet_is_whitelisted_for_synchronous_call_v3(subnet_id: &SubnetId) -> bool {
-    WHITELISTED_SUBNETS_FOR_SYNCHRONOUS_CALL_V3
-        .iter()
-        .any(|s| match PrincipalId::from_str(s) {
-            Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
-            Err(_) => false,
-        })
+fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
+    let subnet_is_in_disabled_list =
+        SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3
+            .iter()
+            .any(|s| match PrincipalId::from_str(s) {
+                Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
+                Err(_) => false,
+            });
+
+    !subnet_is_in_disabled_list
 }
 
 /// Create the consensus pool directory (if none exists)
@@ -254,7 +261,7 @@ pub fn construct_ic_stack(
     let message_router = Arc::new(message_router);
     let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_http.clone(),
+        rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
@@ -368,7 +375,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        subnet_is_whitelisted_for_synchronous_call_v3(&subnet_id),
+        enable_synchronous_call_handler_for_v3_endpoint(&subnet_id),
     );
 
     Ok((

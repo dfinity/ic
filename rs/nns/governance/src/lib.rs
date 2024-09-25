@@ -137,6 +137,7 @@ use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
+    time::{Duration, SystemTime},
 };
 
 #[cfg(test)]
@@ -243,13 +244,21 @@ impl IcClock {
     }
 }
 
+fn now_seconds() -> u64 {
+    let duration = if cfg!(target_arch = "wasm32") {
+        Duration::from_nanos(ic_cdk::api::time())
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+    };
+    duration.as_secs()
+}
+
 impl Clock for IcClock {
     fn now(&self) -> u64 {
         // Step 1: Read the real time.
-        let real_timestamp_seconds = dfn_core::api::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .expect("IcClock malfunctioned.")
-            .as_secs();
+        let real_timestamp_seconds = now_seconds();
 
         // Step 2: Apply time warp.
         let TimeWarp { delta_s } = self.time_warp;
@@ -941,10 +950,6 @@ impl NeuronSubsetMetricsPb {
 
         Ok(())
     }
-}
-
-fn enable_new_canister_management_topics() -> bool {
-    true
 }
 
 #[cfg(test)]

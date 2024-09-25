@@ -736,7 +736,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
-            system_state.get_on_low_wasm_memory_hook_status().clone(),
+            system_state.get_on_low_wasm_memory_hook_status(),
         )
     }
 
@@ -1220,6 +1220,14 @@ impl SandboxSafeSystemState {
         }
     }
 
+    /// Updates status `OnLowWasmMemoryHook` if the following condition is satisfied:
+    ///
+    /// 1. In the case of `memory_allocation`
+    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    /// 2. Without memory allocation
+    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    ///
+    /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_on_low_wasm_memory_hook_status(
         &mut self,
         memory_allocation: Option<NumBytes>,
@@ -1227,15 +1235,42 @@ impl SandboxSafeSystemState {
         used_stable_memory: NumBytes,
         used_wasm_memory: NumBytes,
     ) {
-        self.system_state_changes
-            .on_low_wasm_memory_hook_status
-            .update(
-                self.wasm_memory_threshold,
-                memory_allocation,
-                wasm_memory_limit,
-                used_stable_memory,
-                used_wasm_memory,
-            );
+        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
+        // limit is ignored for query methods, response callback handlers,
+        // global timers, heartbeats, and canister pre_upgrade.
+        let wasm_memory_limit =
+            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
+
+        // If the canister has memory allocation, then it maximum allowed Wasm memory
+        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
+        let wasm_capacity = memory_allocation.map_or_else(
+            || wasm_memory_limit,
+            |memory_allocation| {
+                debug_assert!(
+                    used_stable_memory <= memory_allocation,
+                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
+                    used_stable_memory,
+                    memory_allocation
+                );
+                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            },
+        );
+
+        let on_low_wasm_memory_hook_status =
+            &mut self.system_state_changes.on_low_wasm_memory_hook_status;
+
+        // Conceptually we can think that the remaining Wasm memory is
+        // equal to `wasm_capacity - used_wasm_memory` and that should
+        // be compared with `wasm_memory_threshold` when checking for
+        // the condition for the hook. However, since `wasm_memory_limit`
+        // is ignored in some executions as stated above it is possible
+        // that `used_wasm_memory` is greater than `wasm_capacity` to
+        // avoid overflowing subtraction we adopted inequality.
+        if wasm_capacity >= used_wasm_memory + self.wasm_memory_threshold {
+            *on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+        } else if *on_low_wasm_memory_hook_status != OnLowWasmMemoryHookStatus::Executed {
+            *on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Ready;
+        }
     }
 
     // Returns `true` if storage cycles need to be reserved for the given
@@ -1436,5 +1471,136 @@ mod tests {
 
         // Otherwise the correct `deadline` is returned.
         assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
+    }
+
+    fn helper_create_state_for_hook_status(
+        start_status: OnLowWasmMemoryHookStatus,
+        wasm_memory_threshold: u64,
+    ) -> SandboxSafeSystemState {
+        SandboxSafeSystemState::new_internal(
+            canister_test_id(0),
+            CanisterStatusView::Running,
+            NumSeconds::from(3600),
+            MemoryAllocation::BestEffort,
+            NumBytes::new(wasm_memory_threshold),
+            ComputeAllocation::default(),
+            Cycles::new(1_000_000),
+            Cycles::zero(),
+            None,
+            None,
+            None,
+            None,
+            CyclesAccountManager::new(
+                NumInstructions::from(1_000_000_000),
+                SubnetType::Application,
+                subnet_test_id(0),
+                CyclesAccountManagerConfig::application_subnet(),
+            ),
+            Some(0),
+            BTreeMap::new(),
+            0,
+            BTreeSet::new(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            SchedulerConfig::application_subnet().dirty_page_overhead,
+            CanisterTimer::Inactive,
+            0,
+            BTreeSet::new(),
+            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
+            None,
+            0,
+            start_status,
+        )
+    }
+
+    const GIB: u64 = 1 << 30;
+
+    fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+        wasm_memory_threshold: u64,
+        memory_allocation: Option<u64>,
+        wasm_memory_limit: Option<u64>,
+        used_stable_memory: u64,
+        used_wasm_memory: u64,
+    ) -> bool {
+        let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
+
+        let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
+            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+        });
+
+        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+    }
+
+    fn helper_test_on_low_wasm_memory_hook(
+        start_status: OnLowWasmMemoryHookStatus,
+        status_if_condition_satisfied: OnLowWasmMemoryHookStatus,
+    ) {
+        for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+            for memory_allocation in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+            {
+                for wasm_memory_limit in
+                    [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+                {
+                    for used_stable_memory in [0, GIB] {
+                        for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                            let mut state = helper_create_state_for_hook_status(
+                                start_status,
+                                wasm_memory_threshold,
+                            );
+
+                            assert_eq!(
+                                state.system_state_changes.on_low_wasm_memory_hook_status,
+                                start_status
+                            );
+
+                            state.update_on_low_wasm_memory_hook_status(
+                                memory_allocation.map(|m| m.into()),
+                                wasm_memory_limit.map(|m| m.into()),
+                                used_stable_memory.into(),
+                                used_wasm_memory.into(),
+                            );
+
+                            assert_eq!(
+                                state.system_state_changes.on_low_wasm_memory_hook_status,
+                                if helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                                    wasm_memory_threshold,
+                                    memory_allocation,
+                                    wasm_memory_limit,
+                                    used_stable_memory,
+                                    used_wasm_memory
+                                ) {
+                                    status_if_condition_satisfied
+                                } else {
+                                    OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+                                }
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            OnLowWasmMemoryHookStatus::Ready,
+        );
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_ready() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::Ready,
+            OnLowWasmMemoryHookStatus::Ready,
+        );
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_executed() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::Executed,
+            OnLowWasmMemoryHookStatus::Executed,
+        );
     }
 }

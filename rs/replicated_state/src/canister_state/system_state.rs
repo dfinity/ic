@@ -560,8 +560,9 @@ pub struct SystemState {
     on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
-/// A wrapper around the different canister statuses.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+
+/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
     ConditionNotSatisfied,
@@ -571,12 +572,12 @@ pub enum OnLowWasmMemoryHookStatus {
 
 impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
     fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        use OnLowWasmMemoryHookStatus::*;
+
         match *item {
-            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
-                pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied
-            }
-            OnLowWasmMemoryHookStatus::Ready => pb::OnLowWasmMemoryHookStatus::Ready,
-            OnLowWasmMemoryHookStatus::Executed => pb::OnLowWasmMemoryHookStatus::Executed,
+            ConditionNotSatisfied => Self::ConditionNotSatisfied,
+            Ready => Self::Ready,
+            Executed => Self::Executed,
         }
     }
 }
@@ -598,53 +599,6 @@ impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
             }
             pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
             pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
-        }
-    }
-}
-
-impl OnLowWasmMemoryHookStatus {
-    pub fn update(
-        &mut self,
-        wasm_memory_threshold: NumBytes,
-        memory_allocation: Option<NumBytes>,
-        wasm_memory_limit: Option<NumBytes>,
-        used_stable_memory: NumBytes,
-        used_wasm_memory: NumBytes,
-    ) {
-        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
-        // limit is ignored for query methods, response callback handlers,
-        // global timers, heartbeats, and canister pre_upgrade.
-        let wasm_memory_limit = if let Some(limit) = wasm_memory_limit {
-            limit
-        } else {
-            NumBytes::new(4 * 1024 * 1024 * 1024)
-        };
-
-        // If the canister has memory allocation, then it maximum allowed Wasm memory
-        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
-        let wasm_capacity = if let Some(memory_allocation) = memory_allocation {
-            debug_assert!(
-                used_stable_memory <= memory_allocation,
-                "Used stable memory: {:?}, is larger than memory allocation: {:?}.",
-                used_stable_memory,
-                memory_allocation
-            );
-            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
-        } else {
-            wasm_memory_limit
-        };
-
-        // Conceptually we can think that the remaining Wasm memory is
-        // equal to `wasm_capacity - used_wasm_memory` and that should
-        // be compared with `wasm_memory_threshold` when checking for
-        // the condition for the hook. However, since `wasm_memory_limit`
-        // is ignored in some executions as stated above it is possible
-        // that `used_wasm_memory` is greater than `wasm_capacity` to
-        // avoid overflowing subtraction we adopted inequality.
-        if wasm_capacity >= used_wasm_memory + wasm_memory_threshold {
-            *self = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
-        } else if *self != OnLowWasmMemoryHookStatus::Executed {
-            *self = OnLowWasmMemoryHookStatus::Ready;
         }
     }
 }
@@ -891,8 +845,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
                     prepaid_execution_cycles,
@@ -909,8 +862,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
-                    .map(|c| c.into())
-                    .unwrap_or_else(Cycles::zero);
+                    .map_or_else(Cycles::zero, |c| c.into());
                 let call_id = aborted.call_id.ok_or(ProxyDecodeError::MissingField(
                     "AbortedInstallCode::call_id",
                 ))?;
@@ -1390,7 +1342,8 @@ impl SystemState {
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
     ///  * `NonMatchingResponse` if no response is expected, the callback is not
-    ///    found or the respondent does not match.
+    ///    found, the respondent does not match or this is a duplicate guaranteed
+    ///    response.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -1432,9 +1385,13 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    call_context_manager
-                        .validate_response(response)
-                        .map_err(|err| (err, msg.clone()))?;
+                    if !call_context_manager
+                        .should_enqueue(response)
+                        .map_err(|err| (err, msg.clone()))?
+                    {
+                        // Best effort response whose callback is gone. Silently drop it.
+                        return Ok(());
+                    }
                 }
                 push_input(
                     &mut self.queues,
@@ -1842,8 +1799,8 @@ impl SystemState {
         self.on_low_wasm_memory_hook_status = status;
     }
 
-    pub fn get_on_low_wasm_memory_hook_status(&self) -> &OnLowWasmMemoryHookStatus {
-        &self.on_low_wasm_memory_hook_status
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
     }
 }
 

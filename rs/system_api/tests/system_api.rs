@@ -12,6 +12,7 @@ use ic_interfaces::execution_environment::{
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{
     canister_state::system_state::OnLowWasmMemoryHookStatus, testing::CanisterQueuesTesting,
     CallOrigin, Memory, NetworkTopology, SystemState,
@@ -1034,9 +1035,10 @@ fn test_canister_cycle_balance() {
     // Check ic0_canister_cycle_balance.
     assert_eq!(
         api.ic0_canister_cycle_balance(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None
+        })
     );
 
     let mut heap = vec![0; 16];
@@ -1068,9 +1070,10 @@ fn test_msg_cycles_available_traps() {
 
     assert_eq!(
         api.ic0_msg_cycles_available(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None,
+        })
     );
 
     let mut heap = vec![0; 16];
@@ -1092,9 +1095,10 @@ fn test_msg_cycles_refunded_traps() {
 
     assert_eq!(
         api.ic0_msg_cycles_refunded(),
-        Err(HypervisorError::Trapped(
-            TrapCode::CyclesAmountTooBigFor64Bit
-        ))
+        Err(HypervisorError::Trapped {
+            trap_code: TrapCode::CyclesAmountTooBigFor64Bit,
+            backtrace: None,
+        })
     );
 
     let mut heap = vec![0; 16];
@@ -1348,7 +1352,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1388,7 +1392,7 @@ fn helper_test_on_low_wasm_memory(
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
         .wasm_memory_limit(wasm_memory_limit)
-        .on_low_wasm_memory_hook_status(start_status.clone())
+        .on_low_wasm_memory_hook_status(start_status)
         .initial_cycles(Cycles::from(10_000_000_000_000_000u128));
 
     if let Some(memory_allocation) = memory_allocation {
@@ -1426,7 +1430,7 @@ fn helper_test_on_low_wasm_memory(
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1452,7 +1456,7 @@ fn helper_test_on_low_wasm_memory(
         .unwrap();
 
     assert_eq!(
-        *system_state.get_on_low_wasm_memory_hook_status(),
+        system_state.get_on_low_wasm_memory_hook_status(),
         expected_status
     );
 }
@@ -1663,7 +1667,7 @@ fn push_output_request_respects_memory_limits() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -1776,7 +1780,7 @@ fn push_output_request_oversized_request_memory_limits() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );

@@ -1127,6 +1127,7 @@ pub async fn create_instance(
             instance_config.state_dir,
             instance_config.nonmainnet_features,
             log_level,
+            instance_config.bitcoind_addr,
         )
     })
     .await

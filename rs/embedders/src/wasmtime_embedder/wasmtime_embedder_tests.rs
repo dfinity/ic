@@ -25,6 +25,7 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
+use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
@@ -41,10 +42,9 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
-        &EmbeddersConfig::default(),
-    ))
-    .expect("Failed to initialize Wasmtime engine");
+    let config = EmbeddersConfig::default();
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
+        .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_running(
         canister_id,
@@ -94,7 +94,7 @@ fn test_wasmtime_system_api() {
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
-        Memory::new_for_testing().size,
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -106,6 +106,7 @@ fn test_wasmtime_system_api() {
             log: no_op_logger(),
             num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
             limits: StoreLimits::default(),
+            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 

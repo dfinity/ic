@@ -52,7 +52,7 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "5.0.0")]
+#[clap(version = "6.0.0")]
 struct Args {
     /// If you use PocketIC from the command line, you should not use this flag.
     /// Client libraries use this flag to provide a common identifier (the process ID of the test
@@ -181,6 +181,7 @@ async fn start(runtime: Arc<Runtime>) {
         .nest("/instances", instances_routes::<AppState>())
         // All HTTP gateway routes.
         .nest("/http_gateway", http_gateway_routes::<AppState>())
+        .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
