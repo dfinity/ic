@@ -14,7 +14,7 @@ use ic_nns_test_utils::sns_wasm::{
     ensure_sns_wasm_gzipped,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
-use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
+use ic_sns_wasm::pb::v1::SnsCanisterType;
 
 /// In order to ensure that creating an SNS still works, we need to test the following:
 /// We test new SNS canisters with mainnet NNS canisters
@@ -149,21 +149,18 @@ pub fn test_sns_deployment(
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
     );
-    let DeployedSns {
-        swap_canister_id: Some(swap_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
-    };
 
-    sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
-    sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open).unwrap();
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    );
 }
 
 fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
@@ -185,20 +182,11 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
     );
-    let DeployedSns {
-        governance_canister_id: Some(sns_governance_canister_id),
-        ledger_canister_id: Some(sns_ledger_canister_id),
-        swap_canister_id: Some(swap_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
-    };
 
     for canister_type in &sns_canisters_to_upgrade {
         let wasm = match canister_type {
@@ -248,23 +236,27 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         // Testing the Archive canister requires that it can be spawned.
         sns::ensure_archive_canister_is_spawned_or_panic(
             &pocket_ic,
-            sns_governance_canister_id,
-            sns_ledger_canister_id,
+            sns.governance.canister_id,
+            sns.ledger.canister_id,
         );
     }
 
-    sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
-    sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open).unwrap();
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    );
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
     for _ in sns_canisters_to_upgrade {
         sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
             &pocket_ic,
-            sns_governance_canister_id,
+            sns.governance.canister_id,
         );
         sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
             &pocket_ic,
-            sns_governance_canister_id,
+            sns.governance.canister_id,
         );
     }
 }
