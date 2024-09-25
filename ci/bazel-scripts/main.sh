@@ -6,18 +6,34 @@
 
 set -eufo pipefail
 
-# default behavior is to build targets specified in BAZEL_TARGETS and upload to s3
-ic_version_rc_only="${CI_COMMIT_SHA}"
-s3_upload="True"
+# default behavior is to build targets specified in BAZEL_TARGETS and not upload to s3
+ic_version_rc_only="0000000000000000000000000000000000000000"
+s3_upload="False"
+RUN_ON_DIFF_ONLY="${RUN_ON_DIFF_ONLY:-false}"
 
-if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]] || [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-    ic_version_rc_only="0000000000000000000000000000000000000000"
-    s3_upload="False"
-    # check if the job requested running only on diff
-    if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-        # get bazel targets that changed within the MR
-        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+protected_branches=("master" "rc--*" "hotfix-*" "master-private")
+
+# if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
+for pattern in "${protected_branches[@]}"; do
+    if [[ "$BRANCH_NAME" == $pattern ]]; then
+        IS_PROTECTED_BRANCH="true"
+        break
     fi
+done
+
+# if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
+if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]] || [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
+    ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
+fi
+
+if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
+    s3_upload="False"
+fi
+
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+    # get bazel targets that changed within the MR
+     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file
