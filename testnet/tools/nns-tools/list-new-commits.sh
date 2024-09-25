@@ -35,6 +35,7 @@ NETWORK=ic
 
 list_new_canister_commits() {
     CANISTER_NAME="${1}"
+    # Notice plural. Multiple values are separated by space. Because bash.
     CODE_DIRECTORIES="${2}"
     LATEST_RELEASED_COMMIT_ID="${3}"
 
@@ -46,7 +47,7 @@ list_new_canister_commits() {
             --format="%C(auto) %h %s" \
             "${RANGE}" \
             -- \
-            "${CODE_DIRECTORIES}"
+            ${CODE_DIRECTORIES}  # No quote here is intentional, because plural.
     )
 
     INTERESTING_COMMITS=$(
