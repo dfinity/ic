@@ -355,13 +355,9 @@ impl TaskQueue {
                         id
                     );
                 }
-                // TODO [EXC-1666]
-                // For now, since OnLowWasmMemory is not used we will copy behaviour similar
-                // to Heartbeat and GlobalTimer, but when the feature is implemented we will
-                // come back to it, to revisit if we should keep it after the round ends.
                 ExecutionTask::OnLowWasmMemory => {
                     panic!(
-                        "Unexpected on low wasm memory task after a round in canister {:?}",
+                        "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
                         id
                     );
                 }
