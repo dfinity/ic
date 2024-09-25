@@ -18,7 +18,7 @@ use crate::{
     },
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -778,6 +778,16 @@ impl SharedState {
 // We send complex objects to a different thread to free them. This will spread
 // the cost of deallocation over a longer period of time, and avoid long pauses.
 type Deallocation = Box<dyn std::any::Any + Send + 'static>;
+
+struct NotifyWhenDeallocated {
+    channel: Sender<()>,
+}
+
+impl Drop for NotifyWhenDeallocated {
+    fn drop(&mut self) {
+        self.channel.send(()).expect("Failed to notify dellocation");
+    }
+}
 
 // We will not use the deallocation thread when the number of pending
 // deallocation objects goes above the threshold.
@@ -2159,6 +2169,16 @@ impl StateManagerImpl {
         // should touch.  Instead of pro-actively updating tip here, we let the
         // state machine discover a newer state the next time it calls
         // `take_tip()` and update the tip accordingly.
+    }
+
+    /// Wait till deallocation queue is empty.
+    pub fn flush_deallocation_channel(&self) {
+        let (send, recv) = bounded(1);
+        self.deallocation_sender
+            .send(Box::new(NotifyWhenDeallocated { channel: send }))
+            .expect("Failed to send deallocation request");
+        recv.recv()
+            .expect("Failed to receive deallocation notification");
     }
 
     /// Remove any inmemory state at height h with h < last_height_to_keep, and
