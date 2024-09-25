@@ -38,6 +38,7 @@ use ic_nns_governance::{
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
@@ -172,7 +173,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: Some(StdRng::seed_from_u64(9539)),
+                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -506,6 +507,14 @@ impl Environment for NNSFixture {
             .seed_rng(seed)
     }
 
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .get_rng_seed()
+    }
+
     fn execute_nns_function(
         &self,
         proposal_id: u64,
@@ -716,18 +725,20 @@ impl NNS {
     }
 
     // Must be mut because clone_proto must be mut, but should not affect state
-    pub(crate) fn get_state(&mut self) -> NNSState {
+    pub(crate) fn get_state(&self) -> NNSState {
+        let accounts = self
+            .fixture
+            .nns_state
+            .try_lock()
+            .unwrap()
+            .ledger
+            .accounts
+            .clone();
+        let governance_proto = self.governance.clone_proto();
         NNSState {
             now: self.now(),
-            accounts: self
-                .fixture
-                .nns_state
-                .try_lock()
-                .unwrap()
-                .ledger
-                .accounts
-                .clone(),
-            governance_proto: self.governance.clone_proto(),
+            accounts,
+            governance_proto,
             latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
         }
     }
@@ -962,6 +973,10 @@ impl Environment for NNS {
 
     fn seed_rng(&mut self, seed: [u8; 32]) {
         self.fixture.seed_rng(seed)
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        unimplemented!()
     }
 
     fn execute_nns_function(

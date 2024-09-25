@@ -48,6 +48,10 @@ impl Environment for DegradedEnv {
         todo!()
     }
 
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
+    }
+
     fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
         unimplemented!()
     }

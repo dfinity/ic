@@ -201,8 +201,10 @@ impl Environment for MockEnvironment {
         unimplemented!();
     }
 
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        unimplemented!()
+    fn seed_rng(&mut self, _seed: [u8; 32]) {}
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        Some([0; 32])
     }
 
     fn execute_nns_function(

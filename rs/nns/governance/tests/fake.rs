@@ -326,6 +326,10 @@ impl Environment for FakeDriver {
         todo!()
     }
 
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
+    }
+
     fn execute_nns_function(
         &self,
         _proposal_id: u64,

@@ -10,6 +10,7 @@ use ic_sns_swap::pb::v1::GetStateRequest;
 use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
 use proptest::prelude::RngCore;
 use rand::rngs::StdRng;
+use rand_chacha::ChaCha20Rng;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -46,7 +47,7 @@ where
 /// This state is used to respond to environment calls from Governance in a deterministic way.
 pub struct EnvironmentFixtureState {
     pub now: u64,
-    pub rng: Option<StdRng>,
+    pub rng: Option<ChaCha20Rng>,
     pub observed_canister_calls: VecDeque<CanisterCallRequest>,
     pub mocked_canister_replies: VecDeque<CanisterCallReply>,
 }
@@ -154,18 +155,39 @@ impl Environment for EnvironmentFixture {
             .as_mut()
         {
             Some(rand) => Ok(rand.next_u64()),
-            None => {
-                panic!("No RNG!")
-            } // Err(RngError::RngNotInitialized),
+            None => Err(RngError::RngNotInitialized),
         }
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        unimplemented!()
+        match self
+            .environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_mut()
+        {
+            Some(rand) => {
+                let mut bytes = [0u8; 32];
+                rand.fill_bytes(&mut bytes);
+                Ok(bytes)
+            }
+            // Kick the thing
+            None => Err(RngError::RngNotInitialized),
+        }
     }
 
     fn seed_rng(&mut self, _seed: [u8; 32]) {
         unimplemented!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_ref()
+            .map(|r| r.get_seed())
     }
 
     fn execute_nns_function(

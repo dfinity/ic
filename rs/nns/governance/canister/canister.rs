@@ -173,8 +173,8 @@ fn schedule_seeding(duration: Duration) {
 }
 
 struct CanisterEnv {
-    time_warp: GovTimeWarp,
     rng: Option<ChaCha20Rng>,
+    time_warp: GovTimeWarp,
 }
 
 fn now_nanoseconds() -> u64 {
@@ -197,8 +197,8 @@ fn now_seconds() -> u64 {
 impl CanisterEnv {
     fn new() -> Self {
         CanisterEnv {
-            time_warp: GovTimeWarp { delta_s: 0 },
             rng: None,
+            time_warp: GovTimeWarp { delta_s: 0 },
         }
     }
 }
@@ -221,9 +221,9 @@ impl Environment for CanisterEnv {
     }
 
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        let mut bytes = [0u8; 32];
         match self.rng.as_mut() {
             Some(rand) => {
+                let mut bytes = [0u8; 32];
                 rand.fill_bytes(&mut bytes);
                 Ok(bytes)
             }
@@ -233,6 +233,10 @@ impl Environment for CanisterEnv {
 
     fn seed_rng(&mut self, seed: [u8; 32]) {
         self.rng.replace(ChaCha20Rng::from_seed(seed));
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.rng.as_ref().map(|rng| rng.get_seed())
     }
 
     fn execute_nns_function(

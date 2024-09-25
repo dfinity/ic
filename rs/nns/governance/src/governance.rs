@@ -105,7 +105,6 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use maplit::hashmap;
-use mockall::automock;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
@@ -1468,7 +1467,6 @@ impl From<RngError> for GovernanceError {
 }
 
 /// A general trait for the environment in which governance is running.
-/// DO NOT MERGE - re-add automock
 #[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
@@ -1488,8 +1486,11 @@ pub trait Environment: Send + Sync {
     /// This number is the same in all replicas.
     fn random_byte_array(&mut self) -> Result<[u8; 32], RngError>;
 
-    // Seed the random number generator from the IC (or some other source in tests)
+    // Seed the random number generator.
     fn seed_rng(&mut self, seed: [u8; 32]);
+
+    // Get the current RNG seed (used in pre-upgrade)
+    fn get_rng_seed(&self) -> Option<[u8; 32]>;
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
@@ -1789,6 +1790,7 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
+        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
         let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
@@ -1828,6 +1830,8 @@ impl Governance {
         let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
+        // Carry over the previous rng seed to avoid race conditions in handling queued ingress
+        // messages that may require a functioning RNG.
         if let Some(rng_seed) = maybe_rng_seed {
             env.seed_rng(rng_seed);
         }
@@ -1852,7 +1856,7 @@ impl Governance {
         let neuron_store = std::mem::take(&mut self.neuron_store);
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        let rng_seed = self.env.random_byte_array().ok();
+        let rng_seed = self.env.get_rng_seed();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
@@ -1861,11 +1865,11 @@ impl Governance {
         )
     }
 
-    pub fn clone_proto(&mut self) -> GovernanceProto {
+    pub fn clone_proto(&self) -> GovernanceProto {
         let neurons = self.neuron_store.clone_neurons();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        let rng_seed = self.env.random_byte_array().ok();
+        let rng_seed = self.env.get_rng_seed();
         reassemble_governance_proto(
             neurons,
             heap_topic_followee_index,
