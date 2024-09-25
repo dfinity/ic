@@ -8,13 +8,13 @@ use ic_config::{
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_state_machine_tests::{MessageId, StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
+use ic_state_machine_tests::{
+    MessageId, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
+};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::{messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, Cycles};
 use proptest::prelude::*;
-use random_traffic_test::{
-    extract_metrics, Config as CanisterConfig, Metrics as CanisterMetrics, Record,
-};
+use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -37,7 +37,6 @@ proptest! {
         call_weight in 0..=2,
         // Note: both weights zero defaults to only replies.
     ) {
-        /*
         prop_assert!(check_guaranteed_response_message_memory_limits_are_respected_impl(
             seeds.as_slice(),
             max_payload_bytes,
@@ -45,20 +44,6 @@ proptest! {
             reply_weight as u32,
             call_weight as u32,
         ).is_ok());
-        */
-        if let Err((msg, nfo)) = check_guaranteed_response_message_memory_limits_are_respected_impl(
-            seeds.as_slice(),
-            max_payload_bytes,
-            calls_per_round as u32,
-            reply_weight as u32,
-            call_weight as u32,
-        ) {
-            assert!(
-                false,
-                "{:#?}",
-                nfo.records
-            );
-        }
     }
 }
 
@@ -68,8 +53,11 @@ proptest! {
 /// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
 /// 'chatter' enabled, i.e. the installed canisters are making random calls (including downstream calls).
 ///
-/// For the second phase, the 'chatter' is disabled and additional rounds are executed until all
-/// calls have received a reply.
+/// For the second phase, the 'chatter' is disabled by putting a canister into `Stopping` state
+/// every 10 rounds. In addition to shutting down traffic altogether from that canister (including
+/// downstream calls) this will also induce a lot asychnronous rejections for requests. If any
+/// canister fails to reach `Stopped` state (i.e. no hanging calls), something went wrong in
+/// message routing, most likely a bug connected to reject signals for requests.
 ///
 /// Checks that the guaranteed response message memory never exceeds the limit; that all calls eventually
 /// receive a reply (or were rejected synchronously when issued); and that the message memory goes
@@ -131,9 +119,13 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         )?;
     }
 
-    // Shut down chatter by putting a canister into `Stopping` state every 10 ticks.
+    // Shut down chatter by putting a canister into `Stopping` state every 10 ticks until they are
+    // all `Stopping` or `Stopped`.
     for canister in fixture.canisters().into_iter() {
-        fixture.set_max_calls_per_heartbeat(canister, 0);
+        // The max calls per heartbeat are set to 0 here, because the canister has to be started
+        // to query it's records. This is to make sure the canister doesn't start making calls
+        // immediately before we can get its records.
+        fixture.set_max_calls_per_heartbeat(canister, 0).unwrap();
         fixture.stop_canister_non_blocking(canister);
         for _ in 0..10 {
             fixture.tick();
@@ -147,9 +139,6 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
         }
     }
 
-//    // Stop chatter on all canisters.
-//    fixture.stop_chatter().unwrap();
-
     // Keep ticking until all calls are answered.
     for counter in 0.. {
         fixture.tick();
@@ -161,18 +150,10 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
             REMOTE_MESSAGE_MEMORY_CAPACITY,
         )?;
 
-        if fixture.open_call_contexts_count().values().sum::<usize>() != 0 {
+        if fixture.open_call_contexts_count().values().sum::<usize>() == 0 {
             break;
         }
-        /*
-        if fixture
-            .collect_metrics()
-            .into_iter()
-            .all(|(_canister, metrics)| metrics.hanging_calls == 0)
-        {
-            break;
-        }
-        */
+
         if counter > SHUTDOWN_PHASE_MAX_ROUNDS {
             return fixture.failed_with_reason("shutdown phase hanging");
         }
@@ -181,15 +162,18 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
     // One extra tick to make sure everything is gc'ed.
     fixture.tick();
 
-    // Check the system agrees on 'no hanging calls'.
-    if fixture.open_call_contexts_count().values().sum::<usize>() != 0 {
-        return fixture.failed_with_reason("found call contexts after shutdown phase");
+    // Check the records agree on 'no hanging calls'.
+    if fixture
+        .canisters()
+        .into_iter()
+        .map(|canister| extract_metrics(&fixture.force_query_records(canister)))
+        .any(|metrics| metrics.hanging_calls != 0)
+    {
+        return fixture.failed_with_reason("found hanging calls in the records");
     }
 
     // After the fact, all memory is freed and back to 0.
-    fixture.expect_guaranteed_response_message_memory_taken_at_most("Final check", 0, 0);
-
-    fixture.failed_with_reason("because")
+    fixture.expect_guaranteed_response_message_memory_taken_at_most("Final check", 0, 0)
 }
 
 #[derive(Debug)]
@@ -394,18 +378,6 @@ impl Fixture {
         Ok(())
     }
 
-    /// Sets `call_per_round` on all canisters to 0; sets all call weights to 0.
-    ///
-    /// This sets the total new calls made on `Self` to 0 whether they are made from the heartbeat
-    /// or recursively as a downstream call.
-    pub fn stop_chatter(&self) -> Result<(), ()> {
-        self.start_chatter(0)?;
-        for canister in self.canisters() {
-            self.set_call_weight(canister, 0)?;
-        }
-        Ok(())
-    }
-
     /// Starts `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
@@ -414,7 +386,7 @@ impl Fixture {
     }
 
     /// Puts `canister` into `Stopping` state.
-    /// 
+    ///
     /// This function is asynchronous. It returns the ID of the ingress message
     /// that can be awaited later with [await_ingress].
     ///
@@ -426,19 +398,23 @@ impl Fixture {
     /// Queries the records from `canister`.
     ///
     /// Panics if `canister` is not installed in `Self`.
-    pub fn query_records(&self, canister: CanisterId) -> Result<Vec<Record>, UserError> {
-        let reply = self
-            .get_env(&canister)
-            .query(canister, "records", vec![])?;
-        Ok(candid::Decode!(&reply.bytes(), Vec<Record>).unwrap())
+    pub fn query_records(&self, canister: CanisterId) -> Result<Vec<CanisterRecord>, UserError> {
+        let reply = self.get_env(&canister).query(canister, "records", vec![])?;
+        Ok(candid::Decode!(&reply.bytes(), Vec<CanisterRecord>).unwrap())
     }
 
-    /// Collects the metrics for all installed canisters on the fixture.
-    pub fn collect_metrics(&self) -> BTreeMap<CanisterId, CanisterMetrics> {
-        self.canisters()
-            .into_iter()
-            .map(|canister| (canister, extract_metrics(&self.query_records(canister).unwrap())))
-            .collect()
+    /// Force Queries the records from `canister` by attempting to query them; if it fails start
+    /// the canister and query them again.
+    ///
+    /// Panics if `canister` is not installed in `Self`.
+    pub fn force_query_records(&self, canister: CanisterId) -> Vec<CanisterRecord> {
+        match self.query_records(canister) {
+            Err(_) => {
+                self.start_canister(canister);
+                self.query_records(canister).unwrap()
+            }
+            Ok(records) => records,
+        }
     }
 
     /// Return the number of bytes taken by guaranteed response memory (`local_env`, `remote_env`).
@@ -530,18 +506,7 @@ impl Fixture {
                 records: self
                     .canisters()
                     .into_iter()
-                    .map(|canister| {
-                        (
-                            canister,
-                            match self.query_records(canister) {
-                                Ok(records) => records,
-                                Err(_) => {
-                                    self.start_canister(canister);
-                                    self.query_records(canister).unwrap()
-                                }
-                            }
-                        )
-                    })
+                    .map(|canister| (canister, self.force_query_records(canister)))
                     .collect(),
                 latest_local_state: self.local_env.get_latest_state(),
                 latest_remote_state: self.remote_env.get_latest_state(),
@@ -553,7 +518,7 @@ impl Fixture {
 /// Returned by `Fixture::failed_with_reason()`.
 #[allow(dead_code)]
 struct DebugInfo {
-    pub records: BTreeMap<CanisterId, Vec<Record>>,
+    pub records: BTreeMap<CanisterId, Vec<CanisterRecord>>,
     pub latest_local_state: Arc<ReplicatedState>,
     pub latest_remote_state: Arc<ReplicatedState>,
 }
