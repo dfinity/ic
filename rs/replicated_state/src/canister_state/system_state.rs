@@ -303,6 +303,7 @@ impl TaskQueue {
     }
 
     pub fn push_front(&mut self, task: ExecutionTask) {
+        debug_assert_ne!(task, ExecutionTask::OnLowWasmMemory);
         self.queue.push_front(task);
     }
 
@@ -313,6 +314,7 @@ impl TaskQueue {
 
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
+            && self.on_low_wasm_memory_hook_status != OnLowWasmMemoryHookStatus::Ready
     }
 
     pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
