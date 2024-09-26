@@ -17,7 +17,7 @@ fuzz_target!(|module: ICWasmModule| {
     let wasm = module.module.to_bytes();
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
-        .no_dts()  // Disable DTS to avoid sandbox_launcher binary dependency (which does not work well with fuzz tests).
+        .no_dts() // Disable DTS to avoid sandbox_launcher binary dependency (which does not work well with fuzz tests).
         .with_checkpoints_enabled(false)
         .build();
     let canister_id = env.create_canister_with_cycles(
@@ -28,5 +28,8 @@ fuzz_target!(|module: ICWasmModule| {
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
         .unwrap();
 
-    let _ = env.execute_ingress(canister_id, "update", vec![]);
+    // For determinism, all methods are executed
+    for wasm_method in module.exported_functions.iter() {
+        let _ = env.execute_ingress(canister_id, wasm_method.name(), vec![]);
+    }
 });
