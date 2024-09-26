@@ -2430,7 +2430,12 @@ fn is_next_method_chosen(
 ) -> bool {
     // If the task on the front of the task queue is hook,
     // it must be executed next.
-    if canister.system_state.task_queue.front().is_hook() {
+    if canister
+        .system_state
+        .task_queue
+        .front()
+        .map_or(false, |task| task.is_hook())
+    {
         return true;
     }
 
