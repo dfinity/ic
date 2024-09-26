@@ -8,9 +8,8 @@ def _did_git_test_impl(ctx):
 
 set -xeuo pipefail
 
-readonly mr_title=${{CI_PULL_REQUEST_TITLE:-NONE}}
-if [[ $mr_title == *"[override-didc-check]"* ]]; then
-    echo "Found [override-didc-check] in merge request title. Skipping didc_check."
+if [[ $OVERRIDE_DIDC_CHECK == "true" ]]; then
+    echo "Override didc check requested. Skipping didc_check."
     exit 0
 fi
 
@@ -54,7 +53,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_PULL_REQUEST_TARGET_BRANCH_SHA", "CI_PULL_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["CI_PULL_REQUEST_TARGET_BRANCH_SHA", "OVERRIDE_DIDC_CHECK"]),
     ]
 
 CHECK_DID = attr.label(

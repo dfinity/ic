@@ -24,12 +24,14 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
             HttpGetTxError::Rejected { message, .. } => {
-                CheckTransactionPending::TransientInternalError(message).into()
+                CheckTransactionRetriable::TransientInternalError(message).into()
             }
             HttpGetTxError::ResponseTooLarge => {
-                (CheckTransactionError::ResponseTooLarge { txid }).into()
+                (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
             }
-            _ => CheckTransactionError::InvalidTransaction(format!("{:?}", err)).into(),
+            _ => {
+                CheckTransactionIrrecoverableError::InvalidTransaction(format!("{:?}", err)).into()
+            }
         }
     }
 }
@@ -151,8 +153,8 @@ impl FetchEnv for KytCanisterEnv {
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
     match env.try_fetch_tx(txid) {
-        TryFetchResult::Pending => CheckTransactionPending::Pending.into(),
-        TryFetchResult::HighLoad => CheckTransactionPending::HighLoad.into(),
+        TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
+        TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
         TryFetchResult::Error(err) => (txid, err).into(),
         TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
         TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
@@ -160,7 +162,7 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
             match do_fetch.await {
                 Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
                 Ok(FetchResult::Error(err)) => (txid, err).into(),
-                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionPending::Pending.into(),
+                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionRetriable::Pending.into(),
                 Err(_) => unreachable!(), // should never happen
             }
         }
