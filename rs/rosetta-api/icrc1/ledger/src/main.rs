@@ -133,6 +133,14 @@ fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
+    Access::with_ledger(|ledger| {
+        if !ledger.is_ready() {
+            // This means that migration did not complete and the correct state
+            // of the ledger is still in UPGRADES_MEMORY.
+            return
+        }
+    });    
+
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         Access::with_ledger(|ledger| {
@@ -223,7 +231,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         ledger.state = LedgerState::Migrating(LedgerField::Allowances);
         ledger.approvals.allowances_data.clear_arrivals();
     });
-    const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 20_000_000_000;
+    const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
     migrate_next_part(MAX_INSTRUCTIONS_PER_UPGRADE - pre_upgrade_instructions_consumed);
 
     let end = ic_cdk::api::instruction_counter();
@@ -285,7 +293,7 @@ fn migrate_next_part(instruction_limit: u64) {
                 &LOG,
                 "Migration partially done. Scheduling the next part. {msg}"
             );
-            const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 2_000_000_000;
+            const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
             ic_cdk_timers::set_timer(Duration::from_secs(0), || {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
