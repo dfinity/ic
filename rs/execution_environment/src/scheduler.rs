@@ -482,7 +482,6 @@ impl SchedulerImpl {
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
         ongoing_long_install_code: bool,
-        long_running_canister_ids: BTreeSet<CanisterId>,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
@@ -490,7 +489,7 @@ impl SchedulerImpl {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
             while let Some(msg) = state.peek_subnet_input() {
-                if can_execute_msg(&msg, ongoing_long_install_code, &long_running_canister_ids) {
+                if can_execute_subnet_msg(&msg, ongoing_long_install_code, &state.canister_states) {
                     available_subnet_messages = true;
                     break;
                 }
@@ -680,19 +679,16 @@ impl SchedulerImpl {
                 );
 
                 // TODO(EXC-1517): Improve inner loop preparation.
-                let mut ongoing_long_install_code = false;
-                let long_running_canister_ids = state
-                    .canister_states
-                    .iter()
-                    .filter_map(|(&canister_id, canister)| match canister.next_execution() {
-                        NextExecution::None | NextExecution::StartNew => None,
-                        NextExecution::ContinueLong => Some(canister_id),
-                        NextExecution::ContinueInstallCode => {
-                            ongoing_long_install_code = true;
-                            Some(canister_id)
-                        }
-                    })
-                    .collect();
+                let ongoing_long_install_code =
+                    state
+                        .canister_states
+                        .iter()
+                        .any(|(_canister_id, canister)| match canister.next_execution() {
+                            NextExecution::None
+                            | NextExecution::StartNew
+                            | NextExecution::ContinueLong => false,
+                            NextExecution::ContinueInstallCode => true,
+                        });
 
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
                 if !subnet_round_limits.reached() {
@@ -702,7 +698,6 @@ impl SchedulerImpl {
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
                         ongoing_long_install_code,
-                        long_running_canister_ids,
                         registry_settings,
                         idkg_subnet_public_keys,
                     );
@@ -2364,40 +2359,101 @@ fn join_consumed_cycles_by_use_case(
     }
 }
 
-/// Helper function that checks if a message can be executed:
+/// Helper function that checks if a subnet message can be executed:
 ///     1. A message cannot be executed if it is directed to a canister
 ///     with another long-running execution in progress.
 ///     2. Install code messages can only be executed sequentially.
-fn can_execute_msg(
+fn can_execute_subnet_msg(
     msg: &CanisterMessage,
     ongoing_long_install_code: bool,
-    long_running_canister_ids: &BTreeSet<CanisterId>,
+    canister_states: &BTreeMap<CanisterId, CanisterState>,
 ) -> bool {
-    if let Some(effective_canister_id) = msg.effective_canister_id() {
-        if long_running_canister_ids.contains(&effective_canister_id) {
-            return false;
+    let Some(effective_canister_id) = msg.effective_canister_id() else {
+        // If there is no effective canister ID, we can execute the subnet message.
+        return true;
+    };
+    let Some(effective_canister_state) = canister_states.get(&effective_canister_id) else {
+        // If there is no effective canister state, we can execute the subnet message.
+        return true;
+    };
+    let maybe_method = match msg {
+        CanisterMessage::Ingress(ingress) => {
+            Ic00Method::from_str(ingress.method_name.as_str()).ok()
         }
-    }
+        CanisterMessage::Request(request) => {
+            Ic00Method::from_str(request.method_name.as_str()).ok()
+        }
+        CanisterMessage::Response(_) => None,
+    };
+    let Some(method) = maybe_method else {
+        // If there is no method name, we can execute the subnet message.
+        return true;
+    };
 
-    if ongoing_long_install_code {
-        let maybe_install_code_method = match msg {
-            CanisterMessage::Ingress(ingress) => {
-                Ic00Method::from_str(ingress.method_name.as_str()).ok()
-            }
-            CanisterMessage::Request(request) => {
-                Ic00Method::from_str(request.method_name.as_str()).ok()
-            }
-            CanisterMessage::Response(_) => None,
+    // Adding a full match here to catch any further task queue changes.
+    let (effective_canister_is_paused, effective_canister_is_aborted) =
+        match effective_canister_state.system_state.task_queue.front() {
+            None
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
+            Some(ExecutionTask::PausedExecution { .. })
+            | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
+            Some(ExecutionTask::AbortedExecution { .. })
+            | Some(ExecutionTask::AbortedInstallCode { .. }) => (false, true),
         };
 
-        // Only one install code message allowed at a time.
-        match maybe_install_code_method {
-            Some(Ic00Method::InstallCode) | Some(Ic00Method::InstallChunkedCode) => return false,
-            _ => {}
-        }
+    if effective_canister_is_paused {
+        // If there is a DTS execution in progress, we can't execute the subnet message.
+        // Note, it does NOT include aborted executions.
+        return false;
     }
 
-    true
+    match method {
+        // Only one install code message allowed at a time.
+        Ic00Method::InstallCode | Ic00Method::InstallChunkedCode => {
+            !ongoing_long_install_code && !effective_canister_is_aborted
+        }
+        // Deleting an aborted canister requires to stop it first.
+        Ic00Method::DeleteCanister => !effective_canister_is_aborted,
+        // Stopping an aborted canister does not generate a reply.
+        Ic00Method::StopCanister => !effective_canister_is_aborted,
+        // Loading a snapshot is similar to the install code.
+        Ic00Method::LoadCanisterSnapshot => !effective_canister_is_aborted,
+        // It's safe to allow other subnet messages on aborted canisters.
+        Ic00Method::CanisterStatus
+        | Ic00Method::CanisterInfo
+        | Ic00Method::CreateCanister
+        | Ic00Method::DepositCycles
+        | Ic00Method::HttpRequest
+        | Ic00Method::ECDSAPublicKey
+        | Ic00Method::RawRand
+        | Ic00Method::SetupInitialDKG
+        | Ic00Method::SignWithECDSA
+        | Ic00Method::StartCanister
+        | Ic00Method::UninstallCode
+        | Ic00Method::UpdateSettings
+        | Ic00Method::ComputeInitialIDkgDealings
+        | Ic00Method::SchnorrPublicKey
+        | Ic00Method::SignWithSchnorr
+        | Ic00Method::BitcoinGetBalance
+        | Ic00Method::BitcoinGetUtxos
+        | Ic00Method::BitcoinGetBlockHeaders
+        | Ic00Method::BitcoinSendTransaction
+        | Ic00Method::BitcoinGetCurrentFeePercentiles
+        | Ic00Method::BitcoinSendTransactionInternal
+        | Ic00Method::BitcoinGetSuccessors
+        | Ic00Method::NodeMetricsHistory
+        | Ic00Method::FetchCanisterLogs
+        | Ic00Method::ProvisionalCreateCanisterWithCycles
+        | Ic00Method::ProvisionalTopUpCanister
+        | Ic00Method::UploadChunk
+        | Ic00Method::StoredChunks
+        | Ic00Method::ClearChunkStore
+        | Ic00Method::TakeCanisterSnapshot
+        | Ic00Method::ListCanisterSnapshots
+        | Ic00Method::DeleteCanisterSnapshot => true,
+    }
 }
 
 /// Based on the type of the subnet message to execute, figure out its
