@@ -837,7 +837,7 @@ impl CanisterQueues {
         };
 
         // Check against duplicate responses.
-        if !input_queue.check_has_reserved_response_slot().is_ok()
+        if input_queue.check_has_reserved_response_slot().is_err()
             || !self.callbacks_with_enqueued_response.insert(callback_id)
         {
             // There is already a response enqueued for the callback.
