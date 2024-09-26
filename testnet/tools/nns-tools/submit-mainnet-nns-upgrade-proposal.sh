@@ -6,10 +6,10 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
-    PROPOSAL_FILE: File with proposal created by
-     ./prepare-mainnet-upgrade-proposal-text.sh (or formatted in that way)
+Usage: $0 [--use-dfx-identity] <PROPOSAL_FILE> <NEURON_ID>
+    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-upgrade-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
+    --use-dfx-identity: Optional flag to use dfx identity instead of HSM
 
   Environment Variables:
    DRY_RUN: If set to true, no proposal will be created, but other than that,
@@ -21,6 +21,21 @@ Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
   "
     exit 1
 }
+
+USE_DFX_IDENTITY=false
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --use-dfx-identity)
+            USE_DFX_IDENTITY=true
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 if [ $# -ne 2 ]; then
     help
@@ -79,35 +94,60 @@ submit_nns_upgrade_proposal_mainnet() {
     fi
 
     echo
-    check_or_set_dfx_hsm_pin
-    echo
 
-    cmd=(
-        $IC_ADMIN
-        --nns-url="https://icp-api.io"
+    if [ "$USE_DFX_IDENTITY" = true ]; then
+        cmd=(
+            $IC_ADMIN
+            # Auth
+            --secret-key-pem ~/.config/dfx/identity/$(dfx identity whoami)/identity.pem
+            --nns-url "https://icp-api.io"
 
-        # Auth
-        --use-hsm
-        --slot=0
-        --key-id=01
-        --pin="$DFX_HSM_PIN"
+            propose-to-change-nns-canister
 
-        propose-to-change-nns-canister
+            # Description
+            --proposal-title="$PROPOSAL_TITLE"
+            --summary-file="$PROPOSAL_FILE"
 
-        # Description
-        --proposal-title="$PROPOSAL_TITLE"
-        --summary-file="$PROPOSAL_FILE"
+            # Action
+            --canister-id="$CANISTER_ID"
+            --mode=upgrade
+            --wasm-module-path="$WASM_GZ"
 
-        # Action
-        --canister-id="$CANISTER_ID"
-        --mode=upgrade
-        --wasm-module-path="$WASM_GZ"
+            # Misc
+            --use-explicit-action-type
+            --wasm-module-sha256="$WASM_SHA"
+            --proposer="$NEURON_ID"
+        )
+    else
+        check_or_set_dfx_hsm_pin
+        echo
+        cmd=(
+            $IC_ADMIN
+            --nns-url="https://icp-api.io"
 
-        # Misc
-        --use-explicit-action-type
-        --wasm-module-sha256="$WASM_SHA"
-        --proposer="$NEURON_ID"
-    )
+            # Auth
+            --use-hsm
+            --slot=0
+            --key-id=01
+            --pin="$DFX_HSM_PIN"
+
+            propose-to-change-nns-canister
+
+            # Description
+            --proposal-title="$PROPOSAL_TITLE"
+            --summary-file="$PROPOSAL_FILE"
+
+            # Action
+            --canister-id="$CANISTER_ID"
+            --mode=upgrade
+            --wasm-module-path="$WASM_GZ"
+
+            # Misc
+            --use-explicit-action-type
+            --wasm-module-sha256="$WASM_SHA"
+            --proposer="$NEURON_ID"
+        )
+    fi
 
     if [ ! -z "$CANDID_ARGS_FILE" ]; then
         cmd+=(--arg=$CANDID_ARGS_FILE)
