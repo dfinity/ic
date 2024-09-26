@@ -4487,10 +4487,8 @@ fn test_nns1_520() {
 
     assert_eq!(
         gov.neuron_store
-            .heap_neurons()
-            .get(&id.id)
-            .unwrap()
-            .cached_neuron_stake_e8s,
+            .with_neuron(&id, |n| n.cached_neuron_stake_e8s)
+            .expect("Neuron not found"),
         0
     );
 }
@@ -4989,10 +4987,8 @@ fn test_cant_disburse_without_paying_fees() {
     assert_eq!(
         0,
         gov.neuron_store
-            .heap_neurons()
-            .get(&id.id)
-            .unwrap()
-            .neuron_fees_e8s
+            .with_neuron(&id, |neuron| neuron.neuron_fees_e8s)
+            .expect("Neuron not found")
     );
     driver.assert_account_contains(
         &AccountIdentifier::new(
