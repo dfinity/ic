@@ -5,9 +5,9 @@ from model.repository import Repository
 from model.team import Team
 from scanner.dependency_scanner import PROJECT_ROOT
 
-IS_PRIVATE = PROJECT_ROOT.name == "ic-private"
 CI_PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 GITHUB_REF = os.environ.get("GITHUB_REF", "refs/heads/master")
+REPO_NAME = os.environ.get("REPO_NAME", "ic")
 
 
 def is_running_in_ic_repo() -> bool:
@@ -23,25 +23,17 @@ def is_env_for_periodic_job() -> bool:
 
 
 def get_ic_repo_for_rust() -> Repository:
-    if IS_PRIVATE:
-        return Repository("ic", "https://github.com/dfinity/ic-private",
-                          [Project(name="ic", path="ic-private", owner_by_path={"ic-private/rs/crypto": [Team.CRYPTO_TEAM], "ic-private/rs/validator": [Team.CRYPTO_TEAM], "ic-private/rs/canonical_state": [Team.CRYPTO_TEAM]})])
-    return Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner_by_path={"ic/rs/crypto": [Team.CRYPTO_TEAM], "ic/rs/validator": [Team.CRYPTO_TEAM], "ic/rs/canonical_state": [Team.CRYPTO_TEAM]})])
+    repo_name = REPO_NAME.replace("dfinity/", "")
+    return Repository("ic", f"https://github.com/dfinity/{repo_name}", [Project(name="ic", path=repo_name, owner_by_path={f"{repo_name}/rs/crypto": [Team.CRYPTO_TEAM], f"{repo_name}/rs/validator": [Team.CRYPTO_TEAM], f"{repo_name}/rs/canonical_state": [Team.CRYPTO_TEAM]})])
 
 
 def get_ic_repo_merge_request_base_url() -> str:
-    if IS_PRIVATE:
-        return "https://github.com/dfinity/ic-private/pull/"
-    return "https://github.com/dfinity/ic/pull/"
+    return f"https://github.com/{REPO_NAME}/pull/"
 
 
 def get_ic_repo_ci_pipeline_base_url() -> str:
-    if IS_PRIVATE:
-        return "https://github.com/dfinity/ic-private/actions/runs/"
-    return "https://github.com/dfinity/ic/actions/runs/"
+    return f"https://github.com/{REPO_NAME}/actions/runs/"
 
 
 def __test_get_ic_path():
-    if IS_PRIVATE:
-        return "ic-private"
-    return "ic"
+    return REPO_NAME.replace("dfinity/", "")
