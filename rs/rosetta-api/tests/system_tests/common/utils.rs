@@ -149,24 +149,3 @@ pub async fn query_encoded_blocks(
     )
     .unwrap()
 }
-
-pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
-    Decode!(
-        &agent
-            .query(&GOVERNANCE_CANISTER_ID.into(), "list_neurons")
-            .with_arg(
-                Encode!(&ListNeurons {
-                    neuron_ids: vec![],
-                    include_neurons_readable_by_caller: true,
-                    include_empty_neurons_readable_by_caller: Some(true),
-                    include_public_neurons_in_full_neurons: None,
-                })
-                .unwrap()
-            )
-            .call()
-            .await
-            .unwrap(),
-        ListNeuronsResponse
-    )
-    .unwrap()
-}
