@@ -390,8 +390,36 @@ impl MessageStoreImpl {
         self.pool.message_stats().outbound_message_count > 0
     }
 
+    /// Tests whether the message store contains neither pooled messages nor compact
+    /// responses.
     fn is_empty(&self) -> bool {
         self.pool.len() == 0 && self.shed_responses.is_empty()
+    }
+
+    /// Helper function for concisely validating the hard invariant that a canister
+    /// queue is either empty or has a non-stale reference at the front, by writing
+    /// `debug_assert_eq!(Ok(()), store.queue_front_not_stale(...)`.
+    ///
+    /// Time complexity: `O(log(n))`.
+    fn queue_front_not_stale<T>(
+        &self,
+        queue: &CanisterQueue<T>,
+        canister_id: &CanisterId,
+    ) -> Result<(), String>
+    where
+        MessageStoreImpl: MessageStore<T>,
+    {
+        if let Some(reference) = queue.peek() {
+            if self.is_stale(reference) {
+                return Err(format!(
+                    "Stale reference at the front of {:?} queue to/from {}",
+                    reference.context(),
+                    canister_id
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -405,17 +433,6 @@ trait MessageStore<T> {
     /// Checks whether the given reference is stale (i.e. neither in the pool, nor
     /// in one of the compact response maps iff inbound).
     fn is_stale(&self, reference: message_pool::Reference<T>) -> bool;
-
-    /// Helper function for concisely validating the hard invariant that a canister
-    /// queue is either empty of has a non-stale reference at the front, by writing
-    /// `debug_assert_eq!(Ok(()), queue_front_not_stale(...)`.
-    ///
-    /// Time complexity: `O(log(n))`.
-    fn queue_front_not_stale(
-        &self,
-        queue: &CanisterQueue<T>,
-        canister_id: &CanisterId,
-    ) -> Result<(), String>;
 }
 
 impl MessageStore<CanisterInput> for MessageStoreImpl {
@@ -456,24 +473,6 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
                 || reference.kind() != Kind::Response
                 || !self.shed_responses.contains_key(&reference))
     }
-
-    fn queue_front_not_stale(
-        &self,
-        queue: &CanisterQueue<CanisterInput>,
-        canister_id: &CanisterId,
-    ) -> Result<(), String> {
-        if let Some(reference) = queue.peek() {
-            if self.is_stale(reference) {
-                return Err(format!(
-                    "Stale reference at the front of {:?} queue to/from {}",
-                    reference.context(),
-                    canister_id
-                ));
-            }
-        }
-
-        Ok(())
-    }
 }
 
 impl MessageStore<RequestOrResponse> for MessageStoreImpl {
@@ -497,23 +496,6 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     fn is_stale(&self, reference: OutboundReference) -> bool {
         assert_eq!(Context::Outbound, reference.context());
         self.pool.get(reference).is_none()
-    }
-
-    fn queue_front_not_stale(
-        &self,
-        queue: &CanisterQueue<RequestOrResponse>,
-        canister_id: &CanisterId,
-    ) -> Result<(), String> {
-        if let Some(reference) = queue.peek() {
-            if self.is_stale(reference) {
-                return Err(format!(
-                    "Stale reference at the front of outbound queue to/from {}",
-                    canister_id
-                ));
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -1365,7 +1347,7 @@ impl CanisterQueues {
                     self.store.queue_advance(input_queue);
                 }
 
-                // Release the outbond response slot.
+                // Release the outbound response slot.
                 output_queue.release_reserved_response_slot();
                 self.queue_stats.on_drop_input_request(&request);
             }
