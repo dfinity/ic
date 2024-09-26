@@ -202,6 +202,7 @@ message CanisterQueues {
     uint64 id = 1;
     uint64 callback_id = 2;
   }
+  repeated CallbackReference expired_callbacks = 13;
   repeated CallbackReference shed_responses = 12;
 
   enum NextInputQueue {

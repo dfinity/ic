@@ -387,6 +387,14 @@ impl MessagePool {
         self.insert_impl(msg, actual_deadline, Context::Inbound)
     }
 
+    /// Reserves a reference for an inbound timeout reject response for a
+    /// best-effort callback.
+    ///
+    /// This is equivalent to inserting and then immediately removing a response.
+    pub(super) fn reserve_inbound_timeout_response(&mut self) -> InboundReference {
+        self.next_reference(Class::BestEffort, Kind::Response)
+    }
+
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
     /// into the pool. Returns the reference assigned to the request.
     ///

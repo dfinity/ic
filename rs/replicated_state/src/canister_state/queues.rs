@@ -313,7 +313,6 @@ pub(crate) enum CanisterInput {
     Request(Arc<Request>),
     Response(Arc<Response>),
     /// A concise reject response meaning "call deadine has expired".
-    #[allow(dead_code)]
     DeadlineExpired(CallbackId),
     /// A concise reject response meaning "call response was dropped".
     ResponseDropped(CallbackId),
@@ -360,6 +359,12 @@ struct MessageStoreImpl {
     #[validate_eq(CompareWithValidateEq)]
     pool: MessagePool,
 
+    /// "Deadline expired" compact reject responses (`CallbackIds`), returned as
+    /// `CanisterInput::DeadlineExpired` by `peek_input()` / `pop_input()` (and
+    /// "inflated" by `SystemState` into `SysUnknown` reject responses based on the
+    /// callback).
+    expired_callbacks: BTreeMap<InboundReference, CallbackId>,
+
     /// Compact reject responses (`CallbackIds`) replacing best-effort responses
     /// that were shed. These are returned as `CanisterInput::ResponseDropped` by
     /// `peek_input()` / `pop_input()` (and "inflated" by `SystemState` into
@@ -400,7 +405,9 @@ impl MessageStoreImpl {
     /// Returns `true` if `ingress_queue` or at least one of the canister input
     /// queues is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
-        self.pool.message_stats().inbound_message_count > 0 || !self.shed_responses.is_empty()
+        self.pool.message_stats().inbound_message_count > 0
+            || !self.expired_callbacks.is_empty()
+            || !self.shed_responses.is_empty()
     }
 
     /// Returns `true` if at least one output queue is not empty; false otherwise.
@@ -411,7 +418,7 @@ impl MessageStoreImpl {
     /// Tests whether the message store contains neither pooled messages nor compact
     /// responses.
     fn is_empty(&self) -> bool {
-        self.pool.len() == 0 && self.shed_responses.is_empty()
+        self.pool.len() == 0 && self.expired_callbacks.is_empty() && self.shed_responses.is_empty()
     }
 
     /// Helper function for concisely validating the hard invariant that a canister
@@ -468,10 +475,14 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         assert_eq!(Context::Inbound, reference.context());
 
         if let Some(msg) = self.pool.get(reference) {
+            debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.clone().into();
         } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
-            if let Some(callback_id) = self.shed_responses.get(&reference) {
+            if let Some(callback_id) = self.expired_callbacks.get(&reference) {
+                debug_assert!(!self.shed_responses.contains_key(&reference));
+                return CanisterInput::DeadlineExpired(*callback_id);
+            } else if let Some(callback_id) = self.shed_responses.get(&reference) {
                 return CanisterInput::ResponseDropped(*callback_id);
             }
         }
@@ -483,10 +494,14 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         assert_eq!(Context::Inbound, reference.context());
 
         if let Some(msg) = self.pool.take(reference) {
+            debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.into();
         } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
-            if let Some(callback_id) = self.shed_responses.remove(&reference) {
+            if let Some(callback_id) = self.expired_callbacks.remove(&reference) {
+                debug_assert!(!self.shed_responses.contains_key(&reference));
+                return CanisterInput::DeadlineExpired(callback_id);
+            } else if let Some(callback_id) = self.shed_responses.remove(&reference) {
                 return CanisterInput::ResponseDropped(callback_id);
             }
         }
@@ -500,7 +515,8 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         self.pool.get(reference).is_none()
             && (reference.class() != Class::BestEffort
                 || reference.kind() != Kind::Response
-                || !self.shed_responses.contains_key(&reference))
+                || (!self.expired_callbacks.contains_key(&reference))
+                    && !self.shed_responses.contains_key(&reference))
     }
 }
 
@@ -530,6 +546,9 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
 }
 
 trait InboundMessageStore: MessageStore<CanisterInput> {
+    /// Enqueues a "deadline expired" compact response for the given callback.
+    fn push_inbound_timeout_response(&mut self, callback_id: CallbackId) -> InboundReference;
+
     /// Collects the `CallbackIds` of all responses and compact responses enqueued
     /// in input queues.
     ///
@@ -544,6 +563,12 @@ trait InboundMessageStore: MessageStore<CanisterInput> {
 }
 
 impl InboundMessageStore for MessageStoreImpl {
+    fn push_inbound_timeout_response(&mut self, callback_id: CallbackId) -> InboundReference {
+        let reference = self.pool.reserve_inbound_timeout_response();
+        self.expired_callbacks.insert(reference, callback_id);
+        reference
+    }
+
     fn callbacks_with_enqueued_response(
         &self,
         canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
@@ -552,21 +577,24 @@ impl InboundMessageStore for MessageStoreImpl {
             .values()
             .flat_map(|(input_queue, _)| input_queue.iter())
             .filter_map(|reference| {
-                let (a, b) = (
+                let (a, b, c) = (
                     self.pool.get(*reference),
+                    self.expired_callbacks.get(reference),
                     self.shed_responses.get(reference),
                 );
-                match (a, b) {
+                match (a, b, c) {
                     // Pooled response.
-                    (Some(RequestOrResponse::Response(rep)), None) => {
+                    (Some(RequestOrResponse::Response(rep)), None, None) => {
                         Some(Ok(rep.originator_reply_callback))
                     }
 
                     // Compact response.
-                    (None, Some(callback_id)) => Some(Ok(*callback_id)),
+                    (None, Some(callback_id), None) | (None, None, Some(callback_id)) => {
+                        Some(Ok(*callback_id))
+                    }
 
                     // Request or stale reference.
-                    (Some(RequestOrResponse::Request(_)), None) | (None, None) => None,
+                    (Some(RequestOrResponse::Request(_)), None, None) | (None, None, None) => None,
 
                     // Two or more of the above. This should never happen.
                     _ => Some(Err(format!(
@@ -585,8 +613,9 @@ impl InboundMessageStore for MessageStoreImpl {
             ));
         }
 
-        let response_count =
-            self.pool.message_stats().inbound_response_count + self.shed_responses.len();
+        let response_count = self.pool.message_stats().inbound_response_count
+            + self.expired_callbacks.len()
+            + self.shed_responses.len();
         if callbacks_vec.len() != response_count {
             return Err(format!(
                 "CanisterQueues: Have {} inbound responses, but only {} are enqueued",
@@ -783,6 +812,53 @@ impl CanisterQueues {
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+        Ok(())
+    }
+
+    /// Enqueues a "deadline expired" compact response for the given callback, iff a
+    /// response for the callback is not already enqueued.
+    ///
+    /// Must only be called for not-yet-executing callbacks (i.e. not for a paused
+    /// or aborted callback).
+    pub(super) fn try_push_deadline_expired_input(
+        &mut self,
+        callback_id: CallbackId,
+        respondent: &CanisterId,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> Result<(), String> {
+        // For a not yet executed callback, there must be a queue with either a reserved
+        // slot or an enqueued response.
+        let Some((input_queue, _)) = self.canister_queues.get_mut(respondent) else {
+            return Err(format!(
+                "No input queue for expired callback: {}",
+                callback_id
+            ));
+        };
+
+        // Check against duplicate responses.
+        if !input_queue.check_has_reserved_response_slot().is_ok()
+            || !self.callbacks_with_enqueued_response.insert(callback_id)
+        {
+            // There is already a response enqueued for the callback.
+            return Ok(());
+        }
+
+        let reference = self.store.push_inbound_timeout_response(callback_id);
+        input_queue.push_response(reference);
+        self.queue_stats.on_push_timeout_response();
+
+        // Add sender canister ID to the appropriate input schedule queue if it is not
+        // already scheduled.
+        if input_queue.len() == 1 {
+            let input_queue_type =
+                input_queue_type_fn(own_canister_id, local_canisters)(respondent);
+            self.input_schedule.schedule(*respondent, input_queue_type);
+        }
+
+        debug_assert_eq!(Ok(()), self.test_invariants());
+        debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
+
         Ok(())
     }
 
@@ -1133,7 +1209,9 @@ impl CanisterQueues {
 
     /// Returns the number of non-stale canister messages enqueued in input queues.
     pub fn input_queues_message_count(&self) -> usize {
-        self.message_stats().inbound_message_count + self.store.shed_responses.len()
+        self.message_stats().inbound_message_count
+            + self.store.expired_callbacks.len()
+            + self.store.shed_responses.len()
     }
 
     /// Returns the number of reserved slots across all input queues.
@@ -1161,7 +1239,9 @@ impl CanisterQueues {
 
     /// Returns the number of non-stale responses enqueued in input queues.
     pub fn input_queues_response_count(&self) -> usize {
-        self.message_stats().inbound_response_count + self.store.shed_responses.len()
+        self.message_stats().inbound_response_count
+            + self.store.expired_callbacks.len()
+            + self.store.shed_responses.len()
     }
 
     /// Returns the number of actual (non-stale) messages in output queues.
@@ -1643,6 +1723,7 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             } else {
                 None
             },
+            expired_callbacks: callback_references_to_proto(&item.store.expired_callbacks),
             shed_responses: callback_references_to_proto(&item.store.shed_responses),
             next_input_source,
             local_sender_schedule,
@@ -1662,6 +1743,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
     ) -> Result<Self, Self::Error> {
         let mut canister_queues = BTreeMap::new();
         let mut pool = MessagePool::default();
+        let mut expired_callbacks = BTreeMap::new();
         let mut shed_responses = BTreeMap::new();
 
         if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
@@ -1723,6 +1805,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                     })
                     .collect()
             }
+            expired_callbacks = callback_references_try_from_proto(item.expired_callbacks)?;
             shed_responses = callback_references_try_from_proto(item.shed_responses)?;
 
             let mut enqueued_pool_messages = BTreeSet::new();
@@ -1785,6 +1868,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
         let store = MessageStoreImpl {
             pool,
+            expired_callbacks,
             shed_responses,
         };
         let callbacks_with_enqueued_response = store
@@ -1905,6 +1989,14 @@ impl QueueStats {
             debug_assert!(self.output_queues_reserved_slots > 0);
             self.output_queues_reserved_slots = self.output_queues_reserved_slots.saturating_sub(1);
         }
+    }
+
+    /// Updates the stats to reflect the enqueueing of a "deadline expired"
+    /// reference into an input queue.
+    fn on_push_timeout_response(&mut self) {
+        // Pushing a response into an input queue, consume an input queue slot.
+        debug_assert!(self.input_queues_reserved_slots > 0);
+        self.input_queues_reserved_slots = self.input_queues_reserved_slots.saturating_sub(1);
     }
 
     /// Updates the stats to reflect the dropping of the given request from an input
