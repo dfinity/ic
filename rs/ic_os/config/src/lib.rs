@@ -54,9 +54,10 @@ mod tests {
     #[test]
     fn test_serialize_and_deserialize() {
         let network_settings = NetworkSettings {
-            ipv6_prefix: "2a00:fb01:400:200".to_string(),
+            ipv6_prefix: None,
+            ipv6_address: None,
             ipv6_prefix_length: 64_u8,
-            ipv6_gateway: "2a00:fb01:400:200::1".parse().unwrap(),
+            ipv6_gateway: "2001:db8::1".parse().unwrap(),
             ipv4_address: None,
             ipv4_gateway: None,
             ipv4_prefix_length: None,

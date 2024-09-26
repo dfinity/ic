@@ -65,6 +65,7 @@ pub fn main() -> Result<()> {
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
             let ConfigIniSettings {
                 ipv6_prefix,
+                ipv6_address,
                 ipv6_prefix_length,
                 ipv6_gateway,
                 ipv4_address,
@@ -79,6 +80,7 @@ pub fn main() -> Result<()> {
 
             let network_settings = NetworkSettings {
                 ipv6_prefix,
+                ipv6_address,
                 ipv6_prefix_length,
                 ipv6_gateway,
                 ipv4_address,

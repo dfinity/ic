@@ -15,7 +15,7 @@
   </resource>
   <os>
     <type arch='x86_64' machine='pc-q35-5.0'>hvm</type>
-    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/guestos_VARS.fd</nvram>
     <boot dev='hd'/>
   </os>

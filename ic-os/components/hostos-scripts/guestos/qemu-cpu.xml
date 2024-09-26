@@ -1,1 +1,1 @@
-<cpu mode='host-model'/>
+<cpu mode='host-model' migratable='off'/>
