@@ -1,8 +1,4 @@
-//! SHA-3 and related hash functions.
-//! Currently supported are:
-//! * [`Keccak256`]: Keccak-256 hash function with constant 256-bit (32 bytes) output.
-//!   Note that this is not the same as the [SHA-3 standard](https://csrc.nist.gov/pubs/fips/202/final)
-//!   which uses a different padding scheme. Keccak-256 is the hash function used for example in Ethereum.
+//! Wrappers around SHA-3 and related hash functions.
 
 #![forbid(unsafe_code)]
 #![warn(rust_2018_idioms)]
@@ -10,6 +6,10 @@
 #![warn(future_incompatible)]
 
 /// Keccak-256 hash function.
+///
+/// Hash function with constant 256-bit (32 bytes) output.
+/// Note that this is not the same as the [SHA-3 standard](https://csrc.nist.gov/pubs/fips/202/final)
+/// which uses a different padding scheme. Keccak-256 is the hash function used for example in Ethereum.
 ///
 /// # Examples
 ///
