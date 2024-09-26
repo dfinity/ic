@@ -6,10 +6,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_core",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/runtime",
-    "//rs/ledger_suite/common/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",

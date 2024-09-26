@@ -7,14 +7,14 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/handlers/lifeline/impl:lifeline",
-    "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/common/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",

@@ -12,13 +12,13 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",
-    "//rs/ledger_suite/icrc1/index-ng",
-    "//rs/ledger_suite/icrc1/ledger",
-    "//rs/ledger_suite/common/ledger_canister_core",
-    "//rs/ledger_suite/common/ledger_core",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:base64",

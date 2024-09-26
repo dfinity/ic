@@ -4,6 +4,5 @@ pub mod blocks;
 pub mod construction;
 pub mod mempool;
 pub mod network;
-pub mod neuron_management;
 pub mod search_transactions;
 pub mod transfers;

@@ -31,9 +31,9 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/ledger_suite/icrc1/test_utils",
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1/test_utils",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:leb128",
@@ -138,14 +138,14 @@ rust_test(
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/icrc1/ledger",
             "//rs/nns/test_utils",
             "//rs/nns/test_utils/golden_nns_state",
-            "//rs/ledger_suite/icrc1/ledger",
             "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
+            "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/icrc1/tokens_u256",
             "//rs/ledger_suite/icrc1/tokens_u64",
-            "//rs/ledger_suite/common/ledger_core",
             "//rs/rust_canisters/canister_test",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
@@ -196,10 +196,10 @@ rust_test(
             # Keep sorted.
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/registry/subnet_type",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
+            "//rs/registry/subnet_type",
             "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",

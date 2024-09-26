@@ -27,9 +27,9 @@ package(default_visibility = ["//visibility:public"])
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/tree_hash",
-            "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
             "//rs/types/base_types",
             "@crate_index//:candid",
@@ -82,9 +82,9 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
             "//rs/rust_canisters/http_types",
             "//rs/types/base_types",
@@ -222,9 +222,9 @@ rust_test(
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
-            "//rs/ledger_suite/icrc1/test_utils",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1/test_utils",
             "//rs/rust_canisters/dfn_http_metrics",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
@@ -267,10 +267,10 @@ rust_test(
         # Keep sorted.
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ledger_suite/icrc1",
-        "//rs/ledger_suite/tests/sm-tests",
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1",
+        "//rs/ledger_suite/tests/sm-tests",
         "//rs/types/base_types",
     ],
 )
@@ -299,9 +299,9 @@ rust_test(
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
+            "//rs/ledger_suite/icrc1",
             "//rs/rust_canisters/canister_log",
             "//rs/rust_canisters/http_types",
             "//rs/types/base_types",

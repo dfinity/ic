@@ -19,14 +19,14 @@ Upgrade the ckBTC archive canister to the latest version to add support for the 
 ```
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
-cd rs/ledger_suite/icrc1/archive
+cd rs/rosetta-api/icrc1/archive
 didc encode '()'
 ```
 
 ## Release Notes
 
 ```
-git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/archive
+git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/archive
 576bb8d17 chore: add buildifier sort comment to Bazel files
 f7fe40b7d Merge branch 'mathias-FI-1310-add-heap-memory-usage-metric' into 'master'
 0c16902ca feat(ledger_suite): FI-1310: Add total memory usage metrics for ledger, archive, and index canisters

@@ -6,12 +6,12 @@ package(default_visibility = ["//visibility:public"])
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common/validation",
     "//rs/nervous_system/proto",
     "//rs/nns/common",
     "//rs/protobuf",
-    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/types",

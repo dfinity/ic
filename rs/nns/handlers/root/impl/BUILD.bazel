@@ -200,13 +200,13 @@ rust_ic_test_suite(
     data = [
         ":root-canister",
         ":upgrade-test-canister",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/gtc:genesis-token-canister",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/registry/canister:registry-canister",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",

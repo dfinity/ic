@@ -12,10 +12,10 @@ rust_library(
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
-        "//rs/nns/constants",
+        "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icp/index:ic-icp-index",
-        "//rs/ledger_suite/common/ledger_core",
+        "//rs/nns/constants",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",

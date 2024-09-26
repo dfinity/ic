@@ -23,14 +23,14 @@ Similarly to [132128](https://dashboard.internetcomputer.org/proposal/132128), t
 ```
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
-cd rs/ledger_suite/icrc1/index-ng
+cd rs/rosetta-api/icrc1/index-ng
 didc encode '()'
 ```
 
 ## Release Notes
 
 ```
-git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/index-ng
+git log --format=%C(auto) %h %s 24fd80082f40de6d0b3cd7876be09ef1aadbde86..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/index-ng
 b4be567dc chore: Bump rust version to 1.80 (#642)
 eec6107fa chore: remove obsolete cost scaling feature flag (#502)
 18243444a fix(ICRC-Index): FI-1382: remove comment on removing 0 balance accounts (#341)

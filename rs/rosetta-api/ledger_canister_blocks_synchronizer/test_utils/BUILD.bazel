@@ -5,9 +5,9 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
+    "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
-    "//rs/ledger_suite/common/ledger_core",
     "//rs/types/types",
     "@crate_index//:ic-cdk",
     "@crate_index//:rand",
