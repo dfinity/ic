@@ -5,7 +5,7 @@ use super::{
 use crate::{
     canister_snapshots::CanisterSnapshots,
     canister_state::{
-        queues::CanisterQueuesLoopDetector,
+        queues::{CanisterInput, CanisterQueuesLoopDetector},
         system_state::{push_input, CanisterOutputQueuesIterator},
     },
     metadata_state::{
@@ -782,13 +782,17 @@ impl ReplicatedState {
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn pop_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues.pop_input()
+        self.subnet_queues
+            .pop_input()
+            .map(subnet_input_into_canister_message)
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn peek_subnet_input(&mut self) -> Option<CanisterMessage> {
-        self.subnet_queues.peek_input()
+        self.subnet_queues
+            .peek_input()
+            .map(subnet_input_into_canister_message)
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
@@ -1065,6 +1069,24 @@ impl ReplicatedState {
         );
 
         self.update_stream_guaranteed_responses_size_bytes();
+    }
+}
+
+/// Converts a `CanisterInput` popped from a subnet input queue into a
+/// `CanisterMessage`.
+///
+/// As opposed to actual canister queues, subnet input queues should never hold
+/// any kind of response (because the management canister does not make any
+/// outbound calls as itself).
+fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
+    match input {
+        CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
+        CanisterInput::Request(request) => CanisterMessage::Request(request),
+        CanisterInput::Response(_)
+        | CanisterInput::DeadlineExpired(_)
+        | CanisterInput::ResponseDropped(_) => {
+            unreachable!("Subnet input queues should never hold responses")
+        }
     }
 }
 

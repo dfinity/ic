@@ -575,7 +575,7 @@ impl Install for Installer {
             0,
         );
 
-        install_call
+        () = install_call
             .call_and_wait()
             .await
             .context("failed to install canister")?;
@@ -674,7 +674,7 @@ impl Stop for Stopper {
             0,
         );
 
-        stop_call
+        () = stop_call
             .call_and_wait()
             .await
             .context("failed to stop canister")?;
@@ -724,7 +724,7 @@ impl Delete for Deleter {
             0,
         );
 
-        delete_call
+        () = delete_call
             .call_and_wait()
             .await
             .context("failed to delete canister")?;

@@ -41,10 +41,10 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-sha3",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/secp256k1",
-        "//rs/crypto/sha3",
         "//rs/ethereum/evm-rpc-client",
         "//rs/ethereum/types",
         "//rs/phantom_newtype",
@@ -232,11 +232,19 @@ rust_binary(
 closure_js_library(
     name = "principal_to_bytes",
     srcs = ["templates/principal_to_bytes.js"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         # Keep sorted.
         ":principal_to_bytes",

@@ -12,7 +12,7 @@ filegroup(
 )
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/secp256k1",
@@ -20,6 +20,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
     "//rs/nns/gtc_accounts",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
@@ -34,16 +35,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:sha3",
-]
-
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance/api",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance/api:api--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -113,7 +104,7 @@ rust_library(
     crate_name = "ic_nns_gtc",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
+    deps = DEPENDENCIES + [":build_script"],
 )
 
 rust_canister(
