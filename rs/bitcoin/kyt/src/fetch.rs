@@ -1,6 +1,6 @@
 use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError};
 use crate::types::{
-    CheckTransactionError, CheckTransactionPending, CheckTransactionResponse,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
 };
 use crate::{blocklist_contains, state};
@@ -186,8 +186,10 @@ pub trait FetchEnv {
                         match transaction_output_address(&fetched.tx, vout) {
                             Ok(address) => state::set_fetched_address(txid, index, address),
                             Err(err) => {
-                                return CheckTransactionError::InvalidTransaction(err.to_string())
-                                    .into()
+                                return CheckTransactionIrrecoverableError::InvalidTransaction(
+                                    err.to_string(),
+                                )
+                                .into()
                             }
                         }
                     }
@@ -202,7 +204,7 @@ pub trait FetchEnv {
             if self.cycles_available() == 0 {
                 return CheckTransactionStatus::NotEnoughCycles.into();
             } else {
-                return CheckTransactionPending::HighLoad.into();
+                return CheckTransactionRetriable::HighLoad.into();
             }
         }
 
@@ -219,8 +221,11 @@ pub trait FetchEnv {
                         Ok(address) => state::set_fetched_address(txid, index, address),
                         Err(err) => {
                             error = Some(
-                                CheckTransactionError::InvalidTransaction(format!("{:?}", err))
-                                    .into(),
+                                CheckTransactionIrrecoverableError::InvalidTransaction(format!(
+                                    "{:?}",
+                                    err
+                                ))
+                                .into(),
                             );
                         }
                     }
@@ -238,7 +243,7 @@ pub trait FetchEnv {
             _ => None,
         }) {
             Some(result) => result,
-            None => CheckTransactionPending::Pending.into(),
+            None => CheckTransactionRetriable::Pending.into(),
         }
     }
 }

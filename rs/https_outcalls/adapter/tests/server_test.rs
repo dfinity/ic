@@ -469,37 +469,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     // implements unix listener that removes socket file when done
     // adapter does not need this because the socket is managed by systemd
     mod unix {
-        use std::path::{Path, PathBuf};
         use std::{
             pin::Pin,
             task::{Context, Poll},
         };
         use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-        use tokio::net::unix::SocketAddr;
         use tonic::transport::server::Connected;
-
-        pub struct UnixListenerDrop {
-            path: PathBuf,
-            listener: tokio::net::UnixListener,
-        }
-
-        impl UnixListenerDrop {
-            pub fn bind(path: impl AsRef<Path>) -> std::io::Result<Self> {
-                let path = path.as_ref().to_owned();
-                tokio::net::UnixListener::bind(&path)
-                    .map(|listener| UnixListenerDrop { path, listener })
-            }
-            pub async fn accept(&self) -> tokio::io::Result<(tokio::net::UnixStream, SocketAddr)> {
-                self.listener.accept().await
-            }
-        }
-
-        impl Drop for UnixListenerDrop {
-            fn drop(&mut self) {
-                // There's no way to return a useful error here
-                std::fs::remove_file(&self.path).unwrap();
-            }
-        }
 
         #[derive(Debug)]
         pub struct UnixStream(pub tokio::net::UnixStream);
