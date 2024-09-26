@@ -4251,7 +4251,7 @@ fn governance_with_staked_neuron(
         claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
             .unwrap();
 
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
+    assert_eq!(gov.neuron_store.len(), 1);
 
     gov.neuron_store
         .with_neuron_mut(&nid, |neuron| {
@@ -5185,7 +5185,7 @@ fn test_neuron_split_fails() {
         neuron_before
     );
     // There is still only one neuron
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
+    assert_eq!(gov.neuron_store.len(), 1);
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
 }
@@ -5245,7 +5245,7 @@ fn test_neuron_split() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(governance.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(governance.neuron_store.len(), 2);
     // And we should have two ledger accounts.
     driver.assert_num_neuron_accounts_exist(2);
 
@@ -5473,7 +5473,7 @@ fn test_neuron_spawn() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(gov.neuron_store.len(), 2);
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -5649,7 +5649,7 @@ fn test_neuron_spawn_with_subaccount() {
     let creation_timestamp = driver.now();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(gov.neuron_store.len(), 2);
     // And we should have one ledger accounts.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -5803,7 +5803,7 @@ fn assert_neuron_spawn_partial(
     let creation_timestamp = driver.now();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(gov.neuron_store.len(), 2);
     // And we should have 1 ledger accounts.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -6153,7 +6153,7 @@ fn test_disburse_to_neuron() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(gov.neuron_store.len(), 2);
     // And we should have two ledger accounts.
     driver.assert_num_neuron_accounts_exist(2);
 
@@ -6225,7 +6225,7 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 3);
+    assert_eq!(gov.neuron_store.len(), 3);
     (driver, gov)
 }
 
