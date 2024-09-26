@@ -21,7 +21,7 @@ ic-agent = { workspace = true }
 ic-crypto-secp256k1 = { path = "../../../../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../../../../crypto/ed25519" }
 ic-icrc-rosetta = { path = ".." }
-ic-rosetta-api = { path = "../../.." }
+ic-rosetta-api = { path = "../../../../rosetta-api" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }
