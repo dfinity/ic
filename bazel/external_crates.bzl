@@ -793,6 +793,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "minicbor-derive": crate.spec(
                 version = "^0.13.0",
             ),
+            "mio": crate.spec(
+                version = "^0.8.11",
+            ),
             "mockall": crate.spec(
                 version = "^0.13.0",
             ),

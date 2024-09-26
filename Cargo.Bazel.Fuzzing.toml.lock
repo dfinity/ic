@@ -136,7 +136,7 @@ dependencies = [
  "actix-utils",
  "futures-core",
  "futures-util",
- "mio 0.8.10",
+ "mio 0.8.11",
  "socket2 0.5.7",
  "tokio",
  "tracing",
@@ -2621,7 +2621,7 @@ dependencies = [
  "bitflags 2.4.1",
  "crossterm_winapi",
  "libc",
- "mio 0.8.10",
+ "mio 0.8.11",
  "parking_lot 0.12.1",
  "signal-hook",
  "signal-hook-mio",
@@ -3190,6 +3190,7 @@ dependencies = [
  "metrics-proxy",
  "minicbor",
  "minicbor-derive",
+ "mio 0.8.11",
  "mockall 0.13.0",
  "mockito",
  "moka",
@@ -6796,9 +6797,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "log",
@@ -8445,7 +8446,7 @@ checksum = "1fa3d084c8704911bfefb2771be2f9b6c5c0da7343a71e0021ee3c665cada738"
 dependencies = [
  "bytes",
  "heck 0.4.1",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -8466,7 +8467,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "065717a5dfaca4a83d2fe57db3487b311365200000551d7a364e715dbf4346bc"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.66",
@@ -10225,7 +10226,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ad2e15f37ec9a6cc544097b78a1ec90001e9f71b81338ca39f430adaca99af"
 dependencies = [
  "libc",
- "mio 0.8.10",
+ "mio 0.8.11",
  "signal-hook",
 ]
 

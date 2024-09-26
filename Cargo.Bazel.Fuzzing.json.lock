@@ -1,5 +1,5 @@
 {
-  "checksum": "776aa7c37faa0c93be9eb007128cd9bdee821beb048b4652e1606d78b4f2dd1a",
+  "checksum": "665ffe3f530a74f67ece546a6e8eb37dd082e86ef0c2141e73d44920d25d8d45",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -684,7 +684,7 @@
               "target": "futures_util"
             },
             {
-              "id": "mio 0.8.10",
+              "id": "mio 0.8.11",
               "target": "mio"
             },
             {
@@ -15380,7 +15380,7 @@
                 "target": "libc"
               },
               {
-                "id": "mio 0.8.10",
+                "id": "mio 0.8.11",
                 "target": "mio"
               },
               {
@@ -18363,6 +18363,10 @@
             {
               "id": "minicbor 0.19.1",
               "target": "minicbor"
+            },
+            {
+              "id": "mio 0.8.11",
+              "target": "mio"
             },
             {
               "id": "mockall 0.13.0",
@@ -39286,14 +39290,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "mio 0.8.10": {
+    "mio 0.8.11": {
       "name": "mio",
-      "version": "0.8.10",
+      "version": "0.8.11",
       "package_url": "https://github.com/tokio-rs/mio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mio/0.8.10/download",
-          "sha256": "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+          "url": "https://static.crates.io/crates/mio/0.8.11/download",
+          "sha256": "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
         }
       },
       "targets": [
@@ -39430,7 +39434,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.8.10"
+        "version": "0.8.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -49295,7 +49299,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -49390,7 +49394,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.10.5",
+              "id": "itertools 0.11.0",
               "target": "itertools"
             },
             {
@@ -60327,7 +60331,7 @@
               "target": "libc"
             },
             {
-              "id": "mio 0.8.10",
+              "id": "mio 0.8.11",
               "target": "mio",
               "alias": "mio_0_8"
             },
@@ -78996,6 +79000,7 @@
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
+    "mio 0.8.11",
     "mockall 0.13.0",
     "mockito 1.2.0",
     "moka 0.12.8",
