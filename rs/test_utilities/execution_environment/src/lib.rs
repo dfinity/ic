@@ -1005,10 +1005,12 @@ impl ExecutionTest {
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
             }
-            CanisterTask::OnLowWasmMemory => canister
-                .system_state
-                .task_queue
-                .set_on_low_wasm_memory_hook_status(OnLowWasmMemoryHookStatus::Ready),
+            CanisterTask::OnLowWasmMemory => {
+                canister
+                    .system_state
+                    .task_queue
+                    .set_on_low_wasm_memory_hook_status(OnLowWasmMemoryHookStatus::Ready);
+            }
         }
         let result = execute_canister(
             &self.exec_env,
