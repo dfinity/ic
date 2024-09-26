@@ -290,11 +290,33 @@ impl TaskQueue {
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
-        self.queue.front()
+        if self.on_low_wasm_memory_hook_status != OnLowWasmMemoryHookStatus::Ready {
+            self.queue.front()
+        } else {
+            self.queue.front().map(|front| match *front {
+                ExecutionTask::PausedExecution { .. }
+                | ExecutionTask::PausedInstallCode { .. }
+                | ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. } => front,
+                ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => {
+                    &ExecutionTask::OnLowWasmMemory
+                }
+                ExecutionTask::OnLowWasmMemory => unreachable!(
+                    "`ExecutionTask::OnLowWasmMemory` should never appear in TaskQueue::queue."
+                ),
+            })
+        }
     }
 
     pub fn pop_front(&mut self) -> Option<ExecutionTask> {
-        self.queue.pop_front()
+        let task = self.front()?;
+
+        if *task == ExecutionTask::OnLowWasmMemory {
+            self.on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
+            Some(ExecutionTask::OnLowWasmMemory)
+        } else {
+            self.queue.pop_front()
+        }
     }
 
     #[cfg(test)]
