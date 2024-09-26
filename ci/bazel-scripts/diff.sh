@@ -13,11 +13,7 @@ set -euo pipefail
 set -x
 cd "$(git rev-parse --show-toplevel)"
 
-# if the script is not being run from a PR it will have no target branch to compare it to, so use HEAD
-TARGET_BRANCH="${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-HEAD}"
-
-git fetch origin "$TARGET_BRANCH" --quiet
-MERGE_BASE="$(git merge-base HEAD origin/$TARGET_BRANCH)"
+MERGE_BASE=${{MERGE_BASE_SHA:-HEAD}}
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
