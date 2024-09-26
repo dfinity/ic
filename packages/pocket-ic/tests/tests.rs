@@ -1585,20 +1585,22 @@ fn test_raw_gateway() {
     // We make two requests: the non-raw request fails because the test canister does not certify its response,
     // the raw request succeeds.
     let client = Client::new();
-    let host = endpoint.host().unwrap();
+    let gateway_host = endpoint.host().unwrap();
     for (host, expected) in [
         (
-            format!("{}.{}", canister, host),
+            format!("{}.{}", canister, gateway_host),
             "Response verification failed: Certification values not found",
         ),
-        (format!("{}.raw.{}", canister, host), "My sample asset."),
+        (
+            format!("{}.raw.{}", canister, gateway_host),
+            "My sample asset.",
+        ),
     ] {
         let mut url = endpoint.clone();
         url.set_host(Some(&host)).unwrap();
         url.set_path("/asset.txt");
         let res = client.get(url).send().unwrap();
         let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
-        println!("host: {}, expected: {}, page: {}", host, expected, page);
         assert!(page.contains(expected));
     }
 }
