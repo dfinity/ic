@@ -99,11 +99,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
 
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -170,11 +165,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 [How to verify] this proposal (and others like it).
 
 [How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
-
-
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
 
 
 ## New Commits

@@ -811,15 +811,13 @@ impl CallContextManager {
     /// If we get a response for one of the outstanding calls, we unregister
     /// the callback and return it.
     pub fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
-        self.callbacks.remove(&callback_id).map(|callback| {
-            self.stats.on_unregister_callback(&callback);
+        self.callbacks.remove(&callback_id).inspect(|callback| {
+            self.stats.on_unregister_callback(callback);
             if callback.deadline != NO_DEADLINE {
                 self.unexpired_callbacks
                     .remove(&(callback.deadline, callback_id));
             }
             debug_assert!(self.stats_ok());
-
-            callback
         })
     }
 
