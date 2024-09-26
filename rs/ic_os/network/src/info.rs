@@ -32,24 +32,6 @@ impl NetworkInfo {
             None => None,
         };
 
-        // Optional ipv6_address - for testing. Takes precedence over ipv6_prefix.
-        let ipv6_address = match config_map.get("ipv6_address") {
-            Some(address) => {
-                // ipv6_address might be formatted with the trailing suffix. Remove it.
-                let ipv6_subnet = format!("/{}", ipv6_subnet);
-                let address = address.strip_suffix(&ipv6_subnet).unwrap_or(address);
-                let address = address
-                    .parse::<Ipv6Addr>()
-                    .context(format!("Invalid ipv6 address: {}", address))?;
-                Some(address)
-            }
-            None => None,
-        };
-
-        if ipv6_address.is_none() && ipv6_prefix.is_none() {
-            bail!("Missing config parameter: need at least one of ipv6_prefix or ipv6_address");
-        }
-
         let ipv6_gateway = config_map
             .get("ipv6_gateway")
             .context("Missing config parameter: ipv6_gateway")?;
