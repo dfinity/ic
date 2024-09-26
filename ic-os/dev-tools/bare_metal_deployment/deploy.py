@@ -300,11 +300,15 @@ def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
 def run_script(idrac_script_dir: Path,
                bmc_info: BMCInfo,
                script_and_args: str,
-               quiet: bool = False) -> None:
+               permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
     command = f"python3 {idrac_script_dir}/{script_and_args}"
-    result = invoke.run(command, hide="stdout" if quiet else None)
+    result = invoke.run(command)
+
     if result and not result.ok:
+        raise gen_failure(result, bmc_info)
+
+    if not permissive and result and "FAIL" in result.stdout:
         raise gen_failure(result, bmc_info)
 
 
@@ -360,13 +364,13 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         )
         log.info("Attaching virtual media")
         run_func(
-            f"InsertEjectVirtualMediaREDFISH.py {cli_creds} --uripath {bmc_info.network_image_url} --action insert --index 1",
+            f"InsertEjectVirtualMediaREDFISH.py {cli_creds} --uripath {bmc_info.network_image_url} --action insert --index 1", permissive=False,
         )
         network_image_attached = True
 
         log.info("Setting next boot device to virtual floppy, and restarting")
         run_func(
-            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2"
+            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2", permissive=False,
         ) # Device 2 for virtual Floppy
 
         log.info("Turning on machine")

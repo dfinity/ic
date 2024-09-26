@@ -131,17 +131,11 @@ impl RosettaTestingEnvironment {
             .current_block_identifier
             .index;
 
-        self.rosetta_context.kill();
+        self.rosetta_context.kill_rosetta_process();
 
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-        let rosetta_state_directory =
-            TempDir::new().expect("failed to create a temporary directory");
-        self.rosetta_context = start_rosetta(
-            &rosetta_bin,
-            Some(rosetta_state_directory.path().to_owned()),
-            options,
-        )
-        .await;
+        self.rosetta_context =
+            start_rosetta(&rosetta_bin, self.rosetta_context.state_directory, options).await;
 
         self.rosetta_client =
             RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
@@ -161,6 +155,7 @@ pub struct RosettaTestingEnvironmentBuilder {
     pub transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     pub minting_account: Option<Account>,
     pub initial_balances: Option<HashMap<AccountIdentifier, icp_ledger::Tokens>>,
+    pub persistent_storage: bool,
 }
 
 impl RosettaTestingEnvironmentBuilder {
@@ -169,6 +164,7 @@ impl RosettaTestingEnvironmentBuilder {
             transfer_args_for_block_generating: None,
             minting_account: None,
             initial_balances: None,
+            persistent_storage: false,
         }
     }
 
@@ -185,11 +181,17 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_initial_balances(
         mut self,
         initial_balances: HashMap<AccountIdentifier, icp_ledger::Tokens>,
     ) -> Self {
         self.initial_balances = Some(initial_balances);
+        self
+    }
+
+    pub fn with_persistent_storage(mut self, enable_persistent_storage: bool) -> Self {
+        self.persistent_storage = enable_persistent_storage;
         self
     }
 
@@ -277,10 +279,16 @@ impl RosettaTestingEnvironmentBuilder {
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
+
+        let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string());
+
+        if self.persistent_storage {
+            rosetta_options_builder = rosetta_options_builder.with_persistent_storage();
+        }
         let rosetta_context = start_rosetta(
             &rosetta_bin,
-            Some(rosetta_state_directory.path().to_owned()),
-            RosettaOptionsBuilder::new(replica_url.to_string()).build(),
+            rosetta_state_directory,
+            rosetta_options_builder.build(),
         )
         .await;
 
