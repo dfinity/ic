@@ -10,7 +10,7 @@ on:
       - 'dev-gh-*'
   pull_request:
     branches-ignore:
-      - hotfix-* # CI main is automatically triggered by the release workflow, so no need to run it twice
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
 
