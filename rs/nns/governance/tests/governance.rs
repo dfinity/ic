@@ -1347,17 +1347,17 @@ async fn test_cascade_following() {
     );
     // Check that neuron's vote is registered in the neuron
     assert_eq!(
-        &BallotInfo {
+        BallotInfo {
             proposal_id: Some(ProposalId { id: 1 }),
             vote: Vote::Yes as i32
         },
         gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .recent_ballots
-            .first()
-            .unwrap()
+            .with_neuron(&NeuronId::from_u64(2), |n| n
+                .recent_ballots
+                .first()
+                .unwrap()
+                .clone())
+            .expect("Neuron not found")
     );
     // The proposal should now be accepted and executed.
     assert_eq!(
@@ -1370,10 +1370,8 @@ async fn test_cascade_following() {
     // After the proposal is accepted the Neuron 1 should have 0 fees again
     assert_eq!(
         gov.neuron_store
-            .heap_neurons()
-            .get(&1)
-            .unwrap()
-            .neuron_fees_e8s,
+            .with_neuron(&NeuronId::from_u64(1), |n| n.neuron_fees_e8s)
+            .expect("Neuron not found"),
         0
     );
 }
@@ -1824,10 +1822,8 @@ async fn test_follow_negative() {
     // Make sure that the neuron has been changed the reject fee.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons()
-            .get(&1)
-            .unwrap()
-            .neuron_fees_e8s,
+            .with_neuron(&NeuronId::from_u64(1), |n| n.neuron_fees_e8s)
+            .expect("Neuron not found"),
         gov.heap_data.economics.unwrap().reject_cost_e8s
     );
 }
@@ -2359,10 +2355,8 @@ async fn test_manage_neuron() {
     // neuron proposals.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .neuron_fees_e8s,
+            .with_neuron(&NeuronId::from_u64(2), |n| n.neuron_fees_e8s)
+            .expect("Neuron not found"),
         gov.heap_data
             .economics
             .as_ref()
@@ -2896,10 +2890,10 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         fully_elapsed_reward_rounds * INITIAL_REWARD_POT_PER_ROUND_E8S - 3;
     let neuron_share = gov
         .neuron_store
-        .heap_neurons()
-        .get(&1)
-        .unwrap()
-        .voting_power(fake_driver.now()) as f64
+        .with_neuron(&NeuronId::from_u64(1), |n| {
+            n.voting_power(fake_driver.now()) as f64
+        })
+        .expect("Neuron not found")
         / gov
             .neuron_store
             .heap_neurons()
@@ -3981,8 +3975,14 @@ fn test_approve_kyc() {
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
-    let neuron_a = gov.neuron_store.heap_neurons().get(&1).unwrap().clone();
-    let neuron_b = gov.neuron_store.heap_neurons().get(&2).unwrap().clone();
+    let neuron_a = gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(1), |n| n.clone())
+        .expect("Neuron not found");
+    let neuron_b = gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(2), |n| n.clone())
+        .expect("Neuron not found");
 
     let principal1 = neuron_a.controller();
     let principal2 = neuron_b.controller();
@@ -4024,65 +4024,41 @@ fn test_approve_kyc() {
         "Neuron is not kyc verified: 2"
     );
 
-    assert!(
-        !gov.neuron_store
-            .heap_neurons()
-            .get(&1)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        !gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        !gov.neuron_store
-            .heap_neurons()
-            .get(&3)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        !gov.neuron_store
-            .heap_neurons()
-            .get(&4)
-            .unwrap()
-            .kyc_verified
-    );
+    assert!(!gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(!gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(!gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(!gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
+        .expect("Neuron not found"));
 
     gov.approve_genesis_kyc(&[principal1, principal2]);
 
-    assert!(
-        gov.neuron_store
-            .heap_neurons()
-            .get(&1)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        gov.neuron_store
-            .heap_neurons()
-            .get(&3)
-            .unwrap()
-            .kyc_verified
-    );
-    assert!(
-        !gov.neuron_store
-            .heap_neurons()
-            .get(&4)
-            .unwrap()
-            .kyc_verified
-    );
+    assert!(gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
+        .expect("Neuron not found"));
+    assert!(!gov
+        .neuron_store
+        .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
+        .expect("Neuron not found"));
 
     // Disbursing should now work.
     let _ = gov
@@ -9515,10 +9491,9 @@ fn test_join_neurons_fund() {
         assert_eq!(
             Some(60 * 60 * 24 * 30),
             gov.neuron_store
-                .heap_neurons()
-                .get(&3)
-                .unwrap()
-                .joined_community_fund_timestamp_seconds
+                .with_neuron(&NeuronId::from_u64(3), |n| n
+                    .joined_community_fund_timestamp_seconds)
+                .expect("Neuron not found")
         );
         // Check that neuron info displays the same information.
         let neuron_info = gov
@@ -9562,11 +9537,10 @@ fn test_join_neurons_fund() {
         assert_eq!(
             60 * 60 * 24 * 32,
             gov.neuron_store
-                .heap_neurons()
-                .get(&1)
-                .unwrap()
-                .joined_community_fund_timestamp_seconds
-                .unwrap_or(0)
+                .with_neuron(&NeuronId::from_u64(1), |n| n
+                    .joined_community_fund_timestamp_seconds
+                    .unwrap_or(0))
+                .expect("Neuron not found")
         );
     }
     // Principal B tries to join the Neurons' Fund for neuron 3
@@ -9656,11 +9630,10 @@ fn test_join_neurons_fund() {
     assert_eq!(
         0,
         gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .joined_community_fund_timestamp_seconds
-            .unwrap_or(0)
+            .with_neuron(&NeuronId::from_u64(2), |n| n
+                .joined_community_fund_timestamp_seconds
+                .unwrap_or(0))
+            .expect("Neuron not found")
     );
 }
 
