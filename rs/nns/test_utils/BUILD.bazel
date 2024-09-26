@@ -22,9 +22,12 @@ BASE_DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/lifeline/interface",
+    "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/canister/api",
@@ -41,6 +44,8 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/governance",
+    "//rs/sns/init",
     "//rs/sns/swap",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
@@ -67,23 +72,13 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance/api",
-    "//rs/nns/governance/init",
     "//rs/nns/gtc",
-    "//rs/nns/sns-wasm",
     "//rs/nns/handlers/root/impl:root",
-    "//rs/sns/governance",
-    "//rs/sns/init",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/gtc:gtc--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/init:init--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
