@@ -3159,10 +3159,6 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    /// # Panics
-    ///
-    /// This method panics if checkpoint labels can not be retrieved
-    /// from the disk.
     fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
         let _timer = self
             .metrics
