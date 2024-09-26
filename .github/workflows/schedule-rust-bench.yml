@@ -26,7 +26,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:fb66b22cf6cf52178f554a417837791867a2c080f9d3e9d9acaa64c811e8508a
+      image: ghcr.io/dfinity/ic-build@sha256:115daa5ad5149182bb0416cbe5730f305be3bb2f48df576bc2c23067eefce84b
       # running on bare metal machine using ubuntu user
       options: --user ubuntu -v /cache:/cache
     timeout-minutes: 720 # 12 hours
