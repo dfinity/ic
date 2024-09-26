@@ -173,23 +173,13 @@ function query_nns_nodes() {
         # with `--insecure`. This check is only meant to confirm from SetupOS
         # that NNS urls are reachable, so we do not mind that it is "weak".
         if curl --insecure --head --connect-timeout 3 --silent "${url}" >/dev/null 2>&1; then
-        if curl --insecure --head --connect-timeout 3 --silent "${url}" >/dev/null 2>&1; then
             echo "  okay: ${url}"
-            success=true
             success=true
             break
         else
             echo "  fail: ${url}"
-        else
-            echo "  fail: ${url}"
         fi
     done
-
-    if $success; then
-        echo "  success"
-    else
-        log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
-    fi
 
     if $success; then
         echo "  success"
