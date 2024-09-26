@@ -264,11 +264,15 @@ function verify_deployment_path() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    check_generation
-    verify_cpu
-    verify_memory
-    verify_disks
-    verify_deployment_path
+    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+        check_generation
+        verify_cpu
+        verify_memory
+        verify_disks
+        verify_deployment_path
+    else
+        GENERATION=2
+    fi
     log_end "$(basename $0)"
 }
 

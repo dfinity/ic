@@ -66,3 +66,43 @@ function find_first_drive() {
 function get_large_drives() {
     lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'
 }
+
+# Check if a kernel command line boolean is set to 1 (true).
+# If set to 1, return true (0).
+# If set to 0, return false (1).
+# if absent or any other value, return true (1).
+function kernel_cmdline_bool_default_true() {
+    # Add spaces at the beginning and the end for greppability.
+    local cmdline=" $(cat /proc/cmdline) "
+    if echo "$cmdline" | grep -qF " $1=1 "; then
+        return 0
+    fi
+    # Covers the case where the option is present without =1 as value.
+    if echo "$cmdline" | grep -qF " $1 "; then
+        return 0
+    fi
+    if echo "$cmdline" | grep -qF " $1=0 "; then
+        return 1
+    fi
+    return 0
+}
+
+# Check if a kernel command line boolean is set to 1 (true).
+# If set to 1, return true (0).
+# If set to 0, return false (1).
+# if absent or any other value, return false (1).
+function kernel_cmdline_bool_default_false() {
+    # Add spaces at the beginning and the end for greppability.
+    local cmdline=" $(cat /proc/cmdline) "
+    if echo "$cmdline" | grep -qF " $1=1"; then
+        return 0
+    fi
+    # Covers the case where the option is present without =1 as value.
+    if echo "$cmdline" | grep -qF " $1 "; then
+        return 0
+    fi
+    if echo "$cmdline" | grep -qF " $1=0"; then
+        return 1
+    fi
+    return 1
+}
