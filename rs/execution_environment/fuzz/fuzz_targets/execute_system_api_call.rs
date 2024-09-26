@@ -49,16 +49,15 @@ fn setup_env() -> (StateMachine, CanisterId) {
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call
+// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call -- -rss_limit_mb=4096 > output.txt 2>&1
 
 fuzz_target!(|module: ICWasmModule| {
-    let wasm = module.module.to_bytes();
-
     with_env(|env, canister_id| {
+        let wasm = module.module.to_bytes();
         env.install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
             .unwrap();
 
-        // For determinism, all methods are executed
+        // For determinism, all methods are executed.
         for wasm_method in module.exported_functions.iter() {
             let _ = env.execute_ingress(*canister_id, wasm_method.name(), vec![]);
         }
