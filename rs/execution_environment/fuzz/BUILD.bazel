@@ -32,5 +32,6 @@ rust_fuzz_test_binary(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:libfuzzer-sys",
+        "@crate_index//:wat",
     ],
 )
