@@ -374,6 +374,51 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
+
+    /// Status of low_on_wasm_memory hook execution.
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub enum OnLowWasmMemoryHookStatus {
+    #[default]
+    ConditionNotSatisfied,
+    Ready,
+    Executed,
+}
+
+impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
+    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        use OnLowWasmMemoryHookStatus::*;
+
+        match *item {
+            ConditionNotSatisfied => Self::ConditionNotSatisfied,
+            Ready => Self::Ready,
+            Executed => Self::Executed,
+        }
+    }
+}
+
+impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
+        match value {
+            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "OnLowWasmMemoryHookStatus",
+                err: format!(
+                    "Unexpected value of status of on low wasm memory hook: {:?}",
+                    value
+                ),
+            }),
+            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            }
+            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
+            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
+        }
+    }
 }
 
 /// A wrapper around the different canister statuses.
@@ -743,6 +788,7 @@ impl SystemState {
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::from(0),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
         }
     }
 
@@ -773,6 +819,7 @@ impl SystemState {
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
         metrics: &dyn CheckpointLoadingMetrics,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -801,6 +848,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
+            on_low_wasm_memory_hook_status,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1610,6 +1658,14 @@ impl SystemState {
             }) => Some(request),
             _ => None,
         }
+    }
+
+    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
+        self.on_low_wasm_memory_hook_status = status;
+    }
+
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
     }
 }
 
