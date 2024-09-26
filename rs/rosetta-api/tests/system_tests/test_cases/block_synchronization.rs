@@ -217,3 +217,93 @@ fn test_ledger_upgrade_synchronization() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_load_from_storage() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS * 2,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                // We split up the transactions into two batches to make sure we have a valid blockchain
+                let (first_block_batch, second_block_batch) =
+                    args_with_caller.split_at(args_with_caller.len() / 2);
+
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut env = RosettaTestingEnvironment::builder()
+                        .with_minting_account(MINTING_IDENTITY.sender().unwrap().into())
+                        .with_persistent_storage(true)
+                        .build()
+                        .await;
+                    env.generate_blocks(first_block_batch.to_owned()).await;
+
+                    let replica_url = env.pocket_ic.url();
+                    // We restart rosetta in offline mode to make sure it has to load the blocks from storage
+                    env = env
+                        .restart_rosetta_node(
+                            RosettaOptions::builder(replica_url.clone().unwrap().to_string())
+                                .with_persistent_storage()
+                                .offline()
+                                .build(),
+                        )
+                        .await;
+
+                    // Make sure rosetta syncs up all existing blocks from storage
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        first_block_batch.len() as u64,
+                    )
+                    .await
+                    .unwrap();
+
+                    // Check that rosetta has a valid blockchain when compared to the ledger
+                    assert_rosetta_blockchain_is_valid(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
+                    )
+                    .await;
+
+                    // Now we restart rosetta in online mode and with persistent storage and check that making transactions still works
+                    env = env
+                        .restart_rosetta_node(
+                            RosettaOptions::builder(replica_url.clone().unwrap().to_string())
+                                .with_persistent_storage()
+                                .build(),
+                        )
+                        .await;
+
+                    env.generate_blocks(second_block_batch.to_owned()).await;
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        args_with_caller.len() as u64,
+                    )
+                    .await;
+
+                    assert_rosetta_blockchain_is_valid(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        &get_test_agent(replica_url.clone().unwrap().port().unwrap()).await,
+                    )
+                    .await;
+                });
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}

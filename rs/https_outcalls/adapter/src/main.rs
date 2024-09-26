@@ -5,12 +5,9 @@
 /// systemd socket ic-https-outcalls-adapter.socket
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::{
-    abort_on_panic, incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket,
-    incoming_from_path,
-};
-use ic_https_outcalls_adapter::{AdapterServer, Cli, IncomingSource};
-use ic_logger::{error, info, new_replica_logger_from_config};
+use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal};
+use ic_https_outcalls_adapter::{start_server, Cli, IncomingSource};
+use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
 
@@ -50,22 +47,11 @@ pub async fn main() {
         "Starting the adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
-
-    // Create server with https enforcement.
-    let server = AdapterServer::new(config.clone(), logger.clone(), &metrics_registry);
-    match config.incoming_source {
-        IncomingSource::Path(uds_path) => server
-            .serve(incoming_from_path(uds_path))
-            .await
-            .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
-            .expect("gRPC server crashed"),
-        IncomingSource::Systemd => server
-            // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
-            // Additionally, this is the only call to connect with the systemd socket and
-            // therefore we are sole owner.
-            .serve(unsafe { incoming_from_first_systemd_socket() })
-            .await
-            .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
-            .expect("gRPC server crashed"),
-    };
+    start_server(
+        &logger,
+        &metrics_registry,
+        &tokio::runtime::Handle::current(),
+        config,
+    );
+    shutdown_signal(logger.inner_logger.root.clone()).await;
 }
