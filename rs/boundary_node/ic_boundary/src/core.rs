@@ -140,9 +140,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     tls_config_client.alpn_protocols = alpn;
 
     // Set larger session resumption cache to accomodate all replicas (256 by default)
-    tls_config_client.resumption = rustls::client::Resumption::in_memory_sessions(
-        4096 * cli.listen.http_client_count as usize,
-    );
+    tls_config_client.resumption = rustls::client::Resumption::in_memory_sessions(16384);
 
     let http_client_opts = http::client::Options {
         timeout_connect: Duration::from_millis(cli.listen.http_timeout_connect),
@@ -166,9 +164,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Some(HTTP_DURATION_BUCKETS),
     );
 
-    let http_client_generator = Arc::new(crate::http::ClientGeneratorDynamic(
-        crate::http::ClientGeneratorSingle(http_client_opts.clone(), http_client_metric_params),
-    ));
+    let http_client_generator = Arc::new(crate::http::ClientGeneratorDynamic {
+        g: crate::http::ClientGeneratorSingle(http_client_opts.clone(), http_client_metric_params),
+        min_clients: cli.listen.http_client_pool_min,
+        max_clients: cli.listen.http_client_pool_max,
+        max_outstanding: cli.listen.http_client_max_outstanding,
+        idle_timeout: Duration::from_secs(cli.listen.http_client_pool_timeout as u64),
+    });
 
     // Caching
     let cache = cli.cache.cache_size_bytes.map(|x| {

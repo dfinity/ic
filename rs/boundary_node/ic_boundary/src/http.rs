@@ -44,16 +44,22 @@ impl<R: CloneableDnsResolver> GeneratesClients for ClientGeneratorSingle<R> {
 }
 
 #[derive(Debug)]
-pub struct ClientGeneratorDynamic<R: CloneableDnsResolver>(pub ClientGeneratorSingle<R>);
+pub struct ClientGeneratorDynamic<R: CloneableDnsResolver> {
+    pub g: ClientGeneratorSingle<R>,
+    pub min_clients: usize,
+    pub max_clients: usize,
+    pub max_outstanding: usize,
+    pub idle_timeout: Duration,
+}
 
 impl<R: CloneableDnsResolver> GeneratesClientsWithStats for ClientGeneratorDynamic<R> {
     fn generate(&self) -> Result<Arc<dyn ClientWithStats>, ic_bn_lib::http::Error> {
         Ok(Arc::new(ReqwestClientDynamic::new(
-            self.0.clone(),
-            1,
-            10,
-            200,
-            Duration::from_secs(90),
+            self.g.clone(),
+            self.min_clients,
+            self.max_clients,
+            self.max_outstanding,
+            self.idle_timeout,
         )?))
     }
 }
