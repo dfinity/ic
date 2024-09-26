@@ -3614,25 +3614,7 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
-            None => match load_checkpoint(
-                &self.state_layout,
-                height,
-                &self.metrics,
-                self.own_subnet_type,
-                Arc::clone(&self.get_fd_factory()),
-            ) {
-                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
-                Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
-                Err(err) => {
-                    self.metrics
-                        .state_manager_error_count
-                        .with_label_values(&["recover_checkpoint"])
-                        .inc();
-                    error!(self.log, "Failed to recover state @{}: {}", height, err);
-
-                    Err(StateManagerError::StateRemoved(height))
-                }
-            },
+            None => Err(StateManagerError::StateRemoved(height)),
         }
     }
 
