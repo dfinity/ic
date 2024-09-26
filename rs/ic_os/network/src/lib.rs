@@ -22,17 +22,8 @@ pub fn generate_network_config(
     generated_mac: UnformattedMacAddress,
     output_directory: &Path,
 ) -> Result<()> {
-    if let Some(address) = network_info.ipv6_address {
-        eprintln!("Found ipv6 address in config");
-        return generate_systemd_config_files(output_directory, network_info, None, &address);
-    };
-
     eprintln!("Generating ipv6 address");
-    let ipv6_prefix = network_info
-        .ipv6_prefix
-        .clone()
-        .context("ipv6_prefix required in config to generate ipv6 address")?;
-    let ipv6_address = generate_ipv6_address(&ipv6_prefix, &generated_mac)?;
+    let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
     eprintln!("Using ipv6 address: {}", ipv6_address);
 
     let formatted_mac = FormattedMacAddress::from(&generated_mac);

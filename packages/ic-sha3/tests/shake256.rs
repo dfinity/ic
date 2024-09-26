@@ -1,4 +1,4 @@
-use ic_crypto_sha3::Shake256;
+use ic_sha3::Shake256;
 
 /// Checks a subset of the NIST test vectors in SHAKE256VariableOut.rsp from
 /// https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/sha3/shakebytetestvectors.zip

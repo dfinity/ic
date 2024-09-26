@@ -9,18 +9,22 @@ use ic_config::{
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
-    IC_00,
+    CanisterIdRecord, CanisterInfoRequest, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    DeleteCanisterSnapshotArgs, EmptyBlob, InstallCodeArgs, ListCanisterSnapshotArgs, Method,
+    Payload, StoredChunksArgs, UninstallCodeArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
 use ic_state_machine_tests::{
-    CanisterId, CanisterInstallMode, CryptoHashOfState, ErrorCode, IngressState, IngressStatus,
-    MessageId, PrincipalId, StateMachine, StateMachineConfig,
+    CanisterId, CanisterInstallMode, ClearChunkStoreArgs, CryptoHashOfState, ErrorCode,
+    IngressState, IngressStatus, InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, MessageId,
+    PrincipalId, StateMachine, StateMachineConfig, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
+    UploadChunkArgs,
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use more_asserts::assert_ge;
+use strum::IntoEnumIterator;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -183,6 +187,7 @@ fn dts_env(
             message_instruction_limit,
             slice_instruction_limit,
         ))))
+        .with_canister_snapshots(true)
         .with_subnet_type(SubnetType::Application)
         .build()
 }
@@ -993,28 +998,356 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
         env.tick();
     }
 
+    // The `update` canister call should be aborted.
     assert_eq!(
         ingress_state(env.ingress_status(&update)),
         Some(IngressState::Processing)
     );
-
-    assert_eq!(
-        ingress_state(env.ingress_status(&status)),
-        Some(IngressState::Received)
-    );
-
+    // The `ic0.install_code` should be blocked by the aborted execution.
     assert_eq!(
         ingress_state(env.ingress_status(&upgrade)),
         Some(IngressState::Received)
     );
+    // The `ic0.canister_status` is allowed for aborted canisters.
+    env.await_ingress(status, 30).unwrap();
 
     env.set_checkpoints_enabled(false);
 
     env.await_ingress(update, 30).unwrap();
-
-    env.await_ingress(status, 30).unwrap();
-
     env.await_ingress(upgrade, 30).unwrap();
+}
+
+#[test]
+fn dts_aborted_execution_does_not_block_subnet_messages() {
+    fn test<F: Fn(CanisterId) -> (Method, CallArgs)>(
+        subnet_complete: bool,
+        aborted_complete: bool,
+        f: F,
+    ) {
+        let slice_instruction_limit = 10_000_000;
+        let env = dts_env(
+            NumInstructions::from(slice_instruction_limit * 10),
+            NumInstructions::from(slice_instruction_limit),
+        );
+
+        let user_id = PrincipalId::new_anonymous();
+        let other_canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.into(),
+                vec![],
+                None,
+                INITIAL_CYCLES_BALANCE,
+            )
+            .unwrap();
+        let aborted_canister_id = env
+            .install_canister_with_cycles(
+                UNIVERSAL_CANISTER_WASM.into(),
+                vec![],
+                Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id, other_canister_id.get()])
+                        .build(),
+                ),
+                INITIAL_CYCLES_BALANCE,
+            )
+            .unwrap();
+
+        env.set_checkpoints_enabled(true);
+        let long_execution_id = env.send_ingress(
+            user_id,
+            aborted_canister_id,
+            "update",
+            wasm()
+                .instruction_counter_is_at_least(slice_instruction_limit)
+                .reply_data(&[42])
+                .build(),
+        );
+
+        for _ in 0..5 {
+            // With checkpoints enabled, the update message will be repeatedly
+            // aborted, so there will be no progress.
+            env.tick();
+        }
+
+        let (method, args) = f(aborted_canister_id);
+        if method == Method::DeleteCanisterSnapshot {
+            env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(aborted_canister_id, None))
+                .unwrap();
+        }
+
+        let args = args
+            .on_reject(wasm().reject_message().reject())
+            .on_reply(wasm().reply_data(&[43]));
+
+        let subnet_message = wasm()
+            .call_with_cycles(IC_00, method, args, 100_000_000_000_u128.into())
+            .build();
+
+        let subnet_message_id =
+            env.send_ingress(user_id, other_canister_id, "update", subnet_message);
+
+        for _ in 0..5 {
+            env.tick();
+        }
+
+        // Make sure the aborted execution is still processing.
+        if aborted_complete {
+            assert_eq!(
+                ingress_state(env.ingress_status(&long_execution_id)),
+                Some(IngressState::Processing)
+            );
+        } else {
+            assert_matches!(
+                ingress_state(env.ingress_status(&long_execution_id)),
+                Some(IngressState::Failed(_))
+            );
+        }
+
+        // Make sure the method is completed, despite the effective canister is aborted.
+        if subnet_complete {
+            assert_eq!(
+                ingress_state(env.ingress_status(&subnet_message_id)),
+                Some(IngressState::Completed(WasmResult::Reply(vec![43])))
+            );
+        }
+
+        env.set_checkpoints_enabled(false);
+        for _ in 0..5 {
+            env.tick();
+        }
+
+        // Make sure the aborted message is completed.
+        if aborted_complete {
+            assert_eq!(
+                ingress_state(env.ingress_status(&long_execution_id)),
+                Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+            );
+        }
+    }
+    fn test_supported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
+        test(true, true, f);
+    }
+    fn test_unsupported<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
+        test(false, true, f);
+    }
+    fn test_supported_uninstall<F: Fn(CanisterId) -> (Method, CallArgs)>(f: F) {
+        test(true, false, f);
+    }
+
+    for method in Method::iter() {
+        match method {
+            // Supported methods accepting just one argument.
+            Method::CanisterStatus | Method::DepositCycles | Method::StartCanister => {
+                test_supported(|aborted_canister_id| {
+                    let args = CanisterIdRecord::from(aborted_canister_id).encode();
+                    (method, call_args().other_side(args))
+                })
+            }
+            Method::CanisterInfo => test_supported(|aborted_canister_id| {
+                let args = CanisterInfoRequest::new(aborted_canister_id, None).encode();
+                (method, call_args().other_side(args))
+            }),
+            // No effective canister id.
+            Method::CreateCanister
+            | Method::HttpRequest
+            | Method::ECDSAPublicKey
+            | Method::RawRand
+            | Method::SetupInitialDKG
+            | Method::SignWithECDSA
+            | Method::ComputeInitialIDkgDealings
+            | Method::SchnorrPublicKey
+            | Method::SignWithSchnorr
+            | Method::BitcoinGetBalance
+            | Method::BitcoinGetUtxos
+            | Method::BitcoinGetBlockHeaders
+            | Method::BitcoinSendTransaction
+            | Method::BitcoinGetCurrentFeePercentiles
+            | Method::BitcoinSendTransactionInternal
+            | Method::BitcoinGetSuccessors
+            | Method::NodeMetricsHistory
+            | Method::ProvisionalCreateCanisterWithCycles
+            | Method::ProvisionalTopUpCanister => {}
+            // Unsupported methods accepting just one argument.
+            // Deleting an aborted canister requires to stop it first.
+            // Stopping an aborted canister does not generate a reply.
+            Method::DeleteCanister | Method::StopCanister => {
+                test_unsupported(|aborted_canister_id| {
+                    let args = CanisterIdRecord::from(aborted_canister_id).encode();
+                    (method, call_args().other_side(args))
+                })
+            }
+            // Installing code is not supported on aborted canister.
+            Method::InstallCode => test_unsupported(|aborted_canister_id| {
+                let args = InstallCodeArgs {
+                    canister_id: aborted_canister_id.get(),
+                    mode: CanisterInstallMode::Install,
+                    wasm_module: UNIVERSAL_CANISTER_WASM.into(),
+                    arg: vec![],
+                    compute_allocation: None,
+                    memory_allocation: None,
+                    sender_canister_version: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            // Installing code is not supported on aborted canister.
+            Method::InstallChunkedCode => test_unsupported(|aborted_canister_id| {
+                let args = InstallChunkedCodeArgs {
+                    mode: CanisterInstallModeV2::Install,
+                    target_canister: aborted_canister_id.get(),
+                    store_canister: None,
+                    chunk_hashes_list: vec![],
+                    wasm_module_hash: vec![],
+                    arg: vec![],
+                    sender_canister_version: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UninstallCode => test_supported_uninstall(|aborted_canister_id| {
+                let args = UninstallCodeArgs::new(aborted_canister_id, None).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::UpdateSettings => test_supported(|aborted_canister_id| {
+                let settings = CanisterSettingsArgsBuilder::new().build();
+                let args = UpdateSettingsArgs::new(aborted_canister_id, settings).encode();
+                (method, call_args().other_side(args))
+            }),
+            // API is only accessible in non-replicated mode
+            Method::FetchCanisterLogs => {}
+            Method::UploadChunk => test_supported(|aborted_canister_id| {
+                let args = UploadChunkArgs {
+                    canister_id: aborted_canister_id.get(),
+                    chunk: vec![],
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::StoredChunks => test_supported(|aborted_canister_id| {
+                let args = StoredChunksArgs {
+                    canister_id: aborted_canister_id.get(),
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ClearChunkStore => test_supported(|aborted_canister_id| {
+                let args = ClearChunkStoreArgs {
+                    canister_id: aborted_canister_id.get(),
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::TakeCanisterSnapshot => test_supported(|aborted_canister_id| {
+                let args = TakeCanisterSnapshotArgs {
+                    canister_id: aborted_canister_id.get(),
+                    replace_snapshot: None,
+                }
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            // Loading a snapshot is similar to the install code.
+            Method::LoadCanisterSnapshot => test_unsupported(|aborted_canister_id| {
+                let args = LoadCanisterSnapshotArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                    None,
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::ListCanisterSnapshots => test_supported(|aborted_canister_id| {
+                let args = ListCanisterSnapshotArgs::new(aborted_canister_id).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::DeleteCanisterSnapshot => test_supported(|aborted_canister_id| {
+                let args = DeleteCanisterSnapshotArgs::new(
+                    aborted_canister_id,
+                    (aborted_canister_id, 0).into(),
+                )
+                .encode();
+                (method, call_args().other_side(args))
+            }),
+        }
+    }
+}
+
+#[test]
+fn dts_paused_execution_blocks_deposit_cycles() {
+    let slice_instruction_limit = 10_000_000;
+    let env = dts_env(
+        NumInstructions::from(slice_instruction_limit * 10),
+        NumInstructions::from(slice_instruction_limit),
+    );
+
+    let user_id = PrincipalId::new_anonymous();
+    let long_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+    let other_canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            None,
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let long_execution_id = env.send_ingress(
+        user_id,
+        long_canister_id,
+        "update",
+        wasm()
+            .instruction_counter_is_at_least(slice_instruction_limit * 5)
+            .reply_data(&[42])
+            .build(),
+    );
+
+    let args = Encode!(&CanisterIdRecord::from(long_canister_id)).unwrap();
+    let deposit_cycles = wasm()
+        .call_with_cycles(
+            IC_00,
+            Method::DepositCycles,
+            call_args()
+                .other_side(args)
+                .on_reject(wasm().reject_message().reject())
+                .on_reply(wasm().reply_data(&[43])),
+            1_u128.into(),
+        )
+        .build();
+
+    let deposit_message_id = env.send_ingress(user_id, other_canister_id, "update", deposit_cycles);
+
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Processing)
+    );
+
+    // Make sure the `ic0.deposit_cycles` is not completed,
+    // as the effective canister is paused.
+    assert_eq!(
+        ingress_state(env.ingress_status(&deposit_message_id)),
+        Some(IngressState::Processing)
+    );
+
+    for _ in 0..5 {
+        env.tick();
+    }
+
+    // Make sure the paused message is completed.
+    assert_eq!(
+        ingress_state(env.ingress_status(&long_execution_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![42])))
+    );
+    // Make sure the `ic0.deposit_cycles` is completed.
+    assert_eq!(
+        ingress_state(env.ingress_status(&deposit_message_id)),
+        Some(IngressState::Completed(WasmResult::Reply(vec![43])))
+    );
 }
 
 /// This test starts execution of a long-running install code message

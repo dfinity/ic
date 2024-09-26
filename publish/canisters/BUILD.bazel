@@ -87,7 +87,7 @@ NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "genesis-token-canister.wasm.gz": "3",
     "governance-canister.wasm.gz": "14",
     "governance-canister_test.wasm.gz": "14",
-    "registry-canister.wasm.gz": "13",
+    "registry-canister.wasm.gz": "14",
     "root-canister.wasm.gz": "4",
 }
 
