@@ -119,6 +119,19 @@ fn generate_mac_address_internal(
     UnformattedMacAddress::try_from(mac.as_str())
 }
 
+pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
+    let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+    if !output.status.success() {
+        eprintln!(
+            "Error running ipmitool: {}",
+            std::str::from_utf8(&output.stderr)?
+        );
+    }
+    let ipmitool_output = String::from_utf8(output.stdout)?;
+
+    get_mac_address_from_ipmitool_output(&ipmitool_output)
+}
+
 /// Query the BMC MAC address and return deterministically generated MAC
 pub fn generate_mac_address(
     deployment_name: &str,
@@ -133,21 +146,7 @@ pub fn generate_mac_address(
         );
         Ok(mgmt_mac)
     } else {
-        // A bug in our version of ipmitool causes it to exit with an error
-        // status, but we have enough output to work with anyway.
-        // https://github.com/ipmitool/ipmitool/issues/388
-
-        // let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
-        let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
-        if !output.status.success() {
-            eprintln!(
-                "Error running ipmitool: {}",
-                std::str::from_utf8(&output.stderr)?
-            );
-        }
-        let ipmitool_output = String::from_utf8(output.stdout)?;
-
-        get_mac_address_from_ipmitool_output(&ipmitool_output)
+        get_ipmi_mac()
     }?;
     generate_mac_address_internal(&mgmt_mac, deployment_name, node_type, '6')
 }
