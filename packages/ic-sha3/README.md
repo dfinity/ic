@@ -1,3 +1,3 @@
 # SHA-3
 
-Utilities for hashing data with algorithms from the SHA-3 standard (e.g., Keccak256, Shake256, etc.).
+Thin wrapper around the `sha3` crate to provide convenience methods used on the Internet Computer.
