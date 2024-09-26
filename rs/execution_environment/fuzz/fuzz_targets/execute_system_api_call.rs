@@ -29,13 +29,13 @@ const HELLO_WORLD_WAT: &str = r#"
 
 fn setup_env() -> (StateMachine, CanisterId) {
     let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
+        .with_subnet_type(SubnetType::System)
         .no_dts() // Disable DTS to avoid sandbox_launcher binary dependency (which does not work well with fuzz tests).
         .with_checkpoints_enabled(false)
         .build();
     let canister_id = env.create_canister_with_cycles(
         None,
-        Cycles::from(100_000_000_000_u128),
+        Cycles::from(u128::MAX / 2),
         Some(CanisterSettingsArgsBuilder::new().build()),
     );
     let wasm = wat::parse_str(HELLO_WORLD_WAT).unwrap();
@@ -49,7 +49,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call -- -rss_limit_mb=4096 > output.txt 2>&1
+// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call -- -rss_limit_mb=4096 > output.secret 2>&1
 
 fuzz_target!(|module: ICWasmModule| {
     with_env(|env, canister_id| {
