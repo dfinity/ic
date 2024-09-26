@@ -3,7 +3,6 @@ import os
 from model.project import Project
 from model.repository import Repository
 from model.team import Team
-from scanner.dependency_scanner import PROJECT_ROOT
 
 CI_PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 GITHUB_REF = os.environ.get("GITHUB_REF", "refs/heads/master")
