@@ -2428,6 +2428,12 @@ fn is_next_method_chosen(
     may_schedule_heartbeat: bool,
     may_schedule_global_timer: bool,
 ) -> bool {
+    // If the task on the front of the task queue is hook,
+    // it must be executed next.
+    if canister.system_state.task_queue.front().is_hook() {
+        return true;
+    }
+
     match canister.get_next_scheduled_method() {
         NextScheduledMethod::Message => canister.has_input(),
 

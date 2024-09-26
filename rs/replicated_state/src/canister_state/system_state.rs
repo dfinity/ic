@@ -913,6 +913,20 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     }
 }
 
+impl ExecutionTask {
+    pub fn is_hook(&self) -> bool {
+        match self {
+            ExecutionTask::OnLowWasmMemory => true,
+            Self::PausedExecution { .. }
+            | Self::PausedInstallCode { .. }
+            | Self::AbortedExecution { .. }
+            | Self::AbortedInstallCode { .. }
+            | Self::Heartbeat
+            | Self::GlobalTimer => false,
+        }
+    }
+}
+
 impl From<&CanisterHistory> for pb::CanisterHistory {
     fn from(item: &CanisterHistory) -> Self {
         Self {

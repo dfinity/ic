@@ -39,6 +39,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::OnLowWasmMemoryHookStatus;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
     page_map::{
@@ -977,7 +978,7 @@ impl ExecutionTest {
 
     /// Executes a canister task method of the given canister.
     pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
-        let mut state = self.state.take().unwrap();
+        let mut state: ReplicatedState = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
@@ -1004,12 +1005,10 @@ impl ExecutionTest {
                     .task_queue
                     .push_front(ExecutionTask::GlobalTimer);
             }
-            CanisterTask::OnLowWasmMemory => {
-                canister
-                    .system_state
-                    .task_queue
-                    .push_front(ExecutionTask::OnLowWasmMemory);
-            }
+            CanisterTask::OnLowWasmMemory => canister
+                .system_state
+                .task_queue
+                .set_on_low_wasm_memory_hook_status(OnLowWasmMemoryHookStatus::Ready),
         }
         let result = execute_canister(
             &self.exec_env,
