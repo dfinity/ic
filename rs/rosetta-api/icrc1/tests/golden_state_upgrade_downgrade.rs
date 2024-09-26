@@ -145,10 +145,9 @@ impl LedgerState {
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         previous_ledger_state: Option<LedgerState>,
     ) -> Self {
-        let num_blocks_to_fetch = match &previous_ledger_state {
-            None => None,
-            Some(previous_ledger_state) => Some(previous_ledger_state.num_blocks),
-        };
+        let num_blocks_to_fetch = previous_ledger_state
+            .as_ref()
+            .map(|previous_ledger_state| previous_ledger_state.num_blocks);
 
         let mut ledger_state = LedgerState::new(burns_without_spender);
         // Only fetch the blocks that were present when the previous state was generated. This is
