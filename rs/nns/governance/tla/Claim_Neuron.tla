@@ -35,7 +35,6 @@ variables
 
 macro cn_reset_local_vars() {
     account_id := DUMMY_ACCOUNT;
-    balance := 0;
     neuron_id := 0;
 }
 
@@ -45,7 +44,7 @@ macro cn_reset_local_vars() {
 process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
     variable 
         \* The account_id is an argument to the canister call; we let it be chosen non-deteministically 
-        account_id = Minting_Account_Id;
+        account_id = DUMMY_ACCOUNT;
         \* The neuron_id will be set later on to a fresh value
         neuron_id = 0;
     { 
@@ -53,8 +52,7 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
         with(aid \in  Governance_Account_Ids \ DOMAIN(neuron_id_by_account)) {
             account_id := aid;
             \* Get a fresh neuron ID
-            neuron_id := neuron_count;
-            neuron_count := neuron_count + 1;
+            neuron_id := FRESH_NEURON_ID(DOMAIN(neuron));
             \* The Rust code tries to obtain a lock; this should always succeed, as the 
             \* neuron has just been created in the same atomic block. We'll call assert
             \* instead of await here, to check that
@@ -64,17 +62,26 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
             send_request(self, OP_QUERY_BALANCE, balance_query(account_id));
         };
 
-    ClaimNeuron2:
+    WaitForBalanceQuery:
         \* Note that the "with" construct implicitly awaits until the set of values to draw from is non-empty
-        with(r \in { r2 \in ledger_to_governance : r2.caller = self }; b = r.response_value.bal ) {
+        with(answer \in { resp \in ledger_to_governance : resp.caller = self }) {
             ledger_to_governance := ledger_to_governance \ {r};
-            if(b >= MIN_STAKE) {
-                neuron := [neuron EXCEPT ![neuron_id] = [@ EXCEPT !.cached_stake = b] ]
+            if(answer.response = Variant("Fail", UNIT)) {
+                neuron := Remove_Arguments(neuron, {neuron_id});
+                neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account_id});
             } else {
-                remove_neuron(neuron_id, account_id);
+                with (b = answer.value) {
+                    if(b >= MIN_STAKE) {
+                        neuron := [neuron EXCEPT ![neuron_id] = [@ EXCEPT !.cached_stake = b] ]
+                    } else {
+                        neuron := Remove_Arguments(neuron, {neuron_id});
+                        neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account_id});
+                    };
+                    locks := locks \ {neuron_id};
+                };
             };
-            locks := locks \ {neuron_id};
         };
+        cn_reset_local_vars();
     };
 
 }

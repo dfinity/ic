@@ -14,6 +14,7 @@ _type_alias_dummy == TRUE
 
 \* CODE_LINK_INSERT_CONSTANTS
 
+(*
 CONSTANTS 
     \* @type: Set($account);
     Account_Ids, 
@@ -58,3 +59,5 @@ FRESH_NEURON_ID(existing_neurons) == CHOOSE nid \in (Neuron_Ids \ existing_neuro
 MOD == INSTANCE Claim_Neuron
 
 Next == [MOD!Next]_MOD!vars
+
+====

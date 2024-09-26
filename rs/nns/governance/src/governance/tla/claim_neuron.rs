@@ -9,7 +9,6 @@ pub fn claim_neuron_desc() -> Update {
     const PID: &str = "Claim_Neuron";
     let default_locals = VarAssignment::new()
         .add("account_id", default_account())
-        .add("balance", 0_u64.to_tla_value())
         .add("neuron_id", 0_u64.to_tla_value());
 
     Update {

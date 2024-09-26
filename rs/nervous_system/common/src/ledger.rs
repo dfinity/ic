@@ -239,7 +239,7 @@ impl IcpLedger for IcpLedgerCanister {
             Destination::new("ledger"),
             if let Ok(balance) = result {
                 tla::TlaValue::Variant {
-                    tag: "TransferOk".to_string(),
+                    tag: "BalanceQueryOk".to_string(),
                     value: Box::new(balance.get_e8s().to_tla_value()),
                 }
             } else {
