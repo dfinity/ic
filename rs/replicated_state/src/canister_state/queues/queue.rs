@@ -212,7 +212,7 @@ impl<T> CanisterQueue<T> {
         }
         debug_assert_eq!(Ok(()), self.check_invariants());
 
-        Some(reference.into())
+        Some(reference)
     }
 
     /// Returns the next reference in the queue; or `None` if the queue is empty.

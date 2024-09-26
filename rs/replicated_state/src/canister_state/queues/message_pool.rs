@@ -144,7 +144,7 @@ impl<T> Reference<T> {
 
 impl<T> Clone for Reference<T> {
     fn clone(&self) -> Self {
-        Self(self.0, PhantomData)
+        *self
     }
 }
 
@@ -160,7 +160,7 @@ impl<T> Eq for Reference<T> {}
 
 impl<T> PartialOrd for Reference<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
     }
 }
 
