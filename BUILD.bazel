@@ -142,7 +142,7 @@ config_setting(
     },
 )
 
-# The pocket-ic as released; use this for tests that ensure consistency
+# The pocket-ic as released; use this for tests that need to ensure consistency
 # with a release pocket-ic/replica.
 genrule(
     name = "pocket-ic-mainnet",
