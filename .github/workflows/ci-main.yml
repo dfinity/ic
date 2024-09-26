@@ -345,6 +345,7 @@ jobs:
         env:
           BAZEL_COMMAND: "build"
           RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:
