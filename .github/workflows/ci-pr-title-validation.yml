@@ -31,6 +31,6 @@ jobs:
             exit 1
           fi
           if [[ $CI_PULL_REQUEST_TITLE == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-            echo "Error: The [RUN_ALL_BAZEL_TARGETS] flag in the PR TITLE has been deprecated. Please use the PR label instead."
+            echo "Error: The [RUN_ALL_BAZEL_TARGETS] flag in the PR TITLE has been deprecated. Please use the PR label instead. See .github/CI_README.md."
             exit 1
           fi
