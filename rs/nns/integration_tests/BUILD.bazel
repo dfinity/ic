@@ -9,16 +9,21 @@ BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icp/icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/sns-wasm",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
+    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
@@ -76,12 +81,7 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance",
-    "//rs/nns/governance/api",
-    "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/init",
-    "//rs/sns/swap",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
@@ -93,12 +93,8 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/swap:swap--test_feature",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [

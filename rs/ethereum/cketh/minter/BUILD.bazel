@@ -232,11 +232,19 @@ rust_binary(
 closure_js_library(
     name = "principal_to_bytes",
     srcs = ["templates/principal_to_bytes.js"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 closure_js_test(
     name = "principal_to_bytes_test",
     srcs = ["tests/principal_to_bytes_test.js"],
+    # the test doesn't need to run on macOS; just linux is enough
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     deps = [
         # Keep sorted.
         ":principal_to_bytes",

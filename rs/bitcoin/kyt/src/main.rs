@@ -2,8 +2,9 @@ use bitcoin::{Address, Network};
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist_contains, check_transaction_inputs, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionError, CheckTransactionResponse, CheckTransactionStatus,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::str::FromStr;
@@ -57,7 +58,7 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => CheckTransactionError::InvalidTransaction(err.to_string()).into(),
+        Err(err) => CheckTransactionIrrecoverableError::InvalidTransaction(err.to_string()).into(),
     }
 }
 

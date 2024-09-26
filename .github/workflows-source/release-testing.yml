@@ -19,7 +19,6 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   BRANCH_NAME: ${{ github.event.workflow_run.head_branch || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -27,7 +26,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+    image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
