@@ -21,14 +21,14 @@ Index and archive canisters are not affected.
 ```
 git fetch
 git checkout 6a8e5fca2c6b4e12966638c444e994e204b42989
-cd rs/ledger_suite/icrc1/ledger
+cd rs/rosetta-api/icrc1/ledger
 didc encode -d ledger.did -t '(LedgerArg)' '(variant {Upgrade})'
 ```
 
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..6a8e5fca2c6b4e12966638c444e994e204b42989 -- rs/ledger_suite/icrc1/ledger
+git log --format="%C(auto) %h %s" 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576..6a8e5fca2c6b4e12966638c444e994e204b42989 -- rs/rosetta-api/icrc1/ledger
  1446a38f1a fix(icrc1_ledger): include spender in Burn block
  d0de801df7 Merge branch 'sat-bazel-crates-version-bump' into 'master'
  a163262f11 chore(release): Bump up the bazel versions for all crates as well

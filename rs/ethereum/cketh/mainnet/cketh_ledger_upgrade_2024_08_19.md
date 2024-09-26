@@ -19,14 +19,14 @@ Upgrade the ckETH ledger canister to the latest version to add support for the [
 ```
 git fetch
 git checkout 3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d
-cd rs/ledger_suite/icrc1/ledger
+cd rs/rosetta-api/icrc1/ledger
 didc encode -d ledger.did -t '(LedgerArg)' '(variant {Upgrade = null})'
 ```
 
 ## Release Notes
 
 ```
-git log --format="%C(auto) %h %s" 6a8e5fca2c6b4e12966638c444e994e204b42989..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/ledger
+git log --format="%C(auto) %h %s" 6a8e5fca2c6b4e12966638c444e994e204b42989..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/ledger
 f2f408333 test(ICRC-Ledger): FI-1377: Add tests for upgrading ICRC ledger with WASMs with different token types (#388)
 14836b59d chore(ICP/ICRC-Ledger): FI-1373: refactor approvals library to allow using regular and stable allowance storage (#382)
 33187dbe8 fix(ICRC-21): FI-1386: add e 8 s to icrc 21 (#340)
