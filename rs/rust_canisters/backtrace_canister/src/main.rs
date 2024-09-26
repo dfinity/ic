@@ -1,27 +1,55 @@
 use candid::candid_method;
 use ic_cdk_macros::update;
 
-#[candid_method(update)]
-#[update]
-fn unreachable() {
+/// Macro to create a chain of function calls resulting in the provided
+/// expression and expose it via an update with the provided name.
+///
+/// This just allows us to make a non-trivial backtrace without needed to write
+/// out several functions each time.
+macro_rules! make_call_chain {
+    ( $name:ident, $x:expr ) => {
+        mod $name {
+            #[inline(never)]
+            pub(super) fn outer() {
+                inner();
+            }
+
+            #[inline(never)]
+            fn inner() {
+                inner_2();
+            }
+
+            #[inline(never)]
+            fn inner_2() {
+                $x;
+            }
+        }
+
+        #[candid_method(update)]
+        #[update]
+        fn $name() {
+            $name::outer();
+        }
+    };
+}
+
+make_call_chain!(unreachable, {
     #[cfg(target_arch = "wasm32")]
     core::arch::wasm32::unreachable();
-    #[cfg(not(target_arch = "wasm32"))]
-    panic!("uh oh");
-}
+});
 
-#[candid_method(update)]
-#[update]
-fn oob() {
+make_call_chain!(oob, {
     let address = (u32::MAX - 10) as *const usize; // In the last page of Wasm memory.
     let _count = unsafe { core::ptr::read_volatile(address) };
-}
+});
 
-#[candid_method(update)]
-#[update]
-fn ic0_trap() {
+make_call_chain!(ic0_trap, {
     panic!("uh oh");
-}
+});
+
+make_call_chain!(stable_oob, {
+    ic_cdk::api::stable::stable_write(1_000 * 1_000, "foo".as_bytes());
+});
 
 // When run on native this prints the candid service definition of this
 // canister, from the methods annotated with `candid_method` above.

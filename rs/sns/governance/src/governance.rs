@@ -1,12 +1,10 @@
-#[cfg(feature = "test")]
 use crate::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
 };
-
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        upgrade_canister_directly,
+        update_root_canister_settings, upgrade_canister_directly,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -84,6 +82,7 @@ use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
+use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -96,7 +95,10 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_nns_constants::{
+    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
+};
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -690,6 +692,12 @@ pub struct Governance {
 
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
+
+    /// Whether test features are enabled.
+    /// Test features should not be exposed in production. But, code that should
+    /// not run in production can be gated behind a check for this flag as an
+    /// extra layer of protection.
+    pub test_features_enabled: bool,
 }
 
 impl Governance {
@@ -748,11 +756,21 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            test_features_enabled: false,
         };
 
         gov.initialize_indices();
 
         gov
+    }
+
+    pub fn enable_test_features(mut self) -> Self {
+        self.test_features_enabled = true;
+        self
+    }
+
+    pub fn check_test_features_enabled(&self) {
+        assert!(self.test_features_enabled, "Test features are not enabled");
     }
 
     pub fn get_mode(&self, _: GetMode) -> GetModeResponse {
@@ -4584,6 +4602,32 @@ impl Governance {
         true
     }
 
+    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
+        if self
+            .proto
+            .migrated_root_wasm_memory_limit
+            .unwrap_or_default()
+        {
+            return;
+        }
+
+        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
+        self.proto.migrated_root_wasm_memory_limit = Some(true);
+
+        let settings = CanisterSettings {
+            wasm_memory_limit: Some(candid::Nat::from(
+                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
+            )),
+            ..Default::default()
+        };
+
+        // Set root settings
+        match update_root_canister_settings(self, settings).await {
+            Ok(_) => (),
+            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
+        }
+    }
+
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         self.process_proposals();
@@ -4621,6 +4665,8 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+
+        self.maybe_migrate_root_wasm_memory_limit().await;
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5332,8 +5378,9 @@ impl Governance {
     /// - the followees are not changed (it's easy to update followees
     ///   via `manage_neuron` and doing it here would require updating
     ///   `function_followee_index`)
-    #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+        self.check_test_features_enabled();
+
         let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
 
         // Must clobber an existing neuron.
@@ -5407,11 +5454,12 @@ impl Governance {
         }
     }
 
-    #[cfg(feature = "test")]
     pub fn add_maturity(
         &mut self,
         add_maturity_request: AddMaturityRequest,
     ) -> AddMaturityResponse {
+        self.check_test_features_enabled();
+
         let AddMaturityRequest { id, amount_e8s } = add_maturity_request;
         let id = id.expect("AddMaturityRequest::id is required");
         let amount_e8s = amount_e8s.expect("AddMaturityRequest::amount_e8s is required");
@@ -5427,11 +5475,12 @@ impl Governance {
         }
     }
 
-    #[cfg(feature = "test")]
     pub async fn mint_tokens(
         &mut self,
         mint_tokens_request: MintTokensRequest,
     ) -> MintTokensResponse {
+        self.check_test_features_enabled();
+
         self.ledger
             .transfer_funds(
                 mint_tokens_request.amount_e8s(),
@@ -6564,6 +6613,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         );
+
         // Step 1.3: Record original last_reward_event. That way, we can detect
         // changes (there aren't supposed to be any).
         let original_latest_reward_event = governance.proto.latest_reward_event.clone();
@@ -8591,6 +8641,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         )
+        .enable_test_features()
     }
 
     fn test_neuron_id(controller: PrincipalId) -> NeuronId {
@@ -9297,6 +9348,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         );
+
         SplitNeuronTestSetup {
             controller,
             neuron_id,

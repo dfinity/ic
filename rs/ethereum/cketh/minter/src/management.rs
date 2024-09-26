@@ -1,9 +1,5 @@
-use candid::{CandidType, Principal};
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,
-};
-use serde::de::DeserializeOwned;
+use ic_management_canister_types::DerivationPath;
 use std::fmt;
 
 /// Represents an error from a management canister call, such as
@@ -83,63 +79,39 @@ impl Reason {
     }
 }
 
-async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
-where
-    I: CandidType,
-    O: CandidType + DeserializeOwned,
-{
-    let balance = ic_cdk::api::canister_balance128();
-    if balance < payment as u128 {
-        return Err(CallError {
-            method: method.to_string(),
-            reason: Reason::OutOfCycles,
-        });
-    }
-
-    let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
-        Principal::management_canister(),
-        method,
-        (input,),
-        payment,
-    )
-    .await;
-
-    match res {
-        Ok((output,)) => Ok(output),
-        Err((code, msg)) => Err(CallError {
-            method: method.to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
-    }
-}
-
 /// Signs a message hash using the tECDSA API.
 pub async fn sign_with_ecdsa(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<[u8; 64], CallError> {
-    const CYCLES_PER_SIGNATURE: u64 = 25_000_000_000;
+    use ic_cdk::api::management_canister::ecdsa::{
+        sign_with_ecdsa, EcdsaCurve, EcdsaKeyId, SignWithEcdsaArgument,
+    };
 
-    let reply: SignWithECDSAReply = call(
-        "sign_with_ecdsa",
-        CYCLES_PER_SIGNATURE,
-        &SignWithECDSAArgs {
-            message_hash,
-            derivation_path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name.clone(),
-            },
+    let result = sign_with_ecdsa(SignWithEcdsaArgument {
+        message_hash: message_hash.to_vec(),
+        derivation_path: derivation_path.into_inner(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name.clone(),
         },
-    )
-    .await?;
+    })
+    .await;
 
-    let signature_length = reply.signature.len();
-    Ok(<[u8; 64]>::try_from(reply.signature).unwrap_or_else(|_| {
-        panic!(
-            "BUG: invalid signature from management canister. Expected 64 bytes but got {} bytes",
-            signature_length
-        )
-    }))
+    match result {
+        Ok((reply,)) => {
+            let signature_length = reply.signature.len();
+            Ok(<[u8; 64]>::try_from(reply.signature).unwrap_or_else(|_| {
+                panic!(
+                    "BUG: invalid signature from management canister. Expected 64 bytes but got {} bytes",
+                    signature_length
+                )
+            }))
+        }
+        Err((code, msg)) => Err(CallError {
+            method: "sign_with_ecdsa".to_string(),
+            reason: Reason::from_reject(code, msg),
+        }),
+    }
 }

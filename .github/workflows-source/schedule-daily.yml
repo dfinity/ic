@@ -20,7 +20,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
+    image: ghcr.io/dfinity/ic-build@sha256:115daa5ad5149182bb0416cbe5730f305be3bb2f48df576bc2c23067eefce84b
   dind-large-setup: &dind-large-setup
     runs-on:
       group: zh1
@@ -48,62 +48,22 @@ anchors:
     env:
       DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  bazel-bep: &bazel-bep
+    name: Upload bazel-bep
+    # runs only if previous step succeeded or failed;
+    # we avoid collecting artifacts of jobs that were cancelled
+    if: success() || failure()
+    uses: actions/upload-artifact@v4
+    with:
+      name: ${{ github.job }}-bep
+      retention-days: 14
+      if-no-files-found: ignore
+      compression-level: 9
+      path: |
+        bazel-bep.pb
+        profile.json
 
 jobs:
-
-  cut-release-candidate:
-    name: Cut RC
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.ref }}
-          token: ${{ secrets.IDX_PUSH_TO_PR }}
-      - name: Cut Release Candidate
-        shell: bash
-        run: |
-          git config --global user.email "infra+github-automation@dfinity.org"
-          git config --global user.name "IDX GitLab Automation"
-
-          RC_BRANCH_NAME="rc--$(date '+%Y-%m-%d_%H-%M')"
-          git switch --force-create "$RC_BRANCH_NAME" HEAD
-          git push --force --set-upstream origin "$RC_BRANCH_NAME"
-
-  rust-benchmarks:
-    name: Bazel Run Rust Benchmarks
-    <<: *dind-large-setup
-    runs-on:
-      # see linux-x86-64 runner group
-      labels: rust-benchmarks
-    container:
-      <<: *image
-      # running on bare metal machine using ubuntu user
-      options: --user ubuntu -v /cache:/cache
-    timeout-minutes: 720 # 12 hours
-    strategy:
-      matrix:
-        targets:
-          - "//rs/crypto/..."
-          - "//rs/state_manager/..."
-          - "//rs/certification/..."
-          - "//rs/boundary_node/ic_boundary/..."
-    steps:
-      - <<: *checkout
-      - name: Run Rust Benchmarks
-        id: rust-benchmarks
-        shell: bash
-        run: |
-          ./ci/scripts/rust-benchmarks.sh
-        env:
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_COMMAND: "run"
-          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-          RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-          RUST_BACKTRACE: "full"
-          TARGETS: ${{ matrix.targets }}
 
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
@@ -121,14 +81,29 @@ jobs:
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+
+          # Run bare metal installation test
           # shellcheck disable=SC2046,SC2086
           bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
             //ic-os/setupos/envs/dev:launch_bare_metal -- \
               --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
               --csv_filename "$(realpath file1)" \
               --file_share_ssh_key "$(realpath file2)" \
+              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
               --file_share_username ci_interim \
               --ci_mode
+
+          # Run bare metal node performance benchmarks
+          # shellcheck disable=SC2046,SC2086
+          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+              --csv_filename "$(realpath file1)" \
+              --file_share_ssh_key "$(realpath file2)" \
+              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+              --file_share_username ci_interim \
+              --ci_mode \
+              --benchmark
           bazel clean
         env:
           BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
@@ -154,17 +129,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
@@ -184,17 +149,7 @@ jobs:
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
@@ -219,17 +174,7 @@ jobs:
           # note: there's just one performance cluster, so the job can't be parallelized
           BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   dependency-scan-nightly:
     name: Dependency Scan Nightly

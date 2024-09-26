@@ -58,6 +58,21 @@ impl<T: IngressPool> PoolMutationsProducer<T> for IngressManager {
             .map(|artifact| {
                 let ingress_object = &artifact.message;
 
+                // If the ingress pool is full, discard the message.
+                // Note: since here we don't remove ingress messages from the ingress pool directly,
+                // if `exceeds_limit` returns `true` for a peer `p`, we will remove *all*
+                // unvalidated ingress messages originating from that peer. Conversely, we will
+                // add all unvalidated ingress message from that peer. This should be okay, as
+                // we don't expect to have many unvalidated ingress messages in the pool at any
+                // time, because we call `on_state_change` at most every 200ms and every time we
+                // receive an ingress message from a peer. Historically, we have had at most 2
+                // unvalidated ingress messages in the pool.
+                // Since we plan(IC-1718) to have only one section in the Ingress Pool and to
+                // validate ingress messages on-the-fly, this problem will eventually go away.
+                if pool.exceeds_limit(&ingress_object.originator_id) {
+                    return RemoveFromUnvalidated(IngressMessageId::from(ingress_object));
+                }
+
                 match self.validate_ingress_pool_object(
                     ingress_object,
                     &ingress_message_settings,
@@ -195,10 +210,13 @@ mod tests {
         ids::{canister_test_id, node_test_id, user_test_id},
         messages::SignedIngressBuilder,
     };
-    use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::time::UNIX_EPOCH;
-    use std::sync::Arc;
+    use ic_types::{
+        ingress::{IngressState, IngressStatus},
+        messages::SignedIngress,
+    };
     use std::time::Duration;
+    use std::{collections::HashSet, sync::Arc};
 
     #[tokio::test]
     async fn test_ingress_on_state_change_valid() {
@@ -217,13 +235,9 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
-                let ingress_message = SignedIngressBuilder::new()
-                    .expiry_time(time + MAX_INGRESS_TTL)
-                    .nonce(2)
-                    .sign_for_randomly_generated_sender()
-                    .build();
-                let message_id = IngressMessageId::from(&ingress_message);
+                let (ingress_message, message_id) = fake_ingress_message(time + MAX_INGRESS_TTL, 2);
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -236,6 +250,74 @@ mod tests {
 
                 let expected_change_action = ChangeAction::MoveToValidated(message_id);
                 assert!(change_set.contains(&expected_change_action));
+            },
+        )
+    }
+
+    #[tokio::test]
+    async fn test_ingress_on_state_change_too_many_get_removed() {
+        let time = UNIX_EPOCH;
+        let mut consensus_time = MockConsensusTime::new();
+        consensus_time
+            .expect_consensus_time()
+            .return_const(Some(time));
+        let mut ingress_hist_reader = Box::new(MockIngressHistory::new());
+        ingress_hist_reader
+            .expect_get_latest_status()
+            .returning(|| Box::new(|_| IngressStatus::Unknown {}));
+
+        setup_with_params(
+            Some(ingress_hist_reader),
+            None,
+            Some(Arc::new(consensus_time)),
+            None,
+            Some(1),
+            |ingress_manager, ingress_pool| {
+                let peer_id = node_test_id(0);
+                let peer_id_2 = node_test_id(1);
+
+                let (ingress_message_1, message_id_1) =
+                    fake_ingress_message(time + MAX_INGRESS_TTL, 1);
+                let (ingress_message_2, message_id_2) =
+                    fake_ingress_message(time + MAX_INGRESS_TTL, 2);
+                let (ingress_message_3, message_id_3) =
+                    fake_ingress_message(time + MAX_INGRESS_TTL, 3);
+
+                ingress_pool.write().unwrap().insert(UnvalidatedArtifact {
+                    message: ingress_message_1,
+                    peer_id,
+                    timestamp: time,
+                });
+                ingress_pool
+                    .write()
+                    .unwrap()
+                    .apply(vec![ChangeAction::MoveToValidated(message_id_1)]);
+
+                let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
+                    ingress_pool.insert(UnvalidatedArtifact {
+                        message: ingress_message_2,
+                        peer_id,
+                        timestamp: time,
+                    });
+                    ingress_pool.insert(UnvalidatedArtifact {
+                        message: ingress_message_3,
+                        peer_id: peer_id_2,
+                        timestamp: time,
+                    });
+
+                    ingress_manager.on_state_change(ingress_pool)
+                });
+                let change_set = HashSet::from_iter(change_set);
+
+                let expected_change_set = HashSet::from([
+                    // `message_3` is valid and there is still space in the ingress pool for it
+                    ChangeAction::MoveToValidated(message_id_3),
+                    // `message_2` is removed because we already have too many ingresses from
+                    // `peer_0`.
+                    ChangeAction::RemoveFromUnvalidated(message_id_2),
+                ]);
+
+                assert_eq!(change_set, expected_change_set);
             },
         )
     }
@@ -265,6 +347,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 let ingress_message = SignedIngressBuilder::new()
                     .expiry_time(time + MAX_INGRESS_TTL)
@@ -311,6 +394,7 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
                 // Message should expire at the current time, and should not be selected
                 let ingress_message = SignedIngressBuilder::new()
@@ -367,13 +451,9 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
-                let ingress_message = SignedIngressBuilder::new()
-                    .expiry_time(time + MAX_INGRESS_TTL)
-                    .nonce(2)
-                    .sign_for_randomly_generated_sender()
-                    .build();
-                let message_id = IngressMessageId::from(&ingress_message);
+                let (ingress_message, message_id) = fake_ingress_message(time + MAX_INGRESS_TTL, 2);
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -416,20 +496,20 @@ mod tests {
             None,
             Some(Arc::new(consensus_time)),
             None,
+            /*ingress_pool_max_count=*/ None,
             |ingress_manager, ingress_pool| {
-                let good_msg = SignedIngressBuilder::new()
-                    .expiry_time(current_time + MAX_INGRESS_TTL / 2)
-                    .sign_for_randomly_generated_sender()
-                    .build();
+                let (good_msg, good_id) =
+                    fake_ingress_message(current_time + MAX_INGRESS_TTL / 2, 2);
                 let bad_msg = SignedIngressBuilder::new()
                     .expiry_time(current_time + MAX_INGRESS_TTL)
                     .sign_for_randomly_generated_sender()
                     .nonce(4)
                     .build();
+                let bad_id = IngressMessageId::from(&bad_msg);
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
-                        message: good_msg.clone(),
+                        message: good_msg,
                         peer_id: node_test_id(0),
                         timestamp: UNIX_EPOCH,
                     });
@@ -441,8 +521,6 @@ mod tests {
                     ingress_manager.on_state_change(ingress_pool)
                 });
 
-                let good_id = IngressMessageId::from(&good_msg);
-                let bad_id = IngressMessageId::from(&bad_msg);
                 let expected_change_action0 = PurgeBelowExpiry(batch_time);
                 let expected_change_action1 = ChangeAction::MoveToValidated(good_id);
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);
@@ -452,5 +530,17 @@ mod tests {
                 assert!(change_set.contains(&expected_change_action2));
             },
         )
+    }
+
+    fn fake_ingress_message(expiry_time: Time, nonce: u64) -> (SignedIngress, IngressMessageId) {
+        let ingress_message = SignedIngressBuilder::new()
+            .expiry_time(expiry_time)
+            .nonce(nonce)
+            .sign_for_randomly_generated_sender()
+            .build();
+
+        let message_id = IngressMessageId::from(&ingress_message);
+
+        (ingress_message, message_id)
     }
 }

@@ -20,7 +20,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:1c0e901df3c7a97fc440c271881400ce6d2e586e2a89cdc39ec939e3dfe5de76
+    image: ghcr.io/dfinity/ic-build@sha256:115daa5ad5149182bb0416cbe5730f305be3bb2f48df576bc2c23067eefce84b
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -47,6 +47,20 @@ anchors:
     env:
       DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
       DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+  bazel-bep: &bazel-bep
+    name: Upload bazel-bep
+    # runs only if previous step succeeded or failed;
+    # we avoid collecting artifacts of jobs that were cancelled
+    if: success() || failure()
+    uses: actions/upload-artifact@v4
+    with:
+      name: ${{ github.job }}-bep
+      retention-days: 14
+      if-no-files-found: ignore
+      compression-level: 9
+      path: |
+        bazel-bep.pb
+        profile.json
 
 jobs:
   bazel-build-all-no-cache:
@@ -64,15 +78,7 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci"
           BAZEL_COMMAND: "build"
           BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: bazel-bep.pb
+      - <<: *bazel-bep
 
   bazel-system-test-hourly:
     name: Bazel System Tests Hourly
@@ -93,17 +99,7 @@ jobs:
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=system_test_hourly"
           HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+      - <<: *bazel-bep
 
   bazel-test-coverage:
     name: Bazel Test Coverage
