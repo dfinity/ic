@@ -181,6 +181,7 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_initial_balances(
         mut self,
         initial_balances: HashMap<AccountIdentifier, icp_ledger::Tokens>,
