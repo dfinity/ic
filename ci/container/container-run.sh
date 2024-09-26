@@ -164,13 +164,19 @@ if [ -f "$HOME/.container-run.conf" ]; then
     source "$HOME/.container-run.conf"
 fi
 
+# Omit -t if not a tty.
+# Also shut up logging, because podman will by default loge
+# every byte of standard output to the journal, and that
+# destroys the journal + wastes enormous amounts of CPU.
+# I witnessed journald and syslog peg 2 cores of my devenv
+# when running a simple cat /path/to/file.
+if tty >/dev/null 2>&1 ; then
+    tty=" -t --log-driver=none "
+else
+    tty="--log-driver=none"
+fi
 # privileged rootful podman is required due to requirements of IC-OS guest build
 # additionally, we need to use hosts's cgroups and network
-if tty >/dev/null 2>&1 ; then
-    tty=" -t "
-else
-    tty=""
-fi
 if [ $# -eq 0 ]; then
     set -x
     sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
