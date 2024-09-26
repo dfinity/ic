@@ -9,7 +9,7 @@ use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JS
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::generate_mac_address;
+use network::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -67,10 +67,21 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac.get()
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
             let generated_mac = generate_mac_address(
+                &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
                 &NodeType::SetupOS,
-                deployment_settings.deployment.mgmt_mac.as_deref(),
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac.get());
 
@@ -94,12 +105,23 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac.get()
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
             let generated_mac = generate_mac_address(
-                &deployment_settings.deployment.name,
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
                 &node_type,
-                deployment_settings.deployment.mgmt_mac.as_deref(),
             )?;
+
             let ipv6_prefix = network_info
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
