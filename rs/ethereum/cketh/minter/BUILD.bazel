@@ -41,10 +41,10 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-sha3",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/secp256k1",
-        "//rs/crypto/sha3",
         "//rs/ethereum/evm-rpc-client",
         "//rs/ethereum/types",
         "//rs/phantom_newtype",
