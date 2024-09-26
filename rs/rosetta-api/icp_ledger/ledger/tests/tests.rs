@@ -295,6 +295,49 @@ fn test_anonymous_transfers() {
 }
 
 #[test]
+fn test_anonymous_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let anon = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup(
+        ledger_wasm(),
+        encode_init_args,
+        vec![(Account::from(anon.0), INITIAL_BALANCE)],
+    );
+
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
+
+    // Approve transfers for p1 from the account of the anonymous principal
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p1.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let encoded_transfer_result = env
+        .execute_ingress_as(
+            anon,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        )
+        .expect("failed to approve transfer")
+        .bytes();
+    let string_from_bytes_result = String::from_utf8(encoded_transfer_result.clone());
+    assert_eq!(
+        string_from_bytes_result,
+        Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
+    );
+}
+
+#[test]
 fn test_single_transfer() {
     ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
 }
