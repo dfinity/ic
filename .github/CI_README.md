@@ -3,8 +3,8 @@ GitHub CI for the IC Repo
 ## Using custom CI labels
 Note that setting custom CI logic via the pull request title has been deprecated and we now use labels instead. See labels below for custom logic that can be enabled:
 
-`CI_ALL_BAZEL_TARGETS`: runs all bazel targets and uploads them to s3. \
-`CI_OVERRIDE_DIDC_CHECK`: skips the backwards compatibility didc check.
+* `CI_ALL_BAZEL_TARGETS`: runs all bazel targets and uploads them to s3.
+* `CI_OVERRIDE_DIDC_CHECK`: skips the backwards compatibility didc check.
 
 Adding a label alone will not trigger CI, you will need to retrigger it by either opening & closing the PR or adding an empty commit with `git commit -m 'retrigger CI' --allow-empty`.
 
