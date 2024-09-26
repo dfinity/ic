@@ -3,7 +3,7 @@
 
 use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -1424,7 +1424,7 @@ pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtim
     config.generate_address_map(false);
     // The signal handler uses Posix signals, not Mach ports on MacOS.
     config.macos_use_mach_ports(false);
-    config.wasm_backtrace(false);
+    config.wasm_backtrace(embedders_config.feature_flags.canister_backtrace == FlagStatus::Enabled);
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);

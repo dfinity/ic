@@ -21,21 +21,20 @@ for pattern in "${protected_branches[@]}"; do
 done
 
 # if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
-if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
+if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]] || [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
     RUN_ON_DIFF_ONLY="false"
 fi
 
-# check if the workflow was triggered by a pull request and if the job requested running only on diff
-if [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]]; then
-    # if RUN_ALL_BAZEL_TARGETS was requested we upload to s3 and skip the diff check
-    if [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-        s3_upload="True"
-    elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-        # get bazel targets that changed within the MR
-        BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
-    fi
+if [[ "${CI_PIPELINE_SOURCE:-}" == "merge_group" ]]; then
+    s3_upload="False"
+    RUN_ON_DIFF_ONLY="false"
+fi
+
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
 fi
 
 # pass info about bazel targets to bazel-targets file

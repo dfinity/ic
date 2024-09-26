@@ -162,12 +162,11 @@ impl HttpsOutcallsService for CanisterHttp {
             })?;
 
         // Build Http Request.
-        let mut headers = validate_headers(req.headers).map_err(|err| {
+        let mut headers = validate_headers(req.headers).inspect_err(|_| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
-            err
         })?;
 
         // Add user-agent header if not present.

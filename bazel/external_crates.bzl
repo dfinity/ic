@@ -621,6 +621,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
             ),
+            "ic-transport-types": crate.spec(
+                version = "^0.37.1",
+            ),
             "ic-utils": crate.spec(
                 version = "^0.37.0",
                 features = ["raw"],
@@ -1063,6 +1066,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rust_decimal_macros": crate.spec(
                 version = "^1.25.0",
+            ),
+            "rustc-demangle": crate.spec(
+                version = "^0.1.16",
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",

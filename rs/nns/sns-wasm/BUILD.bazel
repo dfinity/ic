@@ -11,7 +11,7 @@ filegroup(
 )
 
 # See rs/nervous_system/feature_test.md
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
@@ -24,6 +24,8 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_http_metrics",
+    "//rs/sns/governance",
+    "//rs/sns/init",
     "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -40,18 +42,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
-]
-
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/governance",
-    "//rs/sns/init",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/init:init--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -104,20 +94,6 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_library(
-    name = "sns-wasm--test_feature",
-    srcs = glob([
-        "src/**",
-        "gen/**",
-    ]),
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_wasm",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "1.0.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES,
-)
-
 rust_canister(
     name = "sns-wasm-canister",
     srcs = ["canister/canister.rs"],
@@ -143,15 +119,6 @@ rust_test(
     crate = ":sns-wasm",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_test(
-    name = "sns-wasm_test--test_feature",
-    aliases = ALIASES,
-    crate = ":sns-wasm--test_feature",
-    crate_features = ["test"],
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 rust_ic_test_suite_with_extra_srcs(

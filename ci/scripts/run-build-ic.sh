@@ -18,11 +18,9 @@ done
 # run build with release on protected branches or if a pull_request is targeting an rc branch
 if [ "${IS_PROTECTED_BRANCH:-}" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ci/container/build-ic.sh -i -c -b
-# if an override was requested to run all bazel targets with no release
-elif [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-    ci/container/build-ic.sh -i -c -b --no-release
-# check if the workflow was triggered by a pull request and if the job requested running only on diff
-elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+fi
+# check if the job requested running only on diff, otherwise run full build with no release
+if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 

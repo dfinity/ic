@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/bitcoin/service",
     "//rs/config",
-    "//rs/monitoring/adapter_metrics/server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:bitcoin",
@@ -61,6 +60,7 @@ rust_library(
     crate_name = "ic_btc_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    visibility = ["//rs/pocket_ic_server:__subpackages__"],
     deps = DEPENDENCIES,
 )
 
@@ -70,7 +70,10 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
-    deps = DEPENDENCIES + [":adapter"],
+    deps = DEPENDENCIES + [
+        ":adapter",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 rust_binary(
@@ -78,7 +81,10 @@ rust_binary(
     srcs = ["src/stress_test.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":adapter"],
+    deps = DEPENDENCIES + [
+        ":adapter",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 rust_test(
