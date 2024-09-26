@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::mac_address::generate_mac_address;
 use crate::node_type::NodeType;
@@ -23,17 +23,15 @@ pub fn generate_network_config(
     node_type: NodeType,
     output_directory: &Path,
 ) -> Result<()> {
-    let deployment_name = deployment_name
-        .context("Error: Deployment name not found when attempting to generate mac address")?;
-
-    let mac = generate_mac_address(deployment_name, &node_type, mgmt_mac)?;
+    let mac = generate_mac_address(
+        deployment_name,
+        &node_type,
+        network_settings.mgmt_mac.as_deref(),
+    )?;
     eprintln!("Using generated mac (unformatted) {}", mac.get());
 
     eprintln!("Generating ipv6 address");
-    let ipv6_prefix = network_settings
-        .ipv6_prefix
-        .clone()
-        .context("ipv6_prefix required in config to generate ipv6 address")?;
+    let ipv6_prefix = network_settings.ipv6_prefix.clone();
     let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
     eprintln!("Using ipv6 address: {}", ipv6_address);
 

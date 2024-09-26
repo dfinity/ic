@@ -78,10 +78,8 @@ pub fn main() -> Result<()> {
                 &node_type,
                 setup_config.network_settings.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = setup_config.network_settings.ipv6_prefix.ok_or_else(|| {
-                anyhow!("ipv6_prefix required in config to generate ipv6 address")
-            })?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
+            let ipv6_address =
+                generate_ipv6_address(&setup_config.network_settings.ipv6_prefix, &mac)?;
             println!(
                 "{}",
                 to_cidr(

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
 use config::config_ini::get_config_ini_settings;
@@ -67,7 +67,6 @@ pub fn main() -> Result<()> {
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_address: config_ini_settings.ipv6_address,
                 ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
                 ipv6_gateway: config_ini_settings.ipv6_gateway,
                 ipv4_address: config_ini_settings.ipv4_address,
@@ -97,7 +96,6 @@ pub fn main() -> Result<()> {
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_address: config_ini_settings.ipv6_address,
                 ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
                 ipv6_gateway: config_ini_settings.ipv6_gateway,
                 ipv4_address: config_ini_settings.ipv4_address,
@@ -114,10 +112,7 @@ pub fn main() -> Result<()> {
                 &node_type,
                 network_settings.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = network_settings
-                .ipv6_prefix
-                .context("ipv6_prefix required in config to generate ipv6 address")?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&network_settings.ipv6_prefix, &mac)?;
             println!(
                 "{}",
                 to_cidr(ipv6_address, network_settings.ipv6_prefix_length)
@@ -136,7 +131,6 @@ pub fn main() -> Result<()> {
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
                 ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_address: config_ini_settings.ipv6_address,
                 ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
                 ipv6_gateway: config_ini_settings.ipv6_gateway,
                 ipv4_address: config_ini_settings.ipv4_address,
