@@ -139,6 +139,7 @@ const LABEL_VALUE_FAILURE: &str = "failure";
 
 #[derive(Clone)]
 pub struct StateManagerMetrics {
+    #[allow(dead_code)]
     state_manager_error_count: IntCounterVec,
     checkpoint_op_duration: HistogramVec,
     api_call_duration: HistogramVec,
