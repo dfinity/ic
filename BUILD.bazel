@@ -104,7 +104,7 @@ test_suite(
 
 # The pocket-ic server binary. Use this as a test dependency if the test
 # does not require a specific pocket-ic version (see ":pocket-ic-variant"
-# for details). Use this
+# for details).
 # By default returns the pocket-ic server from the source tree to ensure
 # consistency within the source tree. See 'pocket_ic_mainnet_test' for
 # overrides.
