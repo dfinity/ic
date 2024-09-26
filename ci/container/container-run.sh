@@ -39,17 +39,17 @@ CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
-        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
+        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." >&2 && exit 0 ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
-                    echo "$2 is not a directory! Create it and try again."
+                    echo "$2 is not a directory! Create it and try again." >&2
                     usage && exit 1
                 fi
                 CACHE_DIR="$2"
-                echo "Bind-mounting $CACHE_DIR as cache directory."
+                echo "Bind-mounting $CACHE_DIR as cache directory." >&2
             else
-                echo "Missing argument for -c | --cache-dir!"
+                echo "Missing argument for -c | --cache-dir!" >&2
                 usage && exit 1
             fi
             shift
@@ -73,7 +73,7 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
 fi
 
 if findmnt /hoststorage >/dev/null; then
-    echo "Purging non-relevant container images"
+    echo "Purging non-relevant container images" >&2
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
@@ -151,7 +151,7 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
         -e SSH_AUTH_SOCK="/ssh-agent"
     )
 else
-    echo "No ssh-agent to forward."
+    echo "No ssh-agent to forward." >&2
 fi
 
 # make sure we have all bind-mounts
@@ -160,21 +160,26 @@ mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 PODMAN_RUN_USR_ARGS=()
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
-    echo "Sourcing user's ~/.container-run.conf"
+    echo "Sourcing user's ~/.container-run.conf" >&2
     source "$HOME/.container-run.conf"
 fi
 
 # privileged rootful podman is required due to requirements of IC-OS guest build
 # additionally, we need to use hosts's cgroups and network
+if tty >/dev/null 2>&1 ; then
+    tty=" -t "
+else
+    tty=""
+fi
 if [ $# -eq 0 ]; then
     set -x
-    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
         "$IMAGE" ${USHELL:-/usr/bin/bash}
     set +x
 else
     set -x
-    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
         "$IMAGE" "$@"
     set +x
