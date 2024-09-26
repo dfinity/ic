@@ -1,5 +1,5 @@
 {
-  "checksum": "f5026c7a40e78a70b51f4b198bb812011d948439fd6b9031696128a040190590",
+  "checksum": "776aa7c37faa0c93be9eb007128cd9bdee821beb048b4652e1606d78b4f2dd1a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -28766,7 +28766,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "9abf1e385e4a32279de005d0019c17774e164828"
+            "Rev": "c0c826380f220c09f06b88350178c18f63010471"
           }
         }
       },
@@ -49295,7 +49295,7 @@
               "target": "heck"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.10.5",
               "target": "itertools"
             },
             {
@@ -49390,7 +49390,7 @@
               "target": "anyhow"
             },
             {
-              "id": "itertools 0.11.0",
+              "id": "itertools 0.10.5",
               "target": "itertools"
             },
             {
