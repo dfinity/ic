@@ -99,7 +99,7 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(
+            let generated_mac = generate_mac_address(
                 &deployment_settings.deployment.name,
                 &node_type,
                 deployment_settings.deployment.mgmt_mac.as_deref(),
@@ -107,7 +107,7 @@ pub fn main() -> Result<()> {
             let ipv6_prefix = network_info
                 .ipv6_prefix
                 .context("ipv6_prefix required in config to generate ipv6 address")?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }
@@ -129,13 +129,13 @@ pub fn main() -> Result<()> {
             eprintln!("Deployment config: {:?}", deployment_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mac = generate_mac_address(
+            let generated_mac = generate_mac_address(
                 &deployment_settings.deployment.name,
                 &node_type,
                 deployment_settings.deployment.mgmt_mac.as_deref(),
             )?;
-            let mac = FormattedMacAddress::from(&mac);
-            println!("{}", mac.get());
+            let generated_mac = FormattedMacAddress::from(&generated_mac);
+            println!("{}", generated_mac.get());
             Ok(())
         }
         None => Err(anyhow!(
