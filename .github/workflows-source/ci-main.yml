@@ -35,7 +35,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+    image: ghcr.io/dfinity/ic-build@sha256:115daa5ad5149182bb0416cbe5730f305be3bb2f48df576bc2c23067eefce84b
   dind-large-setup: &dind-large-setup
     runs-on:
       labels: dind-large
@@ -125,7 +125,8 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          RUN_ON_DIFF_ONLY: "true"
+          # if the PR is labeled with CI_ALL_BAZEL_TARGETS, set RUN_ON_DIFF_ONLY to false
+          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
@@ -258,7 +259,7 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
         env:
           BAZEL_COMMAND: "build"
-          RUN_ON_DIFF_ONLY: "true"
+          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:

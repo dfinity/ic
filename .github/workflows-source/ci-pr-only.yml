@@ -11,7 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 env:
-  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
@@ -20,7 +19,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+    image: ghcr.io/dfinity/ic-build@sha256:115daa5ad5149182bb0416cbe5730f305be3bb2f48df576bc2c23067eefce84b
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
