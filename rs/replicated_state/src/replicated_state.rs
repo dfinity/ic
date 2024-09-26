@@ -227,7 +227,7 @@ impl std::iter::Iterator for OutputIterator<'_> {
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> {
     /// Peeks into the iterator and returns a reference to the message that
     /// `next()` would return.
-    fn peek(&self) -> Option<&RequestOrResponse>;
+    fn peek(&self) -> Option<RequestOrResponse>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
@@ -240,7 +240,7 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = RequestOrResponse> 
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<&RequestOrResponse> {
+    fn peek(&self) -> Option<RequestOrResponse> {
         self.canister_iterators.front()?.peek()
     }
 

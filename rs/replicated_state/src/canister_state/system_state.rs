@@ -1346,7 +1346,7 @@ impl SystemState {
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
             if own_subnet_type != SubnetType::System
-                && can_push(msg, *subnet_available_memory).is_err()
+                && can_push(&msg, *subnet_available_memory).is_err()
             {
                 // Bail out if not enough memory available for message.
                 return;
