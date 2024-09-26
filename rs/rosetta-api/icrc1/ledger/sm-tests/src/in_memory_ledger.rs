@@ -637,7 +637,7 @@ pub fn verify_ledger_state(
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
 ) {
     println!("verifying state of ledger {}", ledger_id);
-    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
+    let blocks = get_all_ledger_and_archive_blocks(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);

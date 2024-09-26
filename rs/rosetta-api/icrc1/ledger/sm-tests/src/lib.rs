@@ -289,10 +289,14 @@ fn icrc21_consent_message(
 pub fn get_all_ledger_and_archive_blocks(
     state_machine: &StateMachine,
     ledger_id: CanisterId,
+    start_index: Option<u64>,
+    num_blocks: Option<u64>,
 ) -> Vec<Block<Tokens>> {
+    let start_index = start_index.unwrap_or(0);
+    let num_blocks = num_blocks.unwrap_or(u32::MAX as u64);
     let req = GetBlocksRequest {
-        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(0u64),
-        length: Nat::from(u32::MAX),
+        start: icrc_ledger_types::icrc1::transfer::BlockIndex::from(start_index),
+        length: Nat::from(num_blocks),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
     let res = state_machine

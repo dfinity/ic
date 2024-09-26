@@ -3,13 +3,12 @@ use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
-    ApprovalKey, BurnsWithoutSpender, InMemoryLedger, InMemoryLedgerState,
+    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_icrc1_ledger_sm_tests::{
-    get_all_ledger_and_archive_blocks, send_approval, send_transfer, send_transfer_from,
+    get_all_ledger_and_archive_blocks, get_allowance, send_approval, send_transfer,
+    send_transfer_from,
 };
-use ic_ledger_core::approvals::Allowance;
-use ic_ledger_core::timestamp::TimeStamp;
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
@@ -65,6 +64,109 @@ impl CanisterConfig {
             burns_without_spender,
             extended_testing,
         }
+    }
+}
+
+struct LedgerState {
+    in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    num_blocks: u64,
+}
+
+impl LedgerState {
+    fn assert_eq(&self, other: &Self) {
+        assert_eq!(
+            other.num_blocks, self.num_blocks,
+            "Number of blocks ({}) does not match number of blocks in previous state ({})",
+            self.num_blocks, other.num_blocks,
+        );
+        assert!(
+            other.in_memory_ledger == self.in_memory_ledger,
+            "In-memory ledger state does not match previous state"
+        );
+    }
+
+    /// Fetch the next blocks from the ledger canister and ingest them into the in-memory ledger.
+    /// If `total_num_blocks` is `None`, fetch all blocks from the ledger canister, otherwise fetch
+    /// `total_num_blocks - self.num_blocks` blocks (some amount of latest blocks that the in-memory
+    /// ledger does not hold yet).
+    fn fetch_next_blocks(
+        &mut self,
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        total_num_blocks: Option<u64>,
+    ) {
+        let num_blocks = total_num_blocks
+            .unwrap_or(u64::MAX)
+            .saturating_sub(self.num_blocks);
+        let blocks = get_all_ledger_and_archive_blocks(
+            state_machine,
+            canister_id,
+            Some(self.num_blocks),
+            Some(num_blocks),
+        );
+        self.num_blocks = self
+            .num_blocks
+            .checked_add(blocks.len() as u64)
+            .expect("number of blocks should fit in u64");
+        self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+    }
+
+    fn new(burns_without_spender: Option<BurnsWithoutSpender<Account>>) -> Self {
+        let in_memory_ledger = InMemoryLedger::new(burns_without_spender);
+        Self {
+            in_memory_ledger,
+            num_blocks: 0,
+        }
+    }
+
+    fn verify_balances_and_allowances(
+        &self,
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+    ) {
+        self.in_memory_ledger
+            .verify_balances_and_allowances(state_machine, canister_id);
+    }
+
+    /// Verify the ledger state and generate new transactions. In particular:
+    /// - Create a new instance of an in-memory ledger by fetching blocks from the ledger
+    ///   - If a previous ledger state is provided, only fetch the blocks that were present when
+    ///     the previous state was generated.
+    /// - Verify that the balances and allowances in the in-memory ledger match the ledger
+    ///   canister state
+    /// - If a previous ledger state is provided, assert that the state of the newly-generated
+    ///   in-memory ledger state matches that of the previous state
+    /// - Generate transactions on the ledger canister
+    /// - Fetch all blocks from the ledger canister into the new `ledger_state`
+    /// - Return the new `ledger_state`
+    fn verify_state_and_generate_transactions(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        burns_without_spender: Option<BurnsWithoutSpender<Account>>,
+        previous_ledger_state: Option<LedgerState>,
+    ) -> Self {
+        let num_blocks_to_fetch = match &previous_ledger_state {
+            None => None,
+            Some(previous_ledger_state) => Some(previous_ledger_state.num_blocks),
+        };
+
+        let mut ledger_state = LedgerState::new(burns_without_spender);
+        // Only fetch the blocks that were present when the previous state was generated. This is
+        // necessary since there may have been in-transit messages for the ledger in the backup,
+        // or new transactions triggered e.g., by timers running in other canisters on the subnet,
+        // that get applied after the `StateMachine` is initialized, and are not part of the
+        // transactions in `generate_transactions`.
+        ledger_state.fetch_next_blocks(state_machine, canister_id, num_blocks_to_fetch);
+        ledger_state.verify_balances_and_allowances(state_machine, canister_id);
+        // Verify the reconstructed ledger state matches the previous state
+        if let Some(previous_ledger_state) = &previous_ledger_state {
+            ledger_state.assert_eq(previous_ledger_state);
+        }
+        generate_transactions(state_machine, canister_id);
+        // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
+        // not fetched in the previous call to `fetch_next_blocks`.
+        ledger_state.fetch_next_blocks(state_machine, canister_id, None);
+        ledger_state
     }
 }
 
@@ -262,35 +364,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     );
 }
 
-fn build_in_memory_ledger_and_compare_to_previous(
-    state_machine: &StateMachine,
-    canister_id: CanisterId,
-    burns_without_spender: Option<BurnsWithoutSpender<Account>>,
-    previous_ledger_state: Option<InMemoryLedger<ApprovalKey, Account, Tokens>>,
-) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-    let blocks = get_all_ledger_and_archive_blocks(state_machine, canister_id);
-    let mut in_memory_ledger_state =
-        ic_icrc1_ledger_sm_tests::in_memory_ledger::InMemoryLedger::new(burns_without_spender);
-    in_memory_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
-    in_memory_ledger_state.verify_balances_and_allowances(state_machine, canister_id);
-    if let Some(previous_ledger_state) = previous_ledger_state {
-        assert!(
-            previous_ledger_state == in_memory_ledger_state,
-            "In-memory ledger state does not match previous state for canister {:?}",
-            canister_id
-        );
-    }
-    in_memory_ledger_state
-}
-
-fn generate_transactions(
-    state_machine: &StateMachine,
-    canister_id: CanisterId,
-    in_memory_ledger: &mut Option<InMemoryLedger<ApprovalKey, Account, Tokens>>,
-) {
-    let Some(in_memory_ledger) = in_memory_ledger else {
-        return;
-    };
+fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) {
     let start = Instant::now();
     let minter_account = ic_icrc1_ledger_sm_tests::minting_account(state_machine, canister_id)
         .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
@@ -360,7 +434,6 @@ fn generate_transactions(
             },
         )
         .expect("should be able to mint");
-        in_memory_ledger.process_mint(to, &Tokens::from(mint_amount));
         minted += 1;
         if minted >= NUM_TRANSACTIONS_PER_TYPE {
             break;
@@ -391,22 +464,13 @@ fn generate_transactions(
             },
         )
         .expect("should be able to transfer");
-        in_memory_ledger.process_transfer(
-            &from,
-            &to,
-            &None,
-            &Tokens::from(transfer_amount),
-            &Some(fee),
-        );
     }
     // Approve
     println!("approving");
     for i in 0..NUM_TRANSACTIONS_PER_TYPE {
         let from = accounts[i];
         let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        let current_allowance = in_memory_ledger
-            .get_allowance(&from, &spender)
-            .unwrap_or(Allowance::default());
+        let current_allowance = get_allowance(state_machine, canister_id, from, spender);
         let expires_at = state_machine
             .time()
             .checked_add(std::time::Duration::from_secs(3600))
@@ -422,7 +486,7 @@ fn generate_transactions(
                 from_subaccount: from.subaccount,
                 spender,
                 amount: Nat::from(approve_amount),
-                expected_allowance: Some(Nat::from(current_allowance.amount)),
+                expected_allowance: Some(current_allowance.allowance.clone()),
                 expires_at: Some(expires_at),
                 fee: Some(Nat::from(fee)),
                 memo: Some(Memo::from(i as u64)),
@@ -436,21 +500,6 @@ fn generate_transactions(
             },
         )
         .expect("should be able to transfer");
-        in_memory_ledger.process_approve(
-            &from,
-            &spender,
-            &Tokens::from(approve_amount),
-            &Some(current_allowance.amount),
-            &Some(expires_at),
-            &Some(fee),
-            TimeStamp::from_nanos_since_unix_epoch(
-                state_machine
-                    .time()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as u64,
-            ),
-        );
     }
     // Transfer From
     println!("transferring from");
@@ -479,13 +528,6 @@ fn generate_transactions(
             },
         )
         .expect("should be able to transfer from");
-        in_memory_ledger.process_transfer(
-            &from,
-            &to,
-            &Some(spender),
-            &Tokens::from(transfer_from_amount),
-            &Some(fee),
-        );
     }
     // Burn
     println!("burning");
@@ -510,13 +552,6 @@ fn generate_transactions(
             },
         )
         .expect("should be able to transfer");
-        in_memory_ledger.process_transfer(
-            from,
-            &minter_account,
-            &None,
-            &Tokens::from(burn_amount),
-            &None,
-        );
     }
     println!(
         "generated {} transactions in {:?}",
@@ -546,13 +581,12 @@ fn perform_upgrade_downgrade_testing(
             CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
         let mut previous_ledger_state = None;
         if extended_testing {
-            previous_ledger_state = Some(build_in_memory_ledger_and_compare_to_previous(
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 canister_id,
                 burns_without_spender.clone(),
                 None,
             ));
-            generate_transactions(state_machine, canister_id, &mut previous_ledger_state);
         }
         upgrade_canister(
             state_machine,
@@ -566,13 +600,12 @@ fn perform_upgrade_downgrade_testing(
             bump_gzip_timestamp(&master_canister_wasm),
         );
         if extended_testing {
-            previous_ledger_state = Some(build_in_memory_ledger_and_compare_to_previous(
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 canister_id,
                 burns_without_spender.clone(),
                 previous_ledger_state,
             ));
-            generate_transactions(state_machine, canister_id, &mut previous_ledger_state);
         }
         // Downgrade back to the mainnet ledger version
         upgrade_canister(
@@ -581,13 +614,12 @@ fn perform_upgrade_downgrade_testing(
             mainnet_canister_wasm.clone(),
         );
         if extended_testing {
-            previous_ledger_state = Some(build_in_memory_ledger_and_compare_to_previous(
+            let _ = LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 canister_id,
-                burns_without_spender,
+                burns_without_spender.clone(),
                 previous_ledger_state,
-            ));
-            generate_transactions(state_machine, canister_id, &mut previous_ledger_state);
+            );
         }
     }
 }
