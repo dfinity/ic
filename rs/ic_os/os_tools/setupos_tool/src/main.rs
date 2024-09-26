@@ -67,10 +67,11 @@ pub fn main() -> Result<()> {
                 ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let deployment_name = deployment_settings.deployment.name.as_str();
-            let mgmt_mac = deployment_settings.deployment.mgmt_mac.as_deref();
-            let generated_mac =
-                generate_mac_address(deployment_name, &NodeType::SetupOS, mgmt_mac)?;
+            let generated_mac = generate_mac_address(
+                deployment_settings.deployment.name.as_str(),
+                &NodeType::SetupOS,
+                deployment_settings.deployment.mgmt_mac.as_deref(),
+            )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac.get());
 
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
