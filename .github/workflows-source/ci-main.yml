@@ -22,7 +22,6 @@ permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_ID: ${{ github.job }} # github does not expose this variable https://github.com/orgs/community/discussions/8945
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -251,12 +250,12 @@ jobs:
         run: |
           set -eExuo pipefail
           REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
-          mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+          rm -rf "/cache/job/${CI_JOB_NAME}/${ROOT_PIPELINE_ID}"
+          mkdir -p "/cache/job/${CI_JOB_NAME}/${ROOT_PIPELINE_ID}/artifacts"
+          ln -s "/cache/job/${CI_JOB_NAME}/${ROOT_PIPELINE_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_NAME" build-command -- \
               "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
+          rm -rf "/cache/job/${CI_JOB_NAME}/${ROOT_PIPELINE_ID}"
         env:
           BAZEL_COMMAND: "build"
           RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
@@ -346,7 +345,7 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_NAME" build-command -- \
               "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
 
   cargo-build-release-linux:
@@ -375,5 +374,5 @@ jobs:
         shell: bash
         run: |
           set -eExuo pipefail
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release
