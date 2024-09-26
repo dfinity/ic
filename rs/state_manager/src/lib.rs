@@ -3179,10 +3179,10 @@ impl StateManager for StateManagerImpl {
 
         let states = self.states.read();
 
-        let heights: BTreeSet<_> = self
-            .checkpoint_heights()
-            .into_iter()
-            .chain(states.snapshots.iter().map(|snapshot| snapshot.height))
+        let heights: BTreeSet<_> = states
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.height)
             .filter(|h| {
                 matches(
                     states
