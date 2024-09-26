@@ -21,8 +21,6 @@ Canister Backtrace:
 _wasm_backtrace_canister::unreachable::inner_2
 _wasm_backtrace_canister::unreachable::inner
 _wasm_backtrace_canister::unreachable::outer
-_wasm_backtrace_canister::__canister_method_unreachable::{{closure}}
-canister_update unreachable
 "#;
 
 const IC0_TRAP_BACKTRACE: &str = r#"Panicked at 'uh oh', rs/rust_canisters/backtrace_canister/src/main.rs:47:5
@@ -37,8 +35,6 @@ core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::__canister_method_ic0_trap::{{closure}}
-canister_update ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
