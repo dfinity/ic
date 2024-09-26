@@ -64,9 +64,9 @@ fn test_insert() {
     assert_eq!(
         maplit::btreeset! {
             (time(20), id2),
-            (time(60), id6.into()),
-            (time(80), id8.into()),
-            (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5.into())
+            (time(60), id6),
+            (time(80), id8),
+            (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
         },
         pool.deadline_queue
     );

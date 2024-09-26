@@ -194,9 +194,9 @@ fn canister_queue_full_duplex() {
     const CAPACITY: usize = 2;
     let mut queue = InputQueue::new(CAPACITY);
     for i in 0..CAPACITY as u64 {
-        queue.push_request(new_request_reference(i * 2, Class::BestEffort).into());
+        queue.push_request(new_request_reference(i * 2, Class::BestEffort));
         queue.try_reserve_response_slot().unwrap();
-        queue.push_response(new_response_reference(i * 2 + 1, Class::BestEffort).into());
+        queue.push_response(new_response_reference(i * 2 + 1, Class::BestEffort));
     }
 
     assert_eq!(2 * CAPACITY, queue.len());
@@ -223,8 +223,8 @@ fn canister_queue_push_without_reserved_slot_panics() {
 /// Generator for an arbitrary inbound message reference.
 fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse).into()),
-        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort).into()),
+        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
+        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
         1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
         1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
     ]
