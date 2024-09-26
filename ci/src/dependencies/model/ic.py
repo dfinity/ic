@@ -6,7 +6,7 @@ from model.team import Team
 
 CI_PROJECT_PATH = os.environ.get("CI_PROJECT_PATH", "dfinity/ic")
 GITHUB_REF = os.environ.get("GITHUB_REF", "refs/heads/master")
-REPO_NAME = os.environ.get("REPO_NAME", "ic")
+REPO_NAME = os.environ.get("REPO_NAME", "dfinity/ic")
 
 
 def is_running_in_ic_repo() -> bool:
