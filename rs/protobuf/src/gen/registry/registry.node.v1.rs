@@ -69,16 +69,17 @@ pub struct NodeRecord {
 )]
 #[repr(i32)]
 pub enum NodeType {
+    Unspecified = 0,
     /// type0
-    Type0 = 0,
+    Type0 = 1,
     /// type1
-    Type1 = 1,
+    Type1 = 2,
     /// type2
-    Type2 = 2,
+    Type2 = 3,
     /// type3
-    Type3 = 3,
+    Type3 = 4,
     /// type3.1
-    Type3dot1 = 4,
+    Type3dot1 = 5,
 }
 impl NodeType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -87,6 +88,7 @@ impl NodeType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
+            NodeType::Unspecified => "NODE_TYPE_UNSPECIFIED",
             NodeType::Type0 => "NODE_TYPE_Type0",
             NodeType::Type1 => "NODE_TYPE_Type1",
             NodeType::Type2 => "NODE_TYPE_Type2",
@@ -97,6 +99,7 @@ impl NodeType {
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
+            "NODE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
             "NODE_TYPE_Type0" => Some(Self::Type0),
             "NODE_TYPE_Type1" => Some(Self::Type1),
             "NODE_TYPE_Type2" => Some(Self::Type2),
