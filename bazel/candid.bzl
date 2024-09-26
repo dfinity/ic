@@ -14,10 +14,10 @@ if [[ $mr_title == *"[override-didc-check]"* ]]; then
     exit 0
 fi
 
-# Note that CI_PULL_REQUEST_TARGET_BRANCH_SHA is only set on Pull Requests.
+# Note that MERGE_BASE_SHA is only set on Pull Requests.
 # On other events we set the merge_base to HEAD which means we compare the
 # did interface file against itself.
-readonly merge_base=${{CI_PULL_REQUEST_TARGET_BRANCH_SHA:-HEAD}}
+readonly merge_base=${{MERGE_BASE_SHA:-HEAD}}
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -54,7 +54,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["CI_PULL_REQUEST_TARGET_BRANCH_SHA", "CI_PULL_REQUEST_TITLE"]),
+        RunEnvironmentInfo(inherited_environment = ["MERGE_BASE_SHA", "CI_PULL_REQUEST_TITLE"]),
     ]
 
 CHECK_DID = attr.label(
