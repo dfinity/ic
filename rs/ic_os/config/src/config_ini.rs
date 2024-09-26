@@ -278,7 +278,7 @@ mod tests {
         let result = get_config_ini_settings(temp_file_path);
         assert!(result.is_err());
 
-        // Test invalid IPv6 address
+        // Test invalid IPv6 prefix
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "ipv6_prefix=invalid_ipv6_prefix")?;
         writeln!(temp_file, "ipv6_gateway=2001:db8:85a3:0000::1")?;
@@ -290,7 +290,7 @@ mod tests {
         let result = get_config_ini_settings(temp_file_path);
         assert!(result.is_err());
 
-        // Test missing prefix and address
+        // Test missing prefix
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "ipv6_gateway=2001:db8:85a3:0000::1")?;
         let result = get_config_ini_settings(temp_file_path);
