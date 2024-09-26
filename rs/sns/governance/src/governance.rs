@@ -2505,6 +2505,7 @@ impl Governance {
     async fn perform_upgrade_to_next_sns_version(
         &mut self,
         proposal_id: u64,
+        upgrade_sns_params: UpgradeSnsParams,
     ) -> Result<bool, GovernanceError> {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
@@ -2546,7 +2547,39 @@ impl Governance {
 
         let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
 
-        if target_is_root {
+        let canister_id_to_upgrade = match canister_ids_to_upgrade[..] {
+            [canister_id_to_upgrade] => canister_id_to_upgrade,
+            _ => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Proposal somehow asked us to upgrade multiple canisters"),
+                ))
+            }
+        };
+
+        self.upgrade_sns_canister(
+            canister_type_to_upgrade,
+            root_canister_id,
+            target_wasm,
+            canister_id_to_upgrade,
+            next_version,
+            proposal_id,
+        )
+        .await?;
+
+        Ok(false)
+    }
+
+    async fn upgrade_sns_canister(
+        &mut self,
+        canister_type_to_upgrade: SnsCanisterType,
+        root_canister_id: CanisterId,
+        target_wasm: Vec<u8>,
+        canister_id_to_upgrade: CanisterId,
+        next_version: Version,
+        proposal_id: u64,
+    ) -> Result<(), GovernanceError> {
+        if canister_type_to_upgrade == SnsCanisterType::Root {
             upgrade_canister_directly(
                 &*self.env,
                 root_canister_id,
@@ -2555,33 +2588,26 @@ impl Governance {
             )
             .await?;
         } else {
-            for target_canister_id in canister_ids_to_upgrade {
-                self.upgrade_non_root_canister(
-                    target_canister_id,
-                    target_wasm.clone(),
-                    Encode!().unwrap(),
-                    CanisterInstallMode::Upgrade,
-                )
-                .await?;
-            }
+            self.upgrade_non_root_canister(
+                canister_id_to_upgrade,
+                target_wasm.clone(),
+                Encode!().unwrap(),
+                CanisterInstallMode::Upgrade,
+            )
+            .await?;
         }
-
-        // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
-        // field so that Governance's heartbeat logic can check on the status of this upgrade.
         self.proto.pending_version = Some(UpgradeInProgress {
             target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
             checking_upgrade_lock: 0,
             proposal_id,
         });
-
         log!(
             INFO,
             "Successfully kicked off upgrade for SNS canister {:?}",
             canister_type_to_upgrade,
         );
-
-        Ok(false)
+        Ok(())
     }
 
     async fn perform_transfer_sns_treasury_funds(
