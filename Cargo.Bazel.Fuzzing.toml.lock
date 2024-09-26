@@ -3502,6 +3502,7 @@ dependencies = [
  "uuid",
  "vsock",
  "walkdir",
+ "walrus",
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.217.0",

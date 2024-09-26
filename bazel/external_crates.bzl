@@ -160,6 +160,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
+            "walrus": crate.spec(
+                version = "^0.21.1",
+            ),
             "actix-rt": crate.spec(
                 version = "^2.10.0",
             ),

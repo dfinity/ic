@@ -278,6 +278,7 @@ rust_ic_test_suite_with_extra_srcs(
             "src/copy_inactive_neurons_to_stable_memory.rs",
             "src/governance_mem_test.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/why_list_neurons_expensive.rs",
         ],
     ),
     aliases = ALIASES,
@@ -424,4 +425,29 @@ rust_ic_test(
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "why_list_neurons_expensive",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/why_list_neurons_expensive.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/why_list_neurons_expensive.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        "@crate_index//:flate2",
+        "@crate_index//:ic-wasm",
+        "@crate_index//:walrus",
+    ],
 )
