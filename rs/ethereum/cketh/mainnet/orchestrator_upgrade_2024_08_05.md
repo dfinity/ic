@@ -35,7 +35,7 @@ git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b
 ### Ledger
 
 ```
-git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/ledger
+git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/ledger
 f2f408333a test(ICRC-Ledger): FI-1377: Add tests for upgrading ICRC ledger with WASMs with different token types (#388)
 14836b59da chore(ICP/ICRC-Ledger): FI-1373: refactor approvals library to allow using regular and stable allowance storage (#382)
 33187dbe82 fix(ICRC-21): FI-1386: add e 8 s to icrc 21 (#340)
@@ -44,7 +44,7 @@ f2f408333a test(ICRC-Ledger): FI-1377: Add tests for upgrading ICRC ledger with 
 ### Index
 
 ```
-git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/index-ng
+git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/index-ng
 b4be567dc0 chore: Bump rust version to 1.80 (#642)
 eec6107faf chore: remove obsolete cost scaling feature flag (#502)
 ```
@@ -53,7 +53,7 @@ eec6107faf chore: remove obsolete cost scaling feature flag (#502)
 
 No changes since last version (`de29a1a55b589428d173b31cdb8cec0923245657`).
 ```
-git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/ledger_suite/icrc1/archive
+git log --format="%C(auto) %h %s" de29a1a55b589428d173b31cdb8cec0923245657..3d0b3f10417fc6708e8b5d844a0bac5e86f3e17d -- rs/rosetta-api/icrc1/archive
 ```
 
 
