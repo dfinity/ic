@@ -170,7 +170,7 @@ fi
 # destroys the journal + wastes enormous amounts of CPU.
 # I witnessed journald and syslog peg 2 cores of my devenv
 # when running a simple cat /path/to/file.
-if tty >/dev/null 2>&1 ; then
+if tty >/dev/null 2>&1; then
     tty=" -t --log-driver=none "
 else
     tty="--log-driver=none"
@@ -182,11 +182,11 @@ if [ $# -eq 0 ]; then
     sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
         "$IMAGE" ${USHELL:-/usr/bin/bash}
-    { set +x ; } >/dev/null 2>&1
+    { set +x; } >/dev/null 2>&1
 else
     set -x
     sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
         "$IMAGE" "$@"
-    { set +x ; } >/dev/null 2>&1
+    { set +x; } >/dev/null 2>&1
 fi
