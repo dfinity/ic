@@ -786,7 +786,7 @@ pub async fn handle_canister(
         .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
 
     // Proxy the request
-    let resp = proxy::proxy(url, request, &node.cli)
+    let resp = proxy::proxy(url, request, &node.cli.clone().to_client())
         .await
         .map_err(|e| error_infer(&e))?;
 
@@ -804,7 +804,7 @@ pub async fn handle_subnet(
         .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
 
     // Proxy the request
-    let resp = proxy::proxy(url, request, &node.cli)
+    let resp = proxy::proxy(url, request, &node.cli.clone().to_client())
         .await
         .map_err(|e| error_infer(&e))?;
 

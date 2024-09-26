@@ -310,6 +310,8 @@ pub struct MetricParamsCheck {
     pub counter: IntCounterVec,
     pub recorder: HistogramVec,
     pub status: IntGaugeVec,
+    pub client_outstanding: IntGaugeVec,
+    pub client_pool_size: IntGaugeVec,
 }
 
 impl MetricParamsCheck {
@@ -339,6 +341,22 @@ impl MetricParamsCheck {
                 "check_status",
                 "Last check result of a given node",
                 &labels[1..4],
+                registry
+            )
+            .unwrap(),
+
+            client_outstanding: register_int_gauge_vec_with_registry!(
+                "node_client_outstanding",
+                "Number of outstanding requests in the HTTP client for the given node",
+                &[NODE_ID_LABEL, SUBNET_ID_LABEL],
+                registry
+            )
+            .unwrap(),
+
+            client_pool_size: register_int_gauge_vec_with_registry!(
+                "node_client_pool_size",
+                "Size of the sub-client pool in the HTTP client for the given node",
+                &[NODE_ID_LABEL, SUBNET_ID_LABEL],
                 registry
             )
             .unwrap(),

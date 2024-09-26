@@ -408,7 +408,7 @@ fn setup_registry(
     cli: &Cli,
     registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     persister: WithMetricsPersist<Persister>,
-    http_client_generator: Arc<dyn http::client::ClientGenerator>,
+    http_client_generator: Arc<dyn http::client::GeneratesClientsWithStats>,
     metrics_registry: &Registry,
 ) -> Result<RegistrySetupResult, Error> {
     // Registry Client

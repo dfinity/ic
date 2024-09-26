@@ -11,7 +11,7 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_bn_lib::http::client::{Client, ClientGenerator};
+use ic_bn_lib::http::client::{ClientWithStats, GeneratesClientsWithStats};
 use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -43,13 +43,12 @@ pub struct Node {
     pub subnet_type: SubnetType,
     pub addr: IpAddr,
     pub port: u16,
-    pub cli: Arc<dyn Client>,
+    pub cli: Arc<dyn ClientWithStats>,
     pub tls_certificate: Vec<u8>,
     pub avg_latency_secs: f64,
 }
 
 // Lightweight Eq, just compare principals
-// If one ever needs a deep comparison - this needs to be removed and #[derive(Eq)] used
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
@@ -151,7 +150,7 @@ pub struct Snapshotter {
     last_version_change: Instant,
     min_version_age: Duration,
     persister: Option<SnapshotPersister>,
-    client_generator: Arc<dyn ClientGenerator>,
+    client_generator: Arc<dyn GeneratesClientsWithStats>,
 }
 
 pub struct SnapshotInfo {
@@ -178,7 +177,7 @@ impl Snapshotter {
         channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
         registry_client: Arc<dyn RegistryClient>,
         min_version_age: Duration,
-        client_generator: Arc<dyn ClientGenerator>,
+        client_generator: Arc<dyn GeneratesClientsWithStats>,
     ) -> Self {
         Self {
             published_registry_snapshot,
@@ -479,7 +478,7 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
 
 pub fn generate_stub_subnet(
     nodes: Vec<SocketAddr>,
-    generator: Arc<dyn ClientGenerator>,
+    generator: Arc<dyn GeneratesClientsWithStats>,
 ) -> Result<Subnet, Error> {
     let subnet_id = subnet_test_id(0).get().0;
 

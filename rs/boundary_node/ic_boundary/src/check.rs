@@ -131,6 +131,14 @@ impl NodeActor {
             Err(_) => (false, 0, 0.0),
         };
 
+        if healthy != self.state.map(|x| x.healthy).unwrap_or(true) {
+            warn!(
+                "Node {} became {}",
+                self.node,
+                if healthy { "healthy" } else { "unhealthy" }
+            );
+        }
+
         // Note: initially we update only the health field. height and avg latency are updated conditionally.
         let mut new_state = self.state.unwrap_or_else(|| NodeState {
             healthy,
@@ -164,6 +172,8 @@ impl NodeActor {
         debug!("Healthcheck actor for node {} started", self.node);
 
         let mut interval = tokio::time::interval(check_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -324,6 +334,8 @@ impl SubnetActor {
         debug!("Healthcheck actor for subnet {} started", self.subnet);
 
         let mut interval = tokio::time::interval(update_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -654,6 +666,8 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             counter,
             recorder,
             status,
+            client_outstanding,
+            client_pool_size,
         } = &self.1;
 
         let subnet_id = node.subnet_id.to_string();
@@ -667,6 +681,16 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             node_addr.as_str(),
         ];
 
+        let cli_stats = node.cli.stats();
+
+        client_outstanding
+            .with_label_values(&[node_id.as_str(), subnet_id.as_str()])
+            .set(cli_stats.outstanding as i64);
+
+        client_pool_size
+            .with_label_values(&[node_id.as_str(), subnet_id.as_str()])
+            .set(cli_stats.pool_size as i64);
+
         counter.with_label_values(labels).inc();
         recorder.with_label_values(labels).observe(duration);
         status
@@ -674,7 +698,7 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             .set(out.is_ok().into());
 
         if let Err(e) = &out {
-            warn!(
+            debug!(
                 action = "check",
                 result,
                 duration,

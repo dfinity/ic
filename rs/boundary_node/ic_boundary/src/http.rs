@@ -1,12 +1,14 @@
 use std::{
-    fmt,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
 use ic_bn_lib::http::{
-    client::{Client, ClientGenerator, Options, ReqwestClient, ReqwestClientDynamic},
+    client::{
+        Client, ClientWithStats, CloneableDnsResolver, GeneratesClients, GeneratesClientsWithStats,
+        Options, ReqwestClient, ReqwestClientDynamic,
+    },
     http_version,
 };
 use rustls::Error as RustlsError;
@@ -30,14 +32,9 @@ impl Client for StubClient {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClientGeneratorSingle<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static>(
-    pub Options<R>,
-    pub MetricParams,
-);
+pub struct ClientGeneratorSingle<R: CloneableDnsResolver>(pub Options<R>, pub MetricParams);
 
-impl<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static> ClientGenerator
-    for ClientGeneratorSingle<R>
-{
+impl<R: CloneableDnsResolver> GeneratesClients for ClientGeneratorSingle<R> {
     fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
         Ok(Arc::new(WithMetrics(
             ReqwestClient::new(self.0.clone())?,
@@ -47,16 +44,13 @@ impl<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static> ClientGenerator
 }
 
 #[derive(Debug)]
-pub struct ClientGeneratorDynamic<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static>(
-    pub ClientGeneratorSingle<R>,
-);
+pub struct ClientGeneratorDynamic<R: CloneableDnsResolver>(pub ClientGeneratorSingle<R>);
 
-impl<R: reqwest::dns::Resolve + Clone + fmt::Debug + 'static> ClientGenerator
-    for ClientGeneratorDynamic<R>
-{
-    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+impl<R: CloneableDnsResolver> GeneratesClientsWithStats for ClientGeneratorDynamic<R> {
+    fn generate(&self) -> Result<Arc<dyn ClientWithStats>, ic_bn_lib::http::Error> {
         Ok(Arc::new(ReqwestClientDynamic::new(
             self.0.clone(),
+            1,
             10,
             200,
             Duration::from_secs(90),
