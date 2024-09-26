@@ -17,7 +17,7 @@ This proposal install the mainnet ckETH index to the governance-controlled canis
 ```
 git fetch
 git checkout 5ecbd59c6c9f9f874d4340f9fbbd96af07aa2576
-cd rs/ledger_suite/icrc1/index-ng
+cd rs/rosetta-api/icrc1/index-ng
 didc encode -d index-ng.did -t '(opt IndexArg)' '(opt variant { Init = record { ledger_id = principal "ss2fx-dyaaa-aaaar-qacoq-cai" } })'
 ```
 

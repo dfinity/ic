@@ -70,7 +70,7 @@ ce2222b6c build: CRP-2131 add testonly to crypto test utils and adjust the depen
 ### Ledger
 
 ```
-git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/ledger_suite/icrc1/ledger
+git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/rosetta-api/icrc1/ledger
 50aa8cfd64 feat(icrc_ledger): FI-1323: Add metric for instructions consumed during upgrade to ICP and ICRC ledgers
 576bb8d173 chore: add buildifier sort comment to Bazel files
 e219f993d9 chore(ICRC21): FI-1339: Icrc 21 markdown refinement
@@ -94,7 +94,7 @@ ce2222b6c4 build: CRP-2131 add testonly to crypto test utils and adjust the depe
 ### Index
 
 ```
-git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/ledger_suite/icrc1/index-ng
+git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/rosetta-api/icrc1/index-ng
 18243444a2 fix(ICRC-Index): FI-1382: remove comment on removing 0 balance accounts (#341)
 576bb8d173 chore: add buildifier sort comment to Bazel files
 f7fe40b7dd Merge branch 'mathias-FI-1310-add-heap-memory-usage-metric' into 'master'
@@ -109,7 +109,7 @@ e73f59f998 feat(icrc1-index-ng): FI-1296: Make index-ng interval for retrieving 
 ### Archive
 
 ```
-git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/ledger_suite/icrc1/archive
+git log --format="%C(auto) %h %s" 4472b0064d347a88649beb526214fde204f906fb..de29a1a55b589428d173b31cdb8cec0923245657 -- rs/rosetta-api/icrc1/archive
 576bb8d173 chore: add buildifier sort comment to Bazel files
 f7fe40b7dd Merge branch 'mathias-FI-1310-add-heap-memory-usage-metric' into 'master'
 0c16902ca1 feat(ledger_suite): FI-1310: Add total memory usage metrics for ledger, archive, and index canisters
