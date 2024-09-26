@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::mac_address::UnformattedMacAddress;
 use crate::systemd::generate_systemd_config_files;

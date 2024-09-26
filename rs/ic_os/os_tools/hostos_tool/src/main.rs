@@ -126,7 +126,7 @@ pub fn main() -> Result<()> {
                 deployment_settings.deployment.name.as_str(),
                 &node_type,
             )?;
-            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }
