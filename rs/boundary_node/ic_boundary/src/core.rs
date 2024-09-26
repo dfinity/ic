@@ -169,7 +169,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         min_clients: cli.listen.http_client_pool_min,
         max_clients: cli.listen.http_client_pool_max,
         max_outstanding: cli.listen.http_client_max_outstanding,
-        idle_timeout: Duration::from_secs(cli.listen.http_client_pool_timeout as u64),
+        idle_timeout: Duration::from_secs(cli.listen.http_client_pool_timeout),
     });
 
     // Caching

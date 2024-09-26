@@ -6,8 +6,8 @@ use std::{
 use async_trait::async_trait;
 use ic_bn_lib::http::{
     client::{
-        Client, ClientWithStats, CloneableDnsResolver, GeneratesClients, GeneratesClientsWithStats,
-        Options, ReqwestClient, ReqwestClientDynamic,
+        Client, ClientStats, ClientWithStats, CloneableDnsResolver, GeneratesClients,
+        GeneratesClientsWithStats, Options, ReqwestClient, ReqwestClientDynamic, Stats,
     },
     http_version,
 };
@@ -28,6 +28,21 @@ impl Client for StubClient {
     async fn execute(&self, _req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
         let resp = ::http::Response::new(vec![]);
         Ok(resp.into())
+    }
+}
+
+impl Stats for StubClient {
+    fn stats(&self) -> ClientStats {
+        ClientStats {
+            pool_size: 0,
+            outstanding: 0,
+        }
+    }
+}
+
+impl ClientWithStats for StubClient {
+    fn to_client(self: Arc<Self>) -> Arc<dyn Client> {
+        self
     }
 }
 

@@ -10,8 +10,8 @@ use clap::Parser;
 use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{
-    client::{Client, ClientGenerator},
-    Client as HttpClient, ConnInfo,
+    client::{ClientStats, ClientWithStats, GeneratesClientsWithStats, Stats},
+    Client as HttpClient, Client, ConnInfo,
 };
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
@@ -67,11 +67,26 @@ impl HttpClient for TestHttpClient {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct StubGenerator<R: Client + Clone + 'static>(pub R);
+impl Stats for TestHttpClient {
+    fn stats(&self) -> ClientStats {
+        ClientStats {
+            pool_size: 0,
+            outstanding: 0,
+        }
+    }
+}
 
-impl<R: Client + Clone + 'static> ClientGenerator for StubGenerator<R> {
-    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+impl ClientWithStats for TestHttpClient {
+    fn to_client(self: Arc<Self>) -> Arc<dyn Client> {
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StubGenerator<R: ClientWithStats + Clone + 'static>(pub R);
+
+impl<R: ClientWithStats + Clone + 'static> GeneratesClientsWithStats for StubGenerator<R> {
+    fn generate(&self) -> Result<Arc<dyn ClientWithStats>, ic_bn_lib::http::Error> {
         Ok(Arc::new(self.0.clone()))
     }
 }
