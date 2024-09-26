@@ -176,11 +176,11 @@ if [ $# -eq 0 ]; then
     sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
         "$IMAGE" ${USHELL:-/usr/bin/bash}
-    set +x
+    { set +x ; } >/dev/null 2>&1
 else
     set -x
     sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -i $tty --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
         "$IMAGE" "$@"
-    set +x
+    { set +x ; } >/dev/null 2>&1
 fi
