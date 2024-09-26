@@ -978,7 +978,7 @@ impl ExecutionTest {
 
     /// Executes a canister task method of the given canister.
     pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
-        let mut state: ReplicatedState = self.state.take().unwrap();
+        let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
