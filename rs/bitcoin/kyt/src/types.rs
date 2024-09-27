@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize};
+use ic_btc_interface::Network;
 use serde::Serialize;
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
@@ -74,4 +75,18 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
     }
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+pub struct InitArg {
+    pub network: Network,
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct UpgradeArg {}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum KytArg {
+    InitArg(InitArg),
+    UpgradeArg(UpgradeArg),
 }

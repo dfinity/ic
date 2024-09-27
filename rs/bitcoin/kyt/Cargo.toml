@@ -16,6 +16,7 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }
+ic-stable-structures = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

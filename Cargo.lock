@@ -5883,6 +5883,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-interface",
  "ic-cdk 0.13.5",
+ "ic-stable-structures",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",

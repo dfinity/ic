@@ -17,6 +17,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
     ],

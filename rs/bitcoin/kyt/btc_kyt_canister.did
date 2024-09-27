@@ -46,7 +46,24 @@ type CheckTransactionIrrecoverableError = variant {
     InvalidTransaction : text;
 };
 
-service : {
+type InitArg = record {
+    network : Network
+};
+
+type UpgradeArg = record {};
+
+type KytArg = variant {
+    InitArg : InitArg;
+    UpgradeArg: UpgradeArg; 
+};
+
+type Network = variant {
+    mainnet;
+    regtest;
+    testnet
+};
+
+service : (KytArg) -> {
     // Check input addresses of a transaction matching the given transaction id.
     // See `CheckTransactionResponse` for more details on the return result.
     //

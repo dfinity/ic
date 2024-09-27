@@ -1,10 +1,10 @@
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_interface::Txid;
+use ic_btc_interface::{Network, Txid};
 use ic_btc_kyt::{
     blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
     CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
+    CheckTransactionStatus, InitArg, KytArg, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_test_utilities_load_wasm::load_wasm;
@@ -54,6 +54,9 @@ impl Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         let env = PocketIc::new();
 
+        let init_arg = InitArg {
+            network: Network::Mainnet,
+        };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(
@@ -65,7 +68,12 @@ impl Setup {
 
         let kyt_canister = env.create_canister();
         env.add_cycles(kyt_canister, 100_000_000_000_000);
-        env.install_canister(kyt_canister, kyt_wasm(), vec![], None);
+        env.install_canister(
+            kyt_canister,
+            kyt_wasm(),
+            Encode!(&KytArg::InitArg(init_arg)).unwrap(),
+            None,
+        );
 
         Setup {
             controller,
@@ -160,7 +168,7 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin address")));
 }
 
 #[test]

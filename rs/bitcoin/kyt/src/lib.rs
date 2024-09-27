@@ -16,6 +16,7 @@ pub use fetch::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+pub use state::{get_config, set_config};
 use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
