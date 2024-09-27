@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,4 +27,15 @@ rust_test(
     name = "unit_tests",
     crate = ":ic-ethereum-types",
     deps = DEV_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":ic-ethereum-types",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-ethereum-types",
+    deps = [":ic-ethereum-types"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
