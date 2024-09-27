@@ -9521,6 +9521,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nns-constants",
  "ic-sns-governance",
+ "ic-sns-root",
  "ic-sns-wasm",
  "pocket-ic",
  "serde",
