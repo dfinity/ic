@@ -8,7 +8,6 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -20,7 +19,6 @@ system_test_nns(
 
 system_test(
     name = "memory_safety_test",
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -37,7 +35,6 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -54,7 +51,6 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -72,7 +68,6 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = False,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
