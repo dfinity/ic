@@ -1,8 +1,4 @@
-//! SHA-3 and related hash functions.
-//! Currently supported are:
-//! * [`Keccak256`]: Keccak-256 hash function with constant 256-bit (32 bytes) output.
-//!   Note that this is not the same as the [SHA-3 standard](https://csrc.nist.gov/pubs/fips/202/final)
-//!   which uses a different padding scheme. Keccak-256 is the hash function used for example in Ethereum.
+//! Wrappers around SHA-3 and related hash functions.
 
 #![forbid(unsafe_code)]
 #![warn(rust_2018_idioms)]
@@ -11,12 +7,16 @@
 
 /// Keccak-256 hash function.
 ///
+/// Hash function with constant 256-bit (32 bytes) output.
+/// Note that this is not the same as the [SHA-3 standard](https://csrc.nist.gov/pubs/fips/202/final)
+/// which uses a different padding scheme. Keccak-256 is the hash function used for example in Ethereum.
+///
 /// # Examples
 ///
 /// An example of using Keccak-256 to hash data piece by piece:
 /// ```
 /// use std::io::Write;
-/// use ic_crypto_sha3::Keccak256;
+/// use ic_sha3::Keccak256;
 ///
 /// let mut hasher = Keccak256::new();
 /// hasher.write("Hello ").write("world!");
@@ -27,7 +27,7 @@
 ///
 /// An example of using Keccak-256 to hash an entire buffer in one go:
 /// ```
-/// use ic_crypto_sha3::Keccak256;
+/// use ic_sha3::Keccak256;
 ///
 /// let result = Keccak256::hash("Hello world!");
 /// assert_eq!(result[..], hex::decode("ecd0e108a98e192af1d2c25055f4e3bed784b5c877204e73219a5203251feaab")

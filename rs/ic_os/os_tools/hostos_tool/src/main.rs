@@ -104,10 +104,7 @@ pub fn main() -> Result<()> {
                 &node_type,
                 deployment_settings.deployment.mgmt_mac.as_deref(),
             )?;
-            let ipv6_prefix = network_info
-                .ipv6_prefix
-                .context("ipv6_prefix required in config to generate ipv6 address")?;
-            let ipv6_address = generate_ipv6_address(&ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }

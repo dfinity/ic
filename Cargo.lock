@@ -6487,12 +6487,12 @@ dependencies = [
  "ic-cketh-test-utils",
  "ic-config",
  "ic-crypto-secp256k1",
- "ic-crypto-sha3",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types",
  "ic-metrics-encoder",
+ "ic-sha3",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
@@ -7073,8 +7073,8 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
- "ic-crypto-sha3",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-sha3",
  "rand 0.8.5",
  "zeroize",
 ]
@@ -7501,14 +7501,6 @@ name = "ic-crypto-sha2"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-sha2",
-]
-
-[[package]]
-name = "ic-crypto-sha3"
-version = "0.9.0"
-dependencies = [
- "hex",
- "sha3",
 ]
 
 [[package]]
@@ -8114,7 +8106,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-sha3",
+ "ic-sha3",
  "minicbor",
  "minicbor-derive",
  "proptest",
@@ -11424,6 +11416,14 @@ dependencies = [
  "futures",
  "ic-cdk 0.13.5",
  "serde",
+]
+
+[[package]]
+name = "ic-sha3"
+version = "1.0.0"
+dependencies = [
+ "hex",
+ "sha3",
 ]
 
 [[package]]
