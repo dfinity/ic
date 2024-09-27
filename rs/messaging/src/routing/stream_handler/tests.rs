@@ -3475,15 +3475,15 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 &mut expected_state,
                 messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=25),
             );
-            // ...and the first incoming message @153 and a reject response for the request @26.
+            // ...and a reject response for the request @26 and the first incoming message @153.
             push_inputs(
                 &mut expected_state,
                 [
-                    message_in_slice(slices.get(&REMOTE_SUBNET), 153),
                     &generate_reject_response_for(
                         RejectReason::CanisterMigrating,
                         request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
                     ),
+                    message_in_slice(slices.get(&REMOTE_SUBNET), 153),
                 ],
             );
 
