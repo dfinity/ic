@@ -458,7 +458,9 @@ impl GroupSpec {
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
         let version_file_path = std::env::var("VERSION_FILE_PATH")
             .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
+        info!(env.logger(), "version_file_path='{}'", version_file_path);
         let version_file = read_dependency_to_string(version_file_path).unwrap();
+        info!(env.logger(), "version_file='{}'", version_file);
         let runtime_args_map = if Path::new(&version_file).exists() {
             info!(env.logger(), "version_file {} exists.", version_file);
             let volatile_status = std::fs::read_to_string(&version_file)
