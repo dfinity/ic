@@ -185,7 +185,8 @@ pub struct AddNodePayload {
     pub prometheus_metrics_endpoint: String,
 
     // String representation of the node type.  Must be a valid type.
-    // Currently valid types are type0, type1, type2, type3, and type3.1.
+    // See registry/canister/src/mutations/do_add_node.rs, fn `try_str_to_node_type` for currently
+    // accepted types.
     pub node_type: Option<String>,
 }
 

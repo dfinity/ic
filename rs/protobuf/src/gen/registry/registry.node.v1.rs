@@ -80,6 +80,8 @@ pub enum NodeType {
     Type3 = 4,
     /// type3.1
     Type3dot1 = 5,
+    /// type1.1
+    Type1dot1 = 6,
 }
 impl NodeType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -89,22 +91,24 @@ impl NodeType {
     pub fn as_str_name(&self) -> &'static str {
         match self {
             NodeType::Unspecified => "NODE_TYPE_UNSPECIFIED",
-            NodeType::Type0 => "NODE_TYPE_Type0",
-            NodeType::Type1 => "NODE_TYPE_Type1",
-            NodeType::Type2 => "NODE_TYPE_Type2",
-            NodeType::Type3 => "NODE_TYPE_Type3",
-            NodeType::Type3dot1 => "NODE_TYPE_Type3dot1",
+            NodeType::Type0 => "NODE_TYPE_TYPE0",
+            NodeType::Type1 => "NODE_TYPE_TYPE1",
+            NodeType::Type2 => "NODE_TYPE_TYPE2",
+            NodeType::Type3 => "NODE_TYPE_TYPE3",
+            NodeType::Type3dot1 => "NODE_TYPE_TYPE3DOT1",
+            NodeType::Type1dot1 => "NODE_TYPE_TYPE1DOT1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "NODE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
-            "NODE_TYPE_Type0" => Some(Self::Type0),
-            "NODE_TYPE_Type1" => Some(Self::Type1),
-            "NODE_TYPE_Type2" => Some(Self::Type2),
-            "NODE_TYPE_Type3" => Some(Self::Type3),
-            "NODE_TYPE_Type3dot1" => Some(Self::Type3dot1),
+            "NODE_TYPE_TYPE0" => Some(Self::Type0),
+            "NODE_TYPE_TYPE1" => Some(Self::Type1),
+            "NODE_TYPE_TYPE2" => Some(Self::Type2),
+            "NODE_TYPE_TYPE3" => Some(Self::Type3),
+            "NODE_TYPE_TYPE3DOT1" => Some(Self::Type3dot1),
+            "NODE_TYPE_TYPE1DOT1" => Some(Self::Type1dot1),
             _ => None,
         }
     }

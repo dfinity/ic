@@ -26,15 +26,17 @@ message IPv4InterfaceConfig {
 enum NodeType {
   NODE_TYPE_UNSPECIFIED = 0;
   // type0
-  NODE_TYPE_Type0 = 1;
+  NODE_TYPE_TYPE0 = 1;
   // type1
-  NODE_TYPE_Type1 = 2;
+  NODE_TYPE_TYPE1 = 2;
   // type2
-  NODE_TYPE_Type2 = 3;
+  NODE_TYPE_TYPE2 = 3;
   // type3
-  NODE_TYPE_Type3 = 4;
+  NODE_TYPE_TYPE3 = 4;
   // type3.1
-  NODE_TYPE_Type3dot1 = 5;
+  NODE_TYPE_TYPE3DOT1 = 5;
+  // type1.1
+  NODE_TYPE_TYPE1DOT1 = 6;
 }
 
 // A node: one machine running a replica instance.

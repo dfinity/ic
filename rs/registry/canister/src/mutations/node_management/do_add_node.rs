@@ -1,4 +1,5 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
+use std::fmt::Display;
 
 use std::net::SocketAddr;
 
@@ -80,7 +81,7 @@ impl Registry {
             .node_type
             .as_ref()
             .map(|t| {
-                try_str_to_node_type(t).map_err(|e| {
+                validate_str_as_node_type(t).map_err(|e| {
                     format!(
                         "{}do_add_node: Error parsing node type from payload: {}",
                         LOG_PREFIX, e
@@ -160,14 +161,16 @@ impl Registry {
     }
 }
 
-// try to convert input string inot NodeType enum
-fn try_str_to_node_type(type_string: &str) -> Result<NodeType, String> {
-    Ok(match type_string {
+// try to convert input string into NodeType enum
+// If a type is no longer supported for newly registered nodes, it should be removed from this function
+fn validate_str_as_node_type<T: AsRef<str> + Display>(type_string: T) -> Result<NodeType, String> {
+    Ok(match type_string.as_ref() {
         "type0" => NodeType::Type0,
         "type1" => NodeType::Type1,
         "type2" => NodeType::Type2,
         "type3" => NodeType::Type3,
         "type3.1" => NodeType::Type3dot1,
+        "type1.1" => NodeType::Type1dot1,
         _ => return Err(format!("Invalid node type: {}", type_string)),
     })
 }
