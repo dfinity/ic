@@ -4,7 +4,7 @@ use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
 
-pub fn create_requests(
+pub fn create_request(
     network: Network,
     txid: Txid,
     max_response_bytes: u32,
