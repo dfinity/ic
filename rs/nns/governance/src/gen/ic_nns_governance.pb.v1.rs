@@ -2648,8 +2648,8 @@ pub struct Governance {
     /// The summary of restore aging event.
     #[prost(message, optional, tag = "27")]
     pub restore_aging_summary: ::core::option::Option<RestoreAgingSummary>,
-    /// The rng seed used before upgrade, to prevent race conditions in handling
-    /// further requests.
+    /// Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
+    /// source of randomness (from the platform)
     #[prost(bytes = "vec", optional, tag = "28")]
     pub rng_seed: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
