@@ -2392,6 +2392,56 @@ impl StateManagerImpl {
         result
     }
 
+    /// Returns the list of heights corresponding to accessible states matching
+    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
+    /// accessible states.
+    ///
+    /// Note that the initial state at height 0 is considered uncertified from
+    /// the State Manager point of view.  This is because the protocol requires
+    /// each replica to individually obtain the initial state using some
+    /// out-of-band mechanism (i.e., not state sync).  Also note that the
+    /// authenticity of this initial state will be verified by some protocol
+    /// external to this component.
+    ///
+    /// The list of heights is guaranteed to be
+    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
+    ///   0 even if no states were committed yet.
+    /// * Sorted in ascending order.
+    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["list_state_heights"])
+            .start_timer();
+
+        fn matches(cert: Option<&Certification>, mask: CertificationMask) -> bool {
+            match cert {
+                Some(_) => mask.is_set(CERT_CERTIFIED),
+                None => mask.is_set(CERT_UNCERTIFIED),
+            }
+        }
+
+        let states = self.states.read();
+
+        let heights: BTreeSet<_> = states
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.height)
+            .filter(|h| {
+                matches(
+                    states
+                        .certifications_metadata
+                        .get(h)
+                        .and_then(|metadata| metadata.certification.as_ref()),
+                    cert_mask,
+                )
+            })
+            .collect();
+
+        // convert the b-tree into a vector
+        heights.into_iter().collect()
+    }
+
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
@@ -3157,41 +3207,6 @@ impl StateManager for StateManagerImpl {
                 }
             }
         }
-    }
-
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["list_state_heights"])
-            .start_timer();
-
-        fn matches(cert: Option<&Certification>, mask: CertificationMask) -> bool {
-            match cert {
-                Some(_) => mask.is_set(CERT_CERTIFIED),
-                None => mask.is_set(CERT_UNCERTIFIED),
-            }
-        }
-
-        let states = self.states.read();
-
-        let heights: BTreeSet<_> = states
-            .snapshots
-            .iter()
-            .map(|snapshot| snapshot.height)
-            .filter(|h| {
-                matches(
-                    states
-                        .certifications_metadata
-                        .get(h)
-                        .and_then(|metadata| metadata.certification.as_ref()),
-                    cert_mask,
-                )
-            })
-            .collect();
-
-        // convert the b-tree into a vector
-        heights.into_iter().collect()
     }
 
     /// This method instructs the state manager that Consensus doesn't need
