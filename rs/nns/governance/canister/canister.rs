@@ -150,22 +150,30 @@ fn set_governance(gov: Governance) {
         .expect("Error initializing the governance canister.");
 }
 
+// Seeding interval seeks to find a balance between the need for rng secrecy, and
+// avoiding the overhead of frequent reseeding.
 const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
+const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
 
 fn schedule_seeding(duration: Duration) {
     ic_cdk_timers::set_timer(duration, || {
         spawn(async {
-            let (seed,): ([u8; 32],) = CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ())
-                .await
-                .map_err(|(code, msg)| {
+            let result: Result<([u8; 32],), (i32, String)> =
+                CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
+
+            let seed = match result {
+                Ok((seed,)) => seed,
+                Err((code, msg)) => {
                     println!(
                         "Error seeding RNG. Error Code: {}. Error Message: {}",
                         code, msg
-                    )
-                })
-                .unwrap();
+                    );
+                    schedule_seeding(RETRY_SEEDING_INTERVAL);
+                    return;
+                }
+            };
 
-            () = governance_mut().env.seed_rng(seed);
+            governance_mut().env.seed_rng(seed);
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
