@@ -96,7 +96,6 @@ impl Farm {
         group_name: &str,
         ttl: Option<Duration>,
         mut spec: GroupSpec,
-        env: &TestEnv,
     ) -> FarmResult<()> {
         spec.required_host_features = self
             .override_host_features
