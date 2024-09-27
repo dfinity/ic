@@ -155,6 +155,7 @@ genrule(
     outs = ["volatile_status_output.txt"],
     cmd = "cp bazel-out/volatile-status.txt $@",
     stamp = True,
+    tags = ["no-cache"],
     visibility = [
         "//rs/tests:__subpackages__",
     ],
