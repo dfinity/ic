@@ -1,17 +1,13 @@
 //! Wrapper to read the consensus pool
 
-use crate::{lookup_replica_version, registry_version_at_height};
+use crate::registry_version_at_height;
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
-use ic_interfaces_registry::RegistryClient;
-use ic_logger::ReplicaLogger;
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 use ic_types::{
-    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
-    Height, NodeId, RegistryVersion, ReplicaVersion, Time,
+    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, RegistryVersion, Time,
 };
+use std::cmp::Ordering;
 use std::time::Instant;
-use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
@@ -545,45 +541,6 @@ impl<'a> PoolReader<'a> {
             current_summary = self.get_finalized_block(summary.dkg.get_next_start_height());
         }
         None
-    }
-
-    /// Returns the set of DKG messages (indexed by the dealer Id) from the
-    /// finalized tip to the highest summary block.
-    pub fn get_dkg_payloads(&self) -> BTreeMap<NodeId, NiDkgDealing> {
-        self.chain_iterator(self.get_finalized_tip())
-            .take_while(|block| !block.payload.is_summary())
-            .flat_map(|block| {
-                block
-                    .payload
-                    .as_ref()
-                    .as_data()
-                    .dealings
-                    .messages
-                    .clone()
-                    .into_iter()
-            })
-            .map(|message| (message.signature.signer, message.content.dealing))
-            .collect()
-    }
-
-    /// Return the replica version as recorded in the block DKG summary of
-    /// the highest catch up package.
-    ///
-    /// Return None in case of registry lookup failure.
-    pub fn get_replica_version_from_highest_catch_up_package(
-        &self,
-        registry_client: &dyn RegistryClient,
-        replica_config: &ReplicaConfig,
-        log: &ReplicaLogger,
-    ) -> Option<ReplicaVersion> {
-        let catch_up_package = self.get_highest_catch_up_package();
-        let registry_version = catch_up_package.content.registry_version();
-        lookup_replica_version(
-            registry_client,
-            replica_config.subnet_id,
-            log,
-            registry_version,
-        )
     }
 
     /// Returns the height of the next CUP.
