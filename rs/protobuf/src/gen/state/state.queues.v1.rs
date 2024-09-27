@@ -270,8 +270,7 @@ pub mod canister_queues {
     /// A reference to a callback, used as a compact reject response (e.g. an
     /// expired best-effort callback; or one whose response was shed while in an
     /// input queue.
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, Copy, PartialEq, ::prost::Message)]
     pub struct CallbackReference {
         #[prost(uint64, tag = "1")]
         pub id: u64,
