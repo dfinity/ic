@@ -21,7 +21,7 @@ for pattern in "${protected_branches[@]}"; do
 done
 
 # if we are on a protected branch or targeting a rc branch we set ic_version to the commit_sha and upload to s3
-if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]] || [[ "${RUN_ON_DIFF_ONLY:-}" == "false" ]]; then
+if [[ "${IS_PROTECTED_BRANCH:-}" == "true" ]] || [[ "${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
     s3_upload="True"
     RUN_ON_DIFF_ONLY="false"
@@ -35,6 +35,8 @@ fi
 if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     # get bazel targets that changed within the MR
     BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/ci/bazel-scripts/diff.sh)
+else
+    s3_upload="True"
 fi
 
 # pass info about bazel targets to bazel-targets file
