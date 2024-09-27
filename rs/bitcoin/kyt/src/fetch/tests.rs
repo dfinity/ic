@@ -1,5 +1,6 @@
 use super::*;
 use crate::blocklist;
+use crate::types::BtcNetwork;
 use bitcoin::{
     absolute::LockTime, hashes::Hash, transaction::Version, Amount, OutPoint, PubkeyHash,
     ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
@@ -256,6 +257,9 @@ async fn test_fetch_tx() {
 #[tokio::test]
 async fn test_check_fetched() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    state::set_config(state::Config {
+        network: BtcNetwork::Mainnet,
+    });
     let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
         .unwrap()
         .assume_checked();
