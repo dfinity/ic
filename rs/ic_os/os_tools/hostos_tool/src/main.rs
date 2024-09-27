@@ -88,7 +88,6 @@ pub fn main() -> Result<()> {
                 deployment_settings.deployment.name.as_str(),
                 &NodeType::HostOS,
             )?;
-            eprintln!("Using generated mac (unformatted) {}", generated_mac.get());
 
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
         }
