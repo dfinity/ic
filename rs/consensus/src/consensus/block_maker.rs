@@ -59,6 +59,7 @@ pub(crate) fn subnet_records_for_registry_version(
     })
 }
 
+#[derive(Clone)]
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
@@ -207,6 +208,37 @@ impl BlockMaker {
         // The stable registry version to be agreed on in this block. If this is a summary
         // block, this version will be the new membership version of the next dkg interval.
         let stable_registry_version = self.get_stable_registry_version(parent.as_ref())?;
+
+        let (context, subnet_records) = self.construct_context(
+            pool,
+            height,
+            certified_height,
+            registry_version,
+            stable_registry_version,
+            &parent,
+        )?;
+
+        self.construct_block_proposal(
+            pool,
+            context,
+            parent,
+            height,
+            certified_height,
+            rank,
+            registry_version,
+            &subnet_records,
+        )
+    }
+
+    pub(crate) fn construct_context(
+        &self,
+        pool: &PoolReader<'_>,
+        height: Height,
+        certified_height: Height,
+        registry_version: RegistryVersion,
+        stable_registry_version: RegistryVersion,
+        parent: &HashedBlock,
+    ) -> Option<(ValidationContext, SubnetRecords)> {
         // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
@@ -268,19 +300,10 @@ impl BlockMaker {
                 context,
                 &parent.as_ref().context
             );
-            return None;
+            None
+        } else {
+            Some((context, subnet_records))
         }
-
-        self.construct_block_proposal(
-            pool,
-            context,
-            parent,
-            height,
-            certified_height,
-            rank,
-            registry_version,
-            &subnet_records,
-        )
     }
 
     /// Construct a block proposal with specified validation context, parent
@@ -298,6 +321,47 @@ impl BlockMaker {
         registry_version: RegistryVersion,
         subnet_records: &SubnetRecords,
     ) -> Option<BlockProposal> {
+        let hashed_block = self.construct_block(
+            pool,
+            context,
+            parent,
+            height,
+            certified_height,
+            rank,
+            subnet_records,
+            false,
+        )?;
+        let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
+        match self
+            .crypto
+            .sign(&metadata, self.replica_config.node_id, registry_version)
+        {
+            Ok(signature) => Some(BlockProposal {
+                signature,
+                content: hashed_block,
+            }),
+            Err(err) => {
+                error!(self.log, "Couldn't create a signature: {:?}", err);
+                None
+            }
+        }
+    }
+
+    /// Construct a block proposal with specified validation context, parent
+    /// block, rank, and batch payload. This function completes the block by
+    /// adding a DKG payload and signs the block to obtain a block proposal.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn construct_block(
+        &self,
+        pool: &PoolReader<'_>,
+        context: ValidationContext,
+        parent: HashedBlock,
+        height: Height,
+        certified_height: Height,
+        rank: Rank,
+        subnet_records: &SubnetRecords,
+        force_summary: bool,
+    ) -> Option<HashedBlock> {
         let max_dealings_per_block =
             subnet_records.membership_version.dkg_dealings_per_block as usize;
 
@@ -312,6 +376,7 @@ impl BlockMaker {
             &context,
             self.log.clone(),
             max_dealings_per_block,
+            force_summary.then_some(height),
         )
         .map_err(|err| warn!(self.log, "Payload construction has failed: {:?}", err))
         .ok()?;
@@ -404,21 +469,7 @@ impl BlockMaker {
             },
         );
         let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
-        let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
-        let metadata = BlockMetadata::from_block(&hashed_block, self.replica_config.subnet_id);
-        match self
-            .crypto
-            .sign(&metadata, self.replica_config.node_id, registry_version)
-        {
-            Ok(signature) => Some(BlockProposal {
-                signature,
-                content: hashed_block,
-            }),
-            Err(err) => {
-                error!(self.log, "Couldn't create a signature: {:?}", err);
-                None
-            }
-        }
+        Some(hashed::Hashed::new(ic_types::crypto::crypto_hash, block))
     }
 
     #[allow(clippy::too_many_arguments)]

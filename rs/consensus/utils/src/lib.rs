@@ -384,7 +384,7 @@ pub fn aggregate<
                 .get_committee_threshold(content_ref.height(), Message::committee())
             {
                 Ok(threshold) => threshold,
-                Err(err) => 9,
+                Err(_err) => 9,
             };
             if shares.len() < threshold {
                 return None;

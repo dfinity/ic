@@ -32,6 +32,7 @@ pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
 
+#[derive(Clone)]
 pub struct BlockMakerMetrics {
     pub get_payload_calls: IntCounterVec,
     pub block_size_bytes_estimate: IntGaugeVec,
