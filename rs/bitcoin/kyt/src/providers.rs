@@ -5,11 +5,11 @@ use ic_cdk::api::management_canister::http_request::{
 };
 
 pub fn create_request(
-    network: BtcNetwork,
+    btc_network: BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
 ) -> CanisterHttpRequestArgument {
-    match network {
+    match btc_network {
         BtcNetwork::Mainnet => btcscan_request(txid, max_response_bytes),
         BtcNetwork::Testnet => mempool_space_testnet_request(txid, max_response_bytes),
     }

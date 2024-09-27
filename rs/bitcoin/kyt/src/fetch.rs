@@ -252,6 +252,6 @@ fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, Fr
     let output = &tx.output[vout as usize];
     Address::from_script(
         &output.script_pubkey,
-        bitcoin::Network::from(state::get_config().network),
+        bitcoin::Network::from(state::get_config().btc_network),
     )
 }

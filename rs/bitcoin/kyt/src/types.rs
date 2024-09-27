@@ -79,7 +79,7 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct InitArg {
-    pub network: BtcNetwork,
+    pub btc_network: BtcNetwork,
 }
 
 #[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
@@ -91,8 +91,8 @@ pub enum BtcNetwork {
 }
 
 impl From<BtcNetwork> for bitcoin::Network {
-    fn from(network: BtcNetwork) -> Self {
-        match network {
+    fn from(btc_network: BtcNetwork) -> Self {
+        match btc_network {
             BtcNetwork::Mainnet => Self::Bitcoin,
             BtcNetwork::Testnet => Self::Testnet,
         }

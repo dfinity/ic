@@ -47,7 +47,7 @@ type CheckTransactionIrrecoverableError = variant {
 };
 
 type InitArg = record {
-    network : BtcNetwork
+    btc_network : BtcNetwork
 };
 
 type UpgradeArg = record {};

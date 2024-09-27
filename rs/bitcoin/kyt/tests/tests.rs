@@ -51,11 +51,11 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 impl Setup {
-    fn new(network: BtcNetwork) -> Setup {
+    fn new(btc_network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         let env = PocketIc::new();
 
-        let init_arg = InitArg { network };
+        let init_arg = InitArg { btc_network };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(

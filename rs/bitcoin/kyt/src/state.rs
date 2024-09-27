@@ -132,7 +132,7 @@ impl Drop for FetchGuard {
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub network: BtcNetwork,
+    pub btc_network: BtcNetwork,
 }
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
