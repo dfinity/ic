@@ -50,13 +50,11 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 impl Setup {
-    fn new() -> Setup {
+    fn new(network: Network) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         let env = PocketIc::new();
 
-        let init_arg = InitArg {
-            network: Network::Mainnet,
-        };
+        let init_arg = InitArg { network };
         let caller = env.create_canister_with_settings(Some(controller), None);
         env.add_cycles(caller, 100_000_000_000_000);
         env.install_canister(
@@ -115,7 +113,7 @@ fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
 fn test_check_address() {
     let Setup {
         kyt_canister, env, ..
-    } = Setup::new();
+    } = Setup::new(Network::Mainnet);
 
     // Choose an address from the blocklist
     let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
@@ -169,11 +167,26 @@ fn test_check_address() {
         },),
     );
     assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin address")));
+
+    // Test a mainnet address against testnet setup
+    let Setup {
+        kyt_canister, env, ..
+    } = Setup::new(Network::Testnet);
+
+    let result = query_candid::<_, (CheckAddressResponse,)>(
+        &env,
+        kyt_canister,
+        "check_address",
+        (CheckAddressArgs {
+            address: blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string(),
+        },),
+    );
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a testnet address")));
 }
 
 #[test]
 fn test_check_transaction_passed() {
-    let setup = Setup::new();
+    let setup = Setup::new(Network::Mainnet);
     let cycles_before = setup.env.cycle_balance(setup.caller);
 
     let txid =
@@ -277,7 +290,7 @@ fn test_check_transaction_passed() {
 
 #[test]
 fn test_check_transaction_error() {
-    let setup = Setup::new();
+    let setup = Setup::new(Network::Mainnet);
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")
