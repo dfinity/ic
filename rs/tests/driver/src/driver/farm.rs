@@ -15,7 +15,7 @@ use ic_crypto_sha2::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use slog::{error, warn, Logger};
+use slog::{error, info, warn, Logger};
 use std::fmt;
 use std::io::Write;
 use thiserror::Error;
