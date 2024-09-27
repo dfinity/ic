@@ -3,7 +3,6 @@ use crate::fixtures::{
     GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
 };
 use assert_matches::assert_matches;
-use fixtures::environment_fixture::CanisterCallReply;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
