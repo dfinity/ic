@@ -61,6 +61,8 @@ use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
+/// This limit is used to protect against a malicious peer advertising many ingress messages.
+/// If no malicious peers are present the ingress pools are bounded by a separate limit.
 const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
 const SLOT_TABLE_NO_LIMIT: usize = usize::MAX;
 
