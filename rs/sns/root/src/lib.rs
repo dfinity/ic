@@ -2805,7 +2805,7 @@ mod tests {
     async fn test_get_sns_canisters_summary_reports_settings() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = const { RefCell::new(SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
@@ -2813,7 +2813,7 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-            });
+            }) };
         }
 
         let root_canister_id = CanisterId::from_u64(4);
