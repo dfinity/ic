@@ -37,7 +37,7 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -54,7 +54,7 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -72,7 +72,7 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    flaky = True,
+    flaky = False,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
