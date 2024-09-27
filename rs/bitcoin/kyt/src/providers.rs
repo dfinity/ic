@@ -34,13 +34,7 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestAr
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: ic_cdk::api::id(),
-                method: "transform".to_string(),
-            }),
-            context: vec![],
-        }),
+        transform: param_transform(),
         headers: request_headers,
     }
 }
@@ -60,13 +54,17 @@ fn mempool_space_testnet_request(
         method: HttpMethod::GET,
         body: None,
         max_response_bytes: Some(max_response_bytes as u64),
-        transform: Some(TransformContext {
-            function: TransformFunc(candid::Func {
-                principal: ic_cdk::api::id(),
-                method: "transform".to_string(),
-            }),
-            context: vec![],
-        }),
+        transform: param_transform(),
         headers: request_headers,
     }
+}
+
+fn param_transform() -> Option<TransformContext> {
+    Some(TransformContext {
+        function: TransformFunc(candid::Func {
+            principal: ic_cdk::api::id(),
+            method: "transform".to_string(),
+        }),
+        context: vec![],
+    })
 }
