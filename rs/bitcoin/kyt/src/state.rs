@@ -52,91 +52,14 @@ pub struct FetchedTx {
 // Max number of concurrent http outcalls.
 const MAX_CONCURRENT: u32 = 50;
 
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub network: Network,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            network: Network::Bitcoin,
-        }
-    }
-}
-
-impl From<InitArg> for Config {
-    fn from(arg: InitArg) -> Self {
-        let network = match arg.network {
-            BtcNetwork::Mainnet => Network::Bitcoin,
-            BtcNetwork::Testnet => Network::Testnet,
-            BtcNetwork::Regtest => Network::Regtest,
-        };
-        Self { network }
-    }
-}
-
-impl From<&Config> for InitArg {
-    fn from(arg: &Config) -> Self {
-        let network = match arg.network {
-            Network::Bitcoin => BtcNetwork::Mainnet,
-            Network::Testnet => BtcNetwork::Testnet,
-            Network::Regtest => BtcNetwork::Regtest,
-            _ => panic!("unsupported network type: Signet"),
-        };
-        Self { network }
-    }
-}
-
-impl Storable for Config {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        let buf = encode_args((InitArg::from(self),)).expect("fail to encode config");
-        Cow::Owned(buf)
-    }
-
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let (config,): (InitArg,) =
-            decode_args(bytes.as_ref()).expect("failed to decode config bytes");
-        config.into()
-    }
-
-    const BOUND: Bound = Bound::Unbounded;
-}
-
-type StableMemory = VirtualMemory<DefaultMemoryImpl>;
-
-const CONFIG_MEMORY_ID: MemoryId = MemoryId::new(0);
-
 // The internal KYT state includes:
-// 1. Configurations.
-// 2. Outcall capacity, a semaphore limiting max concurrent outcalls.
-// 3. fetch transaction status, indexed by transaction id.
+// 1. Outcall capacity, a semaphore limiting max concurrent outcalls.
+// 2. fetch transaction status, indexed by transaction id.
 //
 // TODO(XC-191): persist canister state
 thread_local! {
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-            MemoryManager::init(DefaultMemoryImpl::default())
-    );
-    static CONFIG: RefCell<Cell<Config, StableMemory>> = RefCell::new(
-        Cell::init(config_memory(), Config::default()).expect("failed to initialize stable cell for state")
-    );
     static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
     static FETCH_TX_STATUS: RefCell<BTreeMap<Txid, FetchTxStatus>> = RefCell::new(BTreeMap::default());
-}
-
-#[allow(dead_code)]
-fn config_memory() -> StableMemory {
-    MEMORY_MANAGER.with(|m| m.borrow().get(CONFIG_MEMORY_ID))
-}
-
-pub fn set_config(config: Config) {
-    CONFIG
-        .with(|c| c.borrow_mut().set(config))
-        .expect("failed to set config");
-}
-
-pub fn get_config() -> Config {
-    CONFIG.with(|c| c.borrow().get().clone())
 }
 
 pub fn get_fetch_status(txid: Txid) -> Option<FetchTxStatus> {
@@ -203,4 +126,83 @@ impl Drop for FetchGuard {
             clear_fetch_status(txid);
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub network: Network,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            network: Network::Bitcoin,
+        }
+    }
+}
+
+impl From<InitArg> for Config {
+    fn from(arg: InitArg) -> Self {
+        let network = match arg.network {
+            BtcNetwork::Mainnet => Network::Bitcoin,
+            BtcNetwork::Testnet => Network::Testnet,
+            BtcNetwork::Regtest => Network::Regtest,
+        };
+        Self { network }
+    }
+}
+
+impl From<&Config> for InitArg {
+    fn from(arg: &Config) -> Self {
+        let network = match arg.network {
+            Network::Bitcoin => BtcNetwork::Mainnet,
+            Network::Testnet => BtcNetwork::Testnet,
+            Network::Regtest => BtcNetwork::Regtest,
+            _ => panic!("unsupported network type: Signet"),
+        };
+        Self { network }
+    }
+}
+
+impl Storable for Config {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let buf = encode_args((InitArg::from(self),)).expect("fail to encode config");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let (config,): (InitArg,) =
+            decode_args(bytes.as_ref()).expect("failed to decode config bytes");
+        config.into()
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+type StableMemory = VirtualMemory<DefaultMemoryImpl>;
+
+const CONFIG_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+// Configuration is stored in stable memory.
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+            MemoryManager::init(DefaultMemoryImpl::default())
+    );
+    static CONFIG: RefCell<Cell<Config, StableMemory>> = RefCell::new(
+        Cell::init(config_memory(), Config::default()).expect("failed to initialize stable cell for config")
+    );
+}
+
+fn config_memory() -> StableMemory {
+    MEMORY_MANAGER.with(|m| m.borrow().get(CONFIG_MEMORY_ID))
+}
+
+pub fn set_config(config: Config) {
+    CONFIG
+        .with(|c| c.borrow_mut().set(config))
+        .expect("failed to set config");
+}
+
+pub fn get_config() -> Config {
+    CONFIG.with(|c| c.borrow().get().clone())
 }
