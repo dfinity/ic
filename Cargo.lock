@@ -6489,7 +6489,7 @@ dependencies = [
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types",
  "ic-metrics-encoder",
- "ic-sha3 1.0.0",
+ "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
