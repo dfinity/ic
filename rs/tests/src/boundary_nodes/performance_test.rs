@@ -145,8 +145,6 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
-// At the moment 300 req/s is the maximum defined by the rate limiter in 000-nginx-global.conf
-
 pub fn update_calls_test(env: TestEnv) {
     let rps_min = 50;
     let rps_max = 450;
@@ -211,8 +209,6 @@ pub fn update_calls_test(env: TestEnv) {
 }
 
 // Execute query calls with an increasing req/s rate, against a counter canister via the boundary node agent.
-// In order to observe rates>1 req/s on the replica, caching should be disabled in 002-mainnet-nginx.conf
-
 pub fn query_calls_test(env: TestEnv) {
     let rps_min = 500;
     let rps_max = 6500;
@@ -352,7 +348,7 @@ pub fn mainnet_query_calls_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
     }
 }
 
-pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
+pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
     const ROOT_HOST: &str = "icp0.io";
     const MAINNET_STREAMING_CANISTER_ID: &str = "4evdk-jqaaa-aaaan-qel6q-cai";
     const MAINNET_COUNTER_CANISTER_ID: &str = "3muos-6yaaa-aaaaa-qaaua-cai";
@@ -365,9 +361,9 @@ pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
 
     const NUM_AGENTS: usize = 100;
 
-    // The amount of traffic that will be directed to ICX Proxy, the remaining traffic will be direct canister query calls.
-    const ICX_PROXY_TRAFFIC_PERCENTAGE: f64 = 20.0;
-    // ICX Proxy traffic will be distributed among these requests according to their weights.
+    // The amount of traffic that will be HTTP, the remaining traffic will be direct canister query calls.
+    const HTTP_TRAFFIC_PERCENTAGE: f64 = 20.0;
+    // HTTP traffic will be distributed among these requests according to their weights.
     let weighted_http_requests = [
         (format!("https://{streaming_canister_host}/1mb.json"), 25),
         (format!("https://{streaming_canister_host}/2mb.json"), 30),
@@ -450,7 +446,7 @@ pub fn mainnet_query_calls_icx_proxy_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
                     CallMode::Query,
                 );
 
-                if prob < ICX_PROXY_TRAFFIC_PERCENTAGE {
+                if prob < HTTP_TRAFFIC_PERCENTAGE {
                     let start_time = Instant::now();
 
                     let result = http_client

@@ -1038,11 +1038,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             )
             .await,
         );
-        let arg = Some(
-            self.arg
-                .as_ref()
-                .map_or(vec![], |path| read_file_fully(path)),
-        );
+        let arg = Some(read_arg(&self.arg, &self.arg_sha256));
         let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
         let install_mode = match self.mode {
             CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
