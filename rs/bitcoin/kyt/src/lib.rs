@@ -61,8 +61,7 @@ impl FetchEnv for KytCanisterEnv {
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
-        let request =
-            providers::create_request(get_config().network, txid, max_response_bytes);
+        let request = providers::create_request(get_config().network, txid, max_response_bytes);
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
