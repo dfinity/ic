@@ -16,8 +16,8 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/ic-ethereum-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",

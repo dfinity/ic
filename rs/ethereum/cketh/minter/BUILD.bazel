@@ -41,9 +41,9 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/ic-ethereum-types",
         "//rs/crypto/secp256k1",
         "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",
@@ -144,9 +144,9 @@ rust_test(
     deps = [
         # Keep sorted.
         ":minter",
+        "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/ic-ethereum-types",
         "//rs/crypto/secp256k1",
         "//rs/rust_canisters/http_types",
         "@crate_index//:askama",
@@ -202,8 +202,8 @@ rust_binary(
         deps = [
             # Keep sorted.
             ":minter",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//packages/ic-ethereum-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ethereum/cketh/test_utils",
             "//rs/ethereum/ledger-suite-orchestrator/test_utils",
             "//rs/state_machine_tests",

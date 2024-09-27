@@ -35,8 +35,8 @@ package(default_visibility = ["//visibility:public"])
         version = "0.1.0",
         deps = [
             # Keep sorted.
-            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//packages/ic-ethereum-types",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/sha2",
             "//rs/rosetta-api/icrc1/index-ng",
             "//rs/rosetta-api/icrc1/ledger",
