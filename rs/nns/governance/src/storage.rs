@@ -177,13 +177,16 @@ pub fn allocate_ic_wasm_instrument_memory_once() {
     println!("  page_limit = {}", page_limit);
 }
 
+// The implementation of this follows the diagram here:
+// https://docs.rs/ic-stable-structures/0.6.5/ic_stable_structures/memory_manager/struct.MemoryManager.html#v1-layout
 pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
-    // Read the first page of stable memory.
+    // Read the first page of stable memory. This is the area reserved by
+    // MemoryManager for its own use. Most of this area is not actually used.
     let mut buffer = [0_u8; ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES];
     DefaultMemoryImpl::default().read(0, &mut buffer);
 
     // Inspect header to make sure stable memory is being managed by MemoryManager.
-    assert_eq!(String::from_utf8_lossy(&buffer[0..3]), "MGR");
+    assert_eq!(String::from_utf8(buffer[0..3].to_vec()).unwrap(), "MGR");
     assert_eq!(buffer[3], 1);
 
     // let allocated_buckets = buffer[4..6]
@@ -196,10 +199,10 @@ pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
         u16::from_le_bytes(array) as u64
     };
 
-    // Scan bucket allocations, that is, who ones each bucket.
+    // Scan bucket allocations, that is, who owns each bucket.
 
     // This is copied from ic_stable_structures, which does not make this
-    // public. Notice that this is equal to 2^15.
+    // public. Notice that this is equal to 2^15 = 32 Ki.
     const MAX_NUM_BUCKETS: u64 = 32_768;
 
     let bucket_allocations_offset =
