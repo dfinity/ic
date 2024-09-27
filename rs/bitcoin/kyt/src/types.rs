@@ -88,5 +88,5 @@ pub struct UpgradeArg {}
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub enum KytArg {
     InitArg(InitArg),
-    UpgradeArg(UpgradeArg),
+    UpgradeArg(Option<UpgradeArg>),
 }

@@ -54,7 +54,7 @@ type UpgradeArg = record {};
 
 type KytArg = variant {
     InitArg : InitArg;
-    UpgradeArg: UpgradeArg; 
+    UpgradeArg: opt UpgradeArg;
 };
 
 type Network = variant {
