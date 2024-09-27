@@ -12868,7 +12868,9 @@ async fn distribute_rewards_load_test() {
     // Step 1.1: Craft many neurons.
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
     let maturity_e8s_equivalent = 3;
-    let neurons = (1000..2000)
+    let neuron_range = 1000..2000;
+    let neurons = neuron_range
+        .clone()
         .map(|id| Neuron {
             id: Some(NeuronId { id }),
             account: account(id),
@@ -12977,9 +12979,16 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for neuron in governance.neuron_store.heap_neurons().values() {
+    for id in neuron_range {
+        let (neuron, actual_maturity) = governance
+            .neuron_store
+            .with_neuron(&NeuronId { id }, |neuron| {
+                (neuron.clone(), neuron.maturity_e8s_equivalent)
+            })
+            .expect("Neuron not found");
+
         assert_ne!(
-            neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
+            actual_maturity, maturity_e8s_equivalent,
             "neuron: {:#?}",
             neuron,
         );
