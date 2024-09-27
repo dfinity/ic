@@ -14,7 +14,7 @@ pub use fetch::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
-pub use state::{Config, get_config, set_config};
+pub use state::{get_config, set_config, Config};
 use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
@@ -62,7 +62,7 @@ impl FetchEnv for KytCanisterEnv {
     ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
         let request =
-            providers::create_request(state::get_config().network.into(), txid, max_response_bytes);
+            providers::create_request(state::get_config().network, txid, max_response_bytes);
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {

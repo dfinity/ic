@@ -1,18 +1,17 @@
-use bitcoin::Network;
+use crate::BtcNetwork;
 use ic_btc_interface::Txid;
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
 
 pub fn create_request(
-    network: Network,
+    network: BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
 ) -> CanisterHttpRequestArgument {
     match network {
-        Network::Bitcoin => btcscan_request(txid, max_response_bytes),
-        Network::Testnet => mempool_space_testnet_request(txid, max_response_bytes),
-        _ => panic!("{} network is not supported", network),
+        BtcNetwork::Mainnet => btcscan_request(txid, max_response_bytes),
+        BtcNetwork::Testnet => mempool_space_testnet_request(txid, max_response_bytes),
     }
 }
 
