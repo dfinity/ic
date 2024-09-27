@@ -479,10 +479,16 @@ impl GroupSpec {
         }
 
         if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
-            info!(env.logger(), "Setting job_schedule to CI_JOB_NAME='{}'.", ci_job_name)
+            info!(
+                env.logger(),
+                "Setting job_schedule to CI_JOB_NAME='{}'.", ci_job_name
+            );
             metadata.job_schedule = Some(String::from(ci_job_name));
         } else {
-            info!(env.logger(), "Defaulting job_schedule to 'manual' since CI_JOB_NAME is not set.", ci_job_name)
+            info!(
+                env.logger(),
+                "Defaulting job_schedule to 'manual' since CI_JOB_NAME is not set.", ci_job_name
+            );
             metadata.job_schedule = Some(String::from("manual"));
         }
         self.metadata = Some(metadata);
