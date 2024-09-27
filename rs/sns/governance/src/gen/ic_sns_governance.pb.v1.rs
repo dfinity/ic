@@ -1491,8 +1491,6 @@ pub struct Governance {
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "26")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
-    #[prost(bool, optional, tag = "27")]
-    pub migrated_root_wasm_memory_limit: ::core::option::Option<bool>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {

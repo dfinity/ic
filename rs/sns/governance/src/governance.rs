@@ -4602,32 +4602,6 @@ impl Governance {
         true
     }
 
-    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
-        if self
-            .proto
-            .migrated_root_wasm_memory_limit
-            .unwrap_or_default()
-        {
-            return;
-        }
-
-        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
-        self.proto.migrated_root_wasm_memory_limit = Some(true);
-
-        let settings = CanisterSettings {
-            wasm_memory_limit: Some(candid::Nat::from(
-                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-            )),
-            ..Default::default()
-        };
-
-        // Set root settings
-        match update_root_canister_settings(self, settings).await {
-            Ok(_) => (),
-            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
-        }
-    }
-
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         self.process_proposals();
@@ -4665,8 +4639,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        self.maybe_migrate_root_wasm_memory_limit().await;
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
