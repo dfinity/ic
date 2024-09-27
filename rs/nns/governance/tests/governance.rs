@@ -2896,8 +2896,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         .expect("Neuron not found")
         / gov
             .neuron_store
-            .heap_neurons()
-            .values()
+            .active_neurons_iter()
             .map(|neuron| neuron.voting_power(fake_driver.now()))
             .sum::<u64>() as f64;
     let expected_distributed_e8s_equivalent =
@@ -2924,7 +2923,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
-    for neuron in gov.neuron_store.heap_neurons().values() {
+    for neuron in gov.neuron_store.active_neurons_iter() {
         if neuron.id().id == 1 {
             continue;
         }
@@ -6888,11 +6887,10 @@ fn test_manage_and_reward_node_providers() {
         ProposalStatus::Executed
     );
     // Find the neuron...
-    let (_, neuron) = gov
+    let neuron = gov
         .neuron_store
-        .heap_neurons()
-        .iter()
-        .find(|(_, x)| x.controller() == np_pid)
+        .active_neurons_iter()
+        .find(|x| x.controller() == np_pid)
         .unwrap();
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
@@ -7199,11 +7197,10 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Check third reward
     // Find the neuron...
-    let (_, neuron) = gov
+    let neuron = gov
         .neuron_store
-        .heap_neurons()
-        .iter()
-        .find(|(_, x)| x.controller() == np_pid_2)
+        .active_neurons_iter()
+        .find(|x| x.controller() == np_pid_2)
         .unwrap();
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
