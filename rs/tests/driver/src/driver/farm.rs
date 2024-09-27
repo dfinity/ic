@@ -466,6 +466,7 @@ impl GroupSpec {
                 })
                 .trim_end()
                 .to_string();
+            info!(env.logger(), "volatile_status='{}'", volatile_status);
             parse_volatile_status_file(volatile_status)
         } else {
             warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
