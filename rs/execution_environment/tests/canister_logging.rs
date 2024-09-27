@@ -59,7 +59,7 @@ fn setup(settings: CanisterSettingsArgs) -> (StateMachine, CanisterId) {
         .with_checkpoints_enabled(false)
         .build();
     let canister_id =
-        env.create_canister_with_cycles(None, Cycles::from(100_000_000_000_u128), Some(settings));
+        env.create_canister_with_cycles(None, Cycles::from(121_000_000_000_u128), Some(settings));
 
     (env, canister_id)
 }

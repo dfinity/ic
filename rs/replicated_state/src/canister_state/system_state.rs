@@ -2,16 +2,18 @@ mod call_context_manager;
 pub mod wasm_chunk_store;
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
+use super::queues::{can_push, CanisterInput};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
+use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
     CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
+use ic_error_types::RejectCode;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
@@ -20,10 +22,11 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-    Request, RequestOrResponse, Response, StopCanisterContext,
+    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
+use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
@@ -1119,7 +1122,58 @@ impl SystemState {
 
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
-        self.queues.pop_input()
+        Some(match self.queues.pop_input()? {
+            CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
+            CanisterInput::Request(msg) => CanisterMessage::Request(msg),
+            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::DeadlineExpired(callback_id) => {
+                self.to_reject_response(callback_id, "Call deadline has expired.")
+            }
+            CanisterInput::ResponseDropped(callback_id) => {
+                self.to_reject_response(callback_id, "Response was dropped.")
+            }
+        })
+    }
+
+    /// Generates a reject response for the given callback ID with the given
+    /// message.
+    ///
+    /// If the `CallContextManager` does not hold a callback with the given
+    /// `CallbackId`, generates a reject response with arbitrary values (but
+    /// matching `CallbackId`). The missing callback will generate a critical error
+    /// when the response is about to be executed, regardless.
+    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        const UNKNOWN_CANISTER_ID: CanisterId =
+            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+        const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
+
+        let call_context_manager = self.call_context_manager().unwrap();
+        let (originator, respondent, deadline) =
+            match call_context_manager.callbacks().get(&callback_id) {
+                // Populate reject responses from the callback.
+                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+
+                // This should be unreachable, but if we somehow end up here, we can populate
+                // the reject response with arbitrary values, as trying to execute it it will
+                // fail anyway and produce a critical error. This is safer than panicking.
+                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
+            };
+
+        CanisterMessage::Response(
+            Response {
+                originator,
+                respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::SysUnknown,
+                    message,
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline,
+            }
+            .into(),
+        )
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.

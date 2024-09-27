@@ -3,7 +3,7 @@ use ic_base_types::PrincipalId;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
-    CheckTransactionError, CheckTransactionPending, CheckTransactionResponse,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
     CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
 };
@@ -328,8 +328,8 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     assert!(matches!(
         dbg!(decode::<CheckTransactionResponse>(&result)),
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
-            CheckTransactionPending::TransientInternalError(_)
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(_)
         ))
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);
@@ -356,7 +356,7 @@ fn test_check_transaction_error() {
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-            CheckTransactionError::InvalidTransaction(_)
+            CheckTransactionIrrecoverableError::InvalidTransaction(_)
         ))
     ));
 
