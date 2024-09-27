@@ -1,4 +1,5 @@
-use ic_crypto_ecdsa_secp256r1::{KeyDecodingError, PrivateKey, PublicKey};
+use hex_literal::hex;
+use ic_crypto_ecdsa_secp256r1::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 #[test]
@@ -269,5 +270,96 @@ NRLvCGaIxJfchxpjcCysTG12MfKOf6/Phw==
     assert_eq!(
         key.serialize_rfc5915_pem().replace('\r', ""),
         SAMPLE_SECP256R1_5915_PEM
+    );
+}
+
+#[test]
+fn private_derivation_is_compatible_with_public_derivation() {
+    use rand::Rng;
+
+    let rng = &mut reproducible_rng();
+
+    fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
+        let l = 1 + rng.gen::<usize>() % 9;
+        let path = (0..l).map(|_| rng.gen::<u32>()).collect::<Vec<u32>>();
+        DerivationPath::new_bip32(&path)
+    }
+
+    for _ in 0..100 {
+        let master_sk = PrivateKey::generate_using_rng(rng);
+        let master_pk = master_sk.public_key();
+
+        let path = random_path(rng);
+
+        let chain_code = rng.gen::<[u8; 32]>();
+
+        let (derived_pk, cc_pk) = master_pk.derive_subkey_with_chain_code(&path, &chain_code);
+
+        let (derived_sk, cc_sk) = master_sk.derive_subkey_with_chain_code(&path, &chain_code);
+
+        assert_eq!(
+            hex::encode(derived_pk.serialize_sec1(true)),
+            hex::encode(derived_sk.public_key().serialize_sec1(true))
+        );
+
+        assert_eq!(hex::encode(cc_pk), hex::encode(cc_sk));
+
+        let msg = rng.gen::<[u8; 32]>();
+        let derived_sig = derived_sk.sign_message(&msg);
+
+        assert!(derived_pk.verify_signature(&msg, &derived_sig));
+    }
+}
+
+#[test]
+fn should_match_slip10_derivation_test_data() {
+    // Test data from https://github.com/satoshilabs/slips/blob/master/slip-0010.md#test-vector-1-for-nist256p1
+    let chain_code = hex!("98c7514f562e64e74170cc3cf304ee1ce54d6b6da4f880f313e8204c2a185318");
+
+    let private_key = PrivateKey::deserialize_sec1(&hex!(
+        "694596e8a54f252c960eb771a3c41e7e32496d03b954aeb90f61635b8e092aa7"
+    ))
+    .expect("Test has valid key");
+
+    let public_key = PublicKey::deserialize_sec1(&hex!(
+        "0359cf160040778a4b14c5f4d7b76e327ccc8c4a6086dd9451b7482b5a4972dda0"
+    ))
+    .expect("Test has valid key");
+
+    assert_eq!(
+        hex::encode(public_key.serialize_sec1(true)),
+        hex::encode(private_key.public_key().serialize_sec1(true))
+    );
+
+    let path = DerivationPath::new_bip32(&[2, 1000000000]);
+
+    let (derived_secret_key, sk_chain_code) =
+        private_key.derive_subkey_with_chain_code(&path, &chain_code);
+
+    let (derived_public_key, pk_chain_code) =
+        public_key.derive_subkey_with_chain_code(&path, &chain_code);
+    assert_eq!(
+        hex::encode(sk_chain_code),
+        "b9b7b82d326bb9cb5b5b121066feea4eb93d5241103c9e7a18aad40f1dde8059",
+    );
+    assert_eq!(
+        hex::encode(pk_chain_code),
+        "b9b7b82d326bb9cb5b5b121066feea4eb93d5241103c9e7a18aad40f1dde8059",
+    );
+
+    assert_eq!(
+        hex::encode(derived_public_key.serialize_sec1(true)),
+        "02216cd26d31147f72427a453c443ed2cde8a1e53c9cc44e5ddf739725413fe3f4",
+    );
+
+    assert_eq!(
+        hex::encode(derived_secret_key.serialize_sec1()),
+        "21c4f269ef0a5fd1badf47eeacebeeaa3de22eb8e5b0adcd0f27dd99d34d0119",
+    );
+
+    assert_eq!(
+        hex::encode(derived_public_key.serialize_sec1(true)),
+        hex::encode(derived_secret_key.public_key().serialize_sec1(true)),
+        "Derived keys match"
     );
 }
