@@ -250,5 +250,8 @@ pub trait FetchEnv {
 
 fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, FromScriptError> {
     let output = &tx.output[vout as usize];
-    Address::from_script(&output.script_pubkey, state::get_config().network)
+    Address::from_script(
+        &output.script_pubkey,
+        bitcoin::Network::from(state::get_config().network),
+    )
 }

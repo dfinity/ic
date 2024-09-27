@@ -3,8 +3,8 @@ use ic_btc_interface::Txid;
 use ic_btc_kyt::{
     blocklist_contains, check_transaction_inputs, get_config, set_config, CheckAddressArgs,
     CheckAddressResponse, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionResponse, CheckTransactionStatus, KytArg, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckTransactionResponse, CheckTransactionStatus, Config, KytArg,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::str::FromStr;
@@ -17,8 +17,8 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let network = get_config().network;
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
-        .require_network(network)
-        .unwrap_or_else(|err| ic_cdk::trap(&format!("Not a {} address: {}", network, err)));
+        .require_network(network.into())
+        .unwrap_or_else(|err| ic_cdk::trap(&format!("Not a bitcoin {} address: {}", network, err)));
 
     if blocklist_contains(&address) {
         CheckAddressResponse::Failed
@@ -75,7 +75,9 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 #[ic_cdk::init]
 fn init(arg: KytArg) {
     match arg {
-        KytArg::InitArg(init_arg) => set_config(init_arg.into()),
+        KytArg::InitArg(init_arg) => set_config(Config {
+            network: init_arg.network,
+        }),
         KytArg::UpgradeArg(_) => {
             ic_cdk::trap("cannot init canister state without init args");
         }

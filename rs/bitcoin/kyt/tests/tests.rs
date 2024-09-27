@@ -1,11 +1,12 @@
 use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist, get_tx_cycle_cost, CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs,
-    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, InitArg, KytArg, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE, INITIAL_MAX_RESPONSE_BYTES,
+    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
+    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, InitArg, KytArg,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
@@ -50,7 +51,7 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 impl Setup {
-    fn new(network: Network) -> Setup {
+    fn new(network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         let env = PocketIc::new();
 
@@ -113,7 +114,7 @@ fn decode<'a, T: CandidType + Deserialize<'a>>(result: &'a WasmResult) -> T {
 fn test_check_address() {
     let Setup {
         kyt_canister, env, ..
-    } = Setup::new(Network::Mainnet);
+    } = Setup::new(BtcNetwork::Mainnet);
 
     // Choose an address from the blocklist
     let blocklist_len = blocklist::BTC_ADDRESS_BLOCKLIST.len();
@@ -166,12 +167,12 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin mainnet address")));
 
     // Test a mainnet address against testnet setup
     let Setup {
         kyt_canister, env, ..
-    } = Setup::new(Network::Testnet);
+    } = Setup::new(BtcNetwork::Testnet);
 
     let result = query_candid::<_, (CheckAddressResponse,)>(
         &env,
@@ -181,12 +182,12 @@ fn test_check_address() {
             address: blocklist::BTC_ADDRESS_BLOCKLIST[blocklist_len / 2].to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a testnet address")));
+    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a bitcoin testnet address")));
 }
 
 #[test]
 fn test_check_transaction_passed() {
-    let setup = Setup::new(Network::Mainnet);
+    let setup = Setup::new(BtcNetwork::Mainnet);
     let cycles_before = setup.env.cycle_balance(setup.caller);
 
     let txid =
@@ -290,7 +291,7 @@ fn test_check_transaction_passed() {
 
 #[test]
 fn test_check_transaction_error() {
-    let setup = Setup::new(Network::Mainnet);
+    let setup = Setup::new(BtcNetwork::Mainnet);
     let cycles_before = setup.env.cycle_balance(setup.caller);
     let mut txid =
         Txid::from_str("a80763842edc9a697a2114517cf0c138c5403a761ef63cfad1fa6993fa3475ed")

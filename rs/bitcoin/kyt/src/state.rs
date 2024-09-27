@@ -1,10 +1,12 @@
-use crate::types::InitArg;
-use bitcoin::{Address, Network, Transaction};
+use crate::types::BtcNetwork;
+use bitcoin::{Address, Transaction};
 use candid::{decode_args, encode_args};
-use ic_btc_interface::{Network as BtcNetwork, Txid};
+use candid::{CandidType, Deserialize};
+use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
+use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -128,52 +130,35 @@ impl Drop for FetchGuard {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    pub network: Network,
+    pub network: BtcNetwork,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            network: Network::Bitcoin,
+            network: BtcNetwork::Mainnet,
         }
     }
 }
 
-impl From<InitArg> for Config {
-    fn from(arg: InitArg) -> Self {
-        let network = match arg.network {
-            BtcNetwork::Mainnet => Network::Bitcoin,
-            BtcNetwork::Testnet => Network::Testnet,
-            BtcNetwork::Regtest => Network::Regtest,
-        };
-        Self { network }
-    }
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+pub enum ConfigState {
+    Uninitialized,
+    Initialized(Config),
 }
 
-impl From<&Config> for InitArg {
-    fn from(arg: &Config) -> Self {
-        let network = match arg.network {
-            Network::Bitcoin => BtcNetwork::Mainnet,
-            Network::Testnet => BtcNetwork::Testnet,
-            Network::Regtest => BtcNetwork::Regtest,
-            _ => panic!("unsupported network type: Signet"),
-        };
-        Self { network }
-    }
-}
-
-impl Storable for Config {
+impl Storable for ConfigState {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let buf = encode_args((InitArg::from(self),)).expect("fail to encode config");
+        let buf = encode_args((&self,)).expect("fail to encode config");
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let (config,): (InitArg,) =
+        let (config,): (ConfigState,) =
             decode_args(bytes.as_ref()).expect("failed to decode config bytes");
-        config.into()
+        config
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -188,8 +173,8 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
             MemoryManager::init(DefaultMemoryImpl::default())
     );
-    static CONFIG: RefCell<Cell<Config, StableMemory>> = RefCell::new(
-        Cell::init(config_memory(), Config::default()).expect("failed to initialize stable cell for config")
+    static CONFIG: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(
+        Cell::init(config_memory(), ConfigState::Uninitialized).expect("failed to initialize stable cell for config")
     );
 }
 
@@ -199,10 +184,13 @@ fn config_memory() -> StableMemory {
 
 pub fn set_config(config: Config) {
     CONFIG
-        .with(|c| c.borrow_mut().set(config))
+        .with(|c| c.borrow_mut().set(ConfigState::Initialized(config)))
         .expect("failed to set config");
 }
 
 pub fn get_config() -> Config {
-    CONFIG.with(|c| c.borrow().get().clone())
+    match CONFIG.with(|c| c.borrow().get().clone()) {
+        ConfigState::Uninitialized => panic!("config is uninitialized"),
+        ConfigState::Initialized(config) => config,
+    }
 }
