@@ -135,14 +135,6 @@ pub struct Config {
     pub network: BtcNetwork,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            network: BtcNetwork::Mainnet,
-        }
-    }
-}
-
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
 pub enum ConfigState {
     Uninitialized,
