@@ -1960,11 +1960,6 @@ pub trait Environment: Send + Sync {
     /// This number is the same in all replicas.
     fn insecure_random_u64(&mut self) -> u64;
 
-    /// Returns a random byte array with 32 bytes.
-    ///
-    /// This byte array is the same in all replicas.
-    fn random_byte_array(&mut self) -> [u8; 32];
-
     /// Calls another canister. The return value indicates whether the call can be successfully
     /// initiated. If initiating the call is successful, the call could later be rejected by the
     /// remote canister. In CanisterEnv (the production implementation of this trait), to
@@ -2679,12 +2674,6 @@ pub mod test_helpers {
 
         fn insecure_random_u64(&mut self) -> u64 {
             rand::thread_rng().gen()
-        }
-
-        fn random_byte_array(&mut self) -> [u8; 32] {
-            let mut result = [0_u8; 32];
-            rand::thread_rng().fill_bytes(&mut result[..]);
-            result
         }
 
         async fn call_canister(

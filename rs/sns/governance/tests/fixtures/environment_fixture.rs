@@ -139,16 +139,6 @@ impl Environment for EnvironmentFixture {
             .next_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
-    }
-
     async fn call_canister(
         &self,
         canister_id: CanisterId,

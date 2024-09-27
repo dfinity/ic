@@ -1,6 +1,3 @@
-use crate::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
-};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -39,18 +36,19 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
-            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
-            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
+            Account as AccountProto, AddMaturityRequest, AddMaturityResponse, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
             RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
@@ -6512,10 +6510,6 @@ mod tests {
             }
 
             fn insecure_random_u64(&mut self) -> u64 {
-                unimplemented!();
-            }
-
-            fn random_byte_array(&mut self) -> [u8; 32] {
                 unimplemented!();
             }
 
