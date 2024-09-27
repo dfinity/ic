@@ -4,7 +4,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
 };
-use ic_types::NumInstructions;
 
 use ic_config::flag_status::FlagStatus;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
@@ -96,19 +95,12 @@ fn new_state_machine_with_golden_state_or_panic(setup_config: SetupConfig) -> St
         subnet_id,
         subnet_type,
     } = setup_config;
-    // TODO, remove when this is the value set in the normal IC build This is to
-    // uncover issues in testing that might affect performance in production.
-    // Application subnets have this set to 2 billion.
-    const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2_000_000_000);
-
     let state_machine_builder = StateMachineBuilder::new()
         .with_current_time()
         .with_routing_table(routing_table);
 
-    let mut subnet_config = SubnetConfig::new(subnet_type);
-    subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
     let state_machine_builder = state_machine_builder.with_config(Some(StateMachineConfig::new(
-        subnet_config,
+        SubnetConfig::new(subnet_type),
         hypervisor_config.unwrap_or_default(),
     )));
 

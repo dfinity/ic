@@ -1114,24 +1114,22 @@ mod upgrade {
             .unwrap();
         }
 
-        let orchestrator = orchestrator
-            .manage_installed_canisters(vec![InstalledLedgerSuite {
-                token_symbol: "ckETH".to_string(),
-                ledger: ledger.clone(),
-                index: index.clone(),
-                archives: None,
-            }])
-            .upgrade_ledger_suite_orchestrator(
-                ledger_suite_orchestrator_wasm(),
-                UpgradeArg {
-                    git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
-                    ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
-                    index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
-                    archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
-                    cycles_management: None,
-                    manage_ledger_suites: None,
-                },
-            );
+        let orchestrator = orchestrator.upgrade_ledger_suite_orchestrator(
+            ledger_suite_orchestrator_wasm(),
+            UpgradeArg {
+                git_commit_hash: Some(GIT_COMMIT_HASH_UPGRADE.to_string()),
+                ledger_compressed_wasm_hash: Some(embedded_ledger_wasm_hash.to_string()),
+                index_compressed_wasm_hash: Some(embedded_index_wasm_hash.to_string()),
+                archive_compressed_wasm_hash: Some(embedded_archive_wasm_hash.to_string()),
+                cycles_management: None,
+                manage_ledger_suites: Some(vec![InstalledLedgerSuite {
+                    token_symbol: "ckETH".to_string(),
+                    ledger: ledger.clone(),
+                    index: index.clone(),
+                    archives: None,
+                }]),
+            },
+        );
 
         orchestrator.advance_time_for_upgrade();
         orchestrator.advance_time_for_upgrade();

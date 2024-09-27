@@ -1,5 +1,5 @@
 {
-  "checksum": "d1f3ca2a660ec73decb6d7bedc62826425960e7b0e1dcb235091fc9e3dcfbd3d",
+  "checksum": "c46f43c083a8b78a972929e9bd91605699f7b1c56c2dc6712e4f36d30c69163c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18197,6 +18197,10 @@
               "target": "ic_test_state_machine_client"
             },
             {
+              "id": "ic-transport-types 0.37.1",
+              "target": "ic_transport_types"
+            },
+            {
               "id": "ic-utils 0.37.0",
               "target": "ic_utils"
             },
@@ -18629,6 +18633,10 @@
             {
               "id": "rust_decimal 1.32.0",
               "target": "rust_decimal"
+            },
+            {
+              "id": "rustc-demangle 0.1.23",
+              "target": "rustc_demangle"
             },
             {
               "id": "rustc-hash 1.1.0",
@@ -78893,6 +78901,7 @@
     "ic-response-verification 2.6.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
+    "ic-transport-types 0.37.1",
     "ic-utils 0.37.0",
     "ic-verify-bls-signature 0.6.0",
     "ic-wasm 0.8.4",
@@ -79006,6 +79015,7 @@
     "rusqlite 0.28.0",
     "rust_decimal 1.32.0",
     "rust_decimal_macros 1.32.0",
+    "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
     "rustls 0.23.12",
     "rustls-native-certs 0.7.0",
