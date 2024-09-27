@@ -104,7 +104,7 @@ impl Farm {
             .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{}", group_name);
         let ttl = ttl.map(|ttl| ttl.as_secs() as u32);
-        let spec = spec.add_meta(env, group_base_name);
+        let spec = spec.add_meta(group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
         let rbb = || rb.try_clone().expect("could not clone a request builder");
@@ -448,7 +448,7 @@ pub struct GroupSpec {
 }
 
 impl GroupSpec {
-    pub fn add_meta(mut self, env: &TestEnv, group_base_name: &str) -> Self {
+    pub fn add_meta(mut self, group_base_name: &str) -> Self {
         let mut metadata = GroupMetadata {
             user: None,
             job_schedule: None,
