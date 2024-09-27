@@ -113,7 +113,7 @@ fn node_is_not_created_with_invalid_type() {
         .await;
 
         let (mut payload, node_pks) = prepare_add_node_payload(1);
-        payload.node_type = Some("type1.1".to_string());
+        payload.node_type = Some("type0.11".to_string());
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
