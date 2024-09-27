@@ -14,7 +14,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_types::{xnet::StreamIndex, PrincipalId, SubnetId};
-use prometheus::{Histogram, HistogramVec, IntCounter};
+use prometheus::{Histogram, HistogramVec};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
