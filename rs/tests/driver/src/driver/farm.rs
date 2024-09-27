@@ -487,7 +487,7 @@ impl GroupSpec {
         } else {
             info!(
                 env.logger(),
-                "Defaulting job_schedule to 'manual' since CI_JOB_NAME is not set.", ci_job_name
+                "Defaulting job_schedule to 'manual' since CI_JOB_NAME is not set.",
             );
             metadata.job_schedule = Some(String::from("manual"));
         }
