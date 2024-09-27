@@ -149,6 +149,9 @@ async fn handle_xnet_request(
                 .unwrap());
         }
     };
+    let metrics = ctx.metrics.clone();
+    let log = ctx.log.clone();
+    let certified_stream_store = ctx.certified_stream_store.clone();
 
     ok(tokio::task::spawn_blocking(move || {
         let _permit = owned_permit;
@@ -160,10 +163,10 @@ async fn handle_xnet_request(
                 .map(|pq| pq.as_str())
                 .unwrap_or(""),
         ) {
-            Ok(url) => route_request(url, ctx.certified_stream_store.as_ref(), &ctx.metrics),
+            Ok(url) => route_request(url, certified_stream_store.as_ref(), &metrics),
             Err(e) => {
                 let msg = format!("Invalid URL {}: {}", request.uri(), e);
-                warn!(ctx.log, "{}", msg);
+                warn!(log, "{}", msg);
                 bad_request(msg)
             }
         }
@@ -182,10 +185,11 @@ fn start_server(
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
 ) -> SocketAddr {
+    let _guard = runtime_handle.enter();
+
     let listener = start_tcp_listener(address, &runtime_handle);
     let address = listener.local_addr().expect("Failed to get local addr.");
 
-    let _guard: runtime::EnterGuard<'_> = runtime_handle.enter();
     let ctx = Context {
         log: log.clone(),
         metrics: Arc::clone(&metrics),
@@ -201,14 +205,17 @@ fn start_server(
     let hyper_service =
         hyper::service::service_fn(move |request: Request<Incoming>| router.clone().call(request));
 
-    let server = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+    let http = hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+
     let graceful_shutdown = GracefulShutdown::new();
+
+    let logger = log.clone();
 
     tokio::spawn(async move {
         loop {
             select! {
                 Ok((stream, _peer_addr)) = listener.accept() => {
-                    let log = log.clone();
+                    let logger = logger.clone();
                     let hyper_service = hyper_service.clone();
 
                     #[cfg(test)]
@@ -218,11 +225,11 @@ fn start_server(
                         let _ = registry_client;
 
                         let io = TokioIo::new(stream);
-                        let conn = server.serve_connection_with_upgrades(io, hyper_service);
-                        let conn = graceful_shutdown.watch(conn.into_owned());
+                        let conn = http.serve_connection_with_upgrades(io, hyper_service);
+                        let wrapped = graceful_shutdown.watch(conn.into_owned());
                         tokio::spawn(async move {
-                            if let Err(err) = conn.await {
-                                warn!(log, "failed to serve connection: {err}");
+                            if let Err(err) = wrapped.await {
+                                warn!(logger, "failed to serve connection: {err}");
                             }
                         });
                     }
@@ -237,37 +244,33 @@ fn start_server(
                         ) {
                             Ok(config) => config,
                             Err(err) => {
-                                warn!(log, "Failed to get server config from crypto {err}");
+                                warn!(logger, "Failed to get server config from crypto {err}");
                                 return;
                             }
                         };
-                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
-                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+
                         const ALPN_HTTP2: &[u8; 2] = b"h2";
-
-                        /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
-                        /// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
                         const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
-
                         server_config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+
                         let tls_acceptor =
                             tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
                         match tls_acceptor.accept(stream).await {
                             Ok(tls_stream) => {
                                 metrics.connections.inc();
                                 let io = TokioIo::new(tls_stream);
-                                let conn = server.serve_connection_with_upgrades(io, hyper_service);
-                                let conn = graceful_shutdown.watch(conn.into_owned());
+                                let conn = http.serve_connection_with_upgrades(io, hyper_service);
+                                let wrapped = graceful_shutdown.watch(conn.into_owned());
                                 let metrics = metrics.clone();
                                 tokio::spawn(async move {
-                                    if let Err(err) = conn.await {
-                                        warn!(log, "failed to serve connection: {err}");
+                                    if let Err(err) = wrapped.await {
+                                        warn!(logger, "failed to serve connection: {err}");
                                     }
                                     metrics.connections_dropped.inc();
                                 });
                             }
                             Err(err) => {
-                                warn!(log, "Error setting up TLS stream: {err}");
+                                warn!(logger, "Error setting up TLS stream: {err}");
                             }
                         };
                     }

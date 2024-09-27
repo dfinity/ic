@@ -26,8 +26,10 @@ libc = { workspace = true }
 libflate = { workspace = true }
 memory_tracker = { path = "../memory_tracker" }
 nix = { workspace = true }
+num-traits = { workspace = true }
 prometheus = { workspace = true }
 rayon = { workspace = true }
+rustc-demangle = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }

@@ -210,7 +210,7 @@ fn model_transfer(
     ((from_balance, to_balance), None)
 }
 
-fn send_transfer(
+pub fn send_transfer(
     env: &StateMachine,
     ledger: CanisterId,
     from: Principal,
@@ -534,6 +534,19 @@ pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account
         Nat
     )
     .expect("failed to decode balance_of response")
+    .0
+    .to_u64()
+    .unwrap()
+}
+
+pub fn fee(env: &StateMachine, ledger: CanisterId) -> u64 {
+    Decode!(
+        &env.query(ledger, "icrc1_fee", Encode!().unwrap())
+            .expect("failed to query fee")
+            .bytes(),
+        Nat
+    )
+    .expect("failed to decode icrc1_fee response")
     .0
     .to_u64()
     .unwrap()
@@ -1948,16 +1961,7 @@ where
     .expect("failed to decode balance_of response");
     assert_eq!(token_name_after_upgrade, OTHER_TOKEN_NAME);
 
-    let token_fee_after_upgrade: u64 = Decode!(
-        &env.query(canister_id, "icrc1_fee", Encode!().unwrap())
-            .expect("failed to query fee")
-            .bytes(),
-        Nat
-    )
-    .expect("failed to decode balance_of response")
-    .0
-    .to_u64()
-    .unwrap();
+    let token_fee_after_upgrade = fee(&env, canister_id);
     assert_eq!(token_fee_after_upgrade, NEW_FEE);
 }
 
@@ -3809,7 +3813,26 @@ test_bytes";
             .unwrap()
             .consent_message,
     );
-    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    args.arg = Encode!(&TransferArg {
+        from_subaccount: None,
+        ..transfer_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_transfer_message.replace("\n\n**From:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**From subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -3957,7 +3980,7 @@ test_bytes";
     );
     let expected_message = expected_approve_message
 .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101" )
-.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your Subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
+.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n101010101010101010101010101010101010101010101010101010101010101");
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -3975,6 +3998,27 @@ test_bytes";
         "Thu, 06 May 2021 20:17:10 +0000",
         "Thu, 06 May 2021 21:17:10 +0100",
     );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    args.arg = Encode!(&ApproveArgs {
+        from_subaccount: None,
+        ..approve_args.clone()
+    })
+    .unwrap();
+    args.user_preferences.metadata.utc_offset_minutes = None;
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_approve_message.replace("\n\n**Your account:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" )
+    .replace("\n\n**Transaction fees to be paid by:**\nd2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101","\n\n**Transaction fees to be paid by your subaccount:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",
@@ -4014,7 +4058,7 @@ fn test_icrc21_transfer_from_message(
 
     let expected_transfer_from_message = "# Transfer from a withdrawal account
 
-**Withdrawal Account:**
+**Withdrawal account:**
 d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101
 
 **Account sending the transfer request:**
@@ -4054,6 +4098,27 @@ test_bytes";
     "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
     "\n\n**Subaccount sending the transfer request:**\n303030303030303030303030303030303030303030303030303030303030303",
 );
+    assert_eq!(
+        message, expected_message,
+        "Expected: {}, got: {}",
+        expected_message, message
+    );
+
+    args.arg = Encode!(&TransferFromArgs {
+        spender_subaccount: None,
+        ..transfer_from_args.clone()
+    })
+    .unwrap();
+
+    let message = extract_icrc21_message_string(
+        &icrc21_consent_message(env, canister_id, Principal::anonymous(), args.clone())
+            .unwrap()
+            .consent_message,
+    );
+
+    let expected_message = expected_transfer_from_message.replace(
+        "\n\n**Account sending the transfer request:**\ndjduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303",
+        "\n\n**Subaccount sending the transfer request:**\n0000000000000000000000000000000000000000000000000000000000000000" );
     assert_eq!(
         message, expected_message,
         "Expected: {}, got: {}",

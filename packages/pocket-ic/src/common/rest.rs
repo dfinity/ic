@@ -10,6 +10,7 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 pub type InstanceId = usize;
@@ -460,6 +461,7 @@ pub struct InstanceConfig {
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: bool,
     pub log_level: Option<String>,
+    pub bitcoind_addr: Option<SocketAddr>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -861,6 +863,7 @@ pub struct RawMockCanisterHttpResponse {
     pub subnet_id: RawSubnetId,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -868,6 +871,7 @@ pub struct MockCanisterHttpResponse {
     pub subnet_id: Principal,
     pub request_id: u64,
     pub response: CanisterHttpResponse,
+    pub additional_responses: Vec<CanisterHttpResponse>,
 }
 
 impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
@@ -878,6 +882,7 @@ impl From<RawMockCanisterHttpResponse> for MockCanisterHttpResponse {
             ),
             request_id: raw_mock_canister_http_response.request_id,
             response: raw_mock_canister_http_response.response,
+            additional_responses: raw_mock_canister_http_response.additional_responses,
         }
     }
 }
@@ -890,6 +895,7 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             },
             request_id: mock_canister_http_response.request_id,
             response: mock_canister_http_response.response,
+            additional_responses: mock_canister_http_response.additional_responses,
         }
     }
 }

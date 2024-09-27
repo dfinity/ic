@@ -39,6 +39,19 @@ type HttpResponse = record {
   headers : vec HttpHeader;
   body : blob;
 };
+type RejectionCode = variant {
+  NoError;
+  SysFatal;
+  SysTransient;
+  DestinationInvalid;
+  CanisterReject;
+  CanisterError;
+  Unknown;
+};
+type HttpResponseResult = variant {
+  Ok : HttpResponse;
+  Err : record {RejectionCode; text};
+};
 type TransformArgs = record {
   response : HttpResponse;
   context : blob;
@@ -48,7 +61,7 @@ service : {
   sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
-  canister_http : () -> (HttpResponse);
+  canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
 }

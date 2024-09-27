@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/lock",
     "//rs/nervous_system/proto",
@@ -123,19 +124,6 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_library(
-    name = "governance--test_feature",
-    srcs = LIB_SRCS,
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES + [
-        ":build_script",
-    ],
-)
-
 rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
@@ -160,14 +148,14 @@ rust_canister(
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES + [
         ":build_script",
-        ":governance--test_feature",
+        ":governance",
         "//rs/nervous_system/canisters",
     ],
 )
 
 rust_test(
     name = "governance_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
@@ -195,7 +183,7 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":governance--test_feature",
+        ":governance",
         "//rs/nervous_system/canisters",
     ],
 )
@@ -216,7 +204,7 @@ rust_test_suite_with_extra_srcs(
         "tests/fixtures/environment_fixture.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

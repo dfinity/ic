@@ -2053,6 +2053,19 @@ pub fn get_icp_xdr_conversion_rate(
     Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
 }
 
+pub fn get_average_icp_xdr_conversion_rate(
+    machine: &StateMachine,
+) -> IcpXdrConversionRateCertifiedResponse {
+    let bytes = query(
+        machine,
+        CYCLES_MINTING_CANISTER_ID,
+        "get_average_icp_xdr_conversion_rate",
+        Encode!().unwrap(),
+    )
+    .expect("Failed to retrieve the average conversion rate");
+    Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
+}
+
 pub fn cmc_set_default_authorized_subnetworks(
     machine: &StateMachine,
     subnets: Vec<SubnetId>,

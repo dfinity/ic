@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/nervous_system/clients",
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
@@ -14,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:serde",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
 ]
 
@@ -25,7 +27,7 @@ MACRO_DEPENDENCIES = [
 
 rust_library(
     name = "agent",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_nervous_system_agent",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",

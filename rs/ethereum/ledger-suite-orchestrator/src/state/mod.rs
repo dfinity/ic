@@ -321,6 +321,7 @@ pub struct Canisters {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub struct CanistersMetadata {
+    #[serde(rename = "ckerc20_token_symbol")]
     pub token_symbol: String,
 }
 

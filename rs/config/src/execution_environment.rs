@@ -276,18 +276,6 @@ pub struct Config {
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
 
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::ComputeInitialIDkgDealings` is enabled.
-    pub ic00_compute_initial_i_dkg_dealings: FlagStatus,
-
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::SchnorrPublicKey` is enabled.
-    pub ic00_schnorr_public_key: FlagStatus,
-
-    // TODO(EXC-1633): remove this flag once the feature is enabled by default.
-    /// Indicates whether `Ic00Method::SignWithSchnorr` is enabled.
-    pub ic00_sign_with_schnorr: FlagStatus,
-
     pub max_canister_http_requests_in_flight: usize,
 
     /// The default value of `wasm_memory_limit` in the canister settings:
@@ -296,6 +284,10 @@ pub struct Config {
     ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
     ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
     pub default_wasm_memory_limit: NumBytes,
+
+    // TODO(EXC-1678): remove after release.
+    /// Feature flag to enable/disable allowed viewers for canister log visibility.
+    pub allowed_viewers_feature: FlagStatus,
 }
 
 impl Default for Config {
@@ -364,13 +356,11 @@ impl Default for Config {
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
-            canister_snapshots: FlagStatus::Disabled,
+            canister_snapshots: FlagStatus::Enabled,
             dirty_page_logging: FlagStatus::Disabled,
-            ic00_compute_initial_i_dkg_dealings: FlagStatus::Enabled,
-            ic00_schnorr_public_key: FlagStatus::Enabled,
-            ic00_sign_with_schnorr: FlagStatus::Enabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
+            allowed_viewers_feature: FlagStatus::Disabled,
         }
     }
 }

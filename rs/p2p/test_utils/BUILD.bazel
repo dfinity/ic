@@ -39,6 +39,8 @@ DEPENDENCIES = [
     "@crate_index//:pin-project-lite",
     "@crate_index//:quinn",
     "@crate_index//:quinn-udp",
+    "@crate_index//:rcgen",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:tempfile",

@@ -46,6 +46,7 @@ use candid::{
 };
 pub use ic_cdk::api::management_canister::main::CanisterSettings;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
+use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -54,11 +55,11 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::thread::JoinHandle;
 use std::{
-    fs::File,
+    net::SocketAddr,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 use tracing::{instrument, warn};
 
@@ -71,96 +72,100 @@ const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 const LOCALHOST: &str = "127.0.0.1";
 
 pub struct PocketIcBuilder {
-    config: ExtendedSubnetConfigSet,
+    config: Option<ExtendedSubnetConfigSet>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     state_dir: Option<PathBuf>,
     nonmainnet_features: bool,
     log_level: Option<Level>,
+    bitcoind_addr: Option<SocketAddr>,
 }
 
 #[allow(clippy::new_without_default)]
 impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
-            config: ExtendedSubnetConfigSet::default(),
+            config: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             state_dir: None,
             nonmainnet_features: false,
             log_level: None,
+            bitcoind_addr: None,
         }
+    }
+
+    pub fn new_with_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
+        let mut builder = Self::new();
+        builder.config = Some(config.into());
+        builder
     }
 
     pub fn build(self) -> PocketIc {
         let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIc::from_components(
-            self.config,
+            self.config.unwrap_or_default(),
             server_url,
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
     }
 
     pub async fn build_async(self) -> PocketIcAsync {
         let server_url = self.server_url.unwrap_or_else(crate::start_or_reuse_server);
         PocketIcAsync::from_components(
-            self.config,
+            self.config.unwrap_or_default(),
             server_url,
             self.max_request_time_ms,
             self.state_dir,
             self.nonmainnet_features,
             self.log_level,
+            self.bitcoind_addr,
         )
         .await
     }
 
-    pub fn with_server_url(self, server_url: Url) -> Self {
-        Self {
-            server_url: Some(server_url),
-            ..self
-        }
+    pub fn with_server_url(mut self, server_url: Url) -> Self {
+        self.server_url = Some(server_url);
+        self
     }
 
-    pub fn with_max_request_time_ms(self, max_request_time_ms: Option<u64>) -> Self {
-        Self {
-            max_request_time_ms,
-            ..self
-        }
+    pub fn with_max_request_time_ms(mut self, max_request_time_ms: Option<u64>) -> Self {
+        self.max_request_time_ms = max_request_time_ms;
+        self
     }
 
-    pub fn with_state_dir(self, state_dir: PathBuf) -> Self {
-        Self {
-            state_dir: Some(state_dir),
-            ..self
-        }
+    pub fn with_state_dir(mut self, state_dir: PathBuf) -> Self {
+        self.state_dir = Some(state_dir);
+        self
     }
 
-    pub fn with_nonmainnet_features(self, nonmainnet_features: bool) -> Self {
-        Self {
-            nonmainnet_features,
-            ..self
-        }
+    pub fn with_nonmainnet_features(mut self, nonmainnet_features: bool) -> Self {
+        self.nonmainnet_features = nonmainnet_features;
+        self
     }
 
-    pub fn with_log_level(self, log_level: Level) -> Self {
+    pub fn with_log_level(mut self, log_level: Level) -> Self {
+        self.log_level = Some(log_level);
+        self
+    }
+
+    pub fn with_bitcoind_addr(self, bitcoind_addr: SocketAddr) -> Self {
         Self {
-            log_level: Some(log_level),
+            bitcoind_addr: Some(bitcoind_addr),
             ..self
         }
     }
 
     /// Add an empty NNS subnet
-    pub fn with_nns_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_nns_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.nns = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an NNS subnet loaded form the given state directory. Note that the provided path must
@@ -196,93 +201,90 @@ impl PocketIcBuilder {
     /// ```sh
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
-    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_nns_state(mut self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.nns = Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id));
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty sns subnet
-    pub fn with_sns_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                sns: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_sns_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.sns = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
+
     /// Add an empty internet identity subnet
-    pub fn with_ii_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                ii: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_ii_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.ii = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty fiduciary subnet
-    pub fn with_fiduciary_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                fiduciary: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_fiduciary_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.fiduciary = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty bitcoin subnet
-    pub fn with_bitcoin_subnet(self) -> Self {
-        Self {
-            config: ExtendedSubnetConfigSet {
-                bitcoin: Some(SubnetSpec::default()),
-                ..self.config
-            },
-            ..self
-        }
+    pub fn with_bitcoin_subnet(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.bitcoin = Some(SubnetSpec::default());
+        self.config = Some(config);
+        self
     }
 
     /// Add an empty generic system subnet
     pub fn with_system_subnet(mut self) -> Self {
-        self.config.system.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.system.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     /// Add an empty generic application subnet
     pub fn with_application_subnet(mut self) -> Self {
-        self.config.application.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.application.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     /// Add an empty verified application subnet
     pub fn with_verified_application_subnet(mut self) -> Self {
-        self.config.verified_application.push(SubnetSpec::default());
+        let mut config = self.config.unwrap_or_default();
+        config.verified_application.push(SubnetSpec::default());
+        self.config = Some(config);
         self
     }
 
     pub fn with_benchmarking_application_subnet(mut self) -> Self {
-        self.config
+        let mut config = self.config.unwrap_or_default();
+        config
             .application
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self.config = Some(config);
         self
     }
 
     pub fn with_benchmarking_system_subnet(mut self) -> Self {
-        self.config
+        let mut config = self.config.unwrap_or_default();
+        config
             .system
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self.config = Some(config);
         self
     }
 
     pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
-        self.config = self.config.with_dts_flag(dts_flag);
+        let config = self.config.unwrap_or_default().with_dts_flag(dts_flag);
+        self.config = Some(config);
         self
     }
 }
@@ -306,47 +308,6 @@ impl PocketIc {
         self.pocket_ic.instance_id
     }
 
-    /// Creates a new PocketIC instance with the specified subnet config.
-    /// The server is started if it's not already running.
-    pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
-    /// (`None` means that there is no timeout).
-    /// The server is started if it's not already running.
-    pub fn from_config_and_max_request_time(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        max_request_time_ms: Option<u64>,
-    ) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None)
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and server url.
-    /// This function is intended for advanced users who start the server manually.
-    pub fn from_config_and_server_url(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
-    ) -> Self {
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-    }
-
     pub(crate) fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
@@ -354,6 +315,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -373,6 +335,7 @@ impl PocketIc {
                 state_dir,
                 nonmainnet_features,
                 log_level,
+                bitcoind_addr,
             )
             .await
         });
@@ -870,6 +833,13 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.get_subnet(canister_id).await })
     }
 
+    /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async { self.pocket_ic.get_subnet_metrics(subnet_id).await })
+    }
+
     fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
@@ -1296,32 +1266,34 @@ pub fn start_or_reuse_server() -> Url {
             .unwrap_or_else(|_| panic!("Invalid string path for {path:?}")),
     };
 
-    if !Path::new(&bin_path).exists() {
+    if !Path::new(&bin_path).is_file() {
+        let is_dir = if Path::new(&bin_path).is_dir() {
+            " (this is a directory, but it should be a binary file)"
+        } else {
+            ""
+        };
         panic!("
 Could not find the PocketIC binary.
 
-The PocketIC binary could not be found at {:?}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
+The PocketIC binary could not be found at {:?}{}. Please specify the path to the binary with the POCKET_IC_BIN environment variable, \
 or place it in your current working directory (you are running PocketIC from {:?}).
 
 To download the binary, please visit https://github.com/dfinity/pocketic."
-, &bin_path, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+, &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
-    let started_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.started", parent_pid));
-    if create_file_atomically(started_file_path).is_ok() {
-        let mut cmd = Command::new(PathBuf::from(bin_path));
-        cmd.arg("--pid").arg(parent_pid.to_string());
-        if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
-            cmd.stdout(std::process::Stdio::null());
-            cmd.stderr(std::process::Stdio::null());
-        }
-        cmd.spawn().expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    cmd.arg("--pid").arg(parent_pid.to_string());
+    if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
     }
+    cmd.spawn()
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path));
 
-    let start = Instant::now();
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
             if port_string.contains("\n") {
@@ -1332,18 +1304,6 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
                 break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
         }
-        if start.elapsed() > Duration::from_secs(10) {
-            panic!("Failed to start PocketIC service in time");
-        }
         std::thread::sleep(Duration::from_millis(20));
     }
-}
-
-// Ensures atomically that this file was created freshly, and gives an error otherwise.
-fn create_file_atomically<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
-    File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&file_path)
 }

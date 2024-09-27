@@ -1,23 +1,23 @@
 use std::{fmt, sync::Arc, time::Duration};
 
-use anyhow::{anyhow, Error};
+use anyhow::{anyhow, Context, Error};
 use axum::{
     body::Body,
-    extract::State,
-    http::{Request, StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
     Extension,
 };
 use bytes::Bytes;
-use http::header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH};
-use http::{response, Version};
+use http::{
+    header::{HeaderMap, CACHE_CONTROL, CONTENT_LENGTH},
+    response, Version,
+};
+use ic_bn_lib::http::body::buffer_body;
 use moka::future::{Cache as MokaCache, CacheBuilder as MokaCacheBuilder};
 
-use crate::{
-    http::{read_streaming_body, AxumResponse},
-    routes::{ApiError, ErrorCause, RequestContext},
-};
+use crate::routes::{ApiError, ErrorCause, RequestContext};
 
 // A list of possible Cache-Control directives that ask us not to cache the response
 const SKIP_CACHE_DIRECTIVES: &[&str] = &["no-store", "no-cache", "max-age=0"];
@@ -57,7 +57,7 @@ pub enum CacheStatus {
 
 // Injects itself into a given response to be accessible by middleware
 impl CacheStatus {
-    fn with_response(self, mut resp: AxumResponse) -> AxumResponse {
+    fn with_response(self, mut resp: Response) -> Response {
         resp.extensions_mut().insert(self);
         resp
     }
@@ -150,7 +150,7 @@ impl Cache {
     }
 
     // Looks up the request in the cache
-    async fn lookup(&self, ctx: &RequestContext) -> Option<AxumResponse> {
+    async fn lookup(&self, ctx: &RequestContext) -> Option<Response> {
         let item = match self.cache.get(ctx).await {
             Some(v) => v,
             None => return None,
@@ -163,11 +163,7 @@ impl Cache {
 
         *builder.headers_mut().unwrap() = item.headers;
 
-        Some(
-            builder
-                .body(axum::body::boxed(Body::from(item.body)))
-                .unwrap(),
-        )
+        Some(builder.body(Body::from(item.body)).unwrap())
     }
 
     pub fn size(&self) -> u64 {
@@ -204,8 +200,8 @@ fn extract_content_length(resp: &Response) -> Result<Option<u64>, Error> {
 pub async fn cache_middleware(
     State(cache): State<Arc<Cache>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    request: Request<Body>,
-    next: Next<Body>,
+    request: Request,
+    next: Next,
 ) -> Result<impl IntoResponse, ApiError> {
     let bypass_reason = (|| {
         // Skip cache if there's a nonce
@@ -266,13 +262,15 @@ pub async fn cache_middleware(
 
     // Buffer entire response body to be able to cache it
     let (parts, body) = response.into_parts();
-    let body = read_streaming_body(body, body_size as usize).await?;
+    let body = buffer_body(body, body_size as usize, Duration::from_secs(60))
+        .await
+        .context("unable to read body")?;
 
     // Insert the response into the cache
     cache.store(ctx, &parts, body.clone()).await;
 
     // Reconstruct the response from components
-    let response = Response::from_parts(parts, axum::body::boxed(Body::from(body)));
+    let response = Response::from_parts(parts, Body::from(body));
 
     Ok(CacheStatus::Miss.with_response(response))
 }

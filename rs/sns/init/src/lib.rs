@@ -44,6 +44,7 @@ use std::{
     string::ToString,
 };
 
+mod create_service_nervous_system;
 pub mod distributions;
 pub mod pb;
 
@@ -562,25 +563,6 @@ impl SnsInitPayload {
         Ok(governance)
     }
 
-    #[cfg(feature = "test")]
-    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
-        // Testing has hardcoded the public key of principal
-        // jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe
-        // for the button to retrieve tokens.
-        let tester = "jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe";
-        let principal = PrincipalId::from_str(tester).unwrap().0;
-        let account = Account {
-            owner: principal,
-            subaccount: None,
-        };
-        vec![(account, /* 10k tokens */ 10_000 * /* E8 */ 100_000_000)]
-    }
-
-    #[cfg(not(feature = "test"))]
-    fn maybe_test_balances(&self) -> Vec<(Account, u64)> {
-        vec![]
-    }
-
     /// Construct the params used to initialize a SNS Ledger canister.
     fn ledger_init_args(
         &self,
@@ -630,9 +612,6 @@ impl SnsInitPayload {
         for (account, amount) in self.get_all_ledger_accounts(sns_canister_ids)? {
             payload_builder = payload_builder.with_initial_balance(account, amount);
         }
-        for (account, amount) in self.maybe_test_balances() {
-            payload_builder = payload_builder.with_initial_balance(account, amount);
-        }
         Ok(LedgerArgument::Init(payload_builder.build()))
     }
 
@@ -665,7 +644,6 @@ impl SnsInitPayload {
             swap_canister_id: Some(sns_canister_ids.swap),
             dapp_canister_ids,
             archive_canister_ids: vec![],
-            latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
         }

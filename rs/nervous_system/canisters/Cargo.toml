@@ -12,8 +12,8 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+candid = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common = { path = "../common" }
