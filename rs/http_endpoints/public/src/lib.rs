@@ -110,8 +110,10 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::{Receiver, UnboundedSender},
-    sync::watch,
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch, OnceCell,
+    },
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
@@ -166,7 +168,7 @@ fn start_server_initialization(
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -207,7 +209,7 @@ fn start_server_initialization(
         )
         .await;
         if let Some(delegation) = loaded_delegation {
-            *delegation_from_nns.write().unwrap() = Some(delegation);
+            let _ = delegation_from_nns.set(delegation);
         }
         metrics
             .health_status_transitions_total
@@ -294,7 +296,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
@@ -316,7 +318,6 @@ pub fn start_server(
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
 
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));

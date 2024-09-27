@@ -38,12 +38,8 @@ use ic_types::{
     CanisterId,
 };
 use serde_cbor::Value as CBOR;
-use std::{
-    collections::BTreeMap,
-    convert::Infallible,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
+use tokio::sync::OnceCell;
 use tokio_util::time::FutureExt;
 use tower::{util::BoxCloneService, ServiceBuilder};
 
@@ -64,7 +60,7 @@ pub(crate) enum CallV3Response {
 
 struct SynchronousCallHandlerState {
     ingress_watcher_handle: IngressWatcherHandle,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     metrics: HttpHandlerMetrics,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_message_certificate_timeout_seconds: u64,
@@ -135,7 +131,7 @@ pub(crate) fn new_router(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Router {
     let call_service = SynchronousCallHandlerState {
@@ -160,7 +156,7 @@ pub fn new_service(
     ingress_watcher_handle: IngressWatcherHandle,
     metrics: HttpHandlerMetrics,
     ingress_message_certificate_timeout_seconds: u64,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> BoxCloneService<Request<Body>, Response, Infallible> {
     let router = new_router(
@@ -206,7 +202,7 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+            let delegation_from_nns = delegation_from_nns.get().cloned();
             let signature = certification.signed.signature.signature.get().0;
 
             return CallV3Response::Certificate(Certificate {
@@ -312,7 +308,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {
