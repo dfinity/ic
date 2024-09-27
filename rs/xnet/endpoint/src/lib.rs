@@ -36,9 +36,6 @@ pub struct XNetEndpointMetrics {
     pub slice_payload_size: Histogram,
     /// Status 200 response size in bytes, by resource.
     pub response_size: HistogramVec,
-
-    pub connections: IntCounter,
-    pub connections_dropped: IntCounter,
 }
 
 const METRIC_REQUEST_DURATION: &str = "xnet_endpoint_request_duration_seconds";
@@ -55,10 +52,6 @@ const XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS: usize = 4;
 impl XNetEndpointMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            connections: metrics_registry.int_counter("xnet_conns_total", "Total number of conns."),
-            connections_dropped: metrics_registry
-                .int_counter("xnet_conns_dropped_total", "Total number of conns."),
-
             request_duration: metrics_registry.histogram_vec(
                 METRIC_REQUEST_DURATION,
                 "The time it took to serve an API request, by resource and response status",
@@ -257,16 +250,13 @@ fn start_server(
                             tokio_rustls::TlsAcceptor::from(Arc::new(server_config));
                         match tls_acceptor.accept(stream).await {
                             Ok(tls_stream) => {
-                                metrics.connections.inc();
                                 let io = TokioIo::new(tls_stream);
                                 let conn = http.serve_connection_with_upgrades(io, hyper_service);
                                 let wrapped = graceful_shutdown.watch(conn.into_owned());
-                                let metrics = metrics.clone();
                                 tokio::spawn(async move {
                                     if let Err(err) = wrapped.await {
                                         warn!(logger, "failed to serve connection: {err}");
                                     }
-                                    metrics.connections_dropped.inc();
                                 });
                             }
                             Err(err) => {
