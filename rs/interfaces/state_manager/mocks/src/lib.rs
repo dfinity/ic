@@ -1,7 +1,7 @@
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError,
-    StateManager, StateManagerResult, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager,
+    StateManagerResult, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{

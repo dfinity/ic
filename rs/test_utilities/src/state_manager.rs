@@ -4,10 +4,9 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
-    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
-    StateManagerResult, StateReader, TransientStateHashError::*, CERT_ANY, CERT_CERTIFIED,
-    CERT_UNCERTIFIED,
+    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
+    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    TransientStateHashError::*,
 };
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
@@ -41,13 +40,6 @@ struct Snapshot {
 impl Snapshot {
     fn make_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
         Labeled::new(self.height, self.state.clone())
-    }
-
-    fn certification_mask(&self) -> CertificationMask {
-        match self.certification {
-            Some(_) => CERT_CERTIFIED,
-            None => CERT_UNCERTIFIED,
-        }
     }
 }
 

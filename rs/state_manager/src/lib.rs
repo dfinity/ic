@@ -32,9 +32,9 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
-    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
-    StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
+    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    TransientStateHashError::*,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -2406,17 +2406,24 @@ impl StateManagerImpl {
     /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
     ///   0 even if no states were committed yet.
     /// * Sorted in ascending order.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
+    #[allow(dead_code)]
+    pub fn list_state_heights(
+        &self,
+        cert_mask: ic_interfaces_state_manager::CertificationMask,
+    ) -> Vec<Height> {
         let _timer = self
             .metrics
             .api_call_duration
             .with_label_values(&["list_state_heights"])
             .start_timer();
 
-        fn matches(cert: Option<&Certification>, mask: CertificationMask) -> bool {
+        fn matches(
+            cert: Option<&Certification>,
+            mask: ic_interfaces_state_manager::CertificationMask,
+        ) -> bool {
             match cert {
-                Some(_) => mask.is_set(CERT_CERTIFIED),
-                None => mask.is_set(CERT_UNCERTIFIED),
+                Some(_) => mask.is_set(ic_interfaces_state_manager::CERT_CERTIFIED),
+                None => mask.is_set(ic_interfaces_state_manager::CERT_UNCERTIFIED),
             }
         }
 
