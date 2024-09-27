@@ -18,9 +18,10 @@ use std::str::FromStr;
 /// assert_eq!(address.into_bytes(), [0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97, 0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48, 0x8d]);
 /// ```
 ///
-/// Instantiate an address from the raw bytes:
+/// Instantiate an address from raw bytes:
 /// ```
 /// let address = ic_ethereum_types::Address::new([0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97, 0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48, 0x8d]);
+/// assert_eq!(address.to_string(), "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D");
 /// ```
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
@@ -40,7 +41,6 @@ impl AsRef<[u8]> for Address {
 }
 
 impl Address {
-
     /// Ethereum zero address.
     ///
     /// ```
@@ -73,6 +73,7 @@ impl UpperHex for Address {
     }
 }
 
+/// Parse an address from a 32-byte array with left zero padding.
 impl TryFrom<&[u8; 32]> for Address {
     type Error = String;
 
@@ -121,10 +122,9 @@ impl fmt::Debug for Address {
     }
 }
 
+/// Display address using [EIP-55](https://eips.ethereum.org/EIPS/eip-55).
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Display address using EIP-55
-        // https://eips.ethereum.org/EIPS/eip-55
         let mut addr_chars = [0u8; 20 * 2];
         hex::encode_to_slice(self.0, &mut addr_chars)
             .expect("bug: failed to encode an address as hex");
