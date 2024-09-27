@@ -207,7 +207,7 @@ fn update_mainnet_canisters_bzl_file(
 
     // Write the new content back to the file
     let file = File::create(canisters_json)?;
-    serde_json::to_writer(file, &m).unwrap();
+    serde_json::to_writer_pretty(file, &m).unwrap();
 
     Ok(())
 }
