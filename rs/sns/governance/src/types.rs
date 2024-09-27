@@ -2526,7 +2526,7 @@ impl From<NeuronRecipes> for Vec<NeuronRecipe> {
 
 pub mod test_helpers {
     use super::*;
-    use rand::{Rng, RngCore};
+    use rand::Rng;
     use std::{
         borrow::BorrowMut,
         collections::HashMap,
