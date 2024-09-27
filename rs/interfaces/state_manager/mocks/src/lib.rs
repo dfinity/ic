@@ -46,11 +46,6 @@ mock! {
 
         fn deliver_state_certification(&self, certification: Certification);
 
-        fn list_state_heights(
-            &self,
-            cert_mask: CertificationMask,
-        ) -> Vec<Height>;
-
         fn remove_states_below(&self, height: Height);
 
         fn remove_inmemory_states_below(&self, height: Height);

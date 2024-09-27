@@ -96,9 +96,10 @@ impl FakeStateManager {
     }
 }
 
+const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 fn initial_state() -> Labeled<Arc<ReplicatedState>> {
     Labeled::new(
-        Height::new(0),
+        INITIAL_STATE_HEIGHT,
         Arc::new(ReplicatedState::new(
             subnet_test_id(1),
             SubnetType::Application,
@@ -196,21 +197,6 @@ impl StateManager for FakeStateManager {
         }
     }
 
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        self.states
-            .read()
-            .unwrap()
-            .iter()
-            .filter_map(|snapshot| {
-                if cert_mask.is_set(snapshot.certification_mask()) {
-                    Some(snapshot.height)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
     fn remove_states_below(&self, height: Height) {
         self.states
             .write()
@@ -259,9 +245,11 @@ impl StateReader for FakeStateManager {
     type State = ReplicatedState;
 
     fn latest_state_height(&self) -> Height {
-        *StateManager::list_state_heights(self, CERT_ANY)
-            .last()
+        self.states
+            .read()
             .unwrap()
+            .last()
+            .map_or(INITIAL_STATE_HEIGHT, |snap| snap.height)
     }
 
     // No certification support in FakeStateManager
@@ -680,10 +668,6 @@ impl StateManager for RefMockStateManager {
             .read()
             .unwrap()
             .deliver_state_certification(certification)
-    }
-
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        self.mock.read().unwrap().list_state_heights(cert_mask)
     }
 
     fn remove_states_below(&self, height: Height) {
