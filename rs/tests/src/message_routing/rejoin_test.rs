@@ -197,6 +197,8 @@ pub async fn store_and_read_stable(
     universal_canister: &UniversalCanister<'_>,
 ) {
     let mut attempts = 1;
+    // There seem to be situations where we need to retry this, especially after the subnet just unstalled itself and
+    // a rejoining node reports healthy again. Not 100% clear why that is.
     while let Err(err) = universal_canister.try_store_to_stable(0, message).await {
         if attempts >= STORE_TO_STABLE_RETRIES {
             panic!("Failed to write to stable memory.");
