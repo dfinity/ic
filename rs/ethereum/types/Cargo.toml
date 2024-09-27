@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 hex = { workspace = true }
-ic-sha3 = { version = "1.0.0" }
+ic-sha3 = { workspace = true }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 serde = { workspace = true }
