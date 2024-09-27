@@ -131,6 +131,7 @@ impl ThresholdSignerMetrics {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct IDkgPayloadMetrics {
     payload_metrics: IntGaugeVec,
     payload_errors: IntCounterVec,

@@ -203,12 +203,12 @@ impl Registry {
                 value: dkg_response.subnet_threshold_public_key.encode_to_vec(),
             };
 
-            mutations.push(new_subnet_threshold_signing_pubkey_mutation);
+            // mutations.push(new_subnet_threshold_signing_pubkey_mutation);
 
-            cup_contents.initial_ni_dkg_transcript_low_threshold =
-                Some(dkg_response.low_threshold_transcript_record);
-            cup_contents.initial_ni_dkg_transcript_high_threshold =
-                Some(dkg_response.high_threshold_transcript_record);
+            // cup_contents.initial_ni_dkg_transcript_low_threshold =
+            //     Some(dkg_response.low_threshold_transcript_record);
+            // cup_contents.initial_ni_dkg_transcript_high_threshold =
+            //     Some(dkg_response.high_threshold_transcript_record);
 
             cup_contents.chain_key_initializations = chain_key_initializations;
 

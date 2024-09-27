@@ -155,6 +155,7 @@ pub(crate) fn validate_payload(
                 registry_version,
                 state_manager,
                 validation_context,
+                current_height,
                 ic_logger::replica_logger::no_op_logger(),
             )?;
             if summary_payload.dkg != expected_summary {

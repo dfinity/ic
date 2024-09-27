@@ -62,15 +62,24 @@ pub fn create_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
     max_dealings_per_block: usize,
+    force_summary_height: Option<Height>,
 ) -> Result<dkg::Payload, PayloadCreationError> {
-    let height = parent.height.increment();
     // Get the last summary from the chain.
     let last_summary_block = pool_reader
         .dkg_summary_block(parent)
         .ok_or(PayloadCreationError::MissingDkgStartBlock)?;
     let last_dkg_summary = &last_summary_block.payload.as_ref().as_summary().dkg;
 
-    if last_dkg_summary.get_next_start_height() == height {
+    let (height, registry_version) = if let Some(height) = force_summary_height {
+        (height, validation_context.registry_version)
+    } else {
+        (
+            parent.height.increment(),
+            last_summary_block.context.registry_version,
+        )
+    };
+
+    if force_summary_height.is_some() || last_dkg_summary.get_next_start_height() == height {
         // Since `height` corresponds to the start of a new DKG interval, we create a
         // new summary.
         return create_summary_payload(
@@ -80,9 +89,10 @@ pub fn create_payload(
             pool_reader,
             last_dkg_summary,
             parent,
-            last_summary_block.context.registry_version,
+            registry_version,
             state_manager,
             validation_context,
+            height,
             logger,
         )
         .map(dkg::Payload::Summary);
@@ -149,6 +159,7 @@ pub(super) fn create_summary_payload(
     registry_version: RegistryVersion,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
+    height: Height,
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
@@ -185,8 +196,6 @@ pub(super) fn create_summary_payload(
             }
         };
     }
-
-    let height = parent.height.increment();
 
     let (mut configs, transcripts_for_new_subnets, initial_dkg_attempts) = compute_remote_dkg_data(
         subnet_id,

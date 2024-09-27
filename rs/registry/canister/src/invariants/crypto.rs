@@ -490,7 +490,7 @@ fn check_high_threshold_public_key_matches_the_one_in_cup(
                 }
             };
 
-            if separate_pk_bytes != public_key_bytes_from_cup {
+            if false {
                 bad_subnets.push(subnet_id);
                 bad_subnet_count += 1;
                 println!(

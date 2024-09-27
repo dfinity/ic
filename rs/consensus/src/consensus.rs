@@ -195,6 +195,21 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
         last_invoked.insert(ConsensusSubcomponent::Recovery, current_time);
 
+        let block_maker = BlockMaker::new(
+            Arc::clone(&time_source) as Arc<_>,
+            replica_config.clone(),
+            Arc::clone(&registry_client),
+            membership.clone(),
+            crypto.clone(),
+            payload_builder.clone(),
+            dkg_pool.clone(),
+            idkg_pool.clone(),
+            state_manager.clone(),
+            stable_registry_version_age,
+            metrics_registry.clone(),
+            logger.clone(),
+        );
+
         ConsensusImpl {
             dkg_key_manager,
             notary: Notary::new(
@@ -225,6 +240,7 @@ impl ConsensusImpl {
                 certification_pool,
                 message_routing.clone(),
                 ingress_selector.clone(),
+                block_maker.clone(),
                 Arc::clone(&time_source),
                 logger.clone(),
                 metrics_registry.clone(),
@@ -250,20 +266,7 @@ impl ConsensusImpl {
                 message_routing.clone(),
                 logger.clone(),
             ),
-            block_maker: BlockMaker::new(
-                Arc::clone(&time_source) as Arc<_>,
-                replica_config.clone(),
-                Arc::clone(&registry_client),
-                membership.clone(),
-                crypto.clone(),
-                payload_builder.clone(),
-                dkg_pool.clone(),
-                idkg_pool.clone(),
-                state_manager.clone(),
-                stable_registry_version_age,
-                metrics_registry.clone(),
-                logger.clone(),
-            ),
+            block_maker,
             validator: Validator::new(
                 replica_config.clone(),
                 membership.clone(),

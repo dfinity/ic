@@ -1,6 +1,7 @@
 use crate::{
     consensus::{
         batch_delivery::deliver_batches,
+        block_maker::subnet_records_for_registry_version,
         metrics::{BatchStats, BlockStats},
     },
     dkg::make_registry_cup,
@@ -25,15 +26,17 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, ConsensusMessage,
-        ConsensusMessageHashable, FinalizationContent, FinalizationShare, HasCommittee, HasHeight,
-        HashedBlock,
+        hashed, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
+        ConsensusMessage, ConsensusMessageHashable, FinalizationContent, FinalizationShare,
+        HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgTag, Signed},
     replica_config::ReplicaConfig,
     Height, ReplicaVersion,
 };
 use std::sync::{Arc, RwLock};
+
+use super::block_maker::BlockMaker;
 
 pub struct Recovery {
     pub(crate) replica_config: ReplicaConfig,
@@ -44,6 +47,7 @@ pub struct Recovery {
     certification_pool: Arc<RwLock<dyn CertificationPool>>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
+    block_maker: BlockMaker,
     time_source: Arc<dyn TimeSource>,
     pub(crate) log: ReplicaLogger,
 }
@@ -59,6 +63,7 @@ impl Recovery {
         certification_pool: Arc<RwLock<dyn CertificationPool>>,
         message_routing: Arc<dyn MessageRouting>,
         ingress_selector: Arc<dyn IngressSelector>,
+        block_maker: BlockMaker,
         time_source: Arc<dyn TimeSource>,
         log: ReplicaLogger,
         _metrics_registry: MetricsRegistry,
@@ -72,6 +77,7 @@ impl Recovery {
             certification_pool,
             message_routing,
             ingress_selector,
+            block_maker,
             time_source,
             log,
         }
@@ -156,17 +162,50 @@ impl Recovery {
             "Created state hash at height {}: {:?}", max_height, state_hash
         );
 
-        registry_cup.content.state_hash = state_hash;
-        let cup_share_content = CatchUpShareContent::from(&registry_cup.content);
+        let Some(parent) = pool.get_finalized_block(max_height) else {
+            error!(self.log, "Couldn't find finalized block.");
+            return Mutations::new();
+        };
+        let parent = hashed::Hashed::new(ic_types::crypto::crypto_hash, parent);
+        let mut context = registry_cup.content.block.get_value().context.clone();
+        context.certified_height = max_height;
+        let registry_version = context.registry_version;
+        let Some(pool_registry_version) = pool.registry_version(max_height) else {
+            error!(self.log, "Couldn't find registry version.");
+            return Mutations::new();
+        };
+        let Some(subnet_records) = subnet_records_for_registry_version(
+            &self.block_maker,
+            pool_registry_version,
+            registry_version,
+        ) else {
+            error!(self.log, "Couldn't create subnet records.");
+            return Mutations::new();
+        };
 
-        let dkg = &registry_cup
-            .content
-            .block
-            .get_value()
-            .payload
-            .as_ref()
-            .as_summary()
-            .dkg;
+        let Some(summary) = self.block_maker.construct_block(
+            pool,
+            context,
+            parent,
+            registry_cup.height(),
+            max_height,
+            Rank(0),
+            &subnet_records,
+            true,
+        ) else {
+            error!(self.log, "Couldn't create a summary.");
+            return Mutations::new();
+        };
+
+        let content = CatchUpContent::new(
+            summary,
+            registry_cup.content.random_beacon.clone(),
+            state_hash,
+            None, //TODO; use correct value
+        );
+        let cup_share_content = CatchUpShareContent::from(&content);
+
+        let dkg = &content.block.get_value().payload.as_ref().as_summary().dkg;
         let high_transcript = dkg.current_transcript(&NiDkgTag::HighThreshold);
         let low_transcript = dkg.current_transcript(&NiDkgTag::LowThreshold);
         let dkg_id = high_transcript.dkg_id;
@@ -196,20 +235,19 @@ impl Recovery {
             ),
         }
 
-        let share =
-            match self
-                .crypto
-                .sign(&registry_cup.content, self.replica_config.node_id, dkg_id)
-            {
-                Ok(signature) => CatchUpPackageShare {
-                    content: cup_share_content.clone(),
-                    signature,
-                },
-                Err(err) => {
-                    error!(self.log, "Couldn't create a signature: {:?}", err);
-                    return Mutations::new();
-                }
-            };
+        let share = match self
+            .crypto
+            .sign(&content, self.replica_config.node_id, dkg_id)
+        {
+            Ok(signature) => CatchUpPackageShare {
+                content: cup_share_content.clone(),
+                signature,
+            },
+            Err(err) => {
+                error!(self.log, "Couldn't create a signature: {:?}", err);
+                return Mutations::new();
+            }
+        };
 
         let mut mutations = Mutations::new();
 
@@ -247,12 +285,12 @@ impl Recovery {
                     ));
                 }
 
-                if let Err(err) = self.membership.node_belongs_to_threshold_committee(
-                    share.signature.signer,
-                    max_height,
-                    CatchUpPackage::committee(),
-                ) {
-                    info!(self.log, "CUP share membership check failed: {:?}", err);
+                if high_transcript
+                    .committee
+                    .position(share.signature.signer)
+                    .is_none()
+                {
+                    info!(self.log, "CUP share membership check failed");
                     return Some(ChangeAction::HandleInvalid(
                         share.into_message(),
                         "CatchUpPackageShare committee check failed".to_string(),
@@ -263,7 +301,7 @@ impl Recovery {
                     &Signed {
                         content: CatchUpContent::from_share_content(
                             share.content.clone(),
-                            registry_cup.content.block.get_value().clone(),
+                            content.block.get_value().clone(),
                         ),
                         signature: share.signature.clone(),
                     },
@@ -300,7 +338,7 @@ impl Recovery {
             .map(|share| Signed {
                 content: CatchUpContent::from_share_content(
                     share.content,
-                    registry_cup.content.block.get_value().clone(),
+                    content.block.get_value().clone(),
                 ),
                 signature: share.signature,
             })
