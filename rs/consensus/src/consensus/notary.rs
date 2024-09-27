@@ -37,7 +37,8 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-         BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent, NotarizationShare, RandomBeacon, Rank
+        BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent,
+        NotarizationShare, RandomBeacon, Rank,
     },
     replica_config::ReplicaConfig,
     Height,
