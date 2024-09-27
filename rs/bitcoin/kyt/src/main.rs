@@ -84,6 +84,14 @@ fn init(arg: KytArg) {
     }
 }
 
+#[ic_cdk::post_upgrade]
+fn post_upgrade(arg: KytArg) {
+    match arg {
+        KytArg::UpgradeArg(_) => (),
+        KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
+    }
+}
+
 fn main() {}
 
 #[test]
