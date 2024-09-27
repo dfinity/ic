@@ -61,8 +61,8 @@ fn test_why_list_neurons_expensive() {
         &mut instrumented_governance_wasm,
         ic_wasm::instrumentation::Config {
             trace_only_funcs: vec![],
-            start_address: Some(start_address as i32),
-            page_limit: Some(page_limit as i32),
+            start_address: Some(i64::try_from(start_address).unwrap()),
+            page_limit: Some(i32::try_from(page_limit).unwrap()),
         },
     )
     .unwrap();
