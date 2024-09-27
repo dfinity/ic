@@ -36,8 +36,8 @@ package(default_visibility = ["//visibility:public"])
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//packages/ic-ethereum-types",
             "//rs/crypto/sha2",
-            "//rs/ethereum/types",
             "//rs/rosetta-api/icrc1/index-ng",
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rust_canisters/http_types",

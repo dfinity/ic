@@ -17,10 +17,10 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/ic-ethereum-types",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-        "//rs/ethereum/types",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
