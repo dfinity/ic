@@ -232,7 +232,7 @@ fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> St
 
 impl CanisterApiImpl {
     async fn stop_canister(&self, canister: CanisterId) -> Result<(), String> {
-        dfn_core::call(
+        () = dfn_core::call(
             CanisterId::ic_00(),
             "stop_canister",
             candid_one,

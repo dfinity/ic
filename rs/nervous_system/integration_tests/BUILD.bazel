@@ -6,17 +6,23 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
+    "//rs/nns/governance/api",
+    "//rs/nns/sns-wasm",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/tokens_u64",
     "//rs/rosetta-api/ledger_core",
+    "//rs/sns/governance",
+    "//rs/sns/init",
     "//rs/sns/root",
+    "//rs/sns/swap",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -48,32 +54,9 @@ BASE_DEPENDENCIES = [
     ],
 })
 
-# Each target declared in this file may choose either these (release-ready)
-# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
-
-# Currently unused.
-# DEPENDENCIES = BASE_DEPENDENCIES + [
-#     "//rs/sns/init",
-#     "//rs/nns/sns-wasm",
-#     "//rs/nns/handlers/root/impl:root",
-#     "//rs/sns/swap",
-# ] + select({
-#     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
-#     "//conditions:default": [
-#         "//rs/nns/constants",
-#         "//rs/nns/test_utils",
-#         "//rs/nns/gtc",
-#     ],
-# })
-
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/init:init--test_feature",
     "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
-    "//rs/sns/governance:governance--test_feature",
-    "//rs/sns/swap:swap--test_feature",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
