@@ -137,9 +137,9 @@ fn pre_upgrade() {
         if !ledger.is_ready() {
             // This means that migration did not complete and the correct state
             // of the ledger is still in UPGRADES_MEMORY.
-            return
+            return;
         }
-    });    
+    });
 
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
