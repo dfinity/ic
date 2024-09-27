@@ -7,14 +7,14 @@ load("@bazel_skylib//lib:paths.bzl", "paths")
 # and for dependents to override that version.
 def _pocket_ic_mainnet_transition_impl(_settings, _attr):
     return {
-        "//:pocket-ic-variant": "mainnet",
+        "//:pocket-ic-server-variant": "mainnet",
     }
 
 pocket_ic_mainnet_transition = transition(
     implementation = _pocket_ic_mainnet_transition_impl,
     inputs = [],
     outputs = [
-        "//:pocket-ic-variant",
+        "//:pocket-ic-server-variant",
     ],
 )
 

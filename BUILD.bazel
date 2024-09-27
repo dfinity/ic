@@ -103,7 +103,7 @@ test_suite(
 ### Pocket IC
 
 # The pocket-ic server binary. Use this as a test dependency if the test
-# does not require a specific pocket-ic version (see ":pocket-ic-variant"
+# does not require a specific pocket-ic version (see ":pocket-ic-server-variant"
 # for details).
 # By default returns the pocket-ic server from the source tree to ensure
 # consistency within the source tree. See 'pocket_ic_mainnet_test' for
@@ -111,8 +111,8 @@ test_suite(
 alias(
     name = "pocket-ic-server",
     actual = select({
-        ":pocket-ic-variant-mainnet": "//:pocket-ic-mainnet",
-        ":pocket-ic-variant-head": "//rs/pocket_ic_server:pocket-ic-server",
+        ":pocket-ic-server-variant-mainnet": "//:pocket-ic-mainnet",
+        ":pocket-ic-server-variant-head": "//rs/pocket_ic_server:pocket-ic-server",
         "//conditions:default": "//rs/pocket_ic_server:pocket-ic-server",
     }),
 )
@@ -121,24 +121,24 @@ alias(
 # default pocket-ic variant/version (head) is the one as in the
 # source tree.
 string_setting(
-    name = "pocket-ic-variant",
+    name = "pocket-ic-server-variant",
     build_setting_default = "head",
     visibility = ["//visibility:public"],
 )
 
 config_setting(
-    name = "pocket-ic-variant-head",
+    name = "pocket-ic-server-variant-head",
     flag_values = {
-        ":pocket-ic-variant": "head",
+        ":pocket-ic-server-variant": "head",
     },
 )
 
 # A "mainnet" variant of the pocket-ic server which represents a
 # released version of pocket-ic.
 config_setting(
-    name = "pocket-ic-variant-mainnet",
+    name = "pocket-ic-server-variant-mainnet",
     flag_values = {
-        ":pocket-ic-variant": "mainnet",
+        ":pocket-ic-server-variant": "mainnet",
     },
 )
 
