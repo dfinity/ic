@@ -2392,9 +2392,8 @@ impl StateManagerImpl {
         result
     }
 
-    /// Returns the list of heights corresponding to accessible states matching
-    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
-    /// accessible states.
+    /// Returns the list of heights corresponding to snapshots matching
+    /// the mask. E.g. `list_state_heights(CERT_ANY)` will return all snapshots.
     ///
     /// Note that the initial state at height 0 is considered uncertified from
     /// the State Manager point of view.  This is because the protocol requires
