@@ -1,4 +1,4 @@
-use ic_crypto_sha3::Keccak256;
+use ic_sha3::Keccak256;
 use std::vec;
 
 #[test]

@@ -6484,12 +6484,12 @@ dependencies = [
  "ic-cketh-test-utils",
  "ic-config",
  "ic-crypto-secp256k1",
- "ic-crypto-sha3",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ethereum-types",
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types",
  "ic-metrics-encoder",
+ "ic-sha3",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
@@ -7070,8 +7070,8 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
- "ic-crypto-sha3",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-sha3",
  "rand 0.8.5",
  "zeroize",
 ]
@@ -7498,14 +7498,6 @@ name = "ic-crypto-sha2"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-sha2",
-]
-
-[[package]]
-name = "ic-crypto-sha3"
-version = "0.9.0"
-dependencies = [
- "hex",
- "sha3",
 ]
 
 [[package]]
@@ -8111,7 +8103,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-sha3",
+ "ic-sha3",
  "minicbor",
  "minicbor-derive",
  "proptest",
@@ -11423,6 +11415,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sha3"
+version = "1.0.0"
+dependencies = [
+ "hex",
+ "sha3",
+]
+
+[[package]]
 name = "ic-signature-verification"
 version = "0.2.0"
 dependencies = [
@@ -13165,8 +13165,12 @@ dependencies = [
 name = "ic-xnet-endpoint"
 version = "0.9.0"
 dependencies = [
+ "axum 0.7.5",
  "bytes",
- "hyper 0.14.30",
+ "crossbeam-channel",
+ "hyper 1.4.1",
+ "hyper-util",
+ "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -13184,7 +13188,6 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-test-utilities-types",
  "ic-types",
- "ic-xnet-hyper",
  "maplit",
  "prometheus",
  "prost",
@@ -13193,6 +13196,8 @@ dependencies = [
  "serde_json",
  "slog",
  "tokio",
+ "tokio-rustls 0.26.0",
+ "tower 0.4.13",
  "url",
 ]
 
@@ -13200,14 +13205,14 @@ dependencies = [
 name = "ic-xnet-hyper"
 version = "0.9.0"
 dependencies = [
- "hyper 0.14.30",
+ "hyper 1.4.1",
+ "hyper-rustls 0.27.3",
+ "hyper-util",
  "ic-crypto-tls-interfaces",
- "ic-crypto-utils-tls",
- "ic-interfaces-registry",
  "ic-xnet-uri",
- "socket2 0.5.7",
  "tokio",
  "tokio-rustls 0.26.0",
+ "tower 0.4.13",
 ]
 
 [[package]]
@@ -13217,8 +13222,9 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "axum 0.7.5",
- "hyper 0.14.30",
- "ic-async-utils",
+ "http-body-util",
+ "hyper 1.4.1",
+ "hyper-util",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
@@ -13262,6 +13268,7 @@ dependencies = [
  "reqwest 0.12.7",
  "slog",
  "tempfile",
+ "thiserror",
  "tokio",
  "url",
 ]
@@ -13270,7 +13277,7 @@ dependencies = [
 name = "ic-xnet-uri"
 version = "0.9.0"
 dependencies = [
- "http 0.2.12",
+ "http 1.1.0",
  "ic-types",
 ]
 

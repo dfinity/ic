@@ -9,6 +9,8 @@ on:
       - master
       - 'dev-gh-*'
   pull_request:
+    branches-ignore:
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
 
@@ -26,7 +28,6 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   ROOT_PIPELINE_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
@@ -124,7 +125,6 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           # if the PR is labeled with CI_ALL_BAZEL_TARGETS, set RUN_ON_DIFF_ONLY to false
           RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
@@ -260,6 +260,7 @@ jobs:
         env:
           BAZEL_COMMAND: "build"
           RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:

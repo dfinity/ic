@@ -52,8 +52,8 @@ mod eth_get_logs {
     use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
-    use ic_crypto_sha3::Keccak256;
     use ic_ethereum_types::Address;
+    use ic_sha3::Keccak256;
     use std::str::FromStr;
 
     #[test]
