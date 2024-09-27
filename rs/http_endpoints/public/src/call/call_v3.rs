@@ -202,7 +202,7 @@ async fn call_sync_v3(
         tree_and_certificate_for_message(state_reader.clone(), message_id.clone()).await
     {
         if let ParsedMessageStatus::Known(_) = parsed_message_status(&tree, &message_id) {
-            let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+            let delegation_from_nns = delegation_from_nns.get().cloned();
             let signature = certification.signed.signature.signature.get().0;
 
             return CallV3Response::Certificate(Certificate {
@@ -308,7 +308,7 @@ async fn call_sync_v3(
         .with_label_values(&[&status_label])
         .inc();
 
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
     let signature = certification.signed.signature.signature.get().0;
 
     CallV3Response::Certificate(Certificate {
