@@ -460,6 +460,7 @@ impl GroupSpec {
             .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
         let version_file = read_dependency_to_string(version_file_path).unwrap();
         let runtime_args_map = if Path::new(&version_file).exists() {
+            info!(env.logger(), "version_file {} exists.", version_file);
             let volatile_status = std::fs::read_to_string(&version_file)
                 .unwrap_or_else(|e| {
                     panic!("Couldn't read content of the VERSION_FILE file {version_file}: {e:?}")
