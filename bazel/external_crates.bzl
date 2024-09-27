@@ -468,6 +468,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "group": crate.spec(
                 version = "^0.13",
             ),
+            "ic-sha3": crate.spec(
+                version = "^1.0.0",
+            ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
             ),

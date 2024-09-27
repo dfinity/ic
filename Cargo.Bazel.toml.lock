@@ -3133,6 +3133,7 @@ dependencies = [
  "ic-http-gateway",
  "ic-metrics-encoder",
  "ic-response-verification",
+ "ic-sha3",
  "ic-stable-structures",
  "ic-test-state-machine-client",
  "ic-transport-types",
@@ -5340,6 +5341,15 @@ dependencies = [
  "sha2 0.10.8",
  "thiserror",
  "urlencoding",
+]
+
+[[package]]
+name = "ic-sha3"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3715f0f4370e8ce6aa9805b81e915ef4420c9dfb5209c71489c27e6f98bd5d65"
+dependencies = [
+ "sha3",
 ]
 
 [[package]]

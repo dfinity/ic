@@ -8,7 +8,7 @@ def _did_git_test_impl(ctx):
 
 set -xeuo pipefail
 
-if [[ $OVERRIDE_DIDC_CHECK == "true" ]]; then
+if [[ ${{OVERRIDE_DIDC_CHECK:-}} == "true" ]]; then
     echo "Override didc check requested. Skipping didc_check."
     exit 0
 fi

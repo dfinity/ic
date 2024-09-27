@@ -1,5 +1,5 @@
 {
-  "checksum": "d15598d9e188b94da2e7102ff73e8a142a27f5e5d9299cb74182c6e6302a0188",
+  "checksum": "dea2cec52d85c89d8e36fa4f4cc48deb5a55e8e1b39beac1b186a5a6051ae544",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18188,6 +18188,10 @@
               "target": "ic_response_verification"
             },
             {
+              "id": "ic-sha3 1.0.0",
+              "target": "ic_sha3"
+            },
+            {
               "id": "ic-stable-structures 0.6.5",
               "target": "ic_stable_structures"
             },
@@ -30444,6 +30448,53 @@
         "Apache-2.0"
       ],
       "license_file": null
+    },
+    "ic-sha3 1.0.0": {
+      "name": "ic-sha3",
+      "version": "1.0.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-sha3/1.0.0/download",
+          "sha256": "3715f0f4370e8ce6aa9805b81e915ef4420c9dfb5209c71489c27e6f98bd5d65"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_sha3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_sha3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "sha3 0.10.8",
+              "target": "sha3"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "ic-stable-structures 0.6.5": {
       "name": "ic-stable-structures",
@@ -79375,6 +79426,7 @@
     "ic-http-gateway 0.0.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.6.0",
+    "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.37.1",
