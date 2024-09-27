@@ -48,18 +48,16 @@ def _run_system_test(ctx):
         if value.startswith("$"):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
-    env = dict(env.items() + [
-        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
-    ])
+    env |= {
+        "VOLATILE_STATUS_FILE_PATH": ctx.file.volatile_status_file.short_path,
+    }
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
 
-    # version_file_path contains the "direct" path to the volatile status file.
-    # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path, ctx.file._k8sconfig])]
+    runtime_deps = [depset([ctx.file.volatile_status_file, ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -99,7 +97,7 @@ run_system_test = rule(
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
-        "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
+        "volatile_status_file": attr.label(allow_single_file = True, default = "//bazel:volatile_status_file"),
     },
 )
 

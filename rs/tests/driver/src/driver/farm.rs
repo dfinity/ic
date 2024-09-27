@@ -456,25 +456,15 @@ impl GroupSpec {
         };
 
         // Acquire bazel's volatile status containing key value pairs like USER and CI_JOB_NAME:
-        let version_file_path = std::env::var("VERSION_FILE_PATH")
-            .expect("Expected the environment variable VERSION_FILE_PATH to be defined!");
-        info!(env.logger(), "version_file_path='{}'", version_file_path);
-        let version_file = read_dependency_to_string(version_file_path).unwrap();
-        info!(env.logger(), "version_file='{}'", version_file);
-        let runtime_args_map = if Path::new(&version_file).exists() {
-            info!(env.logger(), "version_file {} exists.", version_file);
-            let volatile_status = std::fs::read_to_string(&version_file)
-                .unwrap_or_else(|e| {
-                    panic!("Couldn't read content of the VERSION_FILE file {version_file}: {e:?}")
-                })
-                .trim_end()
-                .to_string();
-            info!(env.logger(), "volatile_status='{}'", volatile_status);
-            parse_volatile_status_file(volatile_status)
-        } else {
-            warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
-            HashMap::new()
-        };
+        let volatile_status_file_path = std::env::var("VOLATILE_STATUS_FILE_PATH")
+            .expect("Expected the environment variable VOLATILE_STATUS_FILE_PATH to be defined!");
+        let volatile_status = read_dependency_to_string(&volatile_status_file_path)
+            .unwrap_or_else(|e| {
+                panic!("Couldn't read content of the volatile status file {volatile_status_file_path}: {e:?}")
+            })
+            .trim_end()
+            .to_string();
+        let runtime_args_map = parse_volatile_status_file(volatile_status);
 
         if let Some(user) = runtime_args_map.get("USER") {
             metadata.user = Some(String::from(user));
@@ -483,16 +473,8 @@ impl GroupSpec {
         }
 
         if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
-            info!(
-                env.logger(),
-                "Setting job_schedule to CI_JOB_NAME='{}'.", ci_job_name
-            );
             metadata.job_schedule = Some(String::from(ci_job_name));
         } else {
-            info!(
-                env.logger(),
-                "Defaulting job_schedule to 'manual' since CI_JOB_NAME is not set.",
-            );
             metadata.job_schedule = Some(String::from("manual"));
         }
         self.metadata = Some(metadata);
