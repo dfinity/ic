@@ -84,9 +84,9 @@ impl From<XdrConversionRate> for XdrConversionRatePb {
     }
 }
 
-/// Converts a vector of u8s to array of length 32 (the size of our sha256 hash)
-/// or returns an error if wrong length is given
-fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
+/// Converts a vector of u8s to array of length 32, which is the length needed for our rng seed.
+/// If the array is the wrong size, this returns an error.
+fn vec_to_array(v: Vec<u8>) -> Result<[u8; 32], String> {
     let boxed_slice = v.into_boxed_slice();
     let boxed_array: Box<[u8; 32]> = match boxed_slice.try_into() {
         Ok(hash) => hash,
@@ -157,7 +157,7 @@ pub fn split_governance_proto(
         });
 
     let rng_seed = rng_seed
-        .map(|seed| vec_to_hash(seed).ok())
+        .map(|seed| vec_to_array(seed).ok())
         .and_then(|seed| seed);
 
     (

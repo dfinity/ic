@@ -1459,7 +1459,7 @@ impl From<RngError> for GovernanceError {
     fn from(e: RngError) -> Self {
         match e {
             RngError::RngNotInitialized => GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
+                ErrorType::Unavailable,
                 "Rng not initialized.  Try again later.".to_string(),
             ),
         }
@@ -7856,8 +7856,7 @@ impl Governance {
     /// minutes past midnight.
     pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
         // It's not critical that we have perfect randomness here, so we can default to a fixed value
-        // for the edge case where the RNG is not initialized (which should be very rare in the
-        // context of proposal executions)
+        // for the edge case where the RNG is not initialized (which should never happen in practice).
         let time_of_day_seconds = self.env.random_u64().unwrap_or(10_000) % ONE_DAY_SECONDS;
 
         // Round down to nearest multiple of 15 min.
