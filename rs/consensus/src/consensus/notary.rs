@@ -37,8 +37,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        Block, BlockProposal, HasBlockHash, HasHeight, HasRank, NotarizationContent,
-        NotarizationShare, RandomBeacon, Rank,
+         BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent, NotarizationShare, RandomBeacon, Rank
     },
     replica_config::ReplicaConfig,
     Height,
@@ -91,9 +90,8 @@ impl Notary {
             for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
                 if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
                     if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
-                        let block = proposal.as_ref();
-                        if let Some(s) = self.notarize_block(pool, block) {
-                            self.metrics.report_notarization(block, elapsed);
+                        if let Some(s) = self.notarize_block(pool, &proposal.content) {
+                            self.metrics.report_notarization(proposal.as_ref(), elapsed);
                             notarization_shares.push(s);
                         }
                     }
@@ -166,10 +164,10 @@ impl Notary {
     pub(crate) fn notarize_block(
         &self,
         pool: &PoolReader<'_>,
-        block: &Block,
+        block: &HashedBlock,
     ) -> Option<NotarizationShare> {
-        let registry_version = pool.registry_version(block.height)?;
-        let content = NotarizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
+        let registry_version = pool.registry_version(block.height())?;
+        let content = NotarizationContent::new(block.height(), block.get_hash().clone());
         match self
             .crypto
             .sign(&content, self.replica_config.node_id, registry_version)
