@@ -18,16 +18,19 @@ use ic_types::{
         CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     ingress::WasmResult,
-    messages::{Query, QuerySource, Request},
+    messages::{CertificateDelegation, Query, QuerySource, Request},
     CanisterId, NumBytes,
 };
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 use tokio::{
     runtime::Handle,
-    sync::mpsc::{
-        channel,
-        error::{TryRecvError, TrySendError},
-        Receiver, Sender,
+    sync::{
+        mpsc::{
+            channel,
+            error::{TryRecvError, TrySendError},
+            Receiver, Sender,
+        },
+        OnceCell,
     },
 };
 use tonic::{transport::Channel, Code};
@@ -60,6 +63,7 @@ pub struct CanisterHttpAdapterClientImpl {
     query_service: QueryExecutionService,
     metrics: Metrics,
     subnet_type: SubnetType,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -70,6 +74,7 @@ impl CanisterHttpAdapterClientImpl {
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
         subnet_type: SubnetType,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
         let metrics = Metrics::new(&metrics_registry);
@@ -81,6 +86,7 @@ impl CanisterHttpAdapterClientImpl {
             query_service,
             metrics,
             subnet_type,
+            delegation_from_nns,
         }
     }
 }
@@ -116,6 +122,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
         let subnet_type = self.subnet_type;
+        let delegation_from_nns = self.delegation_from_nns.get().cloned();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -197,6 +204,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 canister_http_payload,
                                 request_sender,
                                 transform,
+                                delegation_from_nns,
                             )
                             .await?
                         }
@@ -275,6 +283,7 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
+    delegation_from_nns: Option<CertificateDelegation>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     let transform_args = TransformArgs {
         response: canister_http_response,
@@ -298,7 +307,7 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    match Oneshot::new(query_handler, (query, None)).await {
+    match Oneshot::new(query_handler, (query, delegation_from_nns)).await {
         Ok(query_response) => match query_response {
             Ok((res, _time)) => match res {
                 Ok(wasm_result) => match wasm_result {
@@ -555,6 +564,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
@@ -607,6 +617,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         assert_eq!(
@@ -667,6 +678,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         assert_eq!(
@@ -725,6 +737,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         assert_eq!(
@@ -808,6 +821,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -880,6 +894,7 @@ mod tests {
             100,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -934,6 +949,7 @@ mod tests {
             2,
             MetricsRegistry::default(),
             SubnetType::Application,
+            Arc::new(OnceCell::new()),
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));

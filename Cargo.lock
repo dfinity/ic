@@ -6489,7 +6489,7 @@ dependencies = [
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types",
  "ic-metrics-encoder",
- "ic-sha3",
+ "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-utils-ensure",
@@ -7071,7 +7071,7 @@ dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-sha3",
+ "ic-sha3 1.0.0",
  "rand 0.8.5",
  "zeroize",
 ]
@@ -8103,7 +8103,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-sha3",
+ "ic-sha3 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "minicbor",
  "minicbor-derive",
  "proptest",
@@ -11419,6 +11419,15 @@ name = "ic-sha3"
 version = "1.0.0"
 dependencies = [
  "hex",
+ "sha3",
+]
+
+[[package]]
+name = "ic-sha3"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3715f0f4370e8ce6aa9805b81e915ef4420c9dfb5209c71489c27e6f98bd5d65"
+dependencies = [
  "sha3",
 ]
 
