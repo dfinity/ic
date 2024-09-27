@@ -228,12 +228,38 @@ impl<T> From<&Reference<T>> for pb_queues::canister_queue::QueueItem {
     }
 }
 
-impl<T> TryFrom<pb_queues::canister_queue::QueueItem> for Reference<T> {
+impl TryFrom<pb_queues::canister_queue::QueueItem> for InboundReference {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
         match item.r {
             Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
-                Ok(Reference(id, PhantomData))
+                let reference = Reference(id, PhantomData);
+                if reference.context() == Context::Inbound {
+                    Ok(reference)
+                } else {
+                    Err(ProxyDecodeError::Other(
+                        "Not an inbound reference".to_string(),
+                    ))
+                }
+            }
+            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
+                let reference = Reference(id, PhantomData);
+                if reference.context() == Context::Outbound {
+                    Ok(reference)
+                } else {
+                    Err(ProxyDecodeError::Other(
+                        "Not an outbound reference".to_string(),
+                    ))
+                }
             }
             None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
         }
@@ -241,6 +267,7 @@ impl<T> TryFrom<pb_queues::canister_queue::QueueItem> for Reference<T> {
 }
 
 /// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);
 
 impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
@@ -255,12 +282,12 @@ impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
 impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReference {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
-        let id = Reference(item.id, PhantomData);
-        if id.context() == Context::Inbound
-            && id.class() == Class::BestEffort
-            && id.kind() == Kind::Response
+        let reference = Reference(item.id, PhantomData);
+        if reference.context() == Context::Inbound
+            && reference.class() == Class::BestEffort
+            && reference.kind() == Kind::Response
         {
-            Ok(CallbackReference(id, CallbackId::from(item.callback_id)))
+            Ok(CallbackReference(reference, item.callback_id.into()))
         } else {
             Err(ProxyDecodeError::Other(
                 "Not an inbound best-effort response".to_string(),

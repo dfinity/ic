@@ -1,4 +1,5 @@
 use super::*;
+use assert_matches::assert_matches;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use ic_types::time::UNIX_EPOCH;
@@ -538,6 +539,134 @@ fn test_message_id_range() {
     // Larger generator values still work, their high bits are just ignored.
     let id4 = Id::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
     assert_eq!(GENERATOR_MAX, id4.0 >> Id::BITMASK_LEN);
+}
+
+#[test]
+fn test_id_to_reference_roundtrip() {
+    for kind in [Kind::Request, Kind::Response] {
+        for class in [Class::GuaranteedResponse, Class::BestEffort] {
+            // Inbound.
+            let id = Id::new(kind, Context::Inbound, class, 13);
+            let reference = InboundReference::from(id);
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
+
+            // Outbound.
+            let id = Id::new(kind, Context::Outbound, class, 13);
+            let reference = OutboundReference::from(id);
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn test_inbound_reference_from_outbound_id() {
+    let id = Id::new(
+        Kind::Request,
+        Context::Outbound,
+        Class::GuaranteedResponse,
+        13,
+    );
+    let _ = InboundReference::from(id);
+}
+
+#[test]
+#[should_panic(expected = "assertion `left == right` failed")]
+fn test_outbound_reference_from_inbound_id() {
+    let id = Id::new(
+        Kind::Request,
+        Context::Inbound,
+        Class::GuaranteedResponse,
+        13,
+    );
+    let _ = OutboundReference::from(id);
+}
+
+#[test]
+fn test_reference_roundtrip_encode() {
+    fn queue_item(id: Id) -> pb_queues::canister_queue::QueueItem {
+        pb_queues::canister_queue::QueueItem {
+            r: Some(pb_queues::canister_queue::queue_item::R::Reference(id.0)),
+        }
+    }
+
+    for kind in [Kind::Request, Kind::Response] {
+        for class in [Class::GuaranteedResponse, Class::BestEffort] {
+            // Inbound.
+            let id = Id::new(kind, Context::Inbound, class, 13);
+            let item = queue_item(id);
+            // Can be converted to an `InboundReference`.
+            let reference = InboundReference::try_from(item.clone()).unwrap();
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            // Fails to convert to an `OutboundReference`.
+            assert_matches!(
+                OutboundReference::try_from(item.clone()),
+                Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
+            );
+            // Roundtrip encode produces the same item.
+            assert_eq!(item, (&reference).into());
+
+            // Outbound.
+            let id = Id::new(kind, Context::Outbound, class, 13);
+            let item = queue_item(id);
+            // Fails to convert to an `InboundReference`.
+            assert_matches!(
+                InboundReference::try_from(item.clone()),
+                Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
+            );
+            // Can be converted to an `OutboundReference`.
+            let reference = OutboundReference::try_from(item.clone()).unwrap();
+            assert_eq!(reference.0, id.0);
+            assert_eq!(id, reference.into());
+            // Roundtrip encode produces the same item.
+            assert_eq!(item, (&reference).into());
+        }
+    }
+}
+
+#[test]
+fn test_callback_reference_roundtip_encode() {
+    let callback_reference = CallbackReference(
+        Id::new(Kind::Response, Context::Inbound, Class::BestEffort, 13).into(),
+        42.into(),
+    );
+    let encoded = pb_queues::canister_queues::CallbackReference::from(callback_reference.clone());
+
+    assert_eq!(
+        callback_reference,
+        CallbackReference::try_from(encoded).unwrap()
+    );
+}
+
+#[test]
+fn test_decode_invalid_callback_reference() {
+    for kind in [Kind::Request, Kind::Response] {
+        for context in [Context::Inbound, Context::Outbound] {
+            for class in [Class::GuaranteedResponse, Class::BestEffort] {
+                if kind == Kind::Response
+                    && context == Context::Inbound
+                    && class == Class::BestEffort
+                {
+                    // This would be a valid `CallbackReference`, skip it.
+                    continue;
+                }
+                let invalid = pb_queues::canister_queues::CallbackReference {
+                    id: Id::new(kind, context, class, 13).0,
+                    callback_id: 42,
+                };
+
+                assert_matches!(
+                    CallbackReference::try_from(invalid),
+                    Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound best-effort response"
+                );
+            }
+        }
+    }
 }
 
 #[test]

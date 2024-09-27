@@ -21,11 +21,11 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// A FIFO queue with equal but separate capacities for requests and responses,
-/// ensuring full-duplex communication up to its capacity.
+/// A typed FIFO queue with equal but separate capacities for requests and
+/// responses, ensuring full-duplex communication up to its capacity.
 ///
-/// The queue holds weak references into a `MessagePool`. The messages that
-/// these references point to may expire or be shed, resulting in stale
+/// The queue holds typed weak references into a `MessageStore`. The messages
+/// that these references point to may expire or be shed, resulting in stale
 /// references that are not immediately removed from the queue. Which is why the
 /// queue stats track "request slots" and "response slots" instead of "requests"
 /// and "responses"; and `len()` returns the length of the queue, not the number
@@ -95,7 +95,12 @@ pub(crate) struct CanisterQueue<T> {
     marker: std::marker::PhantomData<T>,
 }
 
+/// An `InputQueue` is a `CanisterQueue` holding references to `CanisterInput`
+/// items, i.e. either pooled messages or compact responses.
 pub(super) type InputQueue = CanisterQueue<CanisterInput>;
+
+/// An `OutputQueue` is a `CanisterQueue` holding references to outbound
+/// `RequestOrResponse` items.
 pub(super) type OutputQueue = CanisterQueue<RequestOrResponse>;
 
 impl<T> CanisterQueue<T> {
@@ -217,7 +222,7 @@ impl<T> CanisterQueue<T> {
 
     /// Returns the next reference in the queue; or `None` if the queue is empty.
     pub(super) fn peek(&self) -> Option<Reference<T>> {
-        self.queue.front().cloned().map(Into::into)
+        self.queue.front().cloned()
     }
 
     /// Returns `true` if the queue has one or more used slots.
@@ -286,7 +291,7 @@ impl<T> CanisterQueue<T> {
 
     /// Returns an iterator over the underlying references.
     pub(super) fn iter(&self) -> impl Iterator<Item = &Reference<T>> {
-        self.queue.iter().map(Into::into)
+        self.queue.iter()
     }
 }
 
@@ -300,7 +305,10 @@ impl<T> From<&CanisterQueue<T>> for pb_queues::CanisterQueue {
     }
 }
 
-impl<T> TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue<T> {
+impl<T> TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue<T>
+where
+    Reference<T>: TryFrom<pb_queues::canister_queue::QueueItem, Error = ProxyDecodeError>,
+{
     type Error = ProxyDecodeError;
 
     fn try_from((item, context): (pb_queues::CanisterQueue, Context)) -> Result<Self, Self::Error> {

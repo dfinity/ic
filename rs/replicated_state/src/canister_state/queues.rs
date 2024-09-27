@@ -142,6 +142,10 @@ pub struct CanisterQueues {
     /// best-effort responses).
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
+    /// Backing store for `canister_queues` references, combining
+    ///  * a `MessagePool`
+    /// that providing message
+    /// stats (count, size) and support for time-based expiration and load shedding.
     #[validate_eq(CompareWithValidateEq)]
     store: MessageStoreImpl,
 
@@ -178,7 +182,7 @@ pub struct CanisterOutputQueuesIterator<'a> {
     /// / peeked is the one at the front of the first queue.
     queues: VecDeque<(&'a CanisterId, &'a mut OutputQueue)>,
 
-    /// Mutable pool holding the messages referenced by `queues`.
+    /// Mutable store holding the messages referenced by `queues`.
     store: &'a mut MessageStoreImpl,
 
     /// Number of (potentially stale) messages left in the iterator.
@@ -340,6 +344,16 @@ impl From<RequestOrResponse> for CanisterInput {
     }
 }
 
+/// A backing store for canister input and output queues, consisting of:
+///
+///  * a `MessagePool`, holding messages and providing message stats (count,
+///    size) and support for time-based expiration and load shedding; and
+///  * maps of compact resopnses (`CallbackIds` that have either expired or
+///    whose responses have been shed.
+///
+/// Implements the `MessageStore` trait for both inbound messages
+/// (`T = CanisterInput` items that are eiter pooled messages or compact
+/// responses) and outbound messages (pooled `RequestOrResponse items`).
 #[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 struct MessageStoreImpl {
     /// Pool holding the messages referenced by `canister_queues`, providing message
@@ -355,10 +369,15 @@ struct MessageStoreImpl {
 }
 
 impl MessageStoreImpl {
+    /// Inserts an inbound message into the pool.
     fn insert_inbound(&mut self, msg: RequestOrResponse) -> InboundReference {
         self.pool.insert_inbound(msg)
     }
 
+    /// Pops and returns the item at the front of the given queue, advancing to the
+    /// next non-stale reference.
+    ///
+    /// Panics if the reference at the front of the queue is stale.
     fn queue_pop_and_advance<T: Clone>(&mut self, queue: &mut CanisterQueue<T>) -> Option<T>
     where
         MessageStoreImpl: MessageStore<T>,
@@ -423,6 +442,8 @@ impl MessageStoreImpl {
     }
 }
 
+/// Defines context-specific (inbound / outbound) message store operations
+/// (lookup, removal, staleness check) for `MessageStoreImpl`.
 trait MessageStore<T> {
     /// Looks up the referenced item. Panics if the reference is stale.
     fn get(&self, reference: message_pool::Reference<T>) -> T;
@@ -1121,7 +1142,7 @@ impl CanisterQueues {
     /// in the cost of a callback.
     pub fn input_queues_size_bytes(&self) -> usize {
         self.message_stats().inbound_size_bytes
-            + self.canister_queues.len() * (size_of::<InputQueue>() + size_of::<OutputQueue>())
+            + self.canister_queues.len() * size_of::<InputQueue>()
     }
 
     /// Returns the number of non-stale requests enqueued in input queues.
@@ -1297,10 +1318,8 @@ impl CanisterQueues {
 
     /// Handles the timing out or shedding of a message from the pool.
     ///
-    /// Records the callback of a shed inbound best-effort response. Releases the
-    /// outbound slot reservation of a shed inbound request. Generates and enqueues
-    /// a reject response if the message was an outbound request. Updates the stats
-    /// for the dropped message and (where applicable) the generated response.
+    /// Updates the stats, replaces shed inbound responses with compact reject
+    /// responses, generates reject responses for expired outbound requests, etc.
     ///
     /// `input_queue_type_fn` is required to determine the appropriate sender
     /// schedule to update when generating a reject response.
@@ -1320,6 +1339,11 @@ impl CanisterQueues {
         }
     }
 
+    /// Handles the timing out or shedding of an inbound message from the pool.
+    ///
+    /// Replaces a shed inbound best-effort response with a compact reject response.
+    /// Releases the outbound slot reservation of a shed or expired inbound request.
+    /// Updates the stats for the dropped message.
     fn on_inbound_message_dropped(&mut self, reference: InboundReference, msg: RequestOrResponse) {
         assert_eq!(Context::Inbound, reference.context());
 
@@ -1354,6 +1378,14 @@ impl CanisterQueues {
         }
     }
 
+    /// Handles the timing out or shedding of an outbound message from the pool.
+    ///
+    /// Generates and enqueues a reject response if the message was an outbound
+    /// request. Updates the stats for the dropped message and the generated
+    /// response.
+    ///
+    /// `input_queue_type_fn` is required to determine the appropriate sender
+    /// schedule to update when generating a reject response.
     fn on_outbound_message_dropped(
         &mut self,
         reference: OutboundReference,
