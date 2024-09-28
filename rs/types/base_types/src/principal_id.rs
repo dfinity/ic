@@ -425,24 +425,18 @@ impl From<PrincipalIdProto> for PrincipalId {
 /// of the generated type and use it seamlessly, which is particularly
 /// useful when those types are also candid types.
 impl prost::Message for PrincipalId {
-    fn encode_raw<B>(&self, buf: &mut B)
-    where
-        B: bytes::buf::BufMut,
-    {
+    fn encode_raw(&self, buf: &mut impl bytes::buf::BufMut) {
         let pid_proto = PrincipalIdProto::from(self);
         pid_proto.encode_raw(buf)
     }
 
-    fn merge_field<B>(
+    fn merge_field(
         &mut self,
         tag: u32,
         wire_type: prost::encoding::WireType,
-        buf: &mut B,
+        buf: &mut impl bytes::buf::Buf,
         ctx: prost::encoding::DecodeContext,
-    ) -> std::result::Result<(), prost::DecodeError>
-    where
-        B: bytes::buf::Buf,
-    {
+    ) -> std::result::Result<(), prost::DecodeError> {
         let mut pid_proto = PrincipalIdProto::from(*self);
         pid_proto.merge_field(tag, wire_type, buf, ctx)?;
         *self = Self::from(pid_proto);

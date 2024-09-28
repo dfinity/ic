@@ -31,6 +31,10 @@ impl Address {
     pub const fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
+
+    pub const fn into_bytes(self) -> [u8; 20] {
+        self.0
+    }
 }
 
 impl LowerHex for Address {
