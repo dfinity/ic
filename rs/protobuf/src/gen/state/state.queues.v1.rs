@@ -138,33 +138,6 @@ pub struct MessageDeadline {
     #[prost(uint64, tag = "2")]
     pub index: u64,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InputOutputQueue {
-    #[prost(message, repeated, tag = "1")]
-    pub queue: ::prost::alloc::vec::Vec<RequestOrResponse>,
-    #[prost(uint64, tag = "2")]
-    pub begin: u64,
-    #[prost(uint64, tag = "3")]
-    pub capacity: u64,
-    #[prost(uint64, tag = "4")]
-    pub num_slots_reserved: u64,
-    /// Ordered ranges of messages having the same request deadline. Each range
-    /// is represented as a deadline and its end index (the `QueueIndex` just
-    /// past the last request where the deadline applies). Both the deadlines and
-    /// queue indices are strictly increasing.
-    #[prost(message, repeated, tag = "5")]
-    pub deadline_range_ends: ::prost::alloc::vec::Vec<MessageDeadline>,
-    /// Queue index from which request timing out will resume.
-    #[prost(uint64, tag = "6")]
-    pub timeout_index: u64,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct QueueEntry {
-    #[prost(message, optional, tag = "1")]
-    pub canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
-    #[prost(message, optional, tag = "2")]
-    pub queue: ::core::option::Option<InputOutputQueue>,
-}
 /// A pool holding all of a canister's incoming and outgoing canister messages.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MessagePool {
@@ -235,10 +208,6 @@ pub mod canister_queue {
 pub struct CanisterQueues {
     #[prost(message, repeated, tag = "2")]
     pub ingress_queue: ::prost::alloc::vec::Vec<super::super::ingress::v1::Ingress>,
-    #[prost(message, repeated, tag = "3")]
-    pub input_queues: ::prost::alloc::vec::Vec<QueueEntry>,
-    #[prost(message, repeated, tag = "5")]
-    pub output_queues: ::prost::alloc::vec::Vec<QueueEntry>,
     #[prost(message, repeated, tag = "9")]
     pub canister_queues: ::prost::alloc::vec::Vec<canister_queues::CanisterQueuePair>,
     #[prost(message, optional, tag = "10")]

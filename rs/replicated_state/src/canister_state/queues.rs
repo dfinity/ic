@@ -1494,8 +1494,6 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
 
         Self {
             ingress_queue: (&item.ingress_queue).into(),
-            input_queues: Default::default(),
-            output_queues: Default::default(),
             canister_queues: item
                 .canister_queues
                 .iter()
@@ -1531,103 +1529,51 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
     fn try_from(
         (item, metrics): (pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics),
     ) -> Result<Self, Self::Error> {
-        let mut canister_queues = BTreeMap::new();
-        let mut pool = MessagePool::default();
-        let mut shed_responses = BTreeMap::new();
+        let pool = MessagePool::try_from(item.pool.unwrap_or_default())?;
+        let shed_responses = item
+            .shed_responses
+            .into_iter()
+            .map(|sr| {
+                let sr = message_pool::CallbackReference::try_from(sr)?;
+                Ok((sr.0, sr.1))
+            })
+            .collect::<Result<_, Self::Error>>()?;
 
-        if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
-            // Backward compatibility: deserialize from `input_queues` and `output_queues`.
+        let mut enqueued_pool_messages = BTreeSet::new();
+        let canister_queues = item
+            .canister_queues
+            .into_iter()
+            .map(|qp| {
+                let canister_id: CanisterId =
+                    try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
+                let iq: CanisterQueue = try_from_option_field(
+                    qp.input_queue.map(|q| (q, Context::Inbound)),
+                    "CanisterQueuePair::input_queue",
+                )?;
+                let oq: CanisterQueue = try_from_option_field(
+                    qp.output_queue.map(|q| (q, Context::Outbound)),
+                    "CanisterQueuePair::output_queue",
+                )?;
 
-            if item.pool.is_some() || !item.canister_queues.is_empty() {
-                return Err(ProxyDecodeError::Other(
-                    "Both `input_queues`/`output_queues` and `pool`/`canister_queues` are populated"
-                        .to_string(),
-                ));
-            }
+                iq.iter().chain(oq.iter()).for_each(|&reference| {
+                    if pool.get(reference).is_some() && !enqueued_pool_messages.insert(reference) {
+                        metrics.observe_broken_soft_invariant(format!(
+                            "CanisterQueues: {:?} enqueued more than once",
+                            reference
+                        ));
+                    }
+                });
 
-            if item.input_queues.len() != item.output_queues.len() {
-                return Err(ProxyDecodeError::Other(format!(
-                    "CanisterQueues: Mismatched input ({}) and output ({}) queue lengths",
-                    item.input_queues.len(),
-                    item.output_queues.len()
-                )));
-            }
-            for (ie, oe) in item
-                .input_queues
-                .into_iter()
-                .zip(item.output_queues.into_iter())
-            {
-                if ie.canister_id != oe.canister_id {
-                    return Err(ProxyDecodeError::Other(format!(
-                        "CanisterQueues: Mismatched input {:?} and output {:?} queue entries",
-                        ie.canister_id, oe.canister_id
-                    )));
-                }
+                Ok((canister_id, (iq, oq)))
+            })
+            .collect::<Result<_, Self::Error>>()?;
 
-                let canister_id = try_from_option_field(ie.canister_id, "QueueEntry::canister_id")?;
-                let original_iq: queue::InputQueue =
-                    try_from_option_field(ie.queue, "QueueEntry::queue")?;
-                let original_oq: queue::OutputQueue =
-                    try_from_option_field(oe.queue, "QueueEntry::queue")?;
-                let iq = (original_iq, &mut pool).try_into()?;
-                let oq = (original_oq, &mut pool).try_into()?;
-
-                if canister_queues.insert(canister_id, (iq, oq)).is_some() {
-                    metrics.observe_broken_soft_invariant(format!(
-                        "CanisterQueues: Duplicate queues for canister {}",
-                        canister_id
-                    ));
-                }
-            }
-        } else {
-            pool = item.pool.unwrap_or_default().try_into()?;
-            shed_responses = item
-                .shed_responses
-                .into_iter()
-                .map(|sr| {
-                    let sr = message_pool::CallbackReference::try_from(sr)?;
-                    Ok((sr.0, sr.1))
-                })
-                .collect::<Result<_, Self::Error>>()?;
-
-            let mut enqueued_pool_messages = BTreeSet::new();
-            canister_queues = item
-                .canister_queues
-                .into_iter()
-                .map(|qp| {
-                    let canister_id: CanisterId =
-                        try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
-                    let iq: CanisterQueue = try_from_option_field(
-                        qp.input_queue.map(|q| (q, Context::Inbound)),
-                        "CanisterQueuePair::input_queue",
-                    )?;
-                    let oq: CanisterQueue = try_from_option_field(
-                        qp.output_queue.map(|q| (q, Context::Outbound)),
-                        "CanisterQueuePair::output_queue",
-                    )?;
-
-                    iq.iter().chain(oq.iter()).for_each(|&reference| {
-                        if pool.get(reference).is_some()
-                            && !enqueued_pool_messages.insert(reference)
-                        {
-                            metrics.observe_broken_soft_invariant(format!(
-                                "CanisterQueues: {:?} enqueued more than once",
-                                reference
-                            ));
-                        }
-                    });
-
-                    Ok((canister_id, (iq, oq)))
-                })
-                .collect::<Result<_, Self::Error>>()?;
-
-            if enqueued_pool_messages.len() != pool.len() {
-                metrics.observe_broken_soft_invariant(format!(
-                    "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
-                    pool.len(),
-                    enqueued_pool_messages.len()
-                ));
-            }
+        if enqueued_pool_messages.len() != pool.len() {
+            metrics.observe_broken_soft_invariant(format!(
+                "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
+                pool.len(),
+                enqueued_pool_messages.len()
+            ));
         }
 
         let queue_stats = Self::calculate_queue_stats(
