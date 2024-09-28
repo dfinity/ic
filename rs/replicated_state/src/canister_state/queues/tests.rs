@@ -2825,18 +2825,18 @@ fn test_peek_output_with_stale_references() {
     assert!(queues.has_output());
 
     // One message to canister 1.
-    let peeked: RequestOrResponse = requests.get(2).unwrap().clone().into();
-    assert_eq!(Some(peeked.clone()), queues.peek_output(&canister1));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister1));
+    let request2: RequestOrResponse = requests.get(2).unwrap().clone().into();
+    assert_eq!(Some(&request2), queues.peek_output(&canister1));
+    assert_eq!(Some(request2), queues.pop_canister_output(&canister1));
     assert_eq!(None, queues.peek_output(&canister1));
 
     // No message to canister 2.
     assert_eq!(None, queues.peek_output(&canister2));
 
     // One message to canister 3.
-    let peeked: RequestOrResponse = requests.get(3).unwrap().clone().into();
-    assert_eq!(Some(peeked.clone()), queues.peek_output(&canister3));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister3));
+    let request3: RequestOrResponse = requests.get(3).unwrap().clone().into();
+    assert_eq!(Some(&request3), queues.peek_output(&canister3));
+    assert_eq!(Some(request3), queues.pop_canister_output(&canister3));
     assert_eq!(None, queues.peek_output(&canister3));
 
     assert!(!queues.has_output());

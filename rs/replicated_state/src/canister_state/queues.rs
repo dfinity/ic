@@ -211,7 +211,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     }
 
     /// Returns the first message from the next queue.
-    pub fn peek(&self) -> Option<RequestOrResponse> {
+    pub fn peek(&self) -> Option<&RequestOrResponse> {
         let queue = &self.queues.front()?.1;
         let reference = queue.peek().expect("Empty queue in iterator.");
 
@@ -444,8 +444,14 @@ impl MessageStoreImpl {
 /// Defines context-specific (inbound / outbound) message store operations
 /// (lookup, removal, staleness check) for `MessageStoreImpl`.
 trait MessageStore<T> {
+    /// The type returned by `get()`: `&T` if the implementation actually holds
+    /// items of type `T`; or the type `T` if it has to be built on demand.
+    type TRef<'a>
+    where
+        Self: 'a;
+
     /// Looks up the referenced item. Panics if the reference is stale.
-    fn get(&self, reference: message_pool::Reference<T>) -> T;
+    fn get(&self, reference: message_pool::Reference<T>) -> Self::TRef<'_>;
 
     /// Removes the referenced item. Panics if the reference is stale.
     fn take(&mut self, reference: message_pool::Reference<T>) -> T;
@@ -456,6 +462,8 @@ trait MessageStore<T> {
 }
 
 impl MessageStore<CanisterInput> for MessageStoreImpl {
+    type TRef<'a> = CanisterInput;
+
     fn get(&self, reference: InboundReference) -> CanisterInput {
         assert_eq!(Context::Inbound, reference.context());
 
@@ -496,13 +504,14 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
 }
 
 impl MessageStore<RequestOrResponse> for MessageStoreImpl {
-    fn get(&self, reference: OutboundReference) -> RequestOrResponse {
+    type TRef<'a> = &'a RequestOrResponse;
+
+    fn get(&self, reference: OutboundReference) -> &RequestOrResponse {
         assert_eq!(Context::Outbound, reference.context());
 
         self.pool
             .get(reference)
             .expect("stale reference at the front of output queue")
-            .clone()
     }
 
     fn take(&mut self, reference: OutboundReference) -> RequestOrResponse {
@@ -1077,7 +1086,7 @@ impl CanisterQueues {
 
     /// Returns a reference to the (non-stale) message at the front of the respective
     /// output queue, if any.
-    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<RequestOrResponse> {
+    pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         let output_queue = &self.canister_queues.get(canister_id)?.1;
 
         Some(self.store.get(output_queue.peek()?))
@@ -1991,7 +2000,7 @@ pub mod testing {
         fn output_queue_iter_for_testing(
             &self,
             canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = RequestOrResponse>>;
+        ) -> Option<impl Iterator<Item = &RequestOrResponse>>;
     }
 
     impl CanisterQueuesTesting for CanisterQueues {
@@ -2031,7 +2040,7 @@ pub mod testing {
         fn output_queue_iter_for_testing(
             &self,
             canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = RequestOrResponse>> {
+        ) -> Option<impl Iterator<Item = &RequestOrResponse>> {
             self.canister_queues
                 .get(canister_id)
                 .map(|(_, output_queue)| {
