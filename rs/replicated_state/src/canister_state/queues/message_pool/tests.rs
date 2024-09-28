@@ -600,12 +600,12 @@ fn test_reference_roundtrip_encode() {
             let id = Id::new(kind, Context::Inbound, class, 13);
             let item = queue_item(id);
             // Can be converted to an `InboundReference`.
-            let reference = InboundReference::try_from(item.clone()).unwrap();
+            let reference = InboundReference::try_from(item).unwrap();
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             // Fails to convert to an `OutboundReference`.
             assert_matches!(
-                OutboundReference::try_from(item.clone()),
+                OutboundReference::try_from(item),
                 Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
             );
             // Roundtrip encode produces the same item.
@@ -616,11 +616,11 @@ fn test_reference_roundtrip_encode() {
             let item = queue_item(id);
             // Fails to convert to an `InboundReference`.
             assert_matches!(
-                InboundReference::try_from(item.clone()),
+                InboundReference::try_from(item),
                 Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
             );
             // Can be converted to an `OutboundReference`.
-            let reference = OutboundReference::try_from(item.clone()).unwrap();
+            let reference = OutboundReference::try_from(item).unwrap();
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             // Roundtrip encode produces the same item.
