@@ -2489,7 +2489,6 @@ mod tests {
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
-            migrated_root_wasm_memory_limit: Some(true),
         }
     }
 
