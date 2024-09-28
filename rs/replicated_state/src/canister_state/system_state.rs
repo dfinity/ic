@@ -979,6 +979,15 @@ impl SystemState {
         self.ingress_induction_cycles_debit += charge;
     }
 
+    /// Removes a previously postponed charge for ingress messages from the balance
+    /// of the canister.
+    ///
+    /// Note that this will saturate the balance to zero if the charge to remove is
+    /// larger than the current debit.
+    pub fn remove_charge_from_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
+        self.ingress_induction_cycles_debit -= charge;
+    }
+
     /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
     /// Precondition:
