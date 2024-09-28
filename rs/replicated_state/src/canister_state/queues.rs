@@ -142,10 +142,9 @@ pub struct CanisterQueues {
     /// best-effort responses).
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
-    /// Backing store for `canister_queues` references, combining
-    ///  * a `MessagePool`
-    /// that providing message
-    /// stats (count, size) and support for time-based expiration and load shedding.
+    /// Backing store for `canister_queues` references, combining a `MessagePool`
+    /// and maps of compact responses (`CallbackIds` of expired / shed responses),
+    /// with specific behavior for inbound vs outbound messages.
     #[validate_eq(CompareWithValidateEq)]
     store: MessageStoreImpl,
 
