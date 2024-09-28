@@ -296,7 +296,7 @@ proptest! {
         prop_assert_eq!(Ok(()), queue.check_invariants());
 
         let encoded: pb_queues::CanisterQueue = (&queue).into();
-        let decoded = (encoded, Context::Inbound).try_into().unwrap();
+        let decoded = encoded.try_into().unwrap();
 
         assert_eq!(queue, decoded);
     }
@@ -304,19 +304,19 @@ proptest! {
 
 #[test]
 fn decode_inbound_message_in_output_queue_fails() {
-    // Queue with an inbound request.
-    let mut queue = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    queue.push_request(invalid_outbound_reference(13, Class::BestEffort));
+    // Input queue with a request.
+    let mut queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    queue.push_request(new_request_reference(13, Class::BestEffort));
     let encoded: pb_queues::CanisterQueue = (&queue).into();
 
     // Cannot be decoded as an output queue.
     assert_matches!(
-        OutputQueue::try_from((encoded.clone(), Context::Outbound)),
+        OutputQueue::try_from(encoded.clone()),
         Err(ProxyDecodeError::Other(_))
     );
 
     // But can be decoded as an input queue.
-    assert_eq!(queue, (encoded, Context::Inbound).try_into().unwrap());
+    assert_eq!(queue, encoded.try_into().unwrap());
 }
 
 #[test]
@@ -330,16 +330,13 @@ fn decode_with_invalid_response_slots_fails() {
     let encoded: pb_queues::CanisterQueue = (&queue).into();
 
     // Can be decoded as is.
-    assert_eq!(
-        queue,
-        (encoded.clone(), Context::Inbound).try_into().unwrap()
-    );
+    assert_eq!(queue, encoded.clone().try_into().unwrap());
 
     // But fails to decode with a too low `response_slots` value.
     let mut too_few_response_slots = encoded.clone();
     too_few_response_slots.response_slots = 1;
     assert_matches!(
-        InputQueue::try_from((too_few_response_slots.clone(), Context::Inbound)),
+        InputQueue::try_from(too_few_response_slots),
         Err(ProxyDecodeError::Other(_))
     );
 }

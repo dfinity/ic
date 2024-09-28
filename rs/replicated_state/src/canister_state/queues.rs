@@ -1722,14 +1722,10 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                 .map(|qp| {
                     let canister_id: CanisterId =
                         try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
-                    let iq: InputQueue = try_from_option_field(
-                        qp.input_queue.map(|q| (q, Context::Inbound)),
-                        "CanisterQueuePair::input_queue",
-                    )?;
-                    let oq: OutputQueue = try_from_option_field(
-                        qp.output_queue.map(|q| (q, Context::Outbound)),
-                        "CanisterQueuePair::output_queue",
-                    )?;
+                    let iq: InputQueue =
+                        try_from_option_field(qp.input_queue, "CanisterQueuePair::input_queue")?;
+                    let oq: OutputQueue =
+                        try_from_option_field(qp.output_queue, "CanisterQueuePair::output_queue")?;
 
                     iq.iter().for_each(|&reference| {
                         if pool.get(reference).is_some()

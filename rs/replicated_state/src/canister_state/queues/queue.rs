@@ -1,7 +1,7 @@
 // TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #![allow(dead_code)]
 
-use super::message_pool::{Context, Kind, MessagePool, Reference, REQUEST_LIFETIME};
+use super::message_pool::{Kind, MessagePool, Reference, REQUEST_LIFETIME};
 use super::CanisterInput;
 use crate::StateError;
 use ic_base_types::CanisterId;
@@ -305,27 +305,19 @@ impl<T> From<&CanisterQueue<T>> for pb_queues::CanisterQueue {
     }
 }
 
-impl<T> TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue<T>
+impl<T> TryFrom<pb_queues::CanisterQueue> for CanisterQueue<T>
 where
     Reference<T>: TryFrom<pb_queues::canister_queue::QueueItem, Error = ProxyDecodeError>,
 {
     type Error = ProxyDecodeError;
 
-    fn try_from((item, context): (pb_queues::CanisterQueue, Context)) -> Result<Self, Self::Error> {
+    fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
         let queue: VecDeque<Reference<T>> = item
             .queue
             .into_iter()
             .map(|queue_item| match queue_item.r {
                 Some(pb_queues::canister_queue::queue_item::R::Reference(_)) => {
-                    let reference = Reference::<T>::try_from(queue_item)?;
-                    if reference.context() != context {
-                        return Err(ProxyDecodeError::Other(format!(
-                            "CanisterQueue: {:?} message in {:?} queue",
-                            reference.context(),
-                            context
-                        )));
-                    }
-                    Ok(reference)
+                    Ok(Reference::<T>::try_from(queue_item)?)
                 }
                 None => Err(ProxyDecodeError::MissingField("CanisterQueue::queue::r")),
             })

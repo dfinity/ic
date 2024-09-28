@@ -1009,14 +1009,6 @@ pub(crate) fn new_response_reference(generator: u64, class: Class) -> InboundRef
     Id::new(Kind::Response, Context::Inbound, class, generator).into()
 }
 
-/// Generates an invalid `OutboingReference` (with the `Context::Inbound` bit).
-pub(crate) fn invalid_outbound_reference(generator: u64, class: Class) -> OutboundReference {
-    Reference(
-        Id::new(Kind::Request, Context::Inbound, class, generator).0,
-        PhantomData,
-    )
-}
-
 #[derive(PartialEq, Eq)]
 enum QueueOp {
     Push,
