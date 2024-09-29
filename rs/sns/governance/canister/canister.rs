@@ -219,13 +219,19 @@ fn canister_init_(init_payload: GovernanceProto) {
             "{}Trying to initialize an already-initialized governance canister!",
             log_prefix()
         );
-        GOVERNANCE = Some(Governance::new(
+        let governance = Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
             Box::new(IcpLedgerCanister::<DfnRuntime>::new(NNS_LEDGER_CANISTER_ID)),
             Box::new(CMCCanister::<DfnRuntime>::new()),
-        ));
+        );
+        let governance = if cfg!(feature = "test") {
+            governance.enable_test_features()
+        } else {
+            governance
+        };
+        GOVERNANCE = Some(governance);
     }
 }
 

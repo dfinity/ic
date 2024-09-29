@@ -83,10 +83,7 @@ pub struct BackupSpoolSettings {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NetworkSettings {
-    // Config.ini can specify ipv6_prefix and ipv6_gateway, or just an ipv6_address.
-    // ipv6_address takes precedence. Some tests provide only ipv6_address.
-    pub ipv6_prefix: Option<String>,
-    pub ipv6_address: Option<Ipv6Addr>,
+    pub ipv6_prefix: String,
     pub ipv6_prefix_length: u8,
     pub ipv6_gateway: Ipv6Addr,
     pub ipv4_address: Option<Ipv4Addr>,

@@ -2144,16 +2144,17 @@ fn execute_global_timer_before_messages() {
 
 #[test]
 fn test_drain_subnet_messages_with_some_long_running_canisters() {
+    let instructions_per_slice = 100;
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
+            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..SchedulerConfig::application_subnet()
         })
         .build();
 
@@ -2161,19 +2162,18 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
     let mut remote_canisters = vec![];
     let add_messages = |test: &mut SchedulerTest, canisters: &mut Vec<CanisterId>| {
         for _ in 0..2 {
-            let canister = test.create_canister_with(
-                Cycles::new(1_000_000_000_000),
-                ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
-                None,
-                None,
-                None,
-            );
+            let canister = test.create_canister();
             canisters.push(canister);
         }
     };
     add_messages(&mut test, &mut local_canisters);
     add_messages(&mut test, &mut remote_canisters);
+
+    // Start a long execution on `local_canisters[1]` and `remote_canisters[0]`.
+    for canister_id in [&local_canisters[1], &remote_canisters[0]] {
+        test.send_ingress(*canister_id, ingress(instructions_per_slice * 100));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
 
     // Add 3 local subnet input messages.
     // Canister `local_canisters[1]` is in the long running list.
@@ -2229,9 +2229,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
     );
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 6);
 
-    let long_running_canister_ids: BTreeSet<CanisterId> =
-        BTreeSet::from([local_canisters[1], remote_canisters[0]]);
-    let new_state = test.drain_subnet_messages(long_running_canister_ids);
+    let new_state = test.drain_subnet_messages();
     // Left messages that were not able to be executed due to other long running messages
     // belong to `local_canisters[1]` and `remote_canisters[0]` canisters.
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 2);
@@ -2276,40 +2274,34 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
     add_messages(&mut test, InputQueueType::RemoteSubnet);
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 4);
 
-    let long_running_canister_ids: BTreeSet<CanisterId> = BTreeSet::new();
-    let new_state = test.drain_subnet_messages(long_running_canister_ids);
+    let new_state = test.drain_subnet_messages();
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 0);
 }
 
 #[test]
 fn test_drain_subnet_messages_all_long_running_canisters() {
+    let instructions_per_slice = 100;
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(100),
-            max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
-            max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_round: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
+            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::system_subnet()
+            ..SchedulerConfig::application_subnet()
         })
         .build();
 
-    let mut long_running_canister_ids: BTreeSet<CanisterId> = BTreeSet::new();
-    let add_messages = |test: &mut SchedulerTest,
-                        long_running_canister_ids: &mut BTreeSet<CanisterId>,
-                        input_type: InputQueueType| {
+    let add_messages = |test: &mut SchedulerTest, input_type: InputQueueType| {
         for i in 0..2 {
-            let local_canister = test.create_canister_with(
-                Cycles::new(1_000_000_000_000),
-                ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
-                None,
-                None,
-                None,
-            );
-            let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
+            let canister_id = test.create_canister();
+            // Start a long execution.
+            test.send_ingress(canister_id, ingress(instructions_per_slice * 100));
+            test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+            let arg = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
             test.inject_call_to_ic00(
                 Method::StopCanister,
                 arg.clone(),
@@ -2317,22 +2309,13 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
                 canister_test_id(i),
                 input_type,
             );
-            long_running_canister_ids.insert(local_canister);
         }
     };
-    add_messages(
-        &mut test,
-        &mut long_running_canister_ids,
-        InputQueueType::LocalSubnet,
-    );
-    add_messages(
-        &mut test,
-        &mut long_running_canister_ids,
-        InputQueueType::RemoteSubnet,
-    );
+    add_messages(&mut test, InputQueueType::LocalSubnet);
+    add_messages(&mut test, InputQueueType::RemoteSubnet);
     assert_eq!(test.state().subnet_queues().input_queues_message_count(), 4);
 
-    let new_state = test.drain_subnet_messages(long_running_canister_ids);
+    let new_state = test.drain_subnet_messages();
     assert_eq!(new_state.subnet_queues().input_queues_message_count(), 4);
 }
 

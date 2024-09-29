@@ -1344,7 +1344,7 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(100 * B);
+    let initial_cycles = Cycles::new(121 * B);
     let canister_a = create_universal_canister_with_cycles(
         &env,
         Some(
@@ -1402,7 +1402,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         HypervisorConfig::default(),
     ));
 
-    let initial_cycles = Cycles::new(200 * B);
+    let initial_cycles = Cycles::new(240 * B);
 
     let canister_id = create_universal_canister_with_cycles(
         &env,
@@ -1754,7 +1754,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     fn install_canister(env: &StateMachine) -> Result<CanisterId, UserError> {
         let wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
-        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        env.install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
     }
 
     fn send_ingress(env: &StateMachine, canister_id: &CanisterId) -> MessageId {
@@ -1917,7 +1917,7 @@ fn current_interval_length_works_on_app_subnets() {
 
     let wasm = wat::parse_str(DIRTY_PAGE_CANISTER).unwrap();
     let _canister_id = env
-        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
+        .install_canister_with_cycles(wasm, vec![], None, Cycles::new(121 * B))
         .unwrap();
 
     // Canister install takes 2 rounds.

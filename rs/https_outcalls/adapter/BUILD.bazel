@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/https_outcalls/service",
-    "//rs/monitoring/adapter_metrics/server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "@crate_index//:byte-unit",
@@ -78,7 +77,10 @@ rust_binary(
         "//ic-os/guestos:__subpackages__",
         "//rs:release-pkg",
     ],
-    deps = DEPENDENCIES + [":adapter"],
+    deps = DEPENDENCIES + [
+        ":adapter",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 # Same target as above but allows the adapter to make HTTP calls.
@@ -90,7 +92,10 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//rs:release-pkg"],
-    deps = DEPENDENCIES + [":adapter_with_http"],
+    deps = DEPENDENCIES + [
+        ":adapter_with_http",
+        "//rs/monitoring/adapter_metrics/server",
+    ],
 )
 
 rust_test(

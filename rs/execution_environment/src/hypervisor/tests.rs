@@ -2110,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2169,7 +2169,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -5402,7 +5402,6 @@ fn call_with_best_effort_response_test_helper(
     match test
         .canister_state_mut(canister_receiver)
         .system_state
-        .queues_mut()
         .pop_input()
         .unwrap()
     {

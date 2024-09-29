@@ -31,6 +31,10 @@ impl Address {
     pub const fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
     }
+
+    pub const fn into_bytes(self) -> [u8; 20] {
+        self.0
+    }
 }
 
 impl LowerHex for Address {
@@ -121,5 +125,5 @@ impl fmt::Display for Address {
 }
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
-    ic_crypto_sha3::Keccak256::hash(bytes)
+    ic_sha3::Keccak256::hash(bytes)
 }
