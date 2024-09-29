@@ -837,11 +837,19 @@ impl CanisterQueues {
         };
 
         // Check against duplicate responses.
-        if input_queue.check_has_reserved_response_slot().is_err()
-            || !self.callbacks_with_enqueued_response.insert(callback_id)
-        {
+        if !self.callbacks_with_enqueued_response.insert(callback_id) {
             // There is already a response enqueued for the callback.
             return Ok(());
+        }
+
+        if input_queue.check_has_reserved_response_slot().is_err() {
+            // No response enqueued for `callback_id`, but no reserved slot either. This
+            // should never happen.
+            self.callbacks_with_enqueued_response.remove(&callback_id);
+            return Err(format!(
+                "No reserved response slot for expired callback: {}",
+                callback_id
+            ));
         }
 
         let reference = self.store.push_inbound_timeout_response(callback_id);

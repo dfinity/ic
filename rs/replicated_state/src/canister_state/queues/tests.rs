@@ -74,6 +74,20 @@ impl CanisterQueuesFixture {
         )
     }
 
+    fn try_push_deadline_expired_input(&mut self) -> Result<(), String> {
+        self.last_callback_id += 1;
+        self.queues.try_push_deadline_expired_input(
+            CallbackId::from(self.last_callback_id),
+            &self.other,
+            &self.this,
+            &BTreeMap::new(),
+        )
+    }
+
+    fn peek_input(&mut self) -> Option<CanisterInput> {
+        self.queues.peek_input()
+    }
+
     fn pop_input(&mut self) -> Option<CanisterInput> {
         self.queues.pop_input()
     }
@@ -455,6 +469,115 @@ fn test_available_output_request_slots() {
         DEFAULT_QUEUE_CAPACITY,
         fixture.available_output_request_slots()
     );
+}
+
+#[test]
+fn test_deadline_expired_input() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Enqueue a "deadline expired" compact reject response.
+    fixture.push_output_request().unwrap();
+    fixture.pop_output().unwrap();
+    fixture.try_push_deadline_expired_input().unwrap();
+
+    // We have one input (compact) response.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.has_output());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Peek, then pop the "deadline expired" compact reject response. This also
+    // implicitly checks that the input schedule was correctly updated.
+    let expected_callback_id = CallbackId::from(fixture.last_callback_id);
+    assert_eq!(
+        Some(CanisterInput::DeadlineExpired(expected_callback_id)),
+        fixture.peek_input()
+    );
+    assert_eq!(
+        Some(CanisterInput::DeadlineExpired(expected_callback_id)),
+        fixture.pop_input()
+    );
+
+    // No inputs and no outputs left.
+    assert_eq!(0, fixture.queues.input_queues_message_count());
+    assert_eq!(0, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(!fixture.queues.has_input());
+    assert!(!fixture.queues.has_output());
+    assert!(fixture.queues.store.is_empty());
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_no_queue() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Pushing a deadline expired input into a non-existent queue signals a bug.
+    assert_eq!(
+        "No input queue for expired callback: 1",
+        fixture.try_push_deadline_expired_input().unwrap_err()
+    );
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_no_reserved_slot() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Enqueue an input request, to create the input queue.
+    fixture.push_input_request().unwrap();
+
+    // Pushing a deadline expired input without a reserved slot signals a bug.
+    assert_eq!(
+        "No reserved response slot for expired callback: 1",
+        fixture.try_push_deadline_expired_input().unwrap_err()
+    );
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_with_same_callback_id() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Push an input response.
+    fixture.push_output_request().unwrap();
+    fixture.pop_output().unwrap();
+    fixture.push_input_response().unwrap();
+
+    // Sanity check.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Pushing a deadline expired input with the same callback ID is a no-op.
+    let callback_id = fixture.last_callback_id.into();
+    fixture
+        .queues
+        .try_push_deadline_expired_input(
+            callback_id,
+            &fixture.other,
+            &fixture.this,
+            &BTreeMap::new(),
+        )
+        .unwrap();
+
+    // Nothing has changed.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Pop the response.
+    assert_matches!(fixture.pop_input(), Some(CanisterInput::Response(_)));
+
+    // Nothing left.
+    assert_eq!(0, fixture.queues.input_queues_message_count());
+    assert_eq!(0, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(!fixture.queues.has_input());
+    assert!(fixture.queues.store.is_empty());
 }
 
 #[test]
@@ -1917,11 +2040,14 @@ fn decode_backward_compatibility() {
 }
 
 /// Constructs an encoded `CanisterQueues` with 2 inbound responses (callbacks 1
-/// and 2) and one shed inbound response (callback 3).
+/// and 2), one shed inbound response (callback 3) and one expired callback
+/// response (4).
 fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     let mut queues = CanisterQueues::default();
 
-    // Make 3 input queue reservations.
+    let canister_id = canister_test_id(13);
+
+    // Make 4 input queue reservations.
     let deadline = coarse_time(1);
     queues
         .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
@@ -1932,7 +2058,10 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     queues
         .push_output_request(request(3, deadline).into(), UNIX_EPOCH)
         .unwrap();
-    assert_eq!(3, queues.output_into_iter().count());
+    queues
+        .push_output_request(request(4, deadline).into(), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(4, queues.output_into_iter().count());
 
     // Enqueue 3 inbound responses.
     queues
@@ -1944,9 +2073,12 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     queues
         .push_input(response(3, deadline).into(), LocalSubnet)
         .unwrap();
+    queues
+        .try_push_deadline_expired_input(4.into(), &canister_id, &canister_id, &BTreeMap::new())
+        .unwrap();
 
     // Shed the response for callback 3.
-    assert!(queues.shed_largest_message(&canister_test_id(13), &BTreeMap::new()));
+    assert!(queues.shed_largest_message(&canister_id, &BTreeMap::new()));
     assert_eq!(
         Some(&CallbackId::from(3)),
         queues.store.shed_responses.values().next()
@@ -1980,7 +2112,7 @@ fn decode_with_duplicate_response_callback_in_pool() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1, 3]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1, 3, 4]"
     );
 }
 
@@ -1995,7 +2127,23 @@ fn decode_with_duplicate_response_callback_in_shed_responses() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 1]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 1, 4]"
+    );
+}
+
+#[test]
+fn decode_with_duplicate_response_callback_in_expired_callbacks() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Have the callback ID of the expired callback match that of one of the
+    // responses.
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.callback_id = 1;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 3, 1]"
     );
 }
 
@@ -2011,7 +2159,7 @@ fn decode_with_duplicate_reference() {
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 3, 3]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 3, 3, 4]"
     );
     // A critical error should also have been observed.
     assert_eq!(1, *metrics.0.borrow());
@@ -2037,6 +2185,41 @@ fn decode_with_both_response_and_shed_response_for_reference() {
 }
 
 #[test]
+fn decode_with_both_response_and_expired_callback_for_reference() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Make the the shed response have the same reference as one of the responses.
+    let input_queue = encoded.canister_queues[0].input_queue.as_ref().unwrap();
+    let queue_item = input_queue.queue.get(1).unwrap();
+    let pb_queues::canister_queue::queue_item::R::Reference(response_id) =
+        queue_item.r.as_ref().unwrap();
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.id = *response_id;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
+    );
+}
+
+#[test]
+fn decode_with_both_shed_response_and_expired_callback_for_reference() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Make the the expired callback have the same reference as the shed response.
+    let response_id = encoded.shed_responses[0].id;
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.id = response_id;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
+    );
+}
+
+#[test]
 fn decode_with_unreferenced_inbound_response() {
     let mut encoded = canister_queues_proto_with_inbound_responses();
 
@@ -2047,7 +2230,7 @@ fn decode_with_unreferenced_inbound_response() {
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 3 inbound responses, but only 2 are enqueued"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
     );
     // A critical error should also have been observed.
     assert_eq!(1, *metrics.0.borrow());
@@ -2063,58 +2246,26 @@ fn decode_with_unreferenced_shed_response() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 3 inbound responses, but only 2 are enqueued"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
+    );
+}
+
+#[test]
+fn decode_with_unreferenced_expired_callback() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Remove the reference to the fourth (expired callback) response.
+    let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.queue.remove(3);
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
     );
 }
 
 #[test]
 fn decode_with_duplicate_inbound_response() {
-    let mut queues = CanisterQueues::default();
-
-    // Make 2 input queue reservations.
-    queues
-        .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
-        .unwrap();
-    queues
-        .push_output_request(request(2, SOME_DEADLINE).into(), UNIX_EPOCH)
-        .unwrap();
-    assert_eq!(2, queues.output_into_iter().count());
-
-    // Enqueue 2 inbound responses.
-    queues
-        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap();
-    queues
-        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap();
-
-    // Sanity check: roundtrip encode succeeds.
-    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = (
-        encoded.clone(),
-        &StrictMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-    assert_eq!(queues, decoded);
-
-    // Tweak the encoded queues so both responses have the same `CallbackId`.
-    for entry in &mut encoded.pool.as_mut().unwrap().messages {
-        let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
-            panic!("Expected only responses");
-        };
-        response.originator_reply_callback = 1;
-    }
-
-    // Decoding should now fail because of the duplicate `CallbackId`.
-    let err = CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics))
-        .unwrap_err();
-    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1]");
-}
-
-#[test]
-fn decode_duplicate_inbound_response() {
     let mut queues = CanisterQueues::default();
 
     // Make 2 input queue reservations.
