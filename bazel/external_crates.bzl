@@ -1012,7 +1012,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.37",
             ),
             "regex": crate.spec(
-                version = "^1.11.00",
+                version = "^1.11.0",
             ),
             "reqwest": crate.spec(
                 version = "^0.12.7",
