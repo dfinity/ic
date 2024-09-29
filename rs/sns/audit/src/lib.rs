@@ -7,7 +7,7 @@ use ic_neurons_fund::u64_to_dec;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse,
+    GetNeuronsFundAuditInfoResponse, NeuronsFundAuditInfo,
 };
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use ic_sns_swap::pb::v1::{
@@ -150,6 +150,21 @@ async fn validate_neurons_fund_sns_swap_participation(
             audit_info,
         ));
     };
+
+    if let NeuronsFundAuditInfo {
+        initial_neurons_fund_participation: None,
+        final_neurons_fund_participation: None,
+        neurons_fund_refunds: None,
+    } = audit_info
+    {
+        // This indicates that the Neurons' Fund participation has not been requested by this SNS.
+        audit_check(
+            "SwapInit.neurons_fund_participation and NnsGov.get_neurons_fund_audit_info are \
+             consistent.",
+            !swap_init.neurons_fund_participation.unwrap(),
+        );
+        return Ok(());
+    }
 
     let neuron_basket_construction_parameters =
         swap_init.neuron_basket_construction_parameters.unwrap();
