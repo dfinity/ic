@@ -515,8 +515,8 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         self.pool.get(reference).is_none()
             && (reference.class() != Class::BestEffort
                 || reference.kind() != Kind::Response
-                || (!self.expired_callbacks.contains_key(&reference))
-                    && !self.shed_responses.contains_key(&reference))
+                || (!self.expired_callbacks.contains_key(&reference)
+                    && !self.shed_responses.contains_key(&reference)))
     }
 }
 
