@@ -19887,7 +19887,6 @@ dependencies = [
  "flate2",
  "futures",
  "hex",
- "http 0.2.12",
  "humantime",
  "ic-agent",
  "ic-async-utils",
