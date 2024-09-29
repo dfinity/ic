@@ -122,7 +122,13 @@ async fn validate_neurons_fund_sns_swap_participation(
 
     let nns_governance_canister_id = swap_init.nns_governance_canister_id.clone();
     let nns_governance_canister_id = Principal::from_text(nns_governance_canister_id).unwrap();
-    let nns_proposal_id = swap_init.nns_proposal_id.as_ref().unwrap();
+    let Some(nns_proposal_id) = swap_init.nns_proposal_id.as_ref() else {
+        return Err(format!(
+            "{} swap has been created before 1-proposal and cannot be audited using this tool; please \
+             audit this swap manually.",
+            sns_name,
+        ));
+    };
     let audit_info = {
         let response = agent
             .query(&nns_governance_canister_id, "get_neurons_fund_audit_info")
@@ -139,16 +145,26 @@ async fn validate_neurons_fund_sns_swap_participation(
             .map_err(|e| e.to_string())?;
         Decode!(response.as_slice(), GetNeuronsFundAuditInfoResponse).map_err(|e| e.to_string())?
     };
-    let get_neurons_fund_audit_info_response::Result::Ok(
-        get_neurons_fund_audit_info_response::Ok {
-            neurons_fund_audit_info: Some(audit_info),
-        },
-    ) = audit_info.result.clone().unwrap()
-    else {
-        return Err(format!(
-            "Expected GetNeuronsFundAuditInfoResponse to be Ok, got {:?}",
-            audit_info,
-        ));
+    let audit_info = match audit_info.result.clone().unwrap() {
+        get_neurons_fund_audit_info_response::Result::Ok(
+            get_neurons_fund_audit_info_response::Ok {
+                neurons_fund_audit_info,
+            },
+        ) => neurons_fund_audit_info.unwrap(),
+        get_neurons_fund_audit_info_response::Result::Err(err) => {
+            if err.error_message.starts_with("Neurons Fund data not found") {
+                return Err(format!(
+                    "{} swap has been created before Matched Funding and cannot be audited using this \
+                     tool; please audit this swap manually.",
+                    sns_name,
+                ));
+            } else {
+                return Err(format!(
+                    "Expected GetNeuronsFundAuditInfoResponse for {} to be Ok, got {:?}",
+                    sns_name, audit_info,
+                ));
+            }
+        }
     };
 
     let neuron_basket_construction_parameters =
@@ -324,7 +340,7 @@ async fn validate_neurons_fund_sns_swap_participation(
 }
 
 /// Validate that the NNS (identified by `nns_url`) and an SNS instance (identified by
-/// `swap_canister_id`) agree on how the SNS neurons of a sucessful swap have been allocated.
+/// `swap_canister_id`) agree on how the SNS neurons of a successful swap have been allocated.
 ///
 /// This function performs a best-effort audit, e.g., there is no completeness guarantee for
 /// the checks.
