@@ -6619,6 +6619,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
+ "num-traits",
  "phantom_newtype",
  "prometheus",
  "proptest",
