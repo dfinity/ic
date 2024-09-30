@@ -13,8 +13,10 @@ set -euo pipefail
 set -x
 cd "$(git rev-parse --show-toplevel)"
 
-TARGET_BRANCH="${CI_PULL_REQUEST_TARGET_BRANCH_NAME:-$DEFAULT_BRANCH}"
-MERGE_BASE=$(git merge-base HEAD "$TARGET_BRANCH")
+# since default branch is not the same in ic-private, we can't set it to master, throw error if missing
+DEFAULT_BRANCH_SHA=$(git rev-parse origin/$DEFAULT_BRANCH)
+TARGET_BRANCH_SHA="${TARGET_BRANCH_SHA:-$DEFAULT_BRANCH_SHA}"
+MERGE_BASE=$(git merge-base HEAD "$TARGET_BRANCH_SHA")
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
