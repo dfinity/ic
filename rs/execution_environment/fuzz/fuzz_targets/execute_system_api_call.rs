@@ -55,12 +55,12 @@ fn setup_env() -> (StateMachine, CanisterId) {
 fuzz_target!(|module: ICWasmModule| {
     with_env(|env, canister_id| {
         let wasm = module.module.to_bytes();
-        let result =
-            env.install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![]);
-        // Only execute the canister if the wasm was installed successfully.
-        if result.is_ok() {
+        if env
+            .install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
+            .is_ok()
+        {
             // For determinism, all methods are executed.
-            for wasm_method in module.exported_functions.iter() {
+            for wasm_method in &module.exported_functions {
                 let _ = env.execute_ingress(*canister_id, wasm_method.name(), vec![]);
             }
         }
