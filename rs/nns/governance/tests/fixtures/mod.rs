@@ -20,7 +20,8 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
+        governance_minting_account, neuron_subaccount, Environment, Governance,
+        HeapGrowthPotential, RngError,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
@@ -37,6 +38,7 @@ use ic_nns_governance::{
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use rand::{prelude::StdRng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     convert::{TryFrom, TryInto},
@@ -171,7 +173,7 @@ impl Default for EnvironmentBuilder {
         EnvironmentBuilder {
             environment_fixture_state: EnvironmentFixtureState {
                 now: 0,
-                rng: StdRng::seed_from_u64(9539),
+                rng: Some(ChaCha20Rng::from_seed([1u8; 32])),
                 observed_canister_calls: VecDeque::new(),
                 mocked_canister_replies: VecDeque::new(),
             },
@@ -485,16 +487,32 @@ impl Environment for NNSFixture {
         self.nns_state.try_lock().unwrap().environment.now()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         self.nns_state.try_lock().unwrap().environment.random_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.nns_state
             .try_lock()
             .unwrap()
             .environment
             .random_byte_array()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .seed_rng(seed)
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.nns_state
+            .try_lock()
+            .unwrap()
+            .environment
+            .get_rng_seed()
     }
 
     fn execute_nns_function(
@@ -706,18 +724,21 @@ impl NNS {
         self
     }
 
+    // Must be mut because clone_proto must be mut, but should not affect state
     pub(crate) fn get_state(&self) -> NNSState {
+        let accounts = self
+            .fixture
+            .nns_state
+            .try_lock()
+            .unwrap()
+            .ledger
+            .accounts
+            .clone();
+        let governance_proto = self.governance.clone_proto();
         NNSState {
             now: self.now(),
-            accounts: self
-                .fixture
-                .nns_state
-                .try_lock()
-                .unwrap()
-                .ledger
-                .accounts
-                .clone(),
-            governance_proto: self.governance.clone_proto(),
+            accounts,
+            governance_proto,
             latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
         }
     }
@@ -942,12 +963,20 @@ impl Environment for NNS {
         self.fixture.now()
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         self.fixture.random_u64()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         self.fixture.random_byte_array()
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.fixture.seed_rng(seed)
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        unimplemented!()
     }
 
     fn execute_nns_function(

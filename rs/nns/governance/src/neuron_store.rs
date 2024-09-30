@@ -63,6 +63,7 @@ pub enum NeuronStoreError {
         principal_id: PrincipalId,
         neuron_id: NeuronId,
     },
+    NeuronIdGenerationUnavailable,
 }
 
 impl NeuronStoreError {
@@ -160,6 +161,13 @@ impl Display for NeuronStoreError {
                     principal_id, neuron_id
                 )
             }
+            NeuronStoreError::NeuronIdGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron ID generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
         }
     }
 }
@@ -176,6 +184,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
+            NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -384,10 +393,11 @@ impl NeuronStore {
         self.clock.set_time_warp(new_time_warp);
     }
 
-    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> NeuronId {
+    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> Result<NeuronId, NeuronStoreError> {
         loop {
             let id = env
                 .random_u64()
+                .map_err(|_| NeuronStoreError::NeuronIdGenerationUnavailable)?
                 // Let there be no question that id was chosen
                 // intentionally, not just 0 by default.
                 .saturating_add(1);
@@ -396,7 +406,7 @@ impl NeuronStore {
             let is_unique = !self.contains(neuron_id);
 
             if is_unique {
-                return neuron_id;
+                return Ok(neuron_id);
             }
 
             ic_cdk::println!(
