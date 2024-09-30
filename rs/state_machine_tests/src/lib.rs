@@ -1162,6 +1162,9 @@ impl StateMachineBuilder {
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
+                    // TODO: do not submit, remove debug code.
+                    // thread stack overflows before wasmtime (2MiB vs 5MiB)
+                    .thread_stack_size(8 * 1024 * 1024)
                     .build()
                     .expect("failed to create a tokio runtime")
                     .into()
