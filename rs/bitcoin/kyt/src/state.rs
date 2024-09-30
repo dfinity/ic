@@ -108,7 +108,7 @@ impl<T> FetchTxCache<T> {
     fn set_status_with(&mut self, txid: Txid, status: T, now: Timestamp) {
         if self.status.insert(txid, status).is_none() {
             // This is a new entry, record its created time.
-            let _ = self.created.push_back((txid, now));
+            self.created.push_back((txid, now));
             // Expire the oldest entry if it has already expired, or when we exceed max_entries.
             if let Some((txid, created_time)) = self.created.front().cloned() {
                 if created_time + self.expiry < now || self.created.len() > self.max_entries {
