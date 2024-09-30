@@ -1347,16 +1347,12 @@ async fn test_cascade_following() {
     );
     // Check that neuron's vote is registered in the neuron
     assert_eq!(
-        BallotInfo {
+        vec![BallotInfo {
             proposal_id: Some(ProposalId { id: 1 }),
             vote: Vote::Yes as i32
-        },
+        }],
         gov.neuron_store
-            .with_neuron(&NeuronId::from_u64(2), |n| n
-                .recent_ballots
-                .first()
-                .unwrap()
-                .clone())
+            .with_neuron(&NeuronId::from_u64(2), |n| n.recent_ballots.clone())
             .expect("Neuron not found")
     );
     // The proposal should now be accepted and executed.
@@ -12864,7 +12860,7 @@ async fn distribute_rewards_load_test() {
 
     // Step 1.1: Craft many neurons.
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
-    let maturity_e8s_equivalent = 3;
+    let starting_maturity = 3;
     let neuron_range = 1000..2000;
     let neurons = neuron_range
         .clone()
@@ -12873,7 +12869,7 @@ async fn distribute_rewards_load_test() {
             account: account(id),
             controller: Some(principal(id)),
             cached_neuron_stake_e8s: 1_000_000_000,
-            maturity_e8s_equivalent,
+            maturity_e8s_equivalent: starting_maturity,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             aging_since_timestamp_seconds: now - 1,
             ..Default::default()
@@ -12976,16 +12972,11 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for id in neuron_range {
-        let (neuron, actual_maturity) = governance
-            .neuron_store
-            .with_neuron(&NeuronId { id }, |neuron| {
-                (neuron.clone(), neuron.maturity_e8s_equivalent)
-            })
-            .expect("Neuron not found");
+    for neuron in governance.neuron_store.active_neurons_iter() {
+        let current_neuron_maturity = neuron.maturity_e8s_equivalent;
 
         assert_ne!(
-            actual_maturity, maturity_e8s_equivalent,
+            current_neuron_maturity, starting_maturity,
             "neuron: {:#?}",
             neuron,
         );
