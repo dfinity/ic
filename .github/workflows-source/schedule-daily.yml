@@ -191,6 +191,7 @@ jobs:
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       GITHUB_REF: ${{ github.ref }}
+      REPO_NAME: ${{ github.repository }}
     steps:
       - <<: *checkout
       - <<: *before-script
