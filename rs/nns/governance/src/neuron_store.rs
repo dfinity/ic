@@ -30,7 +30,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
-    ops::Deref,
+    ops::{Deref, RangeBounds},
 };
 
 pub mod metrics;
@@ -678,23 +678,46 @@ impl NeuronStore {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
 
-    /// Get a reference to heap neurons.  Temporary method to allow
-    /// access to the heap neurons during transition to better data hiding.
-    pub fn heap_neurons(&self) -> &BTreeMap<u64, Neuron> {
-        &self.heap_neurons
-    }
-
-    fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
+    pub fn active_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
         self.heap_neurons.values()
     }
 
+    /// Returns Neurons in heap starting with the first one whose ID is >= begin.
+    ///
+    /// The len of the result is at most limit. It is also maximal; that is, if the return value has
+    /// len < limit, then the caller can assume that there are no more Neurons.
+    pub fn active_neurons_range<R>(&self, range: R) -> impl Iterator<Item = &Neuron> + '_
+    where
+        R: RangeBounds<NeuronId>,
+    {
+        fn neuron_id_range_to_u64_range(
+            range: &impl RangeBounds<NeuronId>,
+        ) -> impl RangeBounds<u64> {
+            let first = match range.start_bound() {
+                std::ops::Bound::Included(start) => start.id,
+                std::ops::Bound::Excluded(start) => start.id + 1,
+                std::ops::Bound::Unbounded => 0,
+            };
+            let last = match range.end_bound() {
+                std::ops::Bound::Included(end) => end.id,
+                std::ops::Bound::Excluded(end) => end.id - 1,
+                std::ops::Bound::Unbounded => u64::MAX,
+            };
+            first..=last
+        }
+
+        let range = neuron_id_range_to_u64_range(&range);
+
+        self.heap_neurons.range(range).map(|(_, neuron)| neuron)
+    }
+
     /// Internal - map over neurons after filtering
-    fn map_heap_neurons_filtered<R>(
+    fn filter_map_active_neurons<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
         f: impl FnMut(&Neuron) -> R,
     ) -> Vec<R> {
-        self.heap_neurons_iter()
+        self.active_neurons_iter()
             .filter(|n| filter(n))
             .map(f)
             .collect()
@@ -709,7 +732,7 @@ impl NeuronStore {
                     .unwrap_or_default()
                     > 0
         };
-        self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
+        self.filter_map_active_neurons(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
             hotkeys: pick_most_important_hotkeys(&n.hot_keys),
@@ -722,7 +745,7 @@ impl NeuronStore {
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
         let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
-        self.map_heap_neurons_filtered(filter, |neuron| neuron.id())
+        self.filter_map_active_neurons(filter, |neuron| neuron.id())
     }
 
     /// List all neuron ids of known neurons
@@ -741,14 +764,14 @@ impl NeuronStore {
             // so it would be quite surprising if it is missing here (impossible in fact)
             now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
         };
-        self.map_heap_neurons_filtered(filter, |n| n.id())
+        self.filter_map_active_neurons(filter, |n| n.id())
     }
 
     /// Returns an iterator of all voting-eligible neurons
     pub fn voting_eligible_neurons(&self, now_seconds: u64) -> impl Iterator<Item = &Neuron> {
         // This should be safe to do without with_neuron because
         // all voting_eligible neurons should be in the heap
-        self.heap_neurons_iter().filter(move |&neuron| {
+        self.active_neurons_iter().filter(move |&neuron| {
             neuron.dissolve_delay_seconds(now_seconds)
                 >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         })
