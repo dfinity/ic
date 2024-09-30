@@ -49,7 +49,8 @@ fn setup_env() -> (StateMachine, CanisterId) {
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call -- -rss_limit_mb=4096 > output.secret 2>&1
+// bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_system_api_call -- -rss_limit_mb=4096 -runs=100 > output.secret 2>&1
+// bazel run --config=afl //rs/execution_environment/fuzz:execute_system_api_call_afl -- -rss_limit_mb=4096 -runs=100 > output.secret 2>&1
 
 fuzz_target!(|module: ICWasmModule| {
     with_env(|env, canister_id| {
