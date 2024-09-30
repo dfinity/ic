@@ -2791,7 +2791,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     );
     let transfer_from_args = TransferFromArgs {
         spender_subaccount: None,
-        from: account.into(),
+        from: account,
         to: Account::from(PrincipalId::new_user_test_id(2).0),
         amount: Nat::from(1u64),
         fee: None,
