@@ -1194,7 +1194,7 @@ impl ProposalData {
 
         // Every time the tally changes, (possibly) update the wait-for-quiet
         // dynamic deadline.
-        if let Some(old_tally) = self.latest_tally.clone() {
+        if let Some(old_tally) = self.latest_tally {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
                 && new_tally.total == old_tally.total
@@ -2633,7 +2633,7 @@ impl Governance {
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
+            command: Some(InFlightCommand::Split(*split)),
         };
 
         let staked_amount = split.amount_e8s - transaction_fee_e8s;
@@ -2817,7 +2817,7 @@ impl Governance {
         let now = self.env.now();
         let in_flight_command = NeuronInFlightCommand {
             timestamp: now,
-            command: Some(InFlightCommand::Merge(merge.clone())),
+            command: Some(InFlightCommand::Merge(*merge)),
         };
 
         // Step 1: calculates the effect of the merge.
@@ -3712,7 +3712,7 @@ impl Governance {
             let mut ballots = HashMap::new();
             for neuron_id in except_from.iter() {
                 if let Some(v) = all_ballots.get(&neuron_id.id) {
-                    ballots.insert(neuron_id.id, v.clone());
+                    ballots.insert(neuron_id.id, *v);
                 }
             }
             ballots
@@ -3725,7 +3725,7 @@ impl Governance {
             proposal,
             proposal_timestamp_seconds: data.proposal_timestamp_seconds,
             ballots: remove_ballots_not_cast_by(&data.ballots, caller_neurons),
-            latest_tally: data.latest_tally.clone(),
+            latest_tally: data.latest_tally,
             decided_timestamp_seconds: data.decided_timestamp_seconds,
             executed_timestamp_seconds: data.executed_timestamp_seconds,
             failed_timestamp_seconds: data.failed_timestamp_seconds,

@@ -468,6 +468,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "group": crate.spec(
                 version = "^0.13",
             ),
+            "ic-sha3": crate.spec(
+                version = "^1.0.0",
+            ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
             ),
@@ -507,18 +510,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
-            ),
-            "hyper_0_14_27": crate.spec(
-                package = "hyper",
-                version = "^0.14.27",
-                features = [
-                    "client",
-                    "full",
-                    "http1",
-                    "http2",
-                    "server",
-                    "tcp",
-                ],
             ),
             "hyper": crate.spec(
                 version = "^1.4.1",
@@ -964,11 +955,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "proptest-derive": crate.spec(
                 version = "^0.5.0",
             ),
-            "prost": crate.spec(
+            "prost_0_12_0": crate.spec(
+                package = "prost",
                 version = "^0.12",
             ),
+            "prost": crate.spec(
+                version = "^0.13",
+            ),
             "prost-build": crate.spec(
-                version = "^0.12",
+                version = "^0.13",
             ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
@@ -1331,10 +1326,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tonic-build": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
