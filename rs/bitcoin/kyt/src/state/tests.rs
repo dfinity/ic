@@ -78,3 +78,60 @@ fn test_fetch_status() {
     clear_fetch_status(txid_1);
     assert!(get_fetch_status(txid_1).is_none());
 }
+
+#[test]
+fn test_fetch_tx_cache_expiry() {
+    let txid_0 = Txid::from([0u8; 32]);
+    let txid_1 = Txid::from([1u8; 32]);
+    let txid_2 = Txid::from([2u8; 32]);
+    let txid_3 = Txid::from([3u8; 32]);
+    let expiry = 1_000_000; // 1 sec
+    let max_entries = 3;
+    let mut cache = FetchTxCache::new(expiry, max_entries);
+    let mut now = 0;
+    cache.set_status_with(txid_0, (), now);
+    assert!(cache.get_status(txid_0).is_some());
+
+    now += 500_001;
+    cache.set_status_with(txid_1, (), now);
+    assert!(cache.get_status(txid_1).is_some());
+
+    now += 500_001;
+    cache.set_status_with(txid_2, (), now);
+    assert!(cache.get_status(txid_2).is_some());
+    assert!(cache.get_status(txid_1).is_some());
+    // txid_0 expired
+    assert!(cache.get_status(txid_0).is_none());
+
+    now += 200_000;
+    cache.set_status_with(txid_3, (), now);
+    assert!(cache.get_status(txid_3).is_some());
+    assert!(cache.get_status(txid_2).is_some());
+    // Oldest has not expired
+    assert!(cache.get_status(txid_1).is_some());
+
+    now += 200_000;
+    cache.set_status_with(txid_0, (), now);
+    assert!(cache.get_status(txid_0).is_some());
+    assert!(cache.get_status(txid_3).is_some());
+    assert!(cache.get_status(txid_2).is_some());
+    // Oldest has not expired, but still removed due to max_entries reached
+    assert!(cache.get_status(txid_1).is_none());
+
+    // setting status of an existing entry will not expire oldest one
+    now += 100_000;
+    cache.set_status_with(txid_3, (), now);
+    assert!(cache.get_status(txid_0).is_some());
+    assert!(cache.get_status(txid_3).is_some());
+    assert!(cache.get_status(txid_2).is_some());
+
+    // clear_status should make room for one more entry
+    cache.clear_status(txid_3);
+    assert!(cache.get_status(txid_0).is_some());
+    assert!(cache.get_status(txid_3).is_none());
+    assert!(cache.get_status(txid_2).is_some());
+    cache.set_status_with(txid_1, (), now);
+    assert!(cache.get_status(txid_1).is_some());
+    assert!(cache.get_status(txid_0).is_some());
+    assert!(cache.get_status(txid_2).is_some());
+}
