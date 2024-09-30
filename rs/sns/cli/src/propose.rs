@@ -9,7 +9,9 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
+use ic_nns_governance_api::pb::v1::{
+    manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal,
+};
 use ic_sns_governance::pb::v1::governance::Mode;
 use itertools::Itertools;
 use std::{
@@ -400,7 +402,7 @@ fn all_canisters_have_all_required_controllers(
     ))
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SaveToErrors {
     FileOpenFailed(PathBuf, String),
     FileWriteFailed(PathBuf, String),

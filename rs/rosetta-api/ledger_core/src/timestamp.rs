@@ -5,7 +5,7 @@ use std::ops::{Add, Sub};
 use std::time::{Duration, SystemTime};
 
 #[derive(
-    Debug, Clone, Copy, CandidType, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
 )]
 pub struct TimeStamp {
     timestamp_nanos: u64,

@@ -147,7 +147,7 @@ fn batch_verification_works() {
     // Check that empty batches are accepted
     assert!(PublicKey::batch_verify(&[], &[], &[], rng).is_ok());
 
-    for batch_size in 1..15 {
+    for batch_size in (1..30).chain([50, 75, 100]) {
         let sk = (0..batch_size)
             .map(|_| PrivateKey::generate_using_rng(rng))
             .collect::<Vec<_>>();
@@ -182,6 +182,18 @@ fn batch_verification_works() {
 
         // Fix the corrupted message
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
+
+        // Corrupt a random public key and check that the batch fails:
+        let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
+        let correct_pk = pk[corrupted_pk_idx];
+        let wrong_pk = PrivateKey::generate_using_rng(rng).public_key();
+        assert_ne!(correct_pk, wrong_pk);
+        pk[corrupted_pk_idx] = wrong_pk;
+        assert!(!batch_verifies(&msg, &sigs, &pk, rng));
+        // Fix the corrupted public key
+        pk[corrupted_pk_idx] = correct_pk;
+        // We fixed the public key so the batch should verify again:
+        debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         if batch_size > 1 {
             // Swapping a key causes batch verification to fail:

@@ -293,7 +293,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct OpConversionError;
 
 #[async_trait]
@@ -776,7 +776,9 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
-            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+            Json(ApiResponse::Success(
+                RawSubmitIngressResult::try_from(opout).unwrap(),
+            )),
         )
             .into_response(),
         OpOut::NoOutput => (
@@ -1125,6 +1127,7 @@ pub async fn create_instance(
             instance_config.state_dir,
             instance_config.nonmainnet_features,
             log_level,
+            instance_config.bitcoind_addr,
         )
     })
     .await

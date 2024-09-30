@@ -112,7 +112,7 @@ thread_local! {
     static CACHE: RefCell<Cache> = RefCell::new(Cache::default());
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct State {
     /// Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
@@ -175,7 +175,7 @@ impl Storable for State {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 enum AccountDataType {
     #[default]
     Balance = 0,
@@ -322,7 +322,7 @@ fn init(index_arg: Option<IndexArg>) {
 // that reads the ledger_id. This struct is used to deserialize
 // the state of the legacy index during post_upgrade in case
 // the upgrade is from the legacy index to the index-ng.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct LegacyIndexState {
     pub ledger_id: ic_base_types::CanisterId,
 }

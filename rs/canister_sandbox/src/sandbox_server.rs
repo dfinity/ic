@@ -148,12 +148,15 @@ mod tests {
     use ic_base_types::{NumSeconds, PrincipalId};
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
-    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Global, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{
+        canister_state::system_state::OnLowWasmMemoryHookStatus, Global, NumWasmPages, PageIndex,
+        PageMap,
+    };
     use ic_system_api::{
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType, ExecutionParameters, InstructionLimits,
@@ -228,6 +231,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         )
     }
 

@@ -5,10 +5,10 @@ package(default_visibility = ["//visibility:public"])
 BENCH_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/nns/constants",

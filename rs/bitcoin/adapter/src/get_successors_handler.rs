@@ -4,10 +4,9 @@ use std::{
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
-use ic_btc_validation::is_beyond_last_checkpoint;
 use ic_metrics::MetricsRegistry;
 use tokio::sync::{mpsc::Sender, Mutex};
-use tonic::{Code, Status};
+use tonic::Status;
 
 use crate::{
     common::BlockHeight, config::Config, metrics::GetSuccessorMetrics, BlockchainManagerRequest,
@@ -42,7 +41,7 @@ const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsRequest {
     /// Hash of the most recent stable block in the Bitcoin canister.
     pub anchor: BlockHash,
@@ -50,7 +49,7 @@ pub struct GetSuccessorsRequest {
     pub processed_block_hashes: Vec<BlockHash>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
     pub blocks: Vec<Block>,
@@ -102,15 +101,6 @@ impl GetSuccessorsHandler {
             let anchor_height = state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.height);
-
-            // Wait with downloading blocks until we synced the header chain above the last checkpoint
-            // to make sure we are following the correct chain.
-            if !is_beyond_last_checkpoint(&self.network, state.get_active_chain_tip().height) {
-                return Err(Status::new(
-                    Code::Unavailable,
-                    "Header chain not yet synced past last checkpoint",
-                ));
-            }
 
             let allow_multiple_blocks = are_multiple_blocks_allowed(self.network, anchor_height);
             let blocks = get_successor_blocks(
@@ -377,49 +367,6 @@ mod test {
                 .collect::<Vec<BlockHash>>(),
             next_hashes
         );
-    }
-
-    #[tokio::test]
-    async fn test_get_successors_wait_header_sync_testnet() {
-        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
-        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = *blockchain_state.genesis();
-        let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
-        let handler = GetSuccessorsHandler::new(
-            &config,
-            Arc::new(Mutex::new(blockchain_state)),
-            blockchain_manager_tx,
-            &MetricsRegistry::default(),
-        );
-        // Set up the following chain:
-        // 0 -> 1 ---> 2 ---> 3 -> 4
-        let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
-        previous_hashes.extend(
-            main_chain
-                .iter()
-                .map(|h| h.block_hash())
-                .collect::<Vec<_>>(),
-        );
-
-        // Create a request with the anchor block as the block 0 and processed block hashes contain
-        // block 1 and 2.x
-        let request = GetSuccessorsRequest {
-            anchor: genesis_hash,
-            processed_block_hashes: vec![],
-        };
-
-        {
-            let mut blockchain = handler.state.lock().await;
-            blockchain.add_headers(&main_chain);
-        }
-
-        let response = handler.get_successors(request).await;
-
-        // Since adapter is not yet passed highest checkpoint it should still be unavailbale.
-        // Highest checkpoint for testnet is 546.
-        assert_eq!(response.err().unwrap().code(), Code::Unavailable);
     }
 
     #[tokio::test]

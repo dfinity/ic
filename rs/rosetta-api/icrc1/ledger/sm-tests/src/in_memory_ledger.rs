@@ -1,8 +1,10 @@
 use super::{get_all_ledger_and_archive_blocks, get_allowance, Tokens};
 use crate::metrics::parse_metric;
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode, Nat, Principal};
+use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1::Operation;
+use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{TokensType, Zero};
@@ -14,7 +16,7 @@ use std::hash::Hash;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct ApprovalKey(Account, Account);
 
 impl From<(&Account, &Account)> for ApprovalKey {
@@ -29,9 +31,15 @@ impl From<ApprovalKey> for (Account, Account) {
     }
 }
 
-trait InMemoryLedgerState {
+pub trait InMemoryLedgerState {
     type AccountId;
     type Tokens;
+
+    fn get_allowance(
+        &self,
+        from: &Self::AccountId,
+        spender: &Self::AccountId,
+    ) -> Option<Allowance<Self::Tokens>>;
 
     fn process_approve(
         &mut self,
@@ -48,6 +56,7 @@ trait InMemoryLedgerState {
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     );
     fn process_mint(&mut self, to: &Self::AccountId, amount: &Self::Tokens);
     fn process_transfer(
@@ -65,10 +74,11 @@ pub struct InMemoryLedger<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    pub balances: HashMap<AccountId, Tokens>,
-    pub allowances: HashMap<K, Allowance<Tokens>>,
-    pub total_supply: Tokens,
-    pub fee_collector: Option<AccountId>,
+    balances: HashMap<AccountId, Tokens>,
+    allowances: HashMap<K, Allowance<Tokens>>,
+    total_supply: Tokens,
+    fee_collector: Option<AccountId>,
+    burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
 }
 
 impl<K, AccountId, Tokens> InMemoryLedgerState for InMemoryLedger<K, AccountId, Tokens>
@@ -80,6 +90,15 @@ where
 {
     type AccountId = AccountId;
     type Tokens = Tokens;
+
+    fn get_allowance(
+        &self,
+        from: &Self::AccountId,
+        spender: &Self::AccountId,
+    ) -> Option<Allowance<Self::Tokens>> {
+        let key = K::from((from, spender));
+        self.allowances.get(&key).cloned()
+    }
 
     fn process_approve(
         &mut self,
@@ -100,7 +119,19 @@ where
         from: &Self::AccountId,
         spender: &Option<Self::AccountId>,
         amount: &Self::Tokens,
+        index: usize,
     ) {
+        let spender: &Option<Self::AccountId> = &spender.clone().or_else(|| {
+            if let Some(burns_without_spender) = &self.burns_without_spender {
+                if burns_without_spender.burn_indexes.contains(&index) {
+                    Some(burns_without_spender.minter.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        });
         self.decrease_balance(from, amount);
         self.decrease_total_supply(amount);
         if let Some(spender) = spender {
@@ -161,6 +192,7 @@ where
             allowances: HashMap::new(),
             total_supply: Tokens::zero(),
             fee_collector: None,
+            burns_without_spender: None,
         }
     }
 }
@@ -240,12 +272,16 @@ where
     ) {
         let key = K::from((from, spender));
         if let Some(expected_allowance) = expected_allowance {
-            let current_allowance = self
+            let current_allowance_amount = self
                 .allowances
                 .get(&key)
-                .unwrap_or_else(|| panic!("No current allowance but expected allowance set"));
-            if current_allowance.amount != *expected_allowance {
-                panic!("Expected allowance does not match current allowance");
+                .map(|allowance| allowance.amount.clone())
+                .unwrap_or(Tokens::zero());
+            if current_allowance_amount != *expected_allowance {
+                panic!(
+                    "Expected allowance ({:?}) does not match current allowance ({:?})",
+                    expected_allowance, current_allowance_amount
+                );
             }
         }
         if amount == &Tokens::zero() {
@@ -319,30 +355,32 @@ where
 }
 
 impl InMemoryLedger<ApprovalKey, Account, Tokens> {
-    fn new_from_icrc1_ledger_blocks(
-        blocks: &[ic_icrc1::Block<Tokens>],
-    ) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
-        let mut state = InMemoryLedger::default();
-        for block in blocks {
+    pub fn new(burns_without_spender: Option<BurnsWithoutSpender<Account>>) -> Self {
+        InMemoryLedger {
+            burns_without_spender,
+            ..Default::default()
+        }
+    }
+
+    pub fn ingest_icrc1_ledger_blocks(&mut self, blocks: &[ic_icrc1::Block<Tokens>]) {
+        for (index, block) in blocks.iter().enumerate() {
             if let Some(fee_collector) = block.fee_collector {
-                state.fee_collector = Some(fee_collector);
+                self.fee_collector = Some(fee_collector);
             }
             match &block.transaction.operation {
-                Operation::Mint { to, amount } => state.process_mint(to, amount),
+                Operation::Mint { to, amount } => self.process_mint(to, amount),
                 Operation::Transfer {
                     from,
                     to,
                     spender,
                     amount,
                     fee,
-                } => {
-                    state.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee))
-                }
+                } => self.process_transfer(from, to, spender, amount, &fee.or(block.effective_fee)),
                 Operation::Burn {
                     from,
                     spender,
                     amount,
-                } => state.process_burn(from, spender, amount),
+                } => self.process_burn(from, spender, amount, index),
                 Operation::Approve {
                     from,
                     spender,
@@ -350,7 +388,7 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     expected_allowance,
                     expires_at,
                     fee,
-                } => state.process_approve(
+                } => self.process_approve(
                     from,
                     spender,
                     amount,
@@ -360,78 +398,149 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            state.validate_invariants();
+            self.validate_invariants();
         }
-        state.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+        self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
             blocks.last().unwrap().timestamp,
         ));
-        state
+    }
+
+    pub fn apply_arg_with_caller(
+        &mut self,
+        arg: &ArgWithCaller,
+        timestamp: TimeStamp,
+        minter_principal: Principal,
+        fee: Option<Tokens>,
+    ) {
+        match &arg.arg {
+            LedgerEndpointArg::ApproveArg(approve_arg) => {
+                let from = Account {
+                    owner: arg.caller.sender().unwrap(),
+                    subaccount: approve_arg.from_subaccount,
+                };
+                self.process_approve(
+                    &from,
+                    &approve_arg.spender,
+                    &Tokens::try_from(approve_arg.amount.clone()).unwrap(),
+                    &approve_arg
+                        .expected_allowance
+                        .clone()
+                        .map(|ea| Tokens::try_from(ea).unwrap()),
+                    &approve_arg.expires_at,
+                    &fee,
+                    timestamp,
+                );
+            }
+            LedgerEndpointArg::TransferArg(transfer_arg) => {
+                let from = Account {
+                    owner: arg.caller.sender().unwrap(),
+                    subaccount: transfer_arg.from_subaccount,
+                };
+                if from.owner == minter_principal {
+                    self.process_mint(
+                        &transfer_arg.to,
+                        &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                    );
+                } else if transfer_arg.to.owner == minter_principal {
+                    self.process_burn(
+                        &from,
+                        &None,
+                        &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        0,
+                    );
+                } else {
+                    self.process_transfer(
+                        &from,
+                        &transfer_arg.to,
+                        &None,
+                        &Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        &fee,
+                    )
+                }
+            }
+        }
+        self.validate_invariants();
+    }
+
+    pub fn verify_balances_and_allowances(&self, env: &StateMachine, ledger_id: CanisterId) {
+        let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
+        let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
+        assert_eq!(
+            self.balances.len() as u64,
+            actual_num_balances,
+            "Mismatch in number of balances ({} vs {})",
+            self.balances.len(),
+            actual_num_balances
+        );
+        assert_eq!(
+            self.allowances.len() as u64,
+            actual_num_approvals,
+            "Mismatch in number of approvals ({} vs {})",
+            self.allowances.len(),
+            actual_num_approvals
+        );
+        println!(
+            "Checking {} balances and {} allowances",
+            actual_num_balances, actual_num_approvals
+        );
+        for (account, balance) in self.balances.iter() {
+            let actual_balance = Decode!(
+                &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
+                    .expect("failed to query balance")
+                    .bytes(),
+                Nat
+            )
+            .expect("failed to decode balance_of response");
+
+            assert_eq!(
+                &Tokens::try_from(actual_balance.clone()).unwrap(),
+                balance,
+                "Mismatch in balance for account {:?} ({} vs {})",
+                account,
+                balance,
+                actual_balance
+            );
+        }
+        for (approval, allowance) in self.allowances.iter() {
+            let (from, spender): (Account, Account) = approval.clone().into();
+            assert!(
+                !allowance.amount.is_zero(),
+                "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
+                &from,
+                &spender
+            );
+            let actual_allowance = get_allowance(env, ledger_id, from, spender);
+            assert_eq!(
+                allowance.amount,
+                Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
+                &from,
+                &spender,
+                approval,
+                allowance,
+                actual_allowance
+            );
+        }
     }
 }
 
-pub fn verify_ledger_state(env: &StateMachine, ledger_id: CanisterId) {
+#[derive(Clone, Debug)]
+pub struct BurnsWithoutSpender<AccountId> {
+    pub minter: AccountId,
+    pub burn_indexes: Vec<usize>,
+}
+
+pub fn verify_ledger_state(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    burns_without_spender: Option<BurnsWithoutSpender<Account>>,
+) {
     println!("verifying state of ledger {}", ledger_id);
     let blocks = get_all_ledger_and_archive_blocks(env, ledger_id);
     println!("retrieved all ledger and archive blocks");
-    let expected_ledger_state = InMemoryLedger::new_from_icrc1_ledger_blocks(&blocks);
+    let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
+    expected_ledger_state.ingest_icrc1_ledger_blocks(&blocks);
     println!("recreated expected ledger state");
-    let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
-    let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
-    assert_eq!(
-        expected_ledger_state.balances.len() as u64,
-        actual_num_balances,
-        "Mismatch in number of balances ({} vs {})",
-        expected_ledger_state.balances.len(),
-        actual_num_balances
-    );
-    assert_eq!(
-        expected_ledger_state.allowances.len() as u64,
-        actual_num_approvals,
-        "Mismatch in number of approvals ({} vs {})",
-        expected_ledger_state.allowances.len(),
-        actual_num_approvals
-    );
-    println!(
-        "Checking {} balances and {} allowances",
-        actual_num_balances, actual_num_approvals
-    );
-    for (account, balance) in expected_ledger_state.balances.iter() {
-        let actual_balance = Decode!(
-            &env.query(ledger_id, "icrc1_balance_of", Encode!(account).unwrap())
-                .expect("failed to query balance")
-                .bytes(),
-            Nat
-        )
-        .expect("failed to decode balance_of response");
-
-        assert_eq!(
-            &Tokens::try_from(actual_balance.clone()).unwrap(),
-            balance,
-            "Mismatch in balance for account {:?} ({} vs {})",
-            account,
-            balance,
-            actual_balance
-        );
-    }
-    for (approval, allowance) in expected_ledger_state.allowances.iter() {
-        let (from, spender): (Account, Account) = approval.clone().into();
-        assert!(
-            !allowance.amount.is_zero(),
-            "Expected allowance is zero! Should not happen... from: {:?}, spender: {:?}",
-            &from,
-            &spender
-        );
-        let actual_allowance = get_allowance(env, ledger_id, from, spender);
-        assert_eq!(
-            allowance.amount,
-            Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-            "Mismatch in allowance for approval from {:?} spender {:?}: {:?} ({:?} vs {:?})",
-            &from,
-            &spender,
-            approval,
-            allowance,
-            actual_allowance
-        );
-    }
+    expected_ledger_state.verify_balances_and_allowances(env, ledger_id);
     println!("ledger state verified successfully");
 }

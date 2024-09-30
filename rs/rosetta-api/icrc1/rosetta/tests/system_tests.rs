@@ -262,6 +262,7 @@ impl RosettaTestingEnvironmentBuilder {
                 });
             }
         }
+
         // Create a testing agent
         let icrc1_agent = Arc::new(Icrc1Agent {
             agent: local_replica::get_testing_agent(self.port).await,
@@ -1480,15 +1481,7 @@ fn test_search_transactions() {
 
                         let search_transactions_response = env
                             .rosetta_client
-                            .search_transactions(
-                                search_transactions_request.network_identifier,
-                                search_transactions_request.transaction_identifier,
-                                search_transactions_request.account_identifier,
-                                search_transactions_request.type_,
-                                search_transactions_request.max_block,
-                                search_transactions_request.limit,
-                                search_transactions_request.offset,
-                            )
+                            .search_transactions(&search_transactions_request)
                             .await
                             .expect("Unable to call search_transactions");
 

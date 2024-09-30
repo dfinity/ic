@@ -8,11 +8,9 @@
 #   build_ext4_image -s 10M -o partition.img.tzst -p boot -i dockerimg.tar -S file_contexts
 #
 import argparse
-import atexit
 import os
 import subprocess
 import sys
-import tempfile
 
 
 def limit_file_contexts(file_contexts, base_path):
@@ -83,6 +81,7 @@ def read_fakeroot_state(statefile):
 
 
 def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
+    flattened_paths = []
     for path in strip_paths:
         if path[0] == "/":
             path = path[1:]
@@ -91,9 +90,18 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         if os.path.isdir(target_path):
             for entry in os.listdir(target_path):
                 del_path = os.path.join(target_path, entry)
-                subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
+                flattened_paths.append(del_path)
         else:
-            subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", target_path])
+            flattened_paths.append(target_path)
+
+    # TODO: replace this with itertools.batched when we have Python 3.12
+    BATCH_SIZE = 100
+    for batch_start in range(0, len(flattened_paths), BATCH_SIZE):
+        batch_end = min(batch_start + BATCH_SIZE, len(flattened_paths))
+        subprocess.run(
+            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf"] +
+            flattened_paths[batch_start:batch_end],
+            check=True)
 
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
@@ -175,8 +183,9 @@ def main():
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+    tmpdir = os.getenv("ICOS_TMPDIR")
+    if not tmpdir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     if file_contexts_file:
         original_file_contexts = open(file_contexts_file, "r").read()

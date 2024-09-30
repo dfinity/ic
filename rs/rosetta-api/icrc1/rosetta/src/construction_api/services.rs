@@ -118,7 +118,7 @@ pub fn construction_payloads(
     // The interval between each ingress message
     // The permitted drift makes sure that intervals are overlapping and there are no edge cases when trying to submit to the IC
     let ingress_interval: u64 =
-        (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos() as u64;
+        (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos() as u64;
 
     let now = now
         .duration_since(SystemTime::UNIX_EPOCH)
@@ -315,7 +315,7 @@ mod tests {
             assert!(
                 received_metadata.ingress_start.unwrap()
                     <= now
-                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                        + (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
                             as u64
             );
         }
@@ -326,7 +326,7 @@ mod tests {
             assert!(
                 received_metadata.ingress_end.unwrap()
                     <= ingress_end
-                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                        + (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT).as_nanos()
                             as u64
             );
         } else {
@@ -337,7 +337,7 @@ mod tests {
             assert_eq!(
                 received_metadata.ingress_end.unwrap(),
                 received_metadata.ingress_start.unwrap()
-                    + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT
+                    + (ic_limits::MAX_INGRESS_TTL - ic_limits::PERMITTED_DRIFT
                         + INGRESS_INTERVAL_OVERLAP)
                         .as_nanos() as u64
             );
@@ -431,8 +431,8 @@ mod tests {
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
                             .as_nanos() as u64;
-                        let ingress_interval = (ic_constants::MAX_INGRESS_TTL
-                            - ic_constants::PERMITTED_DRIFT)
+                        let ingress_interval = (ic_limits::MAX_INGRESS_TTL
+                            - ic_limits::PERMITTED_DRIFT)
                             .as_nanos() as u64;
                         match (
                             payloads_metadata.ingress_end,

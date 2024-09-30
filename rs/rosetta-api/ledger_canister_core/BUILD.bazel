@@ -14,7 +14,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-        "//rs/constants",
+        "//rs/limits",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/canister_log",
         "//rs/types/base_types",

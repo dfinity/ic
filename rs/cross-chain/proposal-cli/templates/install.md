@@ -28,6 +28,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout {{at}}
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 sha256sum ./{{canister.artifact().as_path().display()}}
 ```

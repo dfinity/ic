@@ -46,7 +46,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-rosetta-test-utils = { path = "../../test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-proptest = "1.0"
+proptest = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 

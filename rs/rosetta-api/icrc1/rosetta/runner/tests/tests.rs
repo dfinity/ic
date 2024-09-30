@@ -17,7 +17,7 @@ fn test() {
     let endpoint = pocket_ic.make_live(None);
     let port = endpoint.port().unwrap();
     let replica_url = format!("http://localhost:{}", port);
-    let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
+    let rosetta_bin: PathBuf = path_from_env("ROSETTA_BIN_PATH");
 
     // Wrap async calls in a blocking Block
     rt.block_on(async {

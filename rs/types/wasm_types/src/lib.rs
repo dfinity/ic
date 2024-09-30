@@ -3,7 +3,7 @@
 mod errors;
 
 pub use errors::{
-    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
     WasmValidationError,
 };
 use ic_types::CountBytes;
@@ -140,7 +140,7 @@ impl std::hash::Hash for CanisterModule {
 }
 
 /// The hash of an __uninstrumented__ canister wasm.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
 impl WasmHash {

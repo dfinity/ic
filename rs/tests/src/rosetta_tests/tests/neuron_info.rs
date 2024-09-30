@@ -25,7 +25,7 @@ use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-neuron-info";
+const VM_NAME: &str = "neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

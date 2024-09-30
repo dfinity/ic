@@ -75,7 +75,7 @@ thread_local! {
 }
 
 /// Configuration of the archive node.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
     max_memory_size_bytes: u64,

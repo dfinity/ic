@@ -6,15 +6,15 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ArtifactMutation, ArtifactWithOpt, BouncerFactory, BouncerValue, ChangeResult,
-    ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, BouncerFactory, BouncerValue,
+    MutablePool, PoolMutationsProducer, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
 use ic_types::NodeId;
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct U64Artifact(Vec<u8>);
 
 impl IdentifiableArtifact for U64Artifact {
@@ -58,7 +58,7 @@ struct PeerPool {
     pool: HashSet<u64>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 enum PoolEvent {
     Insert(u64),
     Remove(u64),
@@ -113,7 +113,7 @@ pub struct TestConsensusInner<Artifact: IdentifiableArtifact> {
 }
 
 impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
-    type ChangeSet = (Vec<u64>, Vec<u64>);
+    type Mutations = (Vec<u64>, Vec<u64>);
 
     fn insert(&mut self, msg: UnvalidatedArtifact<U64Artifact>) {
         let mut inner = self.inner.lock().unwrap();
@@ -135,7 +135,7 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         peer_pool.values_mut().for_each(|x| x.remove(*id));
     }
 
-    fn apply_changes(&mut self, mut change_set: Self::ChangeSet) -> ChangeResult<U64Artifact> {
+    fn apply(&mut self, mut change_set: Self::Mutations) -> ArtifactTransmits<U64Artifact> {
         let mut poll_immediately = false;
         if !change_set.0.is_empty() {
             poll_immediately = true;
@@ -143,25 +143,25 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         if !change_set.1.is_empty() {
             poll_immediately = true;
         }
-        let mut mutations = vec![];
-        mutations.extend(change_set.0.drain(..).map(|m| {
-            ArtifactMutation::Insert(ArtifactWithOpt {
+        let mut transmits = vec![];
+        transmits.extend(change_set.0.drain(..).map(|m| {
+            ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: self.id_to_msg(m).into(),
                 is_latency_sensitive: self.latency_sensitive,
             })
         }));
 
-        mutations.extend(change_set.1.drain(..).map(ArtifactMutation::Remove));
-        ChangeResult {
-            mutations,
+        transmits.extend(change_set.1.drain(..).map(ArtifactTransmit::Abort));
+        ArtifactTransmits {
+            transmits,
             poll_immediately,
         }
     }
 }
 
-impl ChangeSetProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
-    type ChangeSet = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::ChangeSet;
-    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::ChangeSet {
+impl PoolMutationsProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+    type Mutations = <TestConsensus<U64Artifact> as MutablePool<U64Artifact>>::Mutations;
+    fn on_state_change(&self, _pool: &TestConsensus<U64Artifact>) -> Self::Mutations {
         let mut inner = self.inner.lock().unwrap();
         let purged: Vec<_> = inner.purge.drain(..).collect();
         let mut advert = Vec::new();
@@ -283,11 +283,15 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     }
 }
 
-impl BouncerFactory<U64Artifact, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
+impl BouncerFactory<u64, TestConsensus<U64Artifact>> for TestConsensus<U64Artifact> {
     fn new_bouncer(
         &self,
         _pool: &TestConsensus<U64Artifact>,
-    ) -> ic_interfaces::p2p::consensus::Bouncer<<U64Artifact as IdentifiableArtifact>::Id> {
+    ) -> ic_interfaces::p2p::consensus::Bouncer<u64> {
         Box::new(|_| BouncerValue::Wants)
+    }
+
+    fn refresh_period(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(3)
     }
 }

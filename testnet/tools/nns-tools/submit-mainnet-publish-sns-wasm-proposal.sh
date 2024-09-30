@@ -39,7 +39,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
 
     VERSION=$(grep '__Source Code__: ' $PROPOSAL_FILE | sed -E 's~.*\[(.{40})\].*~\1~')
     PROPOSAL_TITLE=$(grep '.' "$PROPOSAL_FILE" | head -n 1 | sed 's/# //')
-    HUMANIZED_CANISTER_TYPE=$(echo "$PROPOSAL_TITLE" | sed -E 's/Publish SNS (.+) Upgrade to .+/\1/')
+    HUMANIZED_CANISTER_TYPE=$(echo "$PROPOSAL_TITLE" | sed -E 's/Publish SNS (.+) WASM Built at Commit .+/\1/')
     CANISTER_TYPE=$(echo "$HUMANIZED_CANISTER_TYPE" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/')
 
     # Functions that exit if error
@@ -107,6 +107,8 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
         exit 1
     fi
     echo "$RESPONSE"
+    echo_line
+    PROPOSAL_ID=$(echo "${RESPONSE}" | grep -o 'proposal [0-9]*' | awk '{print $2}' | tr -d '[:space:]')
 
     # Report conclusion.
     echo

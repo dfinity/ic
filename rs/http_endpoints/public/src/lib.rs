@@ -24,9 +24,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub use call::{
-    CallServiceV2, CallServiceV3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
-};
+pub use call::{call_v2, call_v3, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle};
 pub use common::cors_layer;
 pub use query::QueryServiceBuilder;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
@@ -112,8 +110,10 @@ use tempfile::NamedTempFile;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
-    sync::mpsc::{Receiver, UnboundedSender},
-    sync::watch,
+    sync::{
+        mpsc::{Receiver, UnboundedSender},
+        watch, OnceCell,
+    },
     time::{sleep, timeout, Instant},
 };
 use tokio_rustls::TlsConnector;
@@ -135,7 +135,7 @@ const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 /// Defined in RFC 5246 for TLS 1.2 and RFC 8446 for TLS 1.3
 const TLS_HANDHAKE_BYTES: u8 = 22;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
@@ -168,7 +168,7 @@ fn start_server_initialization(
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     rt_handle: tokio::runtime::Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -209,7 +209,7 @@ fn start_server_initialization(
         )
         .await;
         if let Some(delegation) = loaded_delegation {
-            *delegation_from_nns.write().unwrap() = Some(delegation);
+            let _ = delegation_from_nns.set(delegation);
         }
         metrics
             .health_status_transitions_total
@@ -296,11 +296,12 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tracing_handle: ReloadHandles,
     certified_height_watcher: watch::Receiver<Height>,
     completed_execution_messages_rx: Receiver<(MessageId, Height)>,
+    enable_synchronous_call_handler_for_v3_endpoint: bool,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -317,7 +318,6 @@ pub fn start_server(
     }
     let metrics = HttpHandlerMetrics::new(metrics_registry);
 
-    let delegation_from_nns = Arc::new(RwLock::new(delegation_from_nns));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
 
     let ingress_filter = Arc::new(Mutex::new(ingress_filter));
@@ -345,16 +345,32 @@ pub fn start_server(
     );
 
     let call_router =
-        call::CallServiceV2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
+        call_v2::new_router(call_handler.clone(), Some(ingress_watcher_handle.clone()));
 
-    let call_v3_router = call::CallServiceV3::new_router(
-        call_handler,
-        ingress_watcher_handle,
-        metrics.clone(),
-        config.ingress_message_certificate_timeout_seconds,
-        delegation_from_nns.clone(),
-        state_reader.clone(),
-    );
+    let call_v3_router = if enable_synchronous_call_handler_for_v3_endpoint {
+        call_v3::new_router(
+            call_handler,
+            ingress_watcher_handle,
+            metrics.clone(),
+            config.ingress_message_certificate_timeout_seconds,
+            delegation_from_nns.clone(),
+            state_reader.clone(),
+        )
+    } else {
+        call_v3::new_asynchronous_call_service_router(
+            call_handler.clone(),
+            Some(ingress_watcher_handle.clone()),
+        )
+        // We only want to enforce the global concurrency limit for the asynchronous call handler.
+        .layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(map_box_error_to_response))
+                .load_shed()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                )),
+        )
+    };
 
     let query_router = QueryServiceBuilder::builder(
         log.clone(),
@@ -1124,10 +1140,8 @@ mod tests {
             "success".to_string()
         }
         let http_handler = HttpHandler {
-            call_router: Router::new()
-                .route(call::CallServiceV2::route(), axum::routing::post(dummy)),
-            call_v3_router: Router::new()
-                .route(call::CallServiceV3::route(), axum::routing::post(dummy)),
+            call_router: Router::new().route(call_v2::route(), axum::routing::post(dummy)),
+            call_v3_router: Router::new().route(call_v3::route(), axum::routing::post(dummy)),
             query_router: Router::new()
                 .route(QueryService::route(), axum::routing::post(dummy_cbor)),
             catchup_router: Router::new().route(

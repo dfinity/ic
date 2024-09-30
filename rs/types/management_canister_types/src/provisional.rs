@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use num_traits::ToPrimitive;
 
 /// Struct used for encoding/decoding `(record { amount : opt nat; })`
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub amount: Option<candid::Nat>,
     pub settings: Option<CanisterSettingsArgs>,
@@ -41,7 +41,7 @@ impl Payload<'_> for ProvisionalCreateCanisterWithCyclesArgs {}
 ///     canister_id : principal;
 ///     amount: nat;
 /// })`
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct ProvisionalTopUpCanisterArgs {
     canister_id: PrincipalId,
     amount: candid::Nat,

@@ -27,7 +27,21 @@ mod database_access {
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, Connection, Statement};
+    use rusqlite::{named_params, params, Connection, Params, Statement};
+
+    pub fn get_blocks_by_custom_query<P>(
+        connection: &Connection,
+        sql_query: String,
+        params: P,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError>
+    where
+        P: Params,
+    {
+        let mut stmt = connection
+            .prepare_cached(&sql_query)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        read_hashed_blocks(&mut stmt, params)
+    }
 
     pub fn push_hashed_block(
         con: &mut Connection,
@@ -602,7 +616,7 @@ mod database_access {
     }
 }
 
-#[derive(candid::CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub struct HashedBlock {
     pub block: EncodedBlock,
     pub hash: HashOf<EncodedBlock>,
@@ -644,7 +658,7 @@ impl TryFrom<&Row<'_>> for HashedBlock {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum BlockStoreError {
     NotFound(BlockIndex),
     NotAvailable(BlockIndex),
@@ -665,7 +679,7 @@ fn vec_into_array(v: Vec<u8>) -> [u8; 32] {
     *ba
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum RosettaBlocksMode {
     Disabled,
     Enabled { first_rosetta_block_index: u64 },
@@ -1566,6 +1580,18 @@ impl Blocks {
             BlockStoreError::Other(format!("Unable to acquire the connection mutex: {e:?}"))
         })?;
         database_access::contains_block(&mut connection, block_idx)
+    }
+
+    pub fn get_blocks_by_custom_query<P>(
+        &self,
+        sql_query: String,
+        params: P,
+    ) -> Result<Vec<HashedBlock>, BlockStoreError>
+    where
+        P: rusqlite::Params,
+    {
+        let open_connection = self.connection.lock().unwrap();
+        database_access::get_blocks_by_custom_query(&open_connection, sql_query, params)
     }
 }
 

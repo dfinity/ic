@@ -17,10 +17,10 @@ pub fn ecdsa_public_key_to_address(pubkey: &PublicKey) -> ic_ethereum_types::Add
 }
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
-    ic_crypto_sha3::Keccak256::hash(bytes)
+    ic_sha3::Keccak256::hash(bytes)
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum AddressValidationError {
     Invalid { error: String },
     NotSupported(Address),

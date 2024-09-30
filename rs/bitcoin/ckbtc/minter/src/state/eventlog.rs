@@ -10,13 +10,13 @@ use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
-#[derive(candid::CandidType, Deserialize)]
+#[derive(Deserialize, candid::CandidType)]
 pub struct GetEventsArg {
     pub start: u64,
     pub length: u64,
 }
 
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum Event {
     /// Indicates the minter initialization with the specified arguments.  Must be
     /// the first event in the event log.

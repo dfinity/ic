@@ -4,6 +4,7 @@ set -e
 
 # Set the transient or persistent hostname.
 
+source /opt/ic/bin/logging.sh
 # Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
@@ -53,16 +54,6 @@ function validate_arguments() {
     fi
 }
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
-
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
@@ -70,7 +61,6 @@ function read_variables() {
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv6_address") ipv6_address="${value}" ;;
             "hostname") hostname="${value}" ;;
         esac
     done <"${CONFIG}"

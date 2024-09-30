@@ -13,7 +13,7 @@ use strum_macros::{EnumString, VariantNames};
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Error(pub rosetta_core::miscellaneous::Error);
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
 const ERROR_CODE_UNABLE_TO_FIND_BLOCK: u32 = 2;
@@ -192,7 +192,7 @@ impl Error {
     }
 }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, VariantNames)]
+#[derive(Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString, VariantNames)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum OperationType {
     Mint,
@@ -204,7 +204,7 @@ pub enum OperationType {
     FeeCollector,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ApproveMetadata {
     pub allowance: Amount,
 
@@ -244,7 +244,7 @@ impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct TransactionMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<ByteBuf>,
@@ -288,7 +288,7 @@ impl From<crate::common::storage::types::IcrcTransaction> for TransactionMetadat
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct BlockMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_collector_block_index: Option<u64>,
@@ -341,7 +341,7 @@ impl BlockMetadata {
 }
 
 #[derive(
-    Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, VariantNames, Serialize, Deserialize,
+    Clone, Eq, PartialEq, Debug, Display, Deserialize, EnumIter, EnumString, Serialize, VariantNames,
 )]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum FeeSetter {
@@ -349,7 +349,7 @@ pub enum FeeSetter {
     Ledger,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeeMetadata {
     pub fee_set_by: FeeSetter,
 }

@@ -20,7 +20,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/constants",
+    "//rs/limits",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/state",

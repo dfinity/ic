@@ -1,6 +1,6 @@
 = Prober Funding
 
-The https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/boundary_node/prober[Prober^] service performs periodical functionality checks against the various IC subnets.
+The https://github.com/dfinity/ic/tree/master/rs/boundary_node/prober[Prober^] service performs periodical functionality checks against the various IC subnets.
 
 This includes actions from the entire life-cycle of a canister, such as creation, installation, querying and updating, stopping and destroying.
 

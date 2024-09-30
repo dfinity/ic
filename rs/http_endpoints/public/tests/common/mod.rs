@@ -66,7 +66,7 @@ use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
         mpsc::{channel, unbounded_channel, Sender, UnboundedReceiver},
-        watch,
+        watch, OnceCell,
     },
 };
 use tower::{util::BoxCloneService, Service, ServiceExt};
@@ -377,7 +377,7 @@ pub struct HttpEndpointBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
-    delegation_from_nns: Option<CertificateDelegation>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     pprof_collector: Arc<dyn PprofCollector>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     certified_height: Option<Height>,
@@ -393,7 +393,7 @@ impl HttpEndpointBuilder {
             consensus_cache: Arc::new(basic_consensus_pool_cache()),
             registry_client: Arc::new(basic_registry_client()),
             ingress_pool_throttler: Arc::new(RwLock::new(basic_ingress_pool_throttler())),
-            delegation_from_nns: None,
+            delegation_from_nns: Arc::new(OnceCell::new()),
             pprof_collector: Arc::new(Pprof),
             tls_config: Arc::new(MockTlsConfig::new()),
             certified_height: None,
@@ -426,8 +426,8 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn with_delegation_from_nns(mut self, delegation_from_nns: CertificateDelegation) -> Self {
-        self.delegation_from_nns.replace(delegation_from_nns);
+    pub fn with_delegation_from_nns(self, delegation_from_nns: CertificateDelegation) -> Self {
+        self.delegation_from_nns.set(delegation_from_nns).unwrap();
         self
     }
 
@@ -497,6 +497,7 @@ impl HttpEndpointBuilder {
             ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             certified_height_watcher_rx,
             terminal_state_ingress_messages_rx,
+            true,
         );
 
         HttpEndpointHandles {
@@ -578,13 +579,13 @@ pub mod test_agent {
             .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Copy, Clone, Debug)]
     pub enum Call {
         V2,
         V3,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone, Debug)]
     pub struct IngressMessage {
         canister_id: PrincipalId,
         effective_canister_id: PrincipalId,

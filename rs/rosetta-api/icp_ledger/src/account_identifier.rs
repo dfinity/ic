@@ -19,7 +19,7 @@ use crate::{protobuf as proto, AccountIdBlob};
 ///
 /// When it is encoded or decoded it will always be as a string to make it
 /// easier to use from DFX.
-#[derive(Clone, Copy, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct AccountIdentifier {
     pub hash: [u8; 28],
 }
@@ -226,7 +226,7 @@ impl CandidType for AccountIdentifier {
 }
 
 /// Subaccounts are arbitrary 32-byte values.
-#[derive(Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Subaccount(pub [u8; 32]);
 
@@ -291,7 +291,7 @@ impl Display for Subaccount {
 }
 
 /// An error for reporting invalid checksums.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct ChecksumError {
     input: [u8; 32],
     expected_checksum: [u8; 4],
@@ -311,7 +311,7 @@ impl Display for ChecksumError {
 }
 
 /// An error for reporting invalid Account Identifiers.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum AccountIdParseError {
     InvalidChecksum(ChecksumError),
     InvalidLength(Vec<u8>),

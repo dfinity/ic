@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 
-/// ValidateEq trait is indended to verify equality of vetted subset of fields
+/// The ValidateEq trait is intended to verify equality of a vetted subset of fields
 /// and reporting a path to divergence for logging if any.
 ///
 /// Gigantic fields such as PageMaps that are unfeasible to compare in production are meant to

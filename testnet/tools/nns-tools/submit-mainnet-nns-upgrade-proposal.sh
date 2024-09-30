@@ -59,6 +59,7 @@ submit_nns_upgrade_proposal_mainnet() {
     CANDID_ARGS_FILE=""
     if [ ! -z "$CANDID_UPGRADE_ARGS" ]; then
         CANDID_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_UPGRADE_ARGS")
+        CANDID_ARGS_HASH=$(sha_256 $CANDID_ARGS_FILE)
     fi
 
     echo_line
@@ -103,12 +104,14 @@ submit_nns_upgrade_proposal_mainnet() {
         --wasm-module-path="$WASM_GZ"
 
         # Misc
+        --use-explicit-action-type
         --wasm-module-sha256="$WASM_SHA"
         --proposer="$NEURON_ID"
     )
 
     if [ ! -z "$CANDID_ARGS_FILE" ]; then
         cmd+=(--arg=$CANDID_ARGS_FILE)
+        cmd+=(--arg-sha256="$CANDID_ARGS_HASH")
     fi
 
     if [ "$DRY_RUN" = true ]; then

@@ -6,10 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct InsufficientAllowance<Tokens>(pub Tokens);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ApproveError<Tokens> {
     AllowanceChanged { current_allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
@@ -77,7 +77,7 @@ pub trait AllowancesData {
     fn len_arrivals(&self) -> usize;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct HeapAllowancesData<AccountId, Tokens>
 where
     AccountId: Ord,
@@ -191,7 +191,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Allowance<Tokens> {
     pub amount: Tokens,
     pub expires_at: Option<TimeStamp>,
@@ -208,7 +208,7 @@ impl<Tokens: Zero> Default for Allowance<Tokens> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct AllowanceTable<AD: AllowancesData> {
     allowances_data: AD,

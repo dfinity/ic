@@ -1,6 +1,6 @@
 [package]
 name = "pocket-ic-server"
-version = "5.0.0"
+version = "6.0.0"
 edition = "2021"
 
 [dependencies]
@@ -12,6 +12,7 @@ axum-extra = { version = "^0.9", features = ["typed-header"] }
 axum-server = { version = "0.6.0", features = ["tls-rustls"] }
 backoff = { workspace = true }
 base64 = { workspace = true }
+bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 bytes = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
@@ -23,11 +24,10 @@ hex = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-rustls = { workspace = true }
-hyper-socks2 = { workspace = true }
 hyper-util = { workspace = true }
 ic-agent = { workspace = true }
 ic-boundary = { path = "../boundary_node/ic_boundary" }
+ic-btc-adapter = { path = "../bitcoin/adapter" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-cdk = { workspace = true }
 ic-config = { path = "../config" }
@@ -35,7 +35,7 @@ ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", rev = "a1f63eb17b0a89f7fadcab67b3a0afe1720ef9b3" }
+ic-http-gateway = { git = "https://github.com/dfinity/http-gateway", tag = "0.1.0-b0" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-https-outcalls-adapter = { path = "../https_outcalls/adapter" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
@@ -79,8 +79,12 @@ tracing-subscriber = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
+bitcoincore-rpc = "0.15.0"
+ic-btc-interface = { workspace = true }
+ic-config = { path = "../config" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-nns-constants = { path = "../nns/constants" }
 rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }

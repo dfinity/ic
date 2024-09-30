@@ -16,8 +16,7 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
-use hyper_util::{client::legacy::Client, rt::TokioExecutor};
-use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
+use hyper_util::client::legacy::Client;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -29,6 +28,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
@@ -63,7 +63,7 @@ use tokio::{runtime, sync::mpsc};
 ///
 /// Used when computing the expected indices of a stream during payload building
 /// and validation. Or as cutoff points when dealing with stream slices.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Debug, Default)]
 pub struct ExpectedIndices {
     pub message_index: StreamIndex,
     pub signal_index: StreamIndex,
@@ -267,7 +267,7 @@ pub struct XNetPayloadBuilderImpl {
 }
 
 /// Represents the location of a peer
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum PeerLocation {
     /// Peer in the same datacenter
     Local,
@@ -286,7 +286,7 @@ impl From<PeerLocation> for &str {
 }
 
 /// Metadata describing a replica's XNet endpoint.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub struct EndpointLocator {
     /// The ID of the node hosting the replica.
     node_id: NodeId,
@@ -745,7 +745,7 @@ impl XNetPayloadBuilderImpl {
             SignalsValidationResult::Valid => {
                 self.metrics
                     .slice_messages
-                    .observe(slice.messages().map(|m| m.len()).unwrap_or(0) as f64);
+                    .observe(slice.messages().map_or(0, |m| m.len()) as f64);
                 self.metrics
                     .slice_payload_size
                     .observe(certified_slice.payload.len() as f64);
@@ -753,8 +753,7 @@ impl XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end: slice
                         .messages()
-                        .map(|messages| messages.end())
-                        .unwrap_or(expected.message_index),
+                        .map_or(expected.message_index, |messages| messages.end()),
                     signals_end: slice.header().signals_end(),
                     byte_size,
                 }
@@ -894,8 +893,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .network_topology
                     .subnets
                     .get(&subnet_id)
-                    .map(|subnet| subnet.subnet_type)
-                    .unwrap_or(Application); // Technically unwrap() would work here, but this is safer.
+                    .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
                     return None;
                 }
@@ -1313,24 +1311,36 @@ impl PoolRefillTask {
 
                 match query_result {
                     Ok(slice) => {
-                        let res = if witness_begin != msg_begin {
-                            // Pulled a stream suffix, append to pooled slice.
-                            pool.lock()
-                                .unwrap()
-                                .append(subnet_id, slice, registry_version, log)
-                        } else {
-                            // Pulled a complete stream, replace pooled slice (if any).
-                            pool.lock()
-                                .unwrap()
-                                .put(subnet_id, slice, registry_version, log)
-                        };
-                        let status = match res {
-                            Ok(()) => STATUS_SUCCESS,
-                            Err(e) => e.to_label_value(),
-                        };
+                        let logger = log.clone();
+                        let res = tokio::task::spawn_blocking(move || {
+                            if witness_begin != msg_begin {
+                                // Pulled a stream suffix, append to pooled slice.
+                                pool.lock()
+                                    .unwrap()
+                                    .append(subnet_id, slice, registry_version, log)
+                            } else {
+                                // Pulled a complete stream, replace pooled slice (if any).
+                                pool.lock()
+                                    .unwrap()
+                                    .put(subnet_id, slice, registry_version, log)
+                            }
+                        })
+                        .await;
+                        match res {
+                            Ok(res) => {
+                                let status = match res {
+                                    Ok(()) => STATUS_SUCCESS,
+                                    Err(e) => e.to_label_value(),
+                                };
 
-                        metrics.observe_query_slice_duration(status, proximity, since);
-                        metrics.observe_pull_attempt(status);
+                                metrics.observe_query_slice_duration(status, proximity, since);
+                                metrics.observe_pull_attempt(status);
+                            }
+                            Err(err) => warn!(
+                                logger,
+                                "Failed to join pool refill blocking thread: {}", err
+                            ),
+                        };
                     }
 
                     Err(e) => {
@@ -1416,13 +1426,13 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SignalsValidationResult {
     Valid,
     Invalid,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 enum SliceValidationResult {
     /// Slice is valid.
     Valid {
@@ -1537,7 +1547,8 @@ impl XNetClientImpl {
 
         // TODO(MR-28) Make timeout configurable.
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
-            Client::builder(TokioExecutor::new())
+            Client::builder(hyper_util::rt::TokioExecutor::new())
+                .http2_only(true)
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);

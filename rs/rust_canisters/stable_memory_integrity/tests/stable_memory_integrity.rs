@@ -321,7 +321,7 @@ impl proptest::strategy::ValueTree for OperationsTree {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 struct OperationsStrategy;
 
 impl proptest::strategy::Strategy for OperationsStrategy {

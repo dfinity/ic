@@ -59,7 +59,7 @@ use std::{str::FromStr, time::SystemTime};
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
 pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 250_000 * E8;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnsClient {
     pub sns_canisters: SnsCanisterIds,
     pub wallet_canister_id: PrincipalId,
@@ -546,7 +546,7 @@ fn open_sns_token_swap_payload(
 /// Send open sns token swap proposal to governance and wait until it is executed.
 async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
     // Sanity check that params is valid
-    let params = payload.params.as_ref().unwrap().clone();
+    let params = *payload.params.as_ref().unwrap();
     let () = params
         .validate(&Init {
             should_auto_finalize: Some(true),

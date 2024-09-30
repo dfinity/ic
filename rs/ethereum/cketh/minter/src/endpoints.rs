@@ -11,12 +11,12 @@ use std::str::FromStr;
 
 pub mod ckerc20;
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Eip1559TransactionPriceArg {
     pub ckerc20_ledger_id: Principal,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
     pub max_fee_per_gas: Nat,
@@ -37,7 +37,7 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct CkErc20Token {
     pub ckerc20_token_symbol: String,
     pub erc20_contract_address: String,
@@ -54,13 +54,13 @@ impl From<crate::erc20::CkErc20Token> for CkErc20Token {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct Erc20Balance {
     pub erc20_contract_address: String,
     pub balance: Nat,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
     #[deprecated(note = "use eth_helper_contract_address instead")]
@@ -79,14 +79,14 @@ pub struct MinterInfo {
     pub cketh_ledger_id: Option<Principal>,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GasFeeEstimate {
     pub max_fee_per_gas: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub timestamp: u64,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
@@ -107,12 +107,12 @@ impl From<&TransactionReceipt> for EthTransaction {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Debug, Default, Deserialize, Clone, Encode, Decode, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Decode, Deserialize, Encode)]
 #[cbor(index_only)]
 pub enum CandidBlockTag {
     /// The latest mined block.
@@ -139,7 +139,7 @@ impl From<EthWithdrawalRequest> for RetrieveEthRequest {
     }
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub enum RetrieveEthStatus {
     NotFound,
     Pending,
@@ -148,7 +148,7 @@ pub enum RetrieveEthStatus {
     TxFinalized(TxFinalizedStatus),
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub enum TxFinalizedStatus {
     Success {
         transaction_hash: String,
@@ -196,7 +196,7 @@ pub struct WithdrawalArg {
     pub recipient: String,
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawalError {
     AmountTooLow { min_withdrawal_amount: Nat },
     InsufficientFunds { balance: Nat },
@@ -228,7 +228,7 @@ impl From<LedgerBurnError> for WithdrawalError {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum WithdrawalSearchParameter {
     ByWithdrawalId(u64),
     ByRecipient(String),
@@ -250,7 +250,7 @@ impl TryFrom<WithdrawalSearchParameter> for transactions::WithdrawalSearchParame
     }
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub struct WithdrawalDetail {
     pub withdrawal_id: u64,
     pub recipient_address: String,
@@ -262,7 +262,7 @@ pub struct WithdrawalDetail {
     pub status: WithdrawalStatus,
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub enum WithdrawalStatus {
     Pending,
     TxCreated,
@@ -270,7 +270,7 @@ pub enum WithdrawalStatus {
     TxFinalized(TxFinalizedStatus),
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddCkErc20Token {
     pub chain_id: Nat,
     pub address: String,
@@ -284,31 +284,31 @@ pub mod events {
     use candid::{CandidType, Deserialize, Nat, Principal};
     use serde_bytes::ByteBuf;
 
-    #[derive(CandidType, Deserialize, Debug, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsArg {
         pub start: u64,
         pub length: u64,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     pub struct GetEventsResult {
         pub events: Vec<Event>,
         pub total_event_count: u64,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct Event {
         pub timestamp: u64,
         pub payload: EventPayload,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct EventSource {
         pub transaction_hash: String,
         pub log_index: Nat,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum ReimbursementIndex {
         CkEth {
             ledger_burn_index: Nat,
@@ -320,13 +320,13 @@ pub mod events {
         },
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct AccessListItem {
         pub address: String,
         pub storage_keys: Vec<ByteBuf>,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct UnsignedTransaction {
         pub chain_id: Nat,
         pub nonce: Nat,
@@ -339,13 +339,13 @@ pub mod events {
         pub access_list: Vec<AccessListItem>,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum TransactionStatus {
         Success,
         Failure,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct TransactionReceipt {
         pub block_hash: String,
         pub block_number: Nat,
@@ -355,7 +355,7 @@ pub mod events {
         pub transaction_hash: String,
     }
 
-    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub enum EventPayload {
         Init(InitArg),
         Upgrade(UpgradeArg),

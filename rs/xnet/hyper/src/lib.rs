@@ -17,7 +17,7 @@ use tower::{BoxError, Service};
 
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Copy, Clone, Debug, Default)]
 enum ConnectionType {
     /// Only accept TLS connections.
     #[default]

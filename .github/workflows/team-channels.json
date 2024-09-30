@@ -13,7 +13,7 @@
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
     "networking": "eng-networking",
-    "nns-team": "eng-nns",
+    "nns-team": "eng-nns-prs",
     "node": "eng-node-prs",
     "Platform Operations": "eng-platform-ops",
     "pocket-ic": "pocket-ic",

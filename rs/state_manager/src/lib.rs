@@ -18,7 +18,7 @@ use crate::{
     },
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -634,14 +634,14 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
     meta_manifest: Arc<MetaManifest>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct StateMetadata {
     /// We don't persist the checkpoint layout because we re-create it every
     /// time we discover a checkpoint on disk.
@@ -779,6 +779,16 @@ impl SharedState {
 // the cost of deallocation over a longer period of time, and avoid long pauses.
 type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 
+struct NotifyWhenDeallocated {
+    channel: Sender<()>,
+}
+
+impl Drop for NotifyWhenDeallocated {
+    fn drop(&mut self) {
+        self.channel.send(()).expect("Failed to notify dellocation");
+    }
+}
+
 // We will not use the deallocation thread when the number of pending
 // deallocation objects goes above the threshold.
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
@@ -910,21 +920,11 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
             is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
-}
-
-fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    let mut result = Vec::new();
-    for entry in PageMapType::list_all_including_snapshots(state) {
-        if let Some(page_map) = entry.get(state) {
-            result.push((entry, page_map.num_host_pages()));
-        }
-    }
-    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -1076,7 +1076,7 @@ struct PopulatedMetadata {
 /// When adding additional PageMaps, add an appropriate entry here
 /// to enable all relevant state manager features, e.g. incremental
 /// manifest computations
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
@@ -1163,7 +1163,7 @@ impl PageMapType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct DirtyPageMap {
     pub height: Height,
     pub page_type: PageMapType,
@@ -1683,7 +1683,7 @@ impl StateManagerImpl {
             .zip(snapshots.iter().skip(1))
             .all(|(s0, s1)| s0.height < s1.height));
 
-        let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
+        let last_snapshot_height = snapshots.back().map_or(0, |s| s.height.get() as i64);
 
         metrics.resident_state_count.set(snapshots.len() as i64);
 
@@ -2171,6 +2171,16 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
+    /// Wait till deallocation queue is empty.
+    pub fn flush_deallocation_channel(&self) {
+        let (send, recv) = bounded(1);
+        self.deallocation_sender
+            .send(Box::new(NotifyWhenDeallocated { channel: send }))
+            .expect("Failed to send deallocation request");
+        recv.recv()
+            .expect("Failed to receive deallocation notification");
+    }
+
     /// Remove any inmemory state at height h with h < last_height_to_keep, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
@@ -2248,8 +2258,7 @@ impl StateManagerImpl {
         let latest_height = states
             .snapshots
             .back()
-            .map(|s| s.height)
-            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+            .map_or(Self::INITIAL_STATE_HEIGHT, |s| s.height);
 
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
@@ -2526,6 +2535,18 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
+                .with_label_values(&["defrag_canisters_map"])
+                .start_timer();
+
+            // This step is a functional no-op, but results in a cleaner memory layout that is ultimately faster to iterate over.
+            let canisters = std::mem::take(&mut state.canister_states);
+            state.canister_states = canisters.into_iter().collect();
+        }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
                 .with_label_values(&["validate_eq"])
                 .start_timer();
             if let Err(err) = checkpointed_state.validate_eq(state) {
@@ -2603,7 +2624,7 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 }]
             } else {
@@ -3819,7 +3840,7 @@ fn maliciously_alter_certified_hash(
     certification
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CheckpointError {
     /// Wraps a stringified `std::io::Error`, a message and the path of the
     /// affected file/directory.

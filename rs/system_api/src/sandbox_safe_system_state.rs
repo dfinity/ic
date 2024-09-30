@@ -2,12 +2,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
-use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
     CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
@@ -17,7 +17,10 @@ use ic_management_canister_types::{
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY},
+    canister_state::{
+        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        DEFAULT_QUEUE_CAPACITY,
+    },
     CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
@@ -33,7 +36,7 @@ use std::str::FromStr;
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
 /// The information that canisters can see about their own status.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterStatusView {
     Running,
     Stopping,
@@ -50,14 +53,14 @@ impl CanisterStatusView {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallbackUpdate {
     Register(CallbackId, Callback),
     Unregister(CallbackId),
 }
 
 /// Tracks changes to the system state that the canister has requested.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     // pub for testing
@@ -73,6 +76,7 @@ pub struct SystemStateChanges {
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     canister_log: CanisterLog,
+    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
 }
 
 impl Default for SystemStateChanges {
@@ -88,6 +92,7 @@ impl Default for SystemStateChanges {
             requests: vec![],
             new_global_timer: None,
             canister_log: Default::default(),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         }
     }
 }
@@ -300,6 +305,8 @@ impl SystemStateChanges {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
+
+        system_state.set_on_low_wasm_memory_hook_status(self.on_low_wasm_memory_hook_status);
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
@@ -546,7 +553,7 @@ impl SystemStateChanges {
 /// A version of the `SystemState` that can be used in a sandboxed process.
 /// Changes are separately tracked so that we can verify the changes are valid
 /// before applying them to the actual system state.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SandboxSafeSystemState {
     /// Only public for tests
     #[doc(hidden)]
@@ -610,6 +617,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         Self {
             canister_id,
@@ -626,6 +634,7 @@ impl SandboxSafeSystemState {
                 canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
+                on_low_wasm_memory_hook_status,
                 ..SystemStateChanges::default()
             },
             initial_cycles_balance,
@@ -727,6 +736,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            system_state.get_on_low_wasm_memory_hook_status(),
         )
     }
 
@@ -1210,6 +1220,59 @@ impl SandboxSafeSystemState {
         }
     }
 
+    /// Updates status `OnLowWasmMemoryHook` if the following condition is satisfied:
+    ///
+    /// 1. In the case of `memory_allocation`
+    ///     `wasm_memory_threshold >= min(memory_allocation - used_stable_memory, wasm_memory_limit) - used_wasm_memory`
+    /// 2. Without memory allocation
+    ///     `wasm_memory_threshold >= wasm_memory_limit - used_wasm_memory`
+    ///
+    /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
+    pub fn update_on_low_wasm_memory_hook_status(
+        &mut self,
+        memory_allocation: Option<NumBytes>,
+        wasm_memory_limit: Option<NumBytes>,
+        used_stable_memory: NumBytes,
+        used_wasm_memory: NumBytes,
+    ) {
+        // If wasm memory limit is not set, the default is 4 GiB. Wasm memory
+        // limit is ignored for query methods, response callback handlers,
+        // global timers, heartbeats, and canister pre_upgrade.
+        let wasm_memory_limit =
+            wasm_memory_limit.unwrap_or_else(|| NumBytes::new(4 * 1024 * 1024 * 1024));
+
+        // If the canister has memory allocation, then it maximum allowed Wasm memory
+        // can be calculated as min(memory_allocation - used_stable_memory, wasm_memory_limit).
+        let wasm_capacity = memory_allocation.map_or_else(
+            || wasm_memory_limit,
+            |memory_allocation| {
+                debug_assert!(
+                    used_stable_memory <= memory_allocation,
+                    "Used stable memory: {:?} is larger than memory allocation: {:?}.",
+                    used_stable_memory,
+                    memory_allocation
+                );
+                std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+            },
+        );
+
+        let on_low_wasm_memory_hook_status =
+            &mut self.system_state_changes.on_low_wasm_memory_hook_status;
+
+        // Conceptually we can think that the remaining Wasm memory is
+        // equal to `wasm_capacity - used_wasm_memory` and that should
+        // be compared with `wasm_memory_threshold` when checking for
+        // the condition for the hook. However, since `wasm_memory_limit`
+        // is ignored in some executions as stated above it is possible
+        // that `used_wasm_memory` is greater than `wasm_capacity` to
+        // avoid overflowing subtraction we adopted inequality.
+        if wasm_capacity >= used_wasm_memory + self.wasm_memory_threshold {
+            *on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+        } else if *on_low_wasm_memory_hook_status != OnLowWasmMemoryHookStatus::Executed {
+            *on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Ready;
+        }
+    }
+
     // Returns `true` if storage cycles need to be reserved for the given
     // API type when growing memory.
     fn should_reserve_storage_cycles(&self, api_type: &ApiType) -> bool {
@@ -1278,10 +1341,13 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
-    use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
+    use ic_replicated_state::{
+        canister_state::system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
+        SystemState,
+    };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         messages::{RequestMetadata, NO_DEADLINE},
@@ -1391,6 +1457,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
         );
         sandbox_state.msg_deadline()
     }
@@ -1404,5 +1471,136 @@ mod tests {
 
         // Otherwise the correct `deadline` is returned.
         assert_eq!(helper_msg_deadline(Some(deadline)), deadline);
+    }
+
+    fn helper_create_state_for_hook_status(
+        start_status: OnLowWasmMemoryHookStatus,
+        wasm_memory_threshold: u64,
+    ) -> SandboxSafeSystemState {
+        SandboxSafeSystemState::new_internal(
+            canister_test_id(0),
+            CanisterStatusView::Running,
+            NumSeconds::from(3600),
+            MemoryAllocation::BestEffort,
+            NumBytes::new(wasm_memory_threshold),
+            ComputeAllocation::default(),
+            Cycles::new(1_000_000),
+            Cycles::zero(),
+            None,
+            None,
+            None,
+            None,
+            CyclesAccountManager::new(
+                NumInstructions::from(1_000_000_000),
+                SubnetType::Application,
+                subnet_test_id(0),
+                CyclesAccountManagerConfig::application_subnet(),
+            ),
+            Some(0),
+            BTreeMap::new(),
+            0,
+            BTreeSet::new(),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            SchedulerConfig::application_subnet().dirty_page_overhead,
+            CanisterTimer::Inactive,
+            0,
+            BTreeSet::new(),
+            RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
+            None,
+            0,
+            start_status,
+        )
+    }
+
+    const GIB: u64 = 1 << 30;
+
+    fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+        wasm_memory_threshold: u64,
+        memory_allocation: Option<u64>,
+        wasm_memory_limit: Option<u64>,
+        used_stable_memory: u64,
+        used_wasm_memory: u64,
+    ) -> bool {
+        let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
+
+        let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
+            std::cmp::min(memory_allocation - used_stable_memory, wasm_memory_limit)
+        });
+
+        wasm_capacity < used_wasm_memory + wasm_memory_threshold
+    }
+
+    fn helper_test_on_low_wasm_memory_hook(
+        start_status: OnLowWasmMemoryHookStatus,
+        status_if_condition_satisfied: OnLowWasmMemoryHookStatus,
+    ) {
+        for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+            for memory_allocation in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+            {
+                for wasm_memory_limit in
+                    [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+                {
+                    for used_stable_memory in [0, GIB] {
+                        for used_wasm_memory in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                            let mut state = helper_create_state_for_hook_status(
+                                start_status,
+                                wasm_memory_threshold,
+                            );
+
+                            assert_eq!(
+                                state.system_state_changes.on_low_wasm_memory_hook_status,
+                                start_status
+                            );
+
+                            state.update_on_low_wasm_memory_hook_status(
+                                memory_allocation.map(|m| m.into()),
+                                wasm_memory_limit.map(|m| m.into()),
+                                used_stable_memory.into(),
+                                used_wasm_memory.into(),
+                            );
+
+                            assert_eq!(
+                                state.system_state_changes.on_low_wasm_memory_hook_status,
+                                if helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                                    wasm_memory_threshold,
+                                    memory_allocation,
+                                    wasm_memory_limit,
+                                    used_stable_memory,
+                                    used_wasm_memory
+                                ) {
+                                    status_if_condition_satisfied
+                                } else {
+                                    OnLowWasmMemoryHookStatus::ConditionNotSatisfied
+                                }
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied,
+            OnLowWasmMemoryHookStatus::Ready,
+        );
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_ready() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::Ready,
+            OnLowWasmMemoryHookStatus::Ready,
+        );
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_executed() {
+        helper_test_on_low_wasm_memory_hook(
+            OnLowWasmMemoryHookStatus::Executed,
+            OnLowWasmMemoryHookStatus::Executed,
+        );
     }
 }

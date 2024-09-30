@@ -7,7 +7,7 @@ use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
     /// Minimum amount of bitcoin that can be retrieved.
     #[serde(skip_serializing_if = "Option::is_none")]

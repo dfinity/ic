@@ -166,7 +166,7 @@ impl<'a> WriteBuffer<'a> {
 /// NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
 /// operation. This allows us to simplify canister state management: we can
 /// simply have a copy of the whole PageMap in every canister snapshot.
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct PageDelta(IntMap<Page>);
 
 impl PageDelta {
@@ -230,7 +230,7 @@ where
 }
 
 /// Errors that can happen when one saves or loads a PageMap.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum PersistenceError {
     /// I/O error while interacting with the filesystem.
     FileSystemError {
@@ -323,7 +323,7 @@ impl std::fmt::Display for PersistenceError {
 
 /// A wrapper around the raw file descriptor to be used for memory mapping the
 /// file into the Wasm heap while executing a canister.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FileDescriptor {
     pub fd: RawFd,
 }
@@ -341,7 +341,7 @@ pub type FileOffset = off_t;
 /// Note: For an entry in `instructions` of the form `(range, Data(bytes))`, the lengths of range and bytes
 /// will be consistent. For an entry of the form `(range, MemoryMap(fd, offset))` the length
 /// of the memory map can be inferred from `range`.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub struct MemoryInstructions<'a> {
     pub range: Range<PageIndex>,
     pub instructions: Vec<MemoryInstruction<'a>>,
@@ -352,7 +352,7 @@ pub type MemoryInstruction<'a> = (Range<PageIndex>, MemoryMapOrData<'a>);
 
 /// Description of range of pages.
 /// See also `MemoryInstructions`.
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum MemoryMapOrData<'a> {
     MemoryMap(FileDescriptor, usize),
     Data(&'a [u8]),
@@ -872,12 +872,8 @@ impl PageMap {
     /// ```
     pub fn num_host_pages(&self) -> usize {
         let pages_in_checkpoint = self.storage.num_logical_pages();
-        pages_in_checkpoint.max(
-            self.page_delta
-                .max_page_index()
-                .map(|i| i.get() + 1)
-                .unwrap_or(0) as usize,
-        )
+        pages_in_checkpoint
+            .max(self.page_delta.max_page_index().map_or(0, |i| i.get() + 1) as usize)
     }
 
     /// Switches the checkpoint file of the current page map to the one provided
@@ -1121,7 +1117,7 @@ impl std::fmt::Debug for PageMap {
 /// It contains sufficient information to reconstruct `PageMap`
 /// in another process. Note that canister sandboxing does not
 /// need `unflushed_delta`, but the field is kept for consistency here.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct PageMapSerialization {
     pub storage: StorageSerialization,
     pub base_height: Option<Height>,
@@ -1138,7 +1134,7 @@ pub trait PageAllocatorFileDescriptor: Send + Sync + std::fmt::Debug {
 }
 
 /// Simple implementation that can instantiate give file descriptors to temp file system
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct TestPageAllocatorFileDescriptorImpl;
 
 impl PageAllocatorFileDescriptor for TestPageAllocatorFileDescriptorImpl {

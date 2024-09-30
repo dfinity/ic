@@ -85,15 +85,17 @@ rust_test(
     #     bazel \
     #         test \
     #         --test_env=SSH_AUTH_SOCK \
+    #         --test_timeout=43200 \
     #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test
     #
     # To run the U256 token version of the test (for ckETH and ckERC20 tokens), use:
     #
     #         //rs/rosetta-api/icrc1:icrc_ledger_suite_integration_golden_state_upgrade_downgrade_test_u256
     #
-    # The only unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. That causes the
-    # SSH_AUTH_SOCK environment variable to be "forwarded" from your shell to the sandbox where the test
-    # is run. This authorizes the test to download the test data.
+    # The unusual things in this command are:
+    #  - `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment variable to be "forwarded" from
+    #    your shell to the sandbox where the test is run. This authorizes the test to download the test data.
+    #  - `--test_timeout=43200`: This sets the test timeout to 12 hours (more than currently required).
     #
     # Additionally, the following flags are recommended (but not required):
     #
@@ -117,10 +119,14 @@ rust_test(
         crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1",
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
@@ -137,6 +143,9 @@ rust_test(
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
             "//rs/rosetta-api/icrc1/test_utils",
+            "//rs/rosetta-api/icrc1/tokens_u256",
+            "//rs/rosetta-api/icrc1/tokens_u64",
+            "//rs/rosetta-api/ledger_core",
             "//rs/rust_canisters/canister_test",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
@@ -171,6 +180,7 @@ rust_test(
         data = [
             "//rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
             "@" + mainnet_ledger + "//file",
             "@" + mainnet_index + "//file",
         ],
@@ -180,6 +190,7 @@ rust_test(
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
         },
         deps = [
             # Keep sorted.

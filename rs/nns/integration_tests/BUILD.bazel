@@ -12,13 +12,17 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/cmc",
     "//rs/nns/common",
+    "//rs/nns/governance/api",
+    "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/sns-wasm",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_protobuf",
+    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
@@ -41,6 +45,7 @@ BASE_DEPENDENCIES = [
         "//rs/crypto",
         "//rs/crypto/sha2",
         "//rs/nervous_system/root",
+        "//rs/nns/constants",
         "//rs/phantom_newtype",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -75,16 +80,10 @@ BASE_DEPENDENCIES = [
 DEPENDENCIES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance",
-    "//rs/nns/governance/api",
-    "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/init",
-    "//rs/sns/swap",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//rs/nns/constants",
         "//rs/nns/test_utils",
         "//rs/nns/gtc",
     ],
@@ -93,16 +92,11 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     # Keep sorted.
     "//rs/nns/governance:governance--test_feature",
-    "//rs/nns/governance/api:api--test_feature",
-    "//rs/nns/governance/init:init--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
-    "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/swap:swap--test_feature",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//rs/nns/constants:constants--test_feature",
         "//rs/nns/test_utils:test_utils--test_feature",
         "//rs/nns/gtc:gtc--test_feature",
     ],
@@ -123,8 +117,13 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/test_utils",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nns/test_utils/golden_nns_state",
     "//rs/types/types_test_utils",
+    "@crate_index//:ic-cbor",
+    "@crate_index//:ic-certificate-verification",
+    "@crate_index//:ic-certification",
+    "@crate_index//:serde_cbor",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -356,10 +355,7 @@ rust_ic_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# This test has tag "manual", which means it only runs when you explicitly specify it. In addition,
-# this requires a couple of environment variables.
-#
-# To run this test,
+# Run this test as follows:
 #
 #     bazel \
 #         test \

@@ -30,9 +30,7 @@ service are started in the IC-OS boot sequence:
 
 - Start node exporter
 
-- Start nginx
-
-- Start icx_proxy
+- Start ic-gateway
 
 - Start danted socks-proxy
 
@@ -126,15 +124,9 @@ Service: `node_exporter.service`. Depends on `setup-node_exporter-keys.service`.
 
 Starts the `node_exporter` service to make machine metrics accessible externally.
 
-==  Start nginx
+==  Start ic-gateway
 
-Service: `nginx.service`
-
-Default starter script that comes with the package. Relevant information is here: `nginx.service.d/override.conf` and in `/etc/nginx`
-
-==  Start icx_proxy
-
-Service: icx-proxy.service
+Service: ic-gateway.service
 
 - TODO BOUN-179
 

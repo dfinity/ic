@@ -4,12 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import os
 import shutil
-import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -293,8 +290,9 @@ def main():
     no_cache = args.no_cache
     temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
 
-    context_dir = tempfile.mkdtemp(prefix="icosbuild")
-    atexit.register(lambda: subprocess.run(["rm", "-rf", context_dir], check=True))
+    context_dir = os.getenv("ICOS_TMPDIR")
+    if not context_dir:
+        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
 
     # Add all context files directly into dir
     for context_file in context_files:

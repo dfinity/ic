@@ -345,7 +345,7 @@ pub struct UpdateSettings {
     settings: CanisterSettings,
 }
 
-#[derive(CandidType, Default)]
+#[derive(Default, CandidType)]
 pub struct CanisterSettings {
     pub controller: Option<Principal>,
     pub controllers: Option<Vec<Principal>>,
@@ -354,14 +354,14 @@ pub struct CanisterSettings {
     pub freezing_threshold: Option<candid::Nat>,
 }
 
-#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub enum Network {
     Mainnet,
     Testnet,
     Regtest,
 }
 
-#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct GetBalanceRequest {
     pub address: String,
     pub network: Network,

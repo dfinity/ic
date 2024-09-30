@@ -271,7 +271,11 @@ fn execute_response_traps() {
                 ingress_status,
                 IngressStatus::Known {
                     state: IngressState::Failed(
-                        HypervisorError::CalledTrap(String::new()).into_user_error(&a_id)
+                        HypervisorError::CalledTrap {
+                            message: String::new(),
+                            backtrace: None
+                        }
+                        .into_user_error(&a_id)
                     ),
                     receiver: a_id.get(),
                     time: Time::from_nanos_since_unix_epoch(0),
@@ -322,7 +326,10 @@ fn execute_response_with_trapping_cleanup() {
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
-            let err_trapped = Box::new(HypervisorError::CalledTrap(String::new()));
+            let err_trapped = Box::new(HypervisorError::CalledTrap {
+                message: String::new(),
+                backtrace: None,
+            });
             assert_eq!(
                 ingress_status,
                 IngressStatus::Known {
@@ -2480,7 +2487,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
         .unwrap();
 
     test.ingress(
@@ -2979,10 +2986,10 @@ fn test_best_effort_responses_feature_flag_enabled() {
 fn test_best_effort_responses_feature_flag_disabled() {
     match test_best_effort_responses_feature_flag(FlagStatus::Disabled) {
         Err(e) => {
-            assert_eq!(e.code(), ErrorCode::CanisterContractViolation);
-            assert!(e
-                .description()
-                .ends_with("ic0::call_with_best_effort_response is not enabled."));
+            e.assert_contains(
+                ErrorCode::CanisterContractViolation,
+                "ic0::call_with_best_effort_response is not enabled.",
+            );
         }
         _ => panic!("Unexpected result"),
     };
@@ -3020,8 +3027,8 @@ fn test_ic0_msg_deadline_best_effort_responses_feature_flag_disabled() {
     let err = helper_ic0_msg_deadline_best_effort_responses_feature_flag(FlagStatus::Disabled)
         .unwrap_err();
 
-    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
-    assert!(err
-        .description()
-        .ends_with("ic0::msg_deadline is not enabled."));
+    err.assert_contains(
+        ErrorCode::CanisterContractViolation,
+        "ic0::msg_deadline is not enabled.",
+    );
 }

@@ -41,10 +41,8 @@ fn test_get_status() {
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
                 archive_canister_ids: vec![],
-                latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
-                updated_framework_canisters_memory_limit: Some(true),
             },
         )
         .await;

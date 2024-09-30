@@ -6,7 +6,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub enum InvalidNodePublicKey {
     MalformedRawBytes { internal_error: String },
 }
