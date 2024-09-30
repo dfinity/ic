@@ -1,5 +1,5 @@
 {
-  "checksum": "a69a05f2fa984dfb6fa61da720975e6d56cf11c8dd25267980c629fe1bfbab56",
+  "checksum": "2e83feec05b29387b9fe0f4d22a2a3d4a86cc26ba060fbcdbe080e7572e8c7e0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -684,7 +684,7 @@
               "target": "futures_util"
             },
             {
-              "id": "mio 0.8.10",
+              "id": "mio 0.8.11",
               "target": "mio"
             },
             {
@@ -15181,7 +15181,7 @@
                 "target": "libc"
               },
               {
-                "id": "mio 0.8.10",
+                "id": "mio 0.8.11",
                 "target": "mio"
               },
               {
@@ -18163,6 +18163,10 @@
             {
               "id": "minicbor 0.19.1",
               "target": "minicbor"
+            },
+            {
+              "id": "mio 0.8.11",
+              "target": "mio"
             },
             {
               "id": "mockall 0.13.0",
@@ -28595,7 +28599,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/ic-bn-lib",
           "commitish": {
-            "Rev": "9abf1e385e4a32279de005d0019c17774e164828"
+            "Rev": "c0c826380f220c09f06b88350178c18f63010471"
           }
         }
       },
@@ -39308,14 +39312,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "mio 0.8.10": {
+    "mio 0.8.11": {
       "name": "mio",
-      "version": "0.8.10",
+      "version": "0.8.11",
       "package_url": "https://github.com/tokio-rs/mio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/mio/0.8.10/download",
-          "sha256": "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+          "url": "https://static.crates.io/crates/mio/0.8.11/download",
+          "sha256": "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
         }
       },
       "targets": [
@@ -39452,7 +39456,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.8.10"
+        "version": "0.8.11"
       },
       "license": "MIT",
       "license_ids": [
@@ -60758,7 +60762,7 @@
               "target": "libc"
             },
             {
-              "id": "mio 0.8.10",
+              "id": "mio 0.8.11",
               "target": "mio",
               "alias": "mio_0_8"
             },
@@ -79648,6 +79652,7 @@
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
     "minicbor-derive 0.13.0",
+    "mio 0.8.11",
     "mockall 0.13.0",
     "mockito 1.2.0",
     "moka 0.12.8",

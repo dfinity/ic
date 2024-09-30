@@ -231,6 +231,7 @@ impl Bouncer {
 
     async fn run(&self, apply_interval: Duration) {
         let mut interval = tokio::time::interval(apply_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         warn!(
             "Bouncer: periodic task with interval {}s started",

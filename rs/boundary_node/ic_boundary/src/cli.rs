@@ -173,9 +173,21 @@ pub struct ListenConfig {
     #[clap(long)]
     pub disable_http2_client: bool,
 
-    /// Number of HTTP clients to create to spread the load over
-    #[clap(long, default_value = "1", value_parser = clap::value_parser!(u16).range(1..))]
-    pub http_client_count: u16,
+    /// Minimum number of HTTP clients to keep in the pool (per-node)
+    #[clap(long, default_value = "1")]
+    pub http_client_pool_min: usize,
+
+    /// Maximum number of HTTP clients to create in the pool (per-node)
+    #[clap(long, default_value = "10")]
+    pub http_client_pool_max: usize,
+
+    /// Timeout in seconds after which an unused HTTP client is removed from the pool
+    #[clap(long, default_value = "90")]
+    pub http_client_pool_timeout: u64,
+
+    /// Maximum number of in-flight request to allow per HTTP client in pool
+    #[clap(long, default_value = "200")]
+    pub http_client_max_outstanding: usize,
 }
 
 #[derive(Args)]

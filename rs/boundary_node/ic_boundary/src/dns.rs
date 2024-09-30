@@ -2,6 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use futures_util::future::ready;
+use ic_bn_lib::http::client::CloneableDnsResolver;
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 
 use crate::snapshot::RegistrySnapshot;
@@ -16,6 +17,7 @@ pub struct DnsError(String);
 pub struct DnsResolver {
     snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
+impl CloneableDnsResolver for DnsResolver {}
 
 impl DnsResolver {
     pub fn new(snapshot: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {

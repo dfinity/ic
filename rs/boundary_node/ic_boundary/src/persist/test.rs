@@ -13,6 +13,7 @@ use ethnum::u256;
 use ic_registry_subnet_type::SubnetType;
 
 use crate::{
+    http::StubClient,
     snapshot::{node_test_id, CanisterRange, Node, Subnet},
     test_utils::valid_tls_certificate_and_validation_time,
 };
@@ -71,6 +72,7 @@ pub fn node(i: u64, subnet_id: Principal) -> Arc<Node> {
             .0
             .certificate_der,
         avg_latency_secs: f64::MAX,
+        cli: Arc::new(StubClient),
     })
 }
 

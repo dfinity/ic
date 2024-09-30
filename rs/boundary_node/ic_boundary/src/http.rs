@@ -1,10 +1,83 @@
-use std::time::Instant;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
-use ic_bn_lib::http::{http_version, Client};
+use ic_bn_lib::http::{
+    client::{
+        Client, ClientStats, ClientWithStats, CloneableDnsResolver, GeneratesClients,
+        GeneratesClientsWithStats, Options, ReqwestClient, ReqwestClientDynamic, Stats,
+    },
+    http_version,
+};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
+use crate::{
+    core::error_source,
+    dns::DnsError,
+    metrics::{MetricParams, WithMetrics},
+    routes::ErrorCause,
+};
+
+#[derive(Clone, Debug)]
+pub struct StubClient;
+
+#[async_trait]
+impl Client for StubClient {
+    async fn execute(&self, _req: reqwest::Request) -> Result<reqwest::Response, reqwest::Error> {
+        let resp = ::http::Response::new(vec![]);
+        Ok(resp.into())
+    }
+}
+
+impl Stats for StubClient {
+    fn stats(&self) -> ClientStats {
+        ClientStats {
+            pool_size: 0,
+            outstanding: 0,
+        }
+    }
+}
+
+impl ClientWithStats for StubClient {
+    fn to_client(self: Arc<Self>) -> Arc<dyn Client> {
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientGeneratorSingle<R: CloneableDnsResolver>(pub Options<R>, pub MetricParams);
+
+impl<R: CloneableDnsResolver> GeneratesClients for ClientGeneratorSingle<R> {
+    fn generate(&self) -> Result<Arc<dyn Client>, ic_bn_lib::http::Error> {
+        Ok(Arc::new(WithMetrics(
+            ReqwestClient::new(self.0.clone())?,
+            self.1.clone(),
+        )))
+    }
+}
+
+#[derive(Debug)]
+pub struct ClientGeneratorDynamic<R: CloneableDnsResolver> {
+    pub g: ClientGeneratorSingle<R>,
+    pub min_clients: usize,
+    pub max_clients: usize,
+    pub max_outstanding: usize,
+    pub idle_timeout: Duration,
+}
+
+impl<R: CloneableDnsResolver> GeneratesClientsWithStats for ClientGeneratorDynamic<R> {
+    fn generate(&self) -> Result<Arc<dyn ClientWithStats>, ic_bn_lib::http::Error> {
+        Ok(Arc::new(ReqwestClientDynamic::new(
+            self.g.clone(),
+            self.min_clients,
+            self.max_clients,
+            self.max_outstanding,
+            self.idle_timeout,
+        )?))
+    }
+}
 
 #[async_trait]
 impl<T: Client> Client for WithMetrics<T> {

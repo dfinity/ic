@@ -9,7 +9,6 @@ use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
 use http::Method;
-use ic_bn_lib::http::Client;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use simple_moving_average::{SumTreeSMA, SMA};
@@ -132,6 +131,14 @@ impl NodeActor {
             Err(_) => (false, 0, 0.0),
         };
 
+        if healthy != self.state.map(|x| x.healthy).unwrap_or(true) {
+            warn!(
+                "Node {} became {}",
+                self.node,
+                if healthy { "healthy" } else { "unhealthy" }
+            );
+        }
+
         // Note: initially we update only the health field. height and avg latency are updated conditionally.
         let mut new_state = self.state.unwrap_or_else(|| NodeState {
             healthy,
@@ -165,6 +172,8 @@ impl NodeActor {
         debug!("Healthcheck actor for node {} started", self.node);
 
         let mut interval = tokio::time::interval(check_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -325,6 +334,8 @@ impl SubnetActor {
         debug!("Healthcheck actor for subnet {} started", self.subnet);
 
         let mut interval = tokio::time::interval(update_interval);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
         loop {
             select! {
                 // Check if we need to shut down
@@ -575,16 +586,12 @@ pub trait Check: Send + Sync {
 }
 
 pub struct Checker {
-    http_client: Arc<dyn Client>,
     timeout: Duration,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<dyn Client>, timeout: Duration) -> Self {
-        Self {
-            http_client,
-            timeout,
-        }
+    pub fn new(timeout: Duration) -> Self {
+        Self { timeout }
     }
 }
 
@@ -599,8 +606,8 @@ impl Check for Checker {
         *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
-        let response = self
-            .http_client
+        let response = node
+            .cli
             .execute(request)
             .await
             .map_err(|err| CheckError::Network(err.to_string()))?;
@@ -659,6 +666,8 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             counter,
             recorder,
             status,
+            client_outstanding,
+            client_pool_size,
         } = &self.1;
 
         let subnet_id = node.subnet_id.to_string();
@@ -672,6 +681,16 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             node_addr.as_str(),
         ];
 
+        let cli_stats = node.cli.stats();
+
+        client_outstanding
+            .with_label_values(&[node_id.as_str(), subnet_id.as_str()])
+            .set(cli_stats.outstanding as i64);
+
+        client_pool_size
+            .with_label_values(&[node_id.as_str(), subnet_id.as_str()])
+            .set(cli_stats.pool_size as i64);
+
         counter.with_label_values(labels).inc();
         recorder.with_label_values(labels).observe(duration);
         status
@@ -679,7 +698,7 @@ impl<T: Check> Check for WithMetricsCheck<T> {
             .set(out.is_ok().into());
 
         if let Err(e) = &out {
-            warn!(
+            debug!(
                 action = "check",
                 result,
                 duration,

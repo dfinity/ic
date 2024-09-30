@@ -563,7 +563,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-bn-lib": crate.spec(
                 git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "9abf1e385e4a32279de005d0019c17774e164828",
+                rev = "c0c826380f220c09f06b88350178c18f63010471",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
@@ -783,6 +783,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "minicbor-derive": crate.spec(
                 version = "^0.13.0",
+            ),
+            "mio": crate.spec(
+                version = "^0.8.11",
             ),
             "mockall": crate.spec(
                 version = "^0.13.0",

@@ -3,10 +3,7 @@ use super::*;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Error;
-use axum::{
-    body::Body, http::Request, middleware, response::IntoResponse, routing::method_routing::get,
-    Router,
-};
+use axum::{body::Body, http::Request, middleware, routing::method_routing::get, Router};
 use ethnum::u256;
 use http::header::{
     HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
@@ -76,18 +73,6 @@ impl ProxyRouter {
     fn set_health(&self, new: ReplicaHealthStatus) {
         let mut h = self.health.lock().unwrap();
         *h = new;
-    }
-}
-
-#[async_trait]
-impl Proxy for ProxyRouter {
-    async fn proxy(&self, _request: Request<Body>, _url: Url) -> Result<Response, ErrorCause> {
-        let mut resp = "test_response".into_response();
-
-        let status = StatusCode::OK;
-
-        *resp.status_mut() = status;
-        Ok(resp)
     }
 }
 
