@@ -436,10 +436,10 @@ impl XNetPayloadBuilderImpl {
                     return ExpectedIndices {
                         message_index: messages.end(),
                         signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end()),
+                            .unwrap_or(slice.header().signals_end()),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
+                most_recent_signal_index.get_or_insert(slice.header().signals_end());
             }
         }
 
@@ -449,7 +449,7 @@ impl XNetPayloadBuilderImpl {
             .get(&subnet_id)
             .map(|stream| ExpectedIndices {
                 message_index: stream.signals_end(),
-                signal_index: most_recent_signal_index.unwrap_or_else(|| stream.messages_begin()),
+                signal_index: most_recent_signal_index.unwrap_or(stream.messages_begin()),
             })
             .unwrap_or_default()
     }
@@ -658,7 +658,7 @@ impl XNetPayloadBuilderImpl {
 
         if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
             // Empty slice: no messages and no additional signals (in addition to what we
-            // have in state and any intervening payloads). Not actually invalid, but
+            // have in `state` and any intervening payloads). Not actually invalid, but
             // we don't want it in a payload.
             return SliceValidationResult::Empty;
         }
