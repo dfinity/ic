@@ -13,6 +13,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/string",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/governance/api",
@@ -25,6 +26,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/sns/swap",
     "//rs/types/base_types",
+    "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:bytes",
     "@crate_index//:candid",
@@ -33,10 +35,12 @@ BASE_DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-stable-structures",
+    "@crate_index//:inferno",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus-parse",
     "@crate_index//:prost",
     "@crate_index//:strum",
+    "@crate_index//:wasmparser",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
