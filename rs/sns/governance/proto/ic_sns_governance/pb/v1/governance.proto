@@ -1449,6 +1449,8 @@ message Governance {
 
   reserved "migrated_root_wasm_memory_limit";
   reserved 27;
+
+  Governance.Version target_version = 28;
 }
 
 // Request message for 'get_metadata'.
@@ -1480,6 +1482,8 @@ message GetRunningSnsVersionResponse {
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
   Governance.UpgradeInProgress pending_version = 2;
+  // The target version that the SNS is in the process of upgrading to.
+  Governance.Version target_version = 3;
 }
 
 // Request to fail an upgrade proposal that is Adopted but not Executed or
@@ -2137,4 +2141,12 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+message AdvanceTargetVersionRequest {
+
+}
+
+message AdvanceTargetVersionResponse {
+
 }

@@ -2489,6 +2489,7 @@ mod tests {
             pending_version: None,
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
+            target_version: None,
         }
     }
 
