@@ -158,8 +158,9 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
+    repository = Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     jira_finding = Finding(
-        repository=REPOSITORY,
+        repository=repository.name,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -574,7 +575,7 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gith
     jira_lib_mock.commit_has_block_exception.assert_called_once()
     finding_to_flag = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
