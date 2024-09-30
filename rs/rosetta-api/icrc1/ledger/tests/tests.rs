@@ -411,6 +411,24 @@ fn icrc1_test_upgrade_serialization_fixed_tx() {
     );
 }
 
+#[test]
+fn icrc1_test_stable_migration_endpoints_disabled() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration() {
+    ic_icrc1_ledger_sm_tests::test_incomplete_migration(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
