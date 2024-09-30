@@ -34,26 +34,32 @@ class SlackApi:
                 return json.loads(http_response.read())
             except urllib.error.HTTPError as e:
                 body = e.read().decode()
-                logging.error(
-                    f"Slack API request {url} failed."
-                )
+                logging.error(f"Slack API request {url} failed.")
                 logging.debug(
                     f"Slack API request {url} failed with HTTP response body: {body}\ntraceback:\n{traceback.format_exc()}"
                 )
             except Exception:
                 logging.error(f"Slack API request {url} could not send the requested message.")
-                logging.debug(f"Slack API request {url} could not send the requested message.\ntraceback:\n{traceback.format_exc()}")
+                logging.debug(
+                    f"Slack API request {url} could not send the requested message.\ntraceback:\n{traceback.format_exc()}"
+                )
             retry -= 1
             if retry >= 0:
                 sleep(1)
         return None
 
-    def send_message(self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None) -> Optional[str]:
+    def send_message(
+        self, message: str, is_block_kit_message: bool = False, thread_id: Optional[str] = None
+    ) -> Optional[str]:
         if self.log_to_console:
-            logging.info("Mock Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message)
+            logging.info(
+                "Mock Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message
+            )
             return None
 
-        logging.info("Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message)
+        logging.info(
+            "Slack send_message to channel '%s' and thread '%s': '%s'", self.channel_config, thread_id, message
+        )
 
         data = {
             "channel": self.channel_config.channel_id,
@@ -72,10 +78,17 @@ class SlackApi:
 
     def update_message(self, message: str, message_id: str, is_block_kit_message: bool = False):
         if self.log_to_console:
-            logging.info("Mock Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message)
+            logging.info(
+                "Mock Slack update_message to channel '%s' and message '%s': '%s'",
+                self.channel_config,
+                message_id,
+                message,
+            )
             return
 
-        logging.info("Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message)
+        logging.info(
+            "Slack update_message to channel '%s' and message '%s': '%s'", self.channel_config, message_id, message
+        )
         data = {
             "channel": self.channel_config.channel_id,
             "ts": message_id,
@@ -88,7 +101,9 @@ class SlackApi:
 
     def delete_message(self, message_id: str):
         if self.log_to_console:
-            logging.info("Mock Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id)
+            logging.info(
+                "Mock Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id
+            )
             return
 
         logging.info("Slack delete_message from channel '%s' with message id: '%s'", self.channel_config, message_id)
@@ -101,9 +116,16 @@ class SlackApi:
 
     def add_reaction(self, reaction: str, message_id: str):
         if self.log_to_console:
-            logging.info("Mock Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction)
+            logging.info(
+                "Mock Slack add_reaction to channel '%s' and message '%s': '%s'",
+                self.channel_config,
+                message_id,
+                reaction,
+            )
 
-        logging.info("Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction)
+        logging.info(
+            "Slack add_reaction to channel '%s' and message '%s': '%s'", self.channel_config, message_id, reaction
+        )
         data = {
             "name": reaction,
             "channel": self.channel_config.channel_id,
@@ -125,15 +147,19 @@ class SlackApi:
             self.slack_id_cache[user.email] = api_response["user"]["id"]
             return self.slack_id_cache[user.email]
         else:
-            logging.error(
-                "Slack API users.lookupByEmail for some user returned non ok response."
-            )
+            logging.error("Slack API users.lookupByEmail for some user returned non ok response.")
             logging.debug(
                 f"Slack API users.lookupByEmail for user {user} returned non ok response: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}"
             )
         return None
 
-    def get_channel_history(self, oldest: Optional[str] = None, author: Optional[str] = None, prefix: Optional[str] = None, ignore_reaction: Optional[str] = None) -> List[SlackMessage]:
+    def get_channel_history(
+        self,
+        oldest: Optional[str] = None,
+        author: Optional[str] = None,
+        prefix: Optional[str] = None,
+        ignore_reaction: Optional[str] = None,
+    ) -> List[SlackMessage]:
         def include_message(message: any) -> bool:
             if author and ("user" not in message or message["user"] != author):
                 return False
@@ -155,7 +181,14 @@ class SlackApi:
                             return False
             return True
 
-        logging.info("Slack get_channel_history from channel '%s' with filters: (%s, %s, %s, %s)", self.channel_config, oldest, author, prefix, ignore_reaction)
+        logging.info(
+            "Slack get_channel_history from channel '%s' with filters: (%s, %s, %s, %s)",
+            self.channel_config,
+            oldest,
+            author,
+            prefix,
+            ignore_reaction,
+        )
         cursor = None
         slack_messages = []
         while True:
@@ -179,4 +212,5 @@ class SlackApi:
                     return slack_messages
             else:
                 raise RuntimeError(
-                    f"Slack API conversations.history returned non ok response for URL {url}: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}")
+                    f"Slack API conversations.history returned non ok response for URL {url}: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}"
+                )
