@@ -54,6 +54,9 @@ fn test_why_list_neurons_expensive() {
     println!("  page_limit = {}", page_limit);
     println!("");
 
+    // DO NOT MERGE: THIS IS A HACK
+    let page_limit = page_limit / 2;
+
     // Step 1.2.2: Enable ic-wasm profiling.
     let mut instrumented_governance_wasm = walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
         .expect("walrus cannot cope with our WASM.");
