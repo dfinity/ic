@@ -827,7 +827,6 @@ impl CallContextManager {
     /// current time.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    #[allow(dead_code)]
     pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
