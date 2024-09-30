@@ -212,6 +212,8 @@ jobs:
       - name: Dependency Scan for Release
         id: dependency-scan-release-cut
         shell: bash
+        env:
+          REPO_NAME: ${{ github.repository }}
         run: |
           set -euo pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
