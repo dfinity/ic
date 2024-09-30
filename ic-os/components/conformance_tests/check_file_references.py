@@ -34,7 +34,6 @@ def check_paths_in_source(source: str, partition_img_path: str) -> [str]:
         partition_img_path: Path to the extracted partition file (partition.img)
 
     Returns a list of errors or empty list on no error.
-
     """
 
     print(f"Checking component {source}")
