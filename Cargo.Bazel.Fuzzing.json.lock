@@ -1,5 +1,5 @@
 {
-  "checksum": "f5026c7a40e78a70b51f4b198bb812011d948439fd6b9031696128a040190590",
+  "checksum": "dea2cec52d85c89d8e36fa4f4cc48deb5a55e8e1b39beac1b186a5a6051ae544",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18100,11 +18100,6 @@
               "target": "humantime_serde"
             },
             {
-              "id": "hyper 0.14.27",
-              "target": "hyper",
-              "alias": "hyper_0_14_27"
-            },
-            {
               "id": "hyper 1.4.1",
               "target": "hyper"
             },
@@ -18191,6 +18186,10 @@
             {
               "id": "ic-response-verification 2.6.0",
               "target": "ic_response_verification"
+            },
+            {
+              "id": "ic-sha3 1.0.0",
+              "target": "ic_sha3"
             },
             {
               "id": "ic-stable-structures 0.6.5",
@@ -18524,10 +18523,15 @@
             },
             {
               "id": "prost 0.12.2",
+              "target": "prost",
+              "alias": "prost_0_12_0"
+            },
+            {
+              "id": "prost 0.13.2",
               "target": "prost"
             },
             {
-              "id": "prost-build 0.12.2",
+              "id": "prost-build 0.13.2",
               "target": "prost_build"
             },
             {
@@ -18887,11 +18891,11 @@
               "target": "toml"
             },
             {
-              "id": "tonic 0.11.0",
+              "id": "tonic 0.12.2",
               "target": "tonic"
             },
             {
-              "id": "tonic-build 0.11.0",
+              "id": "tonic-build 0.12.2",
               "target": "tonic_build"
             },
             {
@@ -30444,6 +30448,53 @@
         "Apache-2.0"
       ],
       "license_file": null
+    },
+    "ic-sha3 1.0.0": {
+      "name": "ic-sha3",
+      "version": "1.0.0",
+      "package_url": "https://github.com/dfinity/ic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-sha3/1.0.0/download",
+          "sha256": "3715f0f4370e8ce6aa9805b81e915ef4420c9dfb5209c71489c27e6f98bd5d65"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_sha3",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_sha3",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "sha3 0.10.8",
+              "target": "sha3"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "ic-stable-structures 0.6.5": {
       "name": "ic-stable-structures",
@@ -49246,6 +49297,71 @@
       ],
       "license_file": "LICENSE"
     },
+    "prost 0.13.2": {
+      "name": "prost",
+      "version": "0.13.2",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost/0.13.2/download",
+          "sha256": "3b2ecbe40f08db5c006b5764a2645f7f3f141ce756412ac9e1dd6087e6d32995"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "derive",
+            "prost-derive",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "prost-derive 0.13.2",
+              "target": "prost_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.13.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "prost-build 0.12.2": {
       "name": "prost-build",
       "version": "0.12.2",
@@ -49354,6 +49470,108 @@
       ],
       "license_file": "LICENSE"
     },
+    "prost-build 0.13.2": {
+      "name": "prost-build",
+      "version": "0.13.2",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost-build/0.13.2/download",
+          "sha256": "f8650aabb6c35b860610e9cff5dc1af886c9e25073b7b1712a68972af4281302"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost_build",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost_build",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "format"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            },
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "itertools 0.12.0",
+              "target": "itertools"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "multimap 0.8.3",
+              "target": "multimap"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "petgraph 0.6.4",
+              "target": "petgraph"
+            },
+            {
+              "id": "prettyplease 0.2.15",
+              "target": "prettyplease"
+            },
+            {
+              "id": "prost 0.13.2",
+              "target": "prost"
+            },
+            {
+              "id": "prost-types 0.13.2",
+              "target": "prost_types"
+            },
+            {
+              "id": "regex 1.10.6",
+              "target": "regex"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            },
+            {
+              "id": "tempfile 3.12.0",
+              "target": "tempfile"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "prost-derive 0.12.2": {
       "name": "prost-derive",
       "version": "0.12.2",
@@ -49417,6 +49635,69 @@
       ],
       "license_file": "LICENSE"
     },
+    "prost-derive 0.13.2": {
+      "name": "prost-derive",
+      "version": "0.13.2",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost-derive/0.13.2/download",
+          "sha256": "acf0c195eebb4af52c752bec4f52f645da98b6e92077a04110c7f349477ae5ac"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "prost_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.72",
+              "target": "anyhow"
+            },
+            {
+              "id": "itertools 0.12.0",
+              "target": "itertools"
+            },
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "prost-types 0.12.2": {
       "name": "prost-types",
       "version": "0.12.2",
@@ -49457,6 +49738,53 @@
         },
         "edition": "2021",
         "version": "0.12.2"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "prost-types 0.13.2": {
+      "name": "prost-types",
+      "version": "0.13.2",
+      "package_url": "https://github.com/tokio-rs/prost",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/prost-types/0.13.2/download",
+          "sha256": "60caa6738c7369b940c3d49246a8d1749323674c65cb13010134f5c9bad5b519"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prost_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "prost_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "prost 0.13.2",
+              "target": "prost"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -66468,6 +66796,7 @@
         "crate_features": {
           "common": [
             "default",
+            "net",
             "time"
           ],
           "selects": {}
@@ -66917,7 +67246,6 @@
           "common": [
             "channel",
             "codegen",
-            "default",
             "prost",
             "transport"
           ],
@@ -67018,14 +67346,162 @@
       ],
       "license_file": "LICENSE"
     },
-    "tonic-build 0.11.0": {
-      "name": "tonic-build",
-      "version": "0.11.0",
+    "tonic 0.12.2": {
+      "name": "tonic",
+      "version": "0.12.2",
       "package_url": "https://github.com/hyperium/tonic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tonic-build/0.11.0/download",
-          "sha256": "be4ef6dd70a610078cb4e338a0f79d06bc759ff1b22d2120c2ff02ae264ba9c2"
+          "url": "https://static.crates.io/crates/tonic/0.12.2/download",
+          "sha256": "c6f6ba989e4b2c58ae83d862d3a3e27690b6e3ae630d0deb59f3697f32aa88ad"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tonic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tonic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "channel",
+            "codegen",
+            "default",
+            "prost",
+            "router",
+            "server",
+            "transport"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-stream 0.3.5",
+              "target": "async_stream"
+            },
+            {
+              "id": "axum 0.7.5",
+              "target": "axum"
+            },
+            {
+              "id": "base64 0.22.0",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            },
+            {
+              "id": "h2 0.4.4",
+              "target": "h2"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.4.1",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-timeout 0.5.1",
+              "target": "hyper_timeout"
+            },
+            {
+              "id": "hyper-util 0.1.7",
+              "target": "hyper_util"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "pin-project 1.1.3",
+              "target": "pin_project"
+            },
+            {
+              "id": "prost 0.13.2",
+              "target": "prost"
+            },
+            {
+              "id": "socket2 0.5.7",
+              "target": "socket2"
+            },
+            {
+              "id": "tokio 1.40.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-stream 0.1.14",
+              "target": "tokio_stream"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.81",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.12.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tonic-build 0.12.2": {
+      "name": "tonic-build",
+      "version": "0.12.2",
+      "package_url": "https://github.com/hyperium/tonic",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tonic-build/0.12.2/download",
+          "sha256": "fe4ee8877250136bd7e3d2331632810a4df4ea5e004656990d8d66d2f5ee8a67"
         }
       },
       "targets": [
@@ -67067,7 +67543,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "prost-build 0.12.2",
+              "id": "prost-build 0.13.2",
               "target": "prost_build"
             },
             {
@@ -67082,7 +67558,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.0"
+        "version": "0.12.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -78927,7 +79403,6 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
-    "hyper 0.14.27",
     "hyper 1.4.1",
     "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",
@@ -78951,6 +79426,7 @@
     "ic-http-gateway 0.0.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.6.0",
+    "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.5",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.37.1",
@@ -79038,7 +79514,8 @@
     "proptest 1.5.0",
     "proptest-derive 0.5.0",
     "prost 0.12.2",
-    "prost-build 0.12.2",
+    "prost 0.13.2",
+    "prost-build 0.13.2",
     "protobuf 2.28.0",
     "publicsuffix 2.2.3",
     "quickcheck 1.0.3",
@@ -79132,8 +79609,8 @@
     "tokio-test 0.4.3",
     "tokio-util 0.7.12",
     "toml 0.5.11",
-    "tonic 0.11.0",
-    "tonic-build 0.11.0",
+    "tonic 0.12.2",
+    "tonic-build 0.12.2",
     "tower 0.4.13",
     "tower-http 0.5.2",
     "tower-layer 0.3.3",

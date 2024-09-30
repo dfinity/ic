@@ -417,99 +417,40 @@ def test_get_findings_for_bazel_repo():
                 )
             ]
             assert findings[0].first_level_dependencies == [
-                Dependency(
-                    id="https://crates.io/crates/build-info",
-                    name="build-info",
-                    version="0.0.26",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/build-info-build",
-                    name="build-info-build",
-                    version="0.0.26",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/cddl", name="cddl", version="0.9.1", fix_version_for_vulnerability={}
-                ),
-                Dependency(
-                    id="https://crates.io/crates/cloudflare",
-                    name="cloudflare",
-                    version="0.9.1",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/log4rs",
-                    name="log4rs",
-                    version="1.2.0",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/prometheus-parse",
-                    name="prometheus-parse",
-                    version="0.2.4",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/rsa", name="rsa", version="0.4.0", fix_version_for_vulnerability={}
-                ),
-                Dependency(
-                    id="https://crates.io/crates/simple_asn1",
-                    name="simple_asn1",
-                    version="0.5.4",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/x509-parser",
-                    name="x509-parser",
-                    version="0.12.0",
-                    fix_version_for_vulnerability={},
-                ),
-            ]
-            assert findings[0].projects == [
-                "ic/rs/backup",
-                "ic/rs/canister_client/sender",
-                "ic/rs/crypto",
-                "ic/rs/crypto/ecdsa_secp256k1",
-                "ic/rs/crypto/ecdsa_secp256r1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/cose",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/iccsa",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-                "ic/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
-                "ic/rs/crypto/internal/crypto_service_provider",
-                "ic/rs/crypto/node_key_validation",
-                "ic/rs/crypto/node_key_validation/tls_cert_validation",
-                "ic/rs/crypto/utils/basic_sig",
-                "ic/rs/elastic_common_schema",
-                "ic/rs/monitoring/logger",
-                "ic/rs/monitoring/onchain_observability/adapter",
-                "ic/rs/nervous_system/common",
-                "ic/rs/nns/cmc",
-                "ic/rs/nns/governance",
-                "ic/rs/nns/gtc",
-                "ic/rs/nns/handlers/root/impl",
-                "ic/rs/nns/handlers/root/interface",
-                "ic/rs/nns/sns-wasm",
-                "ic/rs/prep",
-                "ic/rs/registry/canister",
-                "ic/rs/registry/nns_data_provider",
-                "ic/rs/rosetta-api",
-                "ic/rs/ledger_suite/tests/sm-tests",
-                "ic/rs/rosetta-api/ledger_canister_blocks_synchronizer",
-                "ic/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
-                "ic/rs/scenario_tests",
-                "ic/rs/sns/governance",
-                "ic/rs/sns/root",
-                "ic/rs/sns/swap",
-                "ic/rs/tests",
-                "ic/rs/types/types",
-                "ic/rs/validator",
-                "ic/rs/validator/http_request_test_utils",
-            ]
+                Dependency(id='https://crates.io/crates/build-info', name='build-info', version='0.0.26',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/build-info-build', name='build-info-build',
+                           version='0.0.26', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cddl', name='cddl', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cloudflare', name='cloudflare', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/log4rs', name='log4rs', version='1.2.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/prometheus-parse', name='prometheus-parse',
+                           version='0.2.4', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/rsa', name='rsa', version='0.4.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/simple_asn1', name='simple_asn1', version='0.5.4',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
+                           fix_version_for_vulnerability={})]
+            projects = ['/rs/backup', '/rs/canister_client/sender', '/rs/crypto', '/rs/crypto/ecdsa_secp256k1', '/rs/crypto/ecdsa_secp256r1', '/rs/crypto/internal/crypto_lib/basic_sig/cose',
+                                            '/rs/crypto/internal/crypto_lib/basic_sig/der_utils', '/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', '/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1',
+                                            '/rs/crypto/internal/crypto_lib/basic_sig/ed25519', '/rs/crypto/internal/crypto_lib/basic_sig/iccsa', '/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1',
+                                            '/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', '/rs/crypto/internal/crypto_service_provider', '/rs/crypto/node_key_validation',
+                                            '/rs/crypto/node_key_validation/tls_cert_validation', '/rs/crypto/utils/basic_sig', '/rs/elastic_common_schema', '/rs/monitoring/logger', '/rs/monitoring/onchain_observability/adapter',
+                                            '/rs/nervous_system/common', '/rs/nns/cmc', '/rs/nns/governance', '/rs/nns/gtc', '/rs/nns/handlers/root/impl', '/rs/nns/handlers/root/interface', '/rs/nns/sns-wasm',
+                                            '/rs/prep', '/rs/registry/canister',
+                                            '/rs/registry/nns_data_provider', '/rs/rosetta-api', '/rs/rosetta-api/ledger_suite/tests/sm-tests', '/rs/rosetta-api/ledger_canister_blocks_synchronizer',
+                                            '/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', '/rs/scenario_tests', '/rs/sns/governance', '/rs/sns/root', '/rs/sns/swap', '/rs/tests', '/rs/types/types',
+                                            '/rs/validator',
+                                            '/rs/validator/http_request_test_utils']
+
+            assert len(projects) == len(findings[0].projects)
+
+            for project, finding_project in zip(projects, findings[0].projects):
+                assert  __test_get_ic_path() + project == finding_project
             assert findings[0].score == -1
 
             # unique fields for second finding
@@ -528,7 +469,7 @@ def test_get_findings_for_bazel_repo():
                 )
             ]
             assert findings[1].first_level_dependencies == []
-            assert findings[1].projects == ["ic/rs/artifact_pool"]
+            assert findings[1].projects == [__test_get_ic_path() + '/rs/artifact_pool']
             assert findings[1].score == -1
 
             # unique fields for third finding
@@ -558,112 +499,40 @@ def test_get_findings_for_bazel_repo():
                 )
             ]
             assert findings[2].first_level_dependencies == [
-                Dependency(
-                    id="https://crates.io/crates/build-info",
-                    name="build-info",
-                    version="0.0.26",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/build-info-build",
-                    name="build-info-build",
-                    version="0.0.26",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/cddl", name="cddl", version="0.9.1", fix_version_for_vulnerability={}
-                ),
-                Dependency(
-                    id="https://crates.io/crates/chrono",
-                    name="chrono",
-                    version="0.4.19",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/cloudflare",
-                    name="cloudflare",
-                    version="0.9.1",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/log4rs",
-                    name="log4rs",
-                    version="1.2.0",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/prometheus-parse",
-                    name="prometheus-parse",
-                    version="0.2.4",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/rsa", name="rsa", version="0.4.0", fix_version_for_vulnerability={}
-                ),
-                Dependency(
-                    id="https://crates.io/crates/simple_asn1",
-                    name="simple_asn1",
-                    version="0.5.4",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/thread_profiler",
-                    name="thread_profiler",
-                    version="0.3.0",
-                    fix_version_for_vulnerability={},
-                ),
-                Dependency(
-                    id="https://crates.io/crates/x509-parser",
-                    name="x509-parser",
-                    version="0.12.0",
-                    fix_version_for_vulnerability={},
-                ),
-            ]
-            assert findings[2].projects == [
-                "ic/rs/backup",
-                "ic/rs/canister_client/sender",
-                "ic/rs/crypto",
-                "ic/rs/crypto/ecdsa_secp256k1",
-                "ic/rs/crypto/ecdsa_secp256r1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/cose",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/iccsa",
-                "ic/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-                "ic/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
-                "ic/rs/crypto/internal/crypto_service_provider",
-                "ic/rs/crypto/node_key_validation",
-                "ic/rs/crypto/node_key_validation/tls_cert_validation",
-                "ic/rs/crypto/utils/basic_sig",
-                "ic/rs/elastic_common_schema",
-                "ic/rs/monitoring/logger",
-                "ic/rs/monitoring/onchain_observability/adapter",
-                "ic/rs/nervous_system/common",
-                "ic/rs/nns/cmc",
-                "ic/rs/nns/governance",
-                "ic/rs/nns/gtc",
-                "ic/rs/nns/handlers/root/impl",
-                "ic/rs/nns/handlers/root/interface",
-                "ic/rs/nns/sns-wasm",
-                "ic/rs/prep",
-                "ic/rs/registry/canister",
-                "ic/rs/registry/nns_data_provider",
-                "ic/rs/replica",
-                "ic/rs/rosetta-api",
-                "ic/rs/ledger_suite/tests/sm-tests",
-                "ic/rs/rosetta-api/ledger_canister_blocks_synchronizer",
-                "ic/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
-                "ic/rs/scenario_tests",
-                "ic/rs/sns/governance",
-                "ic/rs/sns/root",
-                "ic/rs/sns/swap",
-                "ic/rs/tests",
-                "ic/rs/types/types",
-                "ic/rs/validator",
-                "ic/rs/validator/http_request_test_utils",
-            ]
+                Dependency(id='https://crates.io/crates/build-info', name='build-info', version='0.0.26',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/build-info-build', name='build-info-build',
+                           version='0.0.26', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cddl', name='cddl', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/chrono', name='chrono', version='0.4.19',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/cloudflare', name='cloudflare', version='0.9.1',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/log4rs', name='log4rs', version='1.2.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/prometheus-parse', name='prometheus-parse',
+                           version='0.2.4', fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/rsa', name='rsa', version='0.4.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/simple_asn1', name='simple_asn1', version='0.5.4',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/thread_profiler', name='thread_profiler', version='0.3.0',
+                           fix_version_for_vulnerability={}),
+                Dependency(id='https://crates.io/crates/x509-parser', name='x509-parser', version='0.12.0',
+                           fix_version_for_vulnerability={})]
+            projects_2 = ['/rs/backup', '/rs/canister_client/sender', '/rs/crypto', '/rs/crypto/ecdsa_secp256k1', '/rs/crypto/ecdsa_secp256r1', '/rs/crypto/internal/crypto_lib/basic_sig/cose',
+                                            '/rs/crypto/internal/crypto_lib/basic_sig/der_utils', '/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1', '/rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1',
+                                            '/rs/crypto/internal/crypto_lib/basic_sig/ed25519', '/rs/crypto/internal/crypto_lib/basic_sig/iccsa', '/rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1',
+                                            '/rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils', '/rs/crypto/internal/crypto_service_provider', '/rs/crypto/node_key_validation',
+                                            '/rs/crypto/node_key_validation/tls_cert_validation', '/rs/crypto/utils/basic_sig', '/rs/elastic_common_schema', '/rs/monitoring/logger', '/rs/monitoring/onchain_observability/adapter',
+                                            '/rs/nervous_system/common', '/rs/nns/cmc', '/rs/nns/governance', '/rs/nns/gtc', '/rs/nns/handlers/root/impl', '/rs/nns/handlers/root/interface', '/rs/nns/sns-wasm',
+                                            '/rs/prep', '/rs/registry/canister', '/rs/registry/nns_data_provider', '/rs/replica', '/rs/rosetta-api', '/rs/rosetta-api/ledger_suite/tests/sm-tests',
+                                            '/rs/rosetta-api/ledger_canister_blocks_synchronizer', '/rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils', '/rs/scenario_tests', '/rs/sns/governance', '/rs/sns/root',
+                                            '/rs/sns/swap', '/rs/tests', '/rs/types/types', '/rs/validator', '/rs/validator/http_request_test_utils']
+            assert len(projects_2) == len(findings[2].projects)
+            for project, finding_project in zip(projects_2, findings[2].projects):
+                assert  __test_get_ic_path() + project == finding_project
             assert findings[2].score == 6
 
 

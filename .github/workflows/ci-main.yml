@@ -8,6 +8,8 @@ on:
       - master
       - 'dev-gh-*'
   pull_request:
+    branches-ignore:
+      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
   # Used as reusable workflow within release-testing workflow
   workflow_call:
 # runs for the same workflow are cancelled on PRs but not on master
@@ -303,6 +305,7 @@ jobs:
         env:
           CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
           CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPO_NAME: ${{ github.repository }}
   build-ic:
     name: Build IC
     runs-on:

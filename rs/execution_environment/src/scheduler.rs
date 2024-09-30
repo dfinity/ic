@@ -473,8 +473,6 @@ impl SchedulerImpl {
     }
 
     /// Drains the subnet queues, executing all messages not blocked by long executions.
-    /// It consumes the `long_running_canister_ids` set instead of borrowing it
-    /// because after the function execution the set is no longer valid.
     fn drain_subnet_queues(
         &self,
         mut state: ReplicatedState,
@@ -518,10 +516,9 @@ impl SchedulerImpl {
                     // This may happen only if the message execution was paused,
                     // which means that there should not be any instructions
                     // remaining in the round. Since we do not update
-                    // `long_running_canister_ids` and `ongoing_long_install_code`,
-                    // we need to break the loop here to ensure correctness in
-                    // the unlikely case of some instructions still remaining
-                    // in the round.
+                    // `ongoing_long_install_code`, we need to break the loop
+                    // here to ensure correctness in the unlikely case of
+                    // some instructions still remaining in the round.
                     break;
                 }
 

@@ -4,7 +4,7 @@ use crate::pb::v1::{
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        update_root_canister_settings, upgrade_canister_directly,
+        upgrade_canister_directly,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -82,7 +82,6 @@ use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -95,10 +94,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{
-    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
-};
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -1333,7 +1329,7 @@ impl Governance {
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
             maturity_e8s_equivalent: 0,
-            dissolve_state: parent_neuron.dissolve_state.clone(),
+            dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
             source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
             staked_maturity_e8s_equivalent: None,
@@ -1345,7 +1341,7 @@ impl Governance {
         // Add the child neuron's id to the set of neurons with ongoing operations.
         let in_flight_command = NeuronInFlightCommand {
             timestamp: creation_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
+            command: Some(InFlightCommand::Split(*split)),
         };
         let _child_lock = self.lock_neuron_for_command(&child_nid, in_flight_command)?;
 
@@ -1984,7 +1980,6 @@ impl Governance {
             .map(|proposal_data| {
                 proposal_data
                     .wait_for_quiet_state
-                    .clone()
                     .map(|w| w.current_deadline_timestamp_seconds)
                     .unwrap_or_else(|| {
                         proposal_data
@@ -4602,32 +4597,6 @@ impl Governance {
         true
     }
 
-    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
-        if self
-            .proto
-            .migrated_root_wasm_memory_limit
-            .unwrap_or_default()
-        {
-            return;
-        }
-
-        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
-        self.proto.migrated_root_wasm_memory_limit = Some(true);
-
-        let settings = CanisterSettings {
-            wasm_memory_limit: Some(candid::Nat::from(
-                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-            )),
-            ..Default::default()
-        };
-
-        // Set root settings
-        match update_root_canister_settings(self, settings).await {
-            Ok(_) => (),
-            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
-        }
-    }
-
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         self.process_proposals();
@@ -4665,8 +4634,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        self.maybe_migrate_root_wasm_memory_limit().await;
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5450,7 +5417,7 @@ impl Governance {
         _: GetMaturityModulationRequest,
     ) -> GetMaturityModulationResponse {
         GetMaturityModulationResponse {
-            maturity_modulation: self.proto.maturity_modulation.clone(),
+            maturity_modulation: self.proto.maturity_modulation,
         }
     }
 
@@ -6499,7 +6466,7 @@ mod tests {
                     action: Some(Action::ManageNervousSystemParameters(
                         NervousSystemParameters {
                             // The operative data is here. Foils make_proposal.
-                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS.clone()),
+                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS),
                             ..Default::default()
                         },
                     )),
@@ -9832,7 +9799,7 @@ mod tests {
             };
             let filled_in_ballot = Ballot {
                 vote: vote_of_neuron as i32,
-                ..empty_ballot.clone()
+                ..empty_ballot
             };
 
             // Code under test.
@@ -9845,7 +9812,7 @@ mod tests {
                     &follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id,
                 ]
                 .into_iter()
-                .map(|neuron_id| (neuron_id.to_string(), empty_ballot.clone()))
+                .map(|neuron_id| (neuron_id.to_string(), empty_ballot))
                 .collect::<BTreeMap<String, Ballot>>();
 
                 // voter neuron votes, and the code under test deduces all of the implications of
@@ -9876,21 +9843,21 @@ mod tests {
                 btreemap! {
                     voting_neuron_id.to_string()
                         // Direct vote.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_catch_all_neuron_id.to_string()
                         // Thanks to catch-all/fallback following.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Because this only follows specifically on TransferSnsTreasuryFunds.
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Thanks to catch-all/fallback following, although from just this case, it
                         // is unclear why this happens (you need to look at behavior on many
                         // different proposals to explain the behavior of this neuron).
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9903,22 +9870,22 @@ mod tests {
                 critical_ballots,
                 btreemap! {
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Perhaps, surprisingly, even though this neuron follows on
                     // "catch-all/fallback", that does not apply here, because the proposal is
                     // "critical".
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     // Unsurprisingly, this neuron follows, because it specifically follows on
                     // proposals of this type.
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Even less surprisingly, this also follows for similar reasons.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9932,16 +9899,16 @@ mod tests {
                 btreemap! {
                     // Only direct vote.
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // No following.
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     // Even this "super follower" doesn't follow here.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                 }
             );
         }
