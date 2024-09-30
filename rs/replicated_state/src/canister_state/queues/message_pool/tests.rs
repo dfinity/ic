@@ -128,8 +128,9 @@ fn test_get() {
     }
 
     // Also do a negative test.
-    let nonexistent_id = pool.next_message_id(Kind::Request, Context::Inbound, Class::BestEffort);
-    assert_eq!(None, pool.get(inbound_reference_or_panic(nonexistent_id)));
+    let nonexistent_reference: InboundReference =
+        pool.next_reference(Class::BestEffort, Kind::Request);
+    assert_eq!(None, pool.get(nonexistent_reference));
 }
 
 #[test]
@@ -494,19 +495,22 @@ fn test_message_id_sanity() {
 #[test]
 fn test_message_id_flags() {
     // Guaranteed inbound request.
-    let giq_id = Id::new(
-        Kind::Request,
-        Context::Inbound,
+    let giq_id = Id::from(InboundReference::new(
         Class::GuaranteedResponse,
+        Kind::Request,
         13,
-    );
+    ));
     assert_eq!(Kind::Request, giq_id.kind());
     assert_eq!(Context::Inbound, giq_id.context());
     assert_eq!(Class::GuaranteedResponse, giq_id.class());
     assert_eq!(13, giq_id.0 >> Id::BITMASK_LEN);
 
     // Best-effort outbound response, same generator.
-    let bop_id = Id::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
+    let bop_id = Id::from(OutboundReference::new(
+        Class::BestEffort,
+        Kind::Response,
+        13,
+    ));
     assert_eq!(Kind::Response, bop_id.kind());
     assert_eq!(Context::Outbound, bop_id.context());
     assert_eq!(Class::BestEffort, bop_id.class());
@@ -521,69 +525,52 @@ fn test_message_id_flags() {
 
 #[test]
 fn test_message_id_range() {
-    const REQUEST: Kind = Kind::Request;
-    const INBOUND: Context = Context::Inbound;
-    const GUARANTEED: Class = Class::GuaranteedResponse;
+    use Class::GuaranteedResponse;
+    use Kind::Request;
 
-    let id1 = Id::new(REQUEST, INBOUND, GUARANTEED, 0);
+    let id1 = Id::from(InboundReference::new(GuaranteedResponse, Request, 0));
     assert_eq!(0, id1.0 >> Id::BITMASK_LEN);
 
-    let id2 = Id::new(REQUEST, INBOUND, GUARANTEED, 13);
+    let id2 = Id::from(InboundReference::new(GuaranteedResponse, Request, 13));
     assert_eq!(13, id2.0 >> Id::BITMASK_LEN);
 
     // Maximum generator value that will be preserved
     const GENERATOR_MAX: u64 = u64::MAX >> Id::BITMASK_LEN;
-    let id3 = Id::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
+    let id3 = Id::from(InboundReference::new(
+        GuaranteedResponse,
+        Request,
+        GENERATOR_MAX,
+    ));
     assert_eq!(GENERATOR_MAX, id3.0 >> Id::BITMASK_LEN);
 
     // Larger generator values still work, their high bits are just ignored.
-    let id4 = Id::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
-    assert_eq!(GENERATOR_MAX, id4.0 >> Id::BITMASK_LEN);
+    let id4 = Id::from(InboundReference::new(
+        GuaranteedResponse,
+        Request,
+        GENERATOR_MAX + 3,
+    ));
+    assert_eq!(2, id4.0 >> Id::BITMASK_LEN);
 }
 
 #[test]
-fn test_id_to_reference_roundtrip() {
+fn test_id_from_reference_roundtrip() {
     for kind in [Kind::Request, Kind::Response] {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
-            let id = Id::new(kind, Context::Inbound, class, 13);
-            let reference = inbound_reference_or_panic(id);
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
 
             // Outbound.
-            let id = Id::new(kind, Context::Outbound, class, 13);
-            let reference = outbound_reference_or_panic(id);
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
         }
     }
-}
-
-#[test]
-#[should_panic(expected = "assertion `left == right` failed")]
-fn test_inbound_reference_from_outbound_id() {
-    let id = Id::new(
-        Kind::Request,
-        Context::Outbound,
-        Class::GuaranteedResponse,
-        13,
-    );
-    let _ = inbound_reference_or_panic(id);
-}
-
-#[test]
-#[should_panic(expected = "assertion `left == right` failed")]
-fn test_outbound_reference_from_inbound_id() {
-    let id = Id::new(
-        Kind::Request,
-        Context::Inbound,
-        Class::GuaranteedResponse,
-        13,
-    );
-    let _ = outbound_reference_or_panic(id);
 }
 
 #[test]
@@ -597,7 +584,7 @@ fn test_reference_roundtrip_encode() {
     for kind in [Kind::Request, Kind::Response] {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
-            let id = Id::new(kind, Context::Inbound, class, 13);
+            let id = Id::from(InboundReference::new(class, kind, 13));
             let item = queue_item(id);
             // Can be converted to an `InboundReference`.
             let reference = InboundReference::try_from(item).unwrap();
@@ -612,7 +599,7 @@ fn test_reference_roundtrip_encode() {
             assert_eq!(item, (&reference).into());
 
             // Outbound.
-            let id = Id::new(kind, Context::Outbound, class, 13);
+            let id = Id::from(OutboundReference::new(class, kind, 13));
             let item = queue_item(id);
             // Fails to convert to an `InboundReference`.
             assert_matches!(
@@ -632,12 +619,7 @@ fn test_reference_roundtrip_encode() {
 #[test]
 fn test_callback_reference_roundtip_encode() {
     let callback_reference = CallbackReference(
-        inbound_reference_or_panic(Id::new(
-            Kind::Response,
-            Context::Inbound,
-            Class::BestEffort,
-            13,
-        )),
+        Reference::new(Class::BestEffort, Kind::Response, 13),
         42.into(),
     );
     let encoded = pb_queues::canister_queues::CallbackReference::from(callback_reference.clone());
@@ -660,8 +642,12 @@ fn test_decode_invalid_callback_reference() {
                     // This would be a valid `CallbackReference`, skip it.
                     continue;
                 }
+                let id: Id = match context {
+                    Context::Inbound => InboundReference::new(class, kind, 13).into(),
+                    Context::Outbound => OutboundReference::new(class, kind, 13).into(),
+                };
                 let invalid = pb_queues::canister_queues::CallbackReference {
-                    id: Id::new(kind, context, class, 13).0,
+                    id: id.0,
                     callback_id: 42,
                 };
 
@@ -1006,12 +992,12 @@ fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T
 
 /// Generates an `InboundReference` for a request of the given class.
 pub(crate) fn new_request_reference(generator: u64, class: Class) -> InboundReference {
-    inbound_reference_or_panic(Id::new(Kind::Request, Context::Inbound, class, generator))
+    Reference::new(class, Kind::Request, generator)
 }
 
 /// Generates an `InboundReference` for a response of the given class.
 pub(crate) fn new_response_reference(generator: u64, class: Class) -> InboundReference {
-    inbound_reference_or_panic(Id::new(Kind::Response, Context::Inbound, class, generator))
+    Reference::new(class, Kind::Response, generator)
 }
 
 #[derive(PartialEq, Eq)]

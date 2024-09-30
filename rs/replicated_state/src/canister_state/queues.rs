@@ -470,7 +470,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         if let Some(msg) = self.pool.get(reference) {
             debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.clone().into();
-        } else if reference.kind() == Kind::Response && reference.class() == Class::BestEffort {
+        } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
             if let Some(callback_id) = self.shed_responses.get(&reference) {
                 return CanisterInput::ResponseDropped(*callback_id);
             }
@@ -483,8 +483,9 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         assert_eq!(Context::Inbound, reference.context());
 
         if let Some(msg) = self.pool.take(reference) {
+            debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.into();
-        } else if reference.kind() == Kind::Response && reference.class() == Class::BestEffort {
+        } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
             if let Some(callback_id) = self.shed_responses.remove(&reference) {
                 return CanisterInput::ResponseDropped(callback_id);
             }
@@ -497,7 +498,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         assert_eq!(Context::Inbound, reference.context());
 
         self.pool.get(reference).is_none()
-            && (reference.context() != Context::Inbound
+            && (reference.class() != Class::BestEffort
                 || reference.kind() != Kind::Response
                 || !self.shed_responses.contains_key(&reference))
     }

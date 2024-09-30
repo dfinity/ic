@@ -94,11 +94,7 @@ impl Id {
     /// The minimum `Id` value, for use in e.g. `BTreeSet::split_off()` calls.
     const MIN: Self = Self(0);
 
-    fn new(kind: Kind, context: Context, class: Class, generator: u64) -> Self {
-        Self(kind as u64 | context as u64 | class as u64 | generator << Id::BITMASK_LEN)
-    }
-
-    pub(super) fn kind(&self) -> Kind {
+    fn kind(&self) -> Kind {
         if self.0 & Kind::BIT == Kind::Request as u64 {
             Kind::Request
         } else {
@@ -106,7 +102,7 @@ impl Id {
         }
     }
 
-    pub(super) fn context(&self) -> Context {
+    fn context(&self) -> Context {
         if self.0 & Context::BIT == Context::Inbound as u64 {
             Context::Inbound
         } else {
@@ -114,7 +110,7 @@ impl Id {
         }
     }
 
-    pub(super) fn class(&self) -> Class {
+    fn class(&self) -> Class {
         if self.0 & Class::BIT == Class::GuaranteedResponse as u64 {
             Class::GuaranteedResponse
         } else {
@@ -127,6 +123,19 @@ impl Id {
 /// (`RequestOrResponse`) -- to a message in the `MessagePool`.
 #[derive(Debug)]
 pub(super) struct Reference<T>(u64, PhantomData<T>);
+
+impl<T> Reference<T>
+where
+    T: ToContext,
+{
+    /// Constructs a new `Reference<T>` of the given `class` and `kind`.
+    fn new(class: Class, kind: Kind, generator: u64) -> Self {
+        Self(
+            T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
+            PhantomData,
+        )
+    }
+}
 
 impl<T> Reference<T> {
     pub(super) fn kind(&self) -> Kind {
@@ -189,31 +198,25 @@ impl<T> From<Reference<T>> for Id {
 /// A reference to an inbound message (returned as a `CanisterInput`).
 pub(super) type InboundReference = Reference<CanisterInput>;
 
-/// Converts an `Id` into an `InboundReference`. Panics if the `Id` does not
-/// have `Context::Inbound`.
-///
-/// This is equivalent to `impl From<Id> for InboundReference`, but is a free
-/// function because we want to make it clear that this may panic (even though
-/// `Id` is a private type and `Reference<T>` instances can only be created by
-/// this module).
-fn inbound_reference_or_panic(id: Id) -> InboundReference {
-    assert_eq!(Context::Inbound, id.context());
-    Reference(id.0, PhantomData)
-}
-
 /// A reference to an outbound message (returned as a `RequestOrResponse`).
 pub(super) type OutboundReference = Reference<RequestOrResponse>;
 
-/// Converts an `Id` into an `OutboundReference`. Panics if the `Id` does not
-/// have `Context::Outbound`.
-///
-/// This is equivalent to `impl From<Id> for OutboundReference`, but is a free
-/// function because we want to make it clear that this may panic (even though
-/// `Id` is a private type and `Reference<T>` instances can only be created by
-/// this module).
-fn outbound_reference_or_panic(id: Id) -> OutboundReference {
-    assert_eq!(Context::Outbound, id.context());
-    Reference(id.0, PhantomData)
+/// A means for queue item types to declare whether they're inbound or outbound.
+pub(super) trait ToContext {
+    /// The context (inbound or outbound) of this queue item type.
+    fn context() -> Context;
+}
+
+impl ToContext for CanisterInput {
+    fn context() -> Context {
+        Context::Inbound
+    }
+}
+
+impl ToContext for RequestOrResponse {
+    fn context() -> Context {
+        Context::Outbound
+    }
 }
 
 /// An enum that can hold either an inbound or an outbound reference.
@@ -381,7 +384,7 @@ impl MessagePool {
             RequestOrResponse::Response(_) => NO_DEADLINE,
         };
 
-        inbound_reference_or_panic(self.insert_impl(msg, actual_deadline, Context::Inbound))
+        self.insert_impl(msg, actual_deadline, Context::Inbound)
     }
 
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
@@ -405,11 +408,11 @@ impl MessagePool {
             request.deadline
         };
 
-        outbound_reference_or_panic(self.insert_impl(
+        self.insert_impl(
             RequestOrResponse::Request(request),
             actual_deadline,
             Context::Outbound,
-        ))
+        )
     }
 
     /// Inserts an outbound response (one that is to be enqueued in an output queue)
@@ -422,11 +425,11 @@ impl MessagePool {
         response: Arc<Response>,
     ) -> OutboundReference {
         let actual_deadline = response.deadline;
-        outbound_reference_or_panic(self.insert_impl(
+        self.insert_impl(
             RequestOrResponse::Response(response),
             actual_deadline,
             Context::Outbound,
-        ))
+        )
     }
 
     /// Inserts the given message into the pool. Returns the reference assigned to
@@ -437,15 +440,19 @@ impl MessagePool {
     /// deadline; this is so we can expire outgoing guaranteed response requests;
     /// and not expire incoming best-effort responses). It is recorded in the load
     /// shedding priority queue iff it is a best-effort message.
-    fn insert_impl(
+    fn insert_impl<T>(
         &mut self,
         msg: RequestOrResponse,
         actual_deadline: CoarseTime,
         context: Context,
-    ) -> Id {
+    ) -> Reference<T>
+    where
+        T: ToContext,
+    {
         let kind = Kind::from(&msg);
         let class = Class::from(&msg);
-        let id = self.next_message_id(kind, context, class);
+        let reference = self.next_reference(class, kind);
+        let id = reference.into();
 
         let size_bytes = msg.count_bytes();
 
@@ -479,14 +486,17 @@ impl MessagePool {
             self.size_queue.insert((size_bytes, id));
         }
 
-        id
+        reference
     }
 
-    /// Reserves and returns a new message ID.
-    fn next_message_id(&mut self, kind: Kind, context: Context, class: Class) -> Id {
-        let id = Id::new(kind, context, class, self.message_id_generator);
+    /// Reserves and returns a new message reference.
+    fn next_reference<T>(&mut self, class: Class, kind: Kind) -> Reference<T>
+    where
+        T: ToContext,
+    {
+        let reference = Reference::new(class, kind, self.message_id_generator);
         self.message_id_generator += 1;
-        id
+        reference
     }
 
     /// Retrieves the message with the given `Reference`.
