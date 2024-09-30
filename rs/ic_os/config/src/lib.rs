@@ -46,21 +46,18 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    use types::{
-        GuestOSConfig, GuestOSDevSettings, GuestOSSettings, HostOSConfig, HostOSSettings,
-        ICOSDevSettings, ICOSSettings, Logging, NetworkSettings, SetupOSConfig, SetupOSSettings,
-    };
+    use types::*;
 
     #[test]
     fn test_serialize_and_deserialize() {
+        let ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
+            prefix: "2a00:fb01:400:200".to_string(),
+            prefix_length: 64_u8,
+            gateway: "2a00:fb01:400:200::1".parse().unwrap(),
+        });
         let network_settings = NetworkSettings {
-            ipv6_prefix: "2a00:fb01:400:200".to_string(),
-            ipv6_prefix_length: 64_u8,
-            ipv6_gateway: "2a00:fb01:400:200::1".parse().unwrap(),
-            ipv4_address: None,
-            ipv4_gateway: None,
-            ipv4_prefix_length: None,
-            domain: None,
+            ipv6_config,
+            ipv4_config: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [

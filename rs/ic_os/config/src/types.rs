@@ -82,17 +82,6 @@ pub struct BackupSpoolSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct NetworkSettings {
-    pub ipv6_prefix: String,
-    pub ipv6_prefix_length: u8,
-    pub ipv6_gateway: Ipv6Addr,
-    pub ipv4_address: Option<Ipv4Addr>,
-    pub ipv4_gateway: Option<Ipv4Addr>,
-    pub ipv4_prefix_length: Option<u8>,
-    pub domain: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ICOSSettings {
     pub logging: Logging,
     /// This file must be a text file containing the public key of the NNS to be used.
@@ -124,4 +113,38 @@ pub struct Logging {
     pub elasticsearch_hosts: String,
     /// Space-separated list of tags to apply to exported log records.
     pub elasticsearch_tags: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct NetworkSettings {
+    pub ipv6_config: Ipv6Config,
+    pub ipv4_config: Option<Ipv4Config>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Ipv4Config {
+    pub address: Ipv4Addr,
+    pub gateway: Ipv4Addr,
+    pub prefix_length: u8,
+    pub domain: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum Ipv6Config {
+    Deterministic(DeterministicIpv6Config),
+    Fixed(FixedIpv6Config),
+    RouterAdvertisement,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct DeterministicIpv6Config {
+    pub prefix: String,
+    pub prefix_length: u8,
+    pub gateway: Ipv6Addr,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct FixedIpv6Config {
+    pub address: Ipv6Addr,
+    pub gateway: Ipv6Addr,
 }
