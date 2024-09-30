@@ -65,7 +65,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(1 << 30),
+            max_instructions_per_round: NumInstructions::from(10),
             max_instructions_per_message: NumInstructions::from(5),
             max_instructions_per_message_without_dts: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
@@ -1699,21 +1699,15 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
     for canister_state in test.state().canisters_iter() {
         let system_state = &canister_state.system_state;
         assert_eq!(system_state.queues().ingress_queue_size(), 0);
-        assert_eq!(
-            canister_state.scheduler_state.last_full_execution_round,
-            ExecutionRound::new(1)
-        );
-        assert_eq!(
-            system_state
-                .canister_metrics
-                .skipped_round_due_to_no_messages,
-            0
-        );
-        assert_eq!(system_state.canister_metrics.executed, 1);
-        assert_eq!(
-            system_state.canister_metrics.interrupted_during_execution,
-            0
-        );
+
+        let scheduler_state = &canister_state.scheduler_state;
+        assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
+
+        let metrics = &system_state.canister_metrics;
+        // The inner round was skipped once before breaking the round.
+        assert_eq!(metrics.skipped_round_due_to_no_messages, 1);
+        assert_eq!(metrics.executed, 1);
+        assert_eq!(metrics.interrupted_during_execution, 0);
     }
 
     assert_eq!(
@@ -4781,28 +4775,31 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
 }
 
 /// Scenario:
-/// 1. One canister with two long messages `slice + 1` instructions each.
+/// 1. Scheduler cores + 1 canisters with two long executions each.
 ///
 /// Expectations:
 /// 1. After the first round the canister should have a paused long execution.
-/// 2. After the second round the canister should have no executions, i.e. the
+/// 2. After the second round the canister should have no executions, i.e.
 ///    finish the paused execution and should not start any new executions.
 #[test]
 fn filter_after_long_executions() {
+    let scheduler_cores = 2;
     let max_instructions_per_slice = SchedulerConfig::application_subnet()
         .max_instructions_per_slice
         .get();
 
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
+            max_instructions_per_slice: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
 
-    // Create a canister with long messages
+    // Create scheduler cores + 1 canisters with long executions.
     let mut long_message_ids = vec![];
     let long_canister_id = test.create_canister();
     for _ in 0..2 {
@@ -4810,21 +4807,32 @@ fn filter_after_long_executions() {
             test.send_ingress(long_canister_id, ingress(max_instructions_per_slice + 1));
         long_message_ids.push(long_message_id);
     }
+    for _ in 0..scheduler_cores {
+        let another_canister_id = test.create_canister();
+        for _ in 0..2 {
+            test.send_ingress(another_canister_id, ingress(max_instructions_per_slice + 1));
+        }
+    }
+
+    // Remember the initial accumulated priority.
+    let canister = test.state().canister_state(&long_canister_id).unwrap();
+    let ap_before_execution = canister.scheduler_state.accumulated_priority;
 
     // After the first round the canister should have a paused long execution.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    for canister in test.state().canisters_iter() {
-        assert_eq!(canister.system_state.canister_metrics.executed, 1);
-        assert!(canister.has_paused_execution());
-    }
+    let canister = test.state().canister_state(&long_canister_id).unwrap();
+    assert_eq!(canister.system_state.canister_metrics.executed, 1);
+    assert!(canister.has_paused_execution());
 
-    // After the second round the canister should have no executions, i.e. the
-    // finish the paused execution and should not start any new executions.
+    // After the second round the canister should finish the paused execution.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    for canister in test.state().canisters_iter() {
-        assert_eq!(canister.system_state.canister_metrics.executed, 2);
-        assert!(!canister.has_paused_execution());
-    }
+    let canister = test.state().canister_state(&long_canister_id).unwrap();
+    assert_eq!(canister.system_state.canister_metrics.executed, 2);
+    assert!(!canister.has_paused_execution());
+
+    // The accumulated priority should not increase after the long execution is finished.
+    let ap_after_execution = canister.scheduler_state.accumulated_priority;
+    assert!(ap_after_execution <= ap_before_execution);
 }
 
 #[test]
@@ -5814,4 +5822,87 @@ fn scheduled_heap_delta_limit_scaling() {
     assert_eq!(8, scheduled_limit(45, 50, 9, 10, 5));
     assert_eq!(10, scheduled_limit(50, 50, 9, 10, 5));
     assert_eq!(10, scheduled_limit(55, 50, 9, 10, 5));
+}
+
+#[test_strategy::proptest(ProptestConfig { cases: 8, ..ProptestConfig::default() })]
+fn apply_scheduling_strategy_in_inner_round(#[strategy(2..10_usize)] scheduler_cores: usize) {
+    fn run_inner_rounds_on_cores(inner_rounds: u64, scheduler_cores: usize) -> SchedulerTest {
+        let instructions = 20;
+        let canisters_per_core = 2;
+        let max_messages_per_round = canisters_per_core * inner_rounds;
+        let mut test = SchedulerTestBuilder::new()
+            .with_scheduler_config(SchedulerConfig {
+                scheduler_cores,
+                max_instructions_per_round: (instructions * max_messages_per_round).into(),
+                max_instructions_per_message: instructions.into(),
+                max_instructions_per_message_without_dts: instructions.into(),
+                max_instructions_per_slice: instructions.into(),
+                instruction_overhead_per_execution: NumInstructions::from(0),
+                instruction_overhead_per_canister: NumInstructions::from(0),
+                instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+                ..SchedulerConfig::application_subnet()
+            })
+            .build();
+
+        // Bump up the round number.
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        // Create 2 canisters for each scheduler core.
+        let num_canisters = scheduler_cores as u64 * canisters_per_core;
+        let mut canister_ids = vec![];
+        for _ in 0..num_canisters {
+            canister_ids.push(test.create_canister());
+        }
+
+        // Send a self call message to each canister. Having 2 canisters
+        // on each scheduler core and `2 * inner_rounds`` messages per round,
+        // all canisters should be executed in each inner round.
+        for canister_id in canister_ids.iter() {
+            let message = ingress(instructions).call(
+                other_side(*canister_id, instructions - 1),
+                on_response(instructions - 2),
+            );
+            test.send_ingress(*canister_id, message);
+        }
+
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+        test
+    }
+
+    let test = run_inner_rounds_on_cores(1, scheduler_cores);
+    let mut total_accumulated_priority = 0;
+    for (i, canister) in test.state().canisters_iter().enumerate() {
+        let system_state = &canister.system_state;
+        let scheduler_state = &canister.scheduler_state;
+        // After just one inner round, the first `scheduler_cores` canisters
+        // should be charged for execution.
+        if i < scheduler_cores {
+            prop_assert!(scheduler_state.accumulated_priority < 0.into());
+        } else {
+            prop_assert!(scheduler_state.accumulated_priority > 0.into());
+        }
+        // All ingresses should be executed in the previous round.
+        prop_assert_eq!(system_state.queues().ingress_queue_size(), 0);
+        prop_assert_eq!(system_state.canister_metrics.executed, 1);
+        prop_assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
+        total_accumulated_priority += scheduler_state.accumulated_priority.get();
+    }
+    // The accumulated priority invariant should be respected.
+    prop_assert_eq!(total_accumulated_priority, 0);
+
+    let test = run_inner_rounds_on_cores(2, scheduler_cores);
+    let mut total_accumulated_priority = 0;
+    for canister in test.state().canisters_iter() {
+        let system_state = &canister.system_state;
+        let scheduler_state = &canister.scheduler_state;
+        // After two inner rounds, all canisters should be charged for execution.
+        prop_assert!(scheduler_state.accumulated_priority == 0.into());
+        // All ingresses should be executed twice in the previous round.
+        prop_assert_eq!(system_state.queues().ingress_queue_size(), 0);
+        prop_assert_eq!(system_state.canister_metrics.executed, 2);
+        prop_assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
+        total_accumulated_priority += scheduler_state.accumulated_priority.get();
+    }
+    // The accumulated priority invariant should be respected.
+    prop_assert_eq!(total_accumulated_priority, 0);
 }

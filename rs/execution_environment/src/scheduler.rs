@@ -367,16 +367,9 @@ impl SchedulerImpl {
             let active_cores = scheduler_cores.min(number_of_canisters);
             for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
                 let canister_state = canister_states.get_mut(canister_id).unwrap();
-                // As top `scheduler_cores` canisters are guaranteed to be scheduled
-                // this round, their accumulated priorities must be decreased here
-                // by `capacity * multiplier / scheduler_cores`. But instead this
-                // value is accumulated in the `priority_credit`, and applied later:
-                // * For short executions, the `priority_credit` is deducted from
-                //   the `accumulated_priority` at the end of the round.
-                // * For long executions, the `priority_credit` is accumulated
-                //   for a few rounds, and deducted from the `accumulated_priority`
-                //   at the end of the long execution.
-                canister_state.scheduler_state.priority_credit +=
+                // Decrease accumulated priorities of the top `scheduler_cores` canisters.
+                // This is required to respect scheduler invariant after the round is finished.
+                canister_state.scheduler_state.accumulated_priority -=
                     (compute_capacity_percent * multiplier / active_cores as i64).into();
                 if i < round_schedule.long_execution_cores {
                     canister_state.scheduler_state.long_execution_mode =
@@ -626,9 +619,9 @@ impl SchedulerImpl {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn inner_round<'a>(
         &'a self,
+        round_log: &ReplicaLogger,
         mut state: ReplicatedState,
         csprng: &mut Csprng,
-        round_schedule: &RoundSchedule,
         current_round: ExecutionRound,
         root_measurement_scope: &MeasurementScope<'a>,
         scheduler_round_limits: &mut SchedulerRoundLimits,
@@ -700,19 +693,32 @@ impl SchedulerImpl {
 
             // Update subnet available memory before taking out the canisters.
             round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
-            let canisters = state.take_canister_states();
-            // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
-            let (active_round_schedule, rate_limited_canister_ids) = round_schedule
-                .filter_canisters(
-                    &canisters,
-                    self.config.heap_delta_rate_limit,
-                    self.rate_limiting_of_heap_delta,
-                );
-            round_filtered_canisters
-                .add_canisters(&active_round_schedule, &rate_limited_canister_ids);
+            let mut canisters = state.take_canister_states();
 
-            let (mut active_canisters_partitioned_by_cores, inactive_canisters) =
-                active_round_schedule.partition_canisters_to_cores(canisters);
+            // Scheduling.
+            // TODO(EXC-1617): The scheduling will be optimized in the follow up PRs.
+            let (mut active_canisters_partitioned_by_cores, inactive_canisters) = {
+                let _timer = self.metrics.round_scheduling_duration.start_timer();
+                let round_schedule = self.apply_scheduling_strategy(
+                    round_log,
+                    self.config.scheduler_cores,
+                    current_round,
+                    self.config.accumulated_priority_reset_interval,
+                    &mut canisters,
+                );
+                // Obtain the active canisters and update the collection
+                // of heap delta rate-limited canisters.
+                let (active_round_schedule, rate_limited_canister_ids) = round_schedule
+                    .filter_canisters(
+                        &canisters,
+                        self.config.heap_delta_rate_limit,
+                        self.rate_limiting_of_heap_delta,
+                    );
+                round_filtered_canisters
+                    .add_canisters(&active_round_schedule, &rate_limited_canister_ids);
+
+                active_round_schedule.partition_canisters_to_cores(canisters)
+            };
 
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
@@ -1690,27 +1696,11 @@ impl Scheduler for SchedulerImpl {
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
         };
 
-        // Scheduling.
-        let round_schedule = {
-            let _timer = self.metrics.round_scheduling_duration.start_timer();
-
-            let mut canisters = state.take_canister_states();
-            let round_schedule_candidate = self.apply_scheduling_strategy(
-                &round_log,
-                self.config.scheduler_cores,
-                current_round,
-                self.config.accumulated_priority_reset_interval,
-                &mut canisters,
-            );
-            state.put_canister_states(canisters);
-            round_schedule_candidate
-        };
-
         // Inner round.
         let (mut state, active_canister_ids) = self.inner_round(
+            &round_log,
             state,
             &mut csprng,
-            &round_schedule,
             current_round,
             &root_measurement_scope,
             &mut scheduler_round_limits,
