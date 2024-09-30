@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 bitcoin = { version = "0.32.2", default-features = false }
 candid = { workspace = true }
+ciborium = { workspace = true }
 futures = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-cdk = { workspace = true }

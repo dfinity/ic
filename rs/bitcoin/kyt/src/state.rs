@@ -1,12 +1,10 @@
 use crate::types::BtcNetwork;
 use bitcoin::{Address, Transaction};
-use candid::{decode_args, encode_args};
-use candid::{CandidType, Deserialize};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -130,12 +128,12 @@ impl Drop for FetchGuard {
     }
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     pub btc_network: BtcNetwork,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum ConfigState {
     Uninitialized,
     Initialized(Config),
@@ -143,14 +141,19 @@ pub enum ConfigState {
 
 impl Storable for ConfigState {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let buf = encode_args((&self,)).expect("fail to encode config");
+        let mut buf = vec![];
+        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode ConfigState");
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        let (config,): (ConfigState,) =
-            decode_args(bytes.as_ref()).expect("failed to decode config bytes");
-        config
+        ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode ConfigState bytes {:?}: {}",
+                bytes.as_ref(),
+                e
+            )
+        })
     }
 
     const BOUND: Bound = Bound::Unbounded;

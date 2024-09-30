@@ -5879,6 +5879,7 @@ dependencies = [
  "bitcoin 0.32.2",
  "candid",
  "candid_parser",
+ "ciborium",
  "futures",
  "ic-base-types",
  "ic-btc-interface",
