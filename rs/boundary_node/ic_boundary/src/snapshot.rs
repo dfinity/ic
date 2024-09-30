@@ -197,7 +197,11 @@ impl Snapshotter {
     }
 
     // Creates a snapshot of the registry for given version
-    fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
+    fn get_snapshot(
+        &self,
+        old: Option<Arc<RegistrySnapshot>>,
+        version: RegistryVersion,
+    ) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
             .registry_client
@@ -293,10 +297,15 @@ impl Snapshotter {
                         X509Certificate::from_der(cert.certificate_der.as_slice())
                             .context("Unable to parse TLS certificate")?;
 
-                        let cli = self
-                            .client_generator
-                            .generate()
-                            .context("unable to create HTTP client")?;
+                        let cli = old
+                            .as_ref()
+                            .and_then(|x| x.nodes.get(&node_id.to_string()).map(|x| x.cli.clone()))
+                            .unwrap_or_else(|| {
+                                self.client_generator
+                                    .generate()
+                                    .context("unable to create HTTP client")
+                                    .unwrap()
+                            });
 
                         let node = Node {
                             // init to max, this value is updated with running health checks
@@ -378,7 +387,8 @@ impl Snapshot for Snapshotter {
         }
 
         // Otherwise create a snapshot
-        let snapshot = self.get_snapshot(version)?;
+        let old = self.published_registry_snapshot.load_full();
+        let snapshot = self.get_snapshot(old, version)?;
 
         let result = SnapshotInfoPublished {
             timestamp: snapshot.timestamp,

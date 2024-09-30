@@ -5615,7 +5615,7 @@ dependencies = [
 [[package]]
 name = "ic-bn-lib"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/ic-bn-lib?rev=c0c826380f220c09f06b88350178c18f63010471#c0c826380f220c09f06b88350178c18f63010471"
+source = "git+https://github.com/dfinity/ic-bn-lib?rev=09141e6f530440e9d8c1b1518b5888a522a7cef9#09141e6f530440e9d8c1b1518b5888a522a7cef9"
 dependencies = [
  "ahash 0.8.11",
  "anyhow",
@@ -5648,6 +5648,7 @@ dependencies = [
  "rustls 0.23.13",
  "rustls-acme",
  "rustls-pemfile 2.1.3",
+ "scopeguard",
  "serde_json",
  "sha1",
  "strum",
