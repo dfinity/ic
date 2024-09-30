@@ -148,6 +148,10 @@ impl<T> Clone for Reference<T> {
     }
 }
 
+// This and other traits must be explicitly implemented because
+// `#[derive(Copy)]` generates something like `impl<T> Copy for Reference<T>
+// where T: Copy`. And because neither `CanisterInput` nor `RequestOrResponse`
+// are `Copy`, the attribute does nothing.
 impl<T> Copy for Reference<T> {}
 
 impl<T> PartialEq for Reference<T> {
@@ -185,21 +189,31 @@ impl<T> From<Reference<T>> for Id {
 /// A reference to an inbound message (returned as a `CanisterInput`).
 pub(super) type InboundReference = Reference<CanisterInput>;
 
-impl From<Id> for InboundReference {
-    fn from(id: Id) -> InboundReference {
-        assert_eq!(Context::Inbound, id.context());
-        Reference(id.0, PhantomData)
-    }
+/// Converts an `Id` into an `InboundReference`. Panics if the `Id` does not
+/// have `Context::Inbound`.
+///
+/// This is equivalent to `impl From<Id> for InboundReference`, but is a free
+/// function because we want to make it clear that this may panic (even though
+/// `Id` is a private type and `Reference<T>` instances can only be created by
+/// this module).
+fn inbound_reference_or_panic(id: Id) -> InboundReference {
+    assert_eq!(Context::Inbound, id.context());
+    Reference(id.0, PhantomData)
 }
 
 /// A reference to an outbound message (returned as a `RequestOrResponse`).
 pub(super) type OutboundReference = Reference<RequestOrResponse>;
 
-impl From<Id> for OutboundReference {
-    fn from(id: Id) -> OutboundReference {
-        assert_eq!(Context::Outbound, id.context());
-        Reference(id.0, PhantomData)
-    }
+/// Converts an `Id` into an `OutboundReference`. Panics if the `Id` does not
+/// have `Context::Outbound`.
+///
+/// This is equivalent to `impl From<Id> for OutboundReference`, but is a free
+/// function because we want to make it clear that this may panic (even though
+/// `Id` is a private type and `Reference<T>` instances can only be created by
+/// this module).
+fn outbound_reference_or_panic(id: Id) -> OutboundReference {
+    assert_eq!(Context::Outbound, id.context());
+    Reference(id.0, PhantomData)
 }
 
 /// An enum that can hold either an inbound or an outbound reference.
@@ -367,7 +381,7 @@ impl MessagePool {
             RequestOrResponse::Response(_) => NO_DEADLINE,
         };
 
-        self.insert_impl(msg, actual_deadline, Context::Inbound)
+        inbound_reference_or_panic(self.insert_impl(msg, actual_deadline, Context::Inbound))
     }
 
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
@@ -391,11 +405,11 @@ impl MessagePool {
             request.deadline
         };
 
-        self.insert_impl(
+        outbound_reference_or_panic(self.insert_impl(
             RequestOrResponse::Request(request),
             actual_deadline,
             Context::Outbound,
-        )
+        ))
     }
 
     /// Inserts an outbound response (one that is to be enqueued in an output queue)
@@ -408,11 +422,11 @@ impl MessagePool {
         response: Arc<Response>,
     ) -> OutboundReference {
         let actual_deadline = response.deadline;
-        self.insert_impl(
+        outbound_reference_or_panic(self.insert_impl(
             RequestOrResponse::Response(response),
             actual_deadline,
             Context::Outbound,
-        )
+        ))
     }
 
     /// Inserts the given message into the pool. Returns the reference assigned to
@@ -423,15 +437,12 @@ impl MessagePool {
     /// deadline; this is so we can expire outgoing guaranteed response requests;
     /// and not expire incoming best-effort responses). It is recorded in the load
     /// shedding priority queue iff it is a best-effort message.
-    fn insert_impl<T>(
+    fn insert_impl(
         &mut self,
         msg: RequestOrResponse,
         actual_deadline: CoarseTime,
         context: Context,
-    ) -> Reference<T>
-    where
-        Reference<T>: From<Id>,
-    {
+    ) -> Id {
         let kind = Kind::from(&msg);
         let class = Class::from(&msg);
         let id = self.next_message_id(kind, context, class);
@@ -468,7 +479,7 @@ impl MessagePool {
             self.size_queue.insert((size_bytes, id));
         }
 
-        id.into()
+        id
     }
 
     /// Reserves and returns a new message ID.

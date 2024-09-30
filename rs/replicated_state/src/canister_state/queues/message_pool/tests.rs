@@ -129,7 +129,7 @@ fn test_get() {
 
     // Also do a negative test.
     let nonexistent_id = pool.next_message_id(Kind::Request, Context::Inbound, Class::BestEffort);
-    assert_eq!(None, pool.get(InboundReference::from(nonexistent_id)));
+    assert_eq!(None, pool.get(inbound_reference_or_panic(nonexistent_id)));
 }
 
 #[test]
@@ -547,14 +547,14 @@ fn test_id_to_reference_roundtrip() {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
             let id = Id::new(kind, Context::Inbound, class, 13);
-            let reference = InboundReference::from(id);
+            let reference = inbound_reference_or_panic(id);
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
 
             // Outbound.
             let id = Id::new(kind, Context::Outbound, class, 13);
-            let reference = OutboundReference::from(id);
+            let reference = outbound_reference_or_panic(id);
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
@@ -571,7 +571,7 @@ fn test_inbound_reference_from_outbound_id() {
         Class::GuaranteedResponse,
         13,
     );
-    let _ = InboundReference::from(id);
+    let _ = inbound_reference_or_panic(id);
 }
 
 #[test]
@@ -583,7 +583,7 @@ fn test_outbound_reference_from_inbound_id() {
         Class::GuaranteedResponse,
         13,
     );
-    let _ = OutboundReference::from(id);
+    let _ = outbound_reference_or_panic(id);
 }
 
 #[test]
@@ -632,7 +632,12 @@ fn test_reference_roundtrip_encode() {
 #[test]
 fn test_callback_reference_roundtip_encode() {
     let callback_reference = CallbackReference(
-        Id::new(Kind::Response, Context::Inbound, Class::BestEffort, 13).into(),
+        inbound_reference_or_panic(Id::new(
+            Kind::Response,
+            Context::Inbound,
+            Class::BestEffort,
+            13,
+        )),
         42.into(),
     );
     let encoded = pb_queues::canister_queues::CallbackReference::from(callback_reference.clone());
@@ -1001,12 +1006,12 @@ fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T
 
 /// Generates an `InboundReference` for a request of the given class.
 pub(crate) fn new_request_reference(generator: u64, class: Class) -> InboundReference {
-    Id::new(Kind::Request, Context::Inbound, class, generator).into()
+    inbound_reference_or_panic(Id::new(Kind::Request, Context::Inbound, class, generator))
 }
 
 /// Generates an `InboundReference` for a response of the given class.
 pub(crate) fn new_response_reference(generator: u64, class: Class) -> InboundReference {
-    Id::new(Kind::Response, Context::Inbound, class, generator).into()
+    inbound_reference_or_panic(Id::new(Kind::Response, Context::Inbound, class, generator))
 }
 
 #[derive(PartialEq, Eq)]
