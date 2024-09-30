@@ -139,6 +139,7 @@ const LABEL_VALUE_FAILURE: &str = "failure";
 
 #[derive(Clone)]
 pub struct StateManagerMetrics {
+    #[allow(dead_code)]
     state_manager_error_count: IntCounterVec,
     checkpoint_op_duration: HistogramVec,
     api_call_duration: HistogramVec,
@@ -3159,10 +3160,6 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    /// # Panics
-    ///
-    /// This method panics if checkpoint labels can not be retrieved
-    /// from the disk.
     fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
         let _timer = self
             .metrics
@@ -3179,10 +3176,10 @@ impl StateManager for StateManagerImpl {
 
         let states = self.states.read();
 
-        let heights: BTreeSet<_> = self
-            .checkpoint_heights()
-            .into_iter()
-            .chain(states.snapshots.iter().map(|snapshot| snapshot.height))
+        let heights: BTreeSet<_> = states
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.height)
             .filter(|h| {
                 matches(
                     states
@@ -3618,25 +3615,7 @@ impl StateReader for StateManagerImpl {
             (snapshot.height == height).then(|| Labeled::new(height, snapshot.state.clone()))
         }) {
             Some(state) => Ok(state),
-            None => match load_checkpoint(
-                &self.state_layout,
-                height,
-                &self.metrics,
-                self.own_subnet_type,
-                Arc::clone(&self.get_fd_factory()),
-            ) {
-                Ok((state, _)) => Ok(Labeled::new(height, Arc::new(state))),
-                Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
-                Err(err) => {
-                    self.metrics
-                        .state_manager_error_count
-                        .with_label_values(&["recover_checkpoint"])
-                        .inc();
-                    error!(self.log, "Failed to recover state @{}: {}", height, err);
-
-                    Err(StateManagerError::StateRemoved(height))
-                }
-            },
+            None => Err(StateManagerError::StateRemoved(height)),
         }
     }
 
