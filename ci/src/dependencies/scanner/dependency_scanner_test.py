@@ -159,7 +159,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
     jira_finding = Finding(
-        repository=repository.name,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -182,7 +182,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
         Repository(
             REPOSITORY,
             IC_URL,
-            [Project(name=REPOSITORY, path=_REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
+            [Project(name=REPOSITORY, path=REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
         )
     ]
 
@@ -242,7 +242,7 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
         Repository(
             REPOSITORY,
             IC_URL,
-            [Project(name=REPOSITORY, path=_REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
+            [Project(name=REPOSITORY, path=REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
         )
     ]
 
