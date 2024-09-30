@@ -15,6 +15,7 @@ rust_library(
         # Keep sorted.
         "@crate_index//:bitcoin_0_32",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:futures",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
