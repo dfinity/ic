@@ -123,6 +123,7 @@ pub fn main() -> Result<()> {
             };
             eprintln!("Network settings config: {:?}", &network_settings);
 
+            let node_type = node_type.parse::<NodeType>()?;
             let mgmt_mac = match network_settings.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
@@ -171,7 +172,6 @@ pub fn main() -> Result<()> {
             eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-
             let mgmt_mac = match network_settings.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;

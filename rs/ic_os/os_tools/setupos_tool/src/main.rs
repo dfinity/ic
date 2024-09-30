@@ -94,7 +94,6 @@ pub fn main() -> Result<()> {
             );
 
             let node_type = node_type.parse::<NodeType>()?;
-
             let mgmt_mac = match setup_config.network_settings.mgmt_mac {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
