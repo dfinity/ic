@@ -618,7 +618,7 @@ def test_on_release_scan_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(
+    scanner_job.do_release_scan(
         Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     )
     sub1.on_scan_job_succeeded.assert_called_once()
@@ -666,7 +666,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-      scanner_job.do_merge_request_scan(
+      scanner_job.do_release_scan(
           Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
       )
 
