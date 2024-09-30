@@ -133,17 +133,16 @@ fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
     let _p = canbench_rs::bench_scope("pre_upgrade");
 
-    Access::with_ledger(|ledger| {
-        if !ledger.is_ready() {
-            // This means that migration did not complete and the correct state
-            // of the ledger is still in UPGRADES_MEMORY.
-            return;
-        }
-    });
-
     let start = ic_cdk::api::instruction_counter();
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         Access::with_ledger(|ledger| {
+            if !ledger.is_ready() {
+                // This means that migration did not complete and the correct state
+                // of the ledger is still in UPGRADES_MEMORY.
+                ic_cdk::println!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+                log!(&LOG, "Ledger not ready, skipping write to UPGRADES_MEMORY.");
+                return;
+            }
             let writer = Writer::new(bs, 0);
             let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
             ciborium::ser::into_writer(ledger, &mut buffered_writer)
@@ -176,43 +175,31 @@ fn post_upgrade(args: Option<LedgerArgument>) {
     let mut pre_upgrade_instructions_consumed = 0;
 
     if !memory_manager_found {
-        let mut stable_reader = StableReader::default();
-        LEDGER.with(|cell| {
-            *cell.borrow_mut() = Some(
-                ciborium::de::from_reader(&mut stable_reader)
-                    .expect("failed to decode ledger state"),
-            );
-        });
+        let msg =
+            "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+        ic_cdk::println!("{msg}");
+        panic!("{msg}");
+    }
+
+    let state: Ledger = UPGRADES_MEMORY.with_borrow(|bs| {
+        let reader = Reader::new(bs, 0);
+        let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
+        let state = ciborium::de::from_reader(&mut buffered_reader).expect(
+            "Failed to read the Ledger state from memory manager managed stable structures",
+        );
         let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
         pre_upgrade_instructions_consumed =
-            match stable_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
+            match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
                 Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
                 Err(_) => {
                     // If upgrading from a version that didn't write the instructions counter to stable memory
                     0u64
                 }
             };
-    } else {
-        let state: Ledger = UPGRADES_MEMORY.with_borrow(|bs| {
-            let reader = Reader::new(bs, 0);
-            let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
-            let state = ciborium::de::from_reader(&mut buffered_reader).expect(
-                "Failed to read the Ledger state from memory manager managed stable structures",
-            );
-            let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
-            pre_upgrade_instructions_consumed =
-                match buffered_reader.read_exact(&mut pre_upgrade_instructions_counter_bytes) {
-                    Ok(_) => u64::from_le_bytes(pre_upgrade_instructions_counter_bytes),
-                    Err(_) => {
-                        // If upgrading from a version that didn't write the instructions counter to stable memory
-                        0u64
-                    }
-                };
-            state
-        });
-        ic_cdk::println!("Successfully read state from memory manager managed stable structures");
-        LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
-    }
+        state
+    });
+    ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+    LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
     if let Some(args) = args {
         match args {
