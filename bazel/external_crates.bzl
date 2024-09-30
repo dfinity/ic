@@ -518,14 +518,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.9",
+                version = "^0.1.7",
                 features = [
                     "full",
                 ],
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
