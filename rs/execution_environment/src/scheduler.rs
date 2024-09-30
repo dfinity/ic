@@ -570,7 +570,6 @@ impl SchedulerImpl {
     /// Invoked in the first iteration of the inner round to add the `Heartbeat`
     /// and `GlobalTimer` tasks that are carried out prior to processing
     /// any input messages.
-    /// It also returns the list of canisters that have non-zero priority credit.
     fn initialize_inner_round(&self, state: &mut ReplicatedState) -> BTreeSet<CanisterId> {
         let _timer = self
             .metrics
