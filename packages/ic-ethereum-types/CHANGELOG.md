@@ -9,5 +9,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `ic_ethereum_types::Address`: An Ethereum address on 20 bytes.
+- `ic_ethereum_types::Address`: An Ethereum address of 20 bytes.
 - `ic_ethereum_types::serde_data`: Serialize and deserialize any hexadecimal type following Ethereum's format (prefixed with `0x`).
