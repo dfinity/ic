@@ -1676,26 +1676,26 @@ pub mod governance_error {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
-                ErrorType::Ok => "ERROR_TYPE_OK",
-                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
-                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
-                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
-                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
-                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
-                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
-                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
-                ErrorType::HotKey => "ERROR_TYPE_HOT_KEY",
-                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
-                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
-                ErrorType::External => "ERROR_TYPE_EXTERNAL",
-                ErrorType::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
-                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
-                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
-                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
-                ErrorType::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
-                ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
-                ErrorType::NeuronAlreadyVoted => "ERROR_TYPE_NEURON_ALREADY_VOTED",
+                Self::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                Self::Ok => "ERROR_TYPE_OK",
+                Self::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                Self::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                Self::NotFound => "ERROR_TYPE_NOT_FOUND",
+                Self::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                Self::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                Self::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                Self::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                Self::HotKey => "ERROR_TYPE_HOT_KEY",
+                Self::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                Self::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                Self::External => "ERROR_TYPE_EXTERNAL",
+                Self::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
+                Self::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                Self::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                Self::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                Self::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
+                Self::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
+                Self::NeuronAlreadyVoted => "ERROR_TYPE_NEURON_ALREADY_VOTED",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2247,10 +2247,10 @@ pub mod swap_background_information {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                CanisterStatusType::Unspecified => "CANISTER_STATUS_TYPE_UNSPECIFIED",
-                CanisterStatusType::Running => "CANISTER_STATUS_TYPE_RUNNING",
-                CanisterStatusType::Stopping => "CANISTER_STATUS_TYPE_STOPPING",
-                CanisterStatusType::Stopped => "CANISTER_STATUS_TYPE_STOPPED",
+                Self::Unspecified => "CANISTER_STATUS_TYPE_UNSPECIFIED",
+                Self::Running => "CANISTER_STATUS_TYPE_RUNNING",
+                Self::Stopping => "CANISTER_STATUS_TYPE_STOPPING",
+                Self::Stopped => "CANISTER_STATUS_TYPE_STOPPED",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2944,10 +2944,10 @@ pub mod install_code {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                CanisterInstallMode::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
-                CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
-                CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
-                CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+                Self::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
+                Self::Install => "CANISTER_INSTALL_MODE_INSTALL",
+                Self::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
+                Self::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3014,9 +3014,9 @@ pub mod stop_or_start_canister {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                CanisterAction::Unspecified => "CANISTER_ACTION_UNSPECIFIED",
-                CanisterAction::Stop => "CANISTER_ACTION_STOP",
-                CanisterAction::Start => "CANISTER_ACTION_START",
+                Self::Unspecified => "CANISTER_ACTION_UNSPECIFIED",
+                Self::Stop => "CANISTER_ACTION_STOP",
+                Self::Start => "CANISTER_ACTION_START",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3121,9 +3121,9 @@ pub mod update_canister_settings {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-                LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-                LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+                Self::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+                Self::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+                Self::Public => "LOG_VISIBILITY_PUBLIC",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3550,10 +3550,10 @@ pub mod governance {
             /// (if the ProtoBuf definition does not change) and safe for programmatic use.
             pub fn as_str_name(&self) -> &'static str {
                 match self {
-                    MigrationStatus::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
-                    MigrationStatus::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
-                    MigrationStatus::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
-                    MigrationStatus::Failed => "MIGRATION_STATUS_FAILED",
+                    Self::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
+                    Self::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
+                    Self::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
+                    Self::Failed => "MIGRATION_STATUS_FAILED",
                 }
             }
             /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4387,12 +4387,10 @@ pub mod audit_event {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                NeuronLegacyCase::Unspecified => "NEURON_LEGACY_CASE_UNSPECIFIED",
-                NeuronLegacyCase::DissolvingOrDissolved => {
-                    "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED"
-                }
-                NeuronLegacyCase::Dissolved => "NEURON_LEGACY_CASE_DISSOLVED",
-                NeuronLegacyCase::NoneDissolveState => "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE",
+                Self::Unspecified => "NEURON_LEGACY_CASE_UNSPECIFIED",
+                Self::DissolvingOrDissolved => "NEURON_LEGACY_CASE_DISSOLVING_OR_DISSOLVED",
+                Self::Dissolved => "NEURON_LEGACY_CASE_DISSOLVED",
+                Self::NoneDissolveState => "NEURON_LEGACY_CASE_NONE_DISSOLVE_STATE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4510,16 +4508,12 @@ pub mod restore_aging_summary {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                NeuronGroupType::Unspecified => "NEURON_GROUP_TYPE_UNSPECIFIED",
-                NeuronGroupType::NotPreAging => "NEURON_GROUP_TYPE_NOT_PRE_AGING",
-                NeuronGroupType::DissolvingOrDissolved => {
-                    "NEURON_GROUP_TYPE_DISSOLVING_OR_DISSOLVED"
-                }
-                NeuronGroupType::StakeChanged => "NEURON_GROUP_TYPE_STAKE_CHANGED",
-                NeuronGroupType::StakeSameAgingChanged => {
-                    "NEURON_GROUP_TYPE_STAKE_SAME_AGING_CHANGED"
-                }
-                NeuronGroupType::StakeSameAgingSame => "NEURON_GROUP_TYPE_STAKE_SAME_AGING_SAME",
+                Self::Unspecified => "NEURON_GROUP_TYPE_UNSPECIFIED",
+                Self::NotPreAging => "NEURON_GROUP_TYPE_NOT_PRE_AGING",
+                Self::DissolvingOrDissolved => "NEURON_GROUP_TYPE_DISSOLVING_OR_DISSOLVED",
+                Self::StakeChanged => "NEURON_GROUP_TYPE_STAKE_CHANGED",
+                Self::StakeSameAgingChanged => "NEURON_GROUP_TYPE_STAKE_SAME_AGING_CHANGED",
+                Self::StakeSameAgingSame => "NEURON_GROUP_TYPE_STAKE_SAME_AGING_SAME",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4702,24 +4696,24 @@ impl Topic {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Topic::Unspecified => "TOPIC_UNSPECIFIED",
-            Topic::NeuronManagement => "TOPIC_NEURON_MANAGEMENT",
-            Topic::ExchangeRate => "TOPIC_EXCHANGE_RATE",
-            Topic::NetworkEconomics => "TOPIC_NETWORK_ECONOMICS",
-            Topic::Governance => "TOPIC_GOVERNANCE",
-            Topic::NodeAdmin => "TOPIC_NODE_ADMIN",
-            Topic::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
-            Topic::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
-            Topic::Kyc => "TOPIC_KYC",
-            Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
-            Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
-            Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
-            Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
-            Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
-            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
-            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
+            Self::Unspecified => "TOPIC_UNSPECIFIED",
+            Self::NeuronManagement => "TOPIC_NEURON_MANAGEMENT",
+            Self::ExchangeRate => "TOPIC_EXCHANGE_RATE",
+            Self::NetworkEconomics => "TOPIC_NETWORK_ECONOMICS",
+            Self::Governance => "TOPIC_GOVERNANCE",
+            Self::NodeAdmin => "TOPIC_NODE_ADMIN",
+            Self::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
+            Self::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
+            Self::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
+            Self::Kyc => "TOPIC_KYC",
+            Self::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
+            Self::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
+            Self::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
+            Self::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
+            Self::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
+            Self::SubnetRental => "TOPIC_SUBNET_RENTAL",
+            Self::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
+            Self::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4818,11 +4812,11 @@ impl NeuronState {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NeuronState::Unspecified => "NEURON_STATE_UNSPECIFIED",
-            NeuronState::NotDissolving => "NEURON_STATE_NOT_DISSOLVING",
-            NeuronState::Dissolving => "NEURON_STATE_DISSOLVING",
-            NeuronState::Dissolved => "NEURON_STATE_DISSOLVED",
-            NeuronState::Spawning => "NEURON_STATE_SPAWNING",
+            Self::Unspecified => "NEURON_STATE_UNSPECIFIED",
+            Self::NotDissolving => "NEURON_STATE_NOT_DISSOLVING",
+            Self::Dissolving => "NEURON_STATE_DISSOLVING",
+            Self::Dissolved => "NEURON_STATE_DISSOLVED",
+            Self::Spawning => "NEURON_STATE_SPAWNING",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4874,9 +4868,9 @@ impl Visibility {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Visibility::Unspecified => "VISIBILITY_UNSPECIFIED",
-            Visibility::Private => "VISIBILITY_PRIVATE",
-            Visibility::Public => "VISIBILITY_PUBLIC",
+            Self::Unspecified => "VISIBILITY_UNSPECIFIED",
+            Self::Private => "VISIBILITY_PRIVATE",
+            Self::Public => "VISIBILITY_PUBLIC",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4924,9 +4918,9 @@ impl NeuronType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NeuronType::Unspecified => "NEURON_TYPE_UNSPECIFIED",
-            NeuronType::Seed => "NEURON_TYPE_SEED",
-            NeuronType::Ect => "NEURON_TYPE_ECT",
+            Self::Unspecified => "NEURON_TYPE_UNSPECIFIED",
+            Self::Seed => "NEURON_TYPE_SEED",
+            Self::Ect => "NEURON_TYPE_ECT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4973,9 +4967,9 @@ impl Vote {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Vote::Unspecified => "VOTE_UNSPECIFIED",
-            Vote::Yes => "VOTE_YES",
-            Vote::No => "VOTE_NO",
+            Self::Unspecified => "VOTE_UNSPECIFIED",
+            Self::Yes => "VOTE_YES",
+            Self::No => "VOTE_NO",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5190,78 +5184,68 @@ impl NnsFunction {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NnsFunction::Unspecified => "NNS_FUNCTION_UNSPECIFIED",
-            NnsFunction::CreateSubnet => "NNS_FUNCTION_CREATE_SUBNET",
-            NnsFunction::AddNodeToSubnet => "NNS_FUNCTION_ADD_NODE_TO_SUBNET",
-            NnsFunction::NnsCanisterInstall => "NNS_FUNCTION_NNS_CANISTER_INSTALL",
-            NnsFunction::NnsCanisterUpgrade => "NNS_FUNCTION_NNS_CANISTER_UPGRADE",
-            NnsFunction::BlessReplicaVersion => "NNS_FUNCTION_BLESS_REPLICA_VERSION",
-            NnsFunction::RecoverSubnet => "NNS_FUNCTION_RECOVER_SUBNET",
-            NnsFunction::UpdateConfigOfSubnet => "NNS_FUNCTION_UPDATE_CONFIG_OF_SUBNET",
-            NnsFunction::AssignNoid => "NNS_FUNCTION_ASSIGN_NOID",
-            NnsFunction::NnsRootUpgrade => "NNS_FUNCTION_NNS_ROOT_UPGRADE",
-            NnsFunction::IcpXdrConversionRate => "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE",
-            NnsFunction::DeployGuestosToAllSubnetNodes => {
+            Self::Unspecified => "NNS_FUNCTION_UNSPECIFIED",
+            Self::CreateSubnet => "NNS_FUNCTION_CREATE_SUBNET",
+            Self::AddNodeToSubnet => "NNS_FUNCTION_ADD_NODE_TO_SUBNET",
+            Self::NnsCanisterInstall => "NNS_FUNCTION_NNS_CANISTER_INSTALL",
+            Self::NnsCanisterUpgrade => "NNS_FUNCTION_NNS_CANISTER_UPGRADE",
+            Self::BlessReplicaVersion => "NNS_FUNCTION_BLESS_REPLICA_VERSION",
+            Self::RecoverSubnet => "NNS_FUNCTION_RECOVER_SUBNET",
+            Self::UpdateConfigOfSubnet => "NNS_FUNCTION_UPDATE_CONFIG_OF_SUBNET",
+            Self::AssignNoid => "NNS_FUNCTION_ASSIGN_NOID",
+            Self::NnsRootUpgrade => "NNS_FUNCTION_NNS_ROOT_UPGRADE",
+            Self::IcpXdrConversionRate => "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE",
+            Self::DeployGuestosToAllSubnetNodes => {
                 "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_SUBNET_NODES"
             }
-            NnsFunction::ClearProvisionalWhitelist => "NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST",
-            NnsFunction::RemoveNodesFromSubnet => "NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET",
-            NnsFunction::SetAuthorizedSubnetworks => "NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS",
-            NnsFunction::SetFirewallConfig => "NNS_FUNCTION_SET_FIREWALL_CONFIG",
-            NnsFunction::UpdateNodeOperatorConfig => "NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG",
-            NnsFunction::StopOrStartNnsCanister => "NNS_FUNCTION_STOP_OR_START_NNS_CANISTER",
-            NnsFunction::RemoveNodes => "NNS_FUNCTION_REMOVE_NODES",
-            NnsFunction::UninstallCode => "NNS_FUNCTION_UNINSTALL_CODE",
-            NnsFunction::UpdateNodeRewardsTable => "NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE",
-            NnsFunction::AddOrRemoveDataCenters => "NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS",
-            NnsFunction::UpdateUnassignedNodesConfig => {
-                "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG"
-            }
-            NnsFunction::RemoveNodeOperators => "NNS_FUNCTION_REMOVE_NODE_OPERATORS",
-            NnsFunction::RerouteCanisterRanges => "NNS_FUNCTION_REROUTE_CANISTER_RANGES",
-            NnsFunction::AddFirewallRules => "NNS_FUNCTION_ADD_FIREWALL_RULES",
-            NnsFunction::RemoveFirewallRules => "NNS_FUNCTION_REMOVE_FIREWALL_RULES",
-            NnsFunction::UpdateFirewallRules => "NNS_FUNCTION_UPDATE_FIREWALL_RULES",
-            NnsFunction::PrepareCanisterMigration => "NNS_FUNCTION_PREPARE_CANISTER_MIGRATION",
-            NnsFunction::CompleteCanisterMigration => "NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION",
-            NnsFunction::AddSnsWasm => "NNS_FUNCTION_ADD_SNS_WASM",
-            NnsFunction::ChangeSubnetMembership => "NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP",
-            NnsFunction::UpdateSubnetType => "NNS_FUNCTION_UPDATE_SUBNET_TYPE",
-            NnsFunction::ChangeSubnetTypeAssignment => "NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT",
-            NnsFunction::UpdateSnsWasmSnsSubnetIds => "NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS",
-            NnsFunction::UpdateAllowedPrincipals => "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS",
-            NnsFunction::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
-            NnsFunction::InsertSnsWasmUpgradePathEntries => {
+            Self::ClearProvisionalWhitelist => "NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST",
+            Self::RemoveNodesFromSubnet => "NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET",
+            Self::SetAuthorizedSubnetworks => "NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS",
+            Self::SetFirewallConfig => "NNS_FUNCTION_SET_FIREWALL_CONFIG",
+            Self::UpdateNodeOperatorConfig => "NNS_FUNCTION_UPDATE_NODE_OPERATOR_CONFIG",
+            Self::StopOrStartNnsCanister => "NNS_FUNCTION_STOP_OR_START_NNS_CANISTER",
+            Self::RemoveNodes => "NNS_FUNCTION_REMOVE_NODES",
+            Self::UninstallCode => "NNS_FUNCTION_UNINSTALL_CODE",
+            Self::UpdateNodeRewardsTable => "NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE",
+            Self::AddOrRemoveDataCenters => "NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS",
+            Self::UpdateUnassignedNodesConfig => "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG",
+            Self::RemoveNodeOperators => "NNS_FUNCTION_REMOVE_NODE_OPERATORS",
+            Self::RerouteCanisterRanges => "NNS_FUNCTION_REROUTE_CANISTER_RANGES",
+            Self::AddFirewallRules => "NNS_FUNCTION_ADD_FIREWALL_RULES",
+            Self::RemoveFirewallRules => "NNS_FUNCTION_REMOVE_FIREWALL_RULES",
+            Self::UpdateFirewallRules => "NNS_FUNCTION_UPDATE_FIREWALL_RULES",
+            Self::PrepareCanisterMigration => "NNS_FUNCTION_PREPARE_CANISTER_MIGRATION",
+            Self::CompleteCanisterMigration => "NNS_FUNCTION_COMPLETE_CANISTER_MIGRATION",
+            Self::AddSnsWasm => "NNS_FUNCTION_ADD_SNS_WASM",
+            Self::ChangeSubnetMembership => "NNS_FUNCTION_CHANGE_SUBNET_MEMBERSHIP",
+            Self::UpdateSubnetType => "NNS_FUNCTION_UPDATE_SUBNET_TYPE",
+            Self::ChangeSubnetTypeAssignment => "NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT",
+            Self::UpdateSnsWasmSnsSubnetIds => "NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS",
+            Self::UpdateAllowedPrincipals => "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS",
+            Self::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
+            Self::InsertSnsWasmUpgradePathEntries => {
                 "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES"
             }
-            NnsFunction::ReviseElectedGuestosVersions => {
-                "NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS"
-            }
-            NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
-            NnsFunction::UpdateElectedHostosVersions => {
-                "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS"
-            }
-            NnsFunction::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
-            NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
-            NnsFunction::AddApiBoundaryNodes => "NNS_FUNCTION_ADD_API_BOUNDARY_NODES",
-            NnsFunction::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
-            NnsFunction::UpdateApiBoundaryNodesVersion => {
-                "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
-            }
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
+            Self::ReviseElectedGuestosVersions => "NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS",
+            Self::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
+            Self::UpdateElectedHostosVersions => "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS",
+            Self::UpdateNodesHostosVersion => "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION",
+            Self::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
+            Self::AddApiBoundaryNodes => "NNS_FUNCTION_ADD_API_BOUNDARY_NODES",
+            Self::RemoveApiBoundaryNodes => "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES",
+            Self::UpdateApiBoundaryNodesVersion => "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION",
+            Self::DeployGuestosToSomeApiBoundaryNodes => {
                 "NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES"
             }
-            NnsFunction::DeployGuestosToAllUnassignedNodes => {
+            Self::DeployGuestosToAllUnassignedNodes => {
                 "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES"
             }
-            NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
+            Self::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                 "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES"
             }
-            NnsFunction::ReviseElectedHostosVersions => {
-                "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS"
-            }
-            NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
-            NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            Self::ReviseElectedHostosVersions => "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS",
+            Self::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
+            Self::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5383,12 +5367,12 @@ impl ProposalStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ProposalStatus::Unspecified => "PROPOSAL_STATUS_UNSPECIFIED",
-            ProposalStatus::Open => "PROPOSAL_STATUS_OPEN",
-            ProposalStatus::Rejected => "PROPOSAL_STATUS_REJECTED",
-            ProposalStatus::Adopted => "PROPOSAL_STATUS_ADOPTED",
-            ProposalStatus::Executed => "PROPOSAL_STATUS_EXECUTED",
-            ProposalStatus::Failed => "PROPOSAL_STATUS_FAILED",
+            Self::Unspecified => "PROPOSAL_STATUS_UNSPECIFIED",
+            Self::Open => "PROPOSAL_STATUS_OPEN",
+            Self::Rejected => "PROPOSAL_STATUS_REJECTED",
+            Self::Adopted => "PROPOSAL_STATUS_ADOPTED",
+            Self::Executed => "PROPOSAL_STATUS_EXECUTED",
+            Self::Failed => "PROPOSAL_STATUS_FAILED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -5442,11 +5426,11 @@ impl ProposalRewardStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ProposalRewardStatus::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
-            ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
-            ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
-            ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
-            ProposalRewardStatus::Ineligible => "PROPOSAL_REWARD_STATUS_INELIGIBLE",
+            Self::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
+            Self::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
+            Self::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
+            Self::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+            Self::Ineligible => "PROPOSAL_REWARD_STATUS_INELIGIBLE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
