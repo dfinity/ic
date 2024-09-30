@@ -69,6 +69,7 @@ runs:
           BAZEL_EXTRA_ARGS: "${{ inputs.BAZEL_EXTRA_ARGS }} ${{ inputs.BAZEL_EXTRA_ARGS_RULES }}"
           BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
           CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
