@@ -80,6 +80,7 @@ component_files = {
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
     Label("networking/nftables/nftables-hostos.conf"): "/etc/nftables.conf",
+    Label("networking/nftables/nftables-add-operator-rules-hostos.conf"): "/etc/systemd/system/nftables.service.d/nftables-add-operator-rules.conf",
     Label("networking/hosts"): "/etc/hosts",
 
     # ssh
