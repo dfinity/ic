@@ -16,7 +16,7 @@ cd "$(git rev-parse --show-toplevel)"
 # since default branch is not the same in ic-private, we can't set it to master, throw error if missing
 git fetch origin
 DEFAULT_BRANCH_SHA=$(git rev-parse origin/$DEFAULT_BRANCH)
-TARGET_BRANCH_SHA="${TARGET_BRANCH_SHA:-$DEFAULT_BRANCH_SHA}"
+TARGET_BRANCH_SHA="${MERGE_BASE_SHA:-$DEFAULT_BRANCH_SHA}"
 MERGE_BASE=$(git merge-base HEAD "$TARGET_BRANCH_SHA")
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
