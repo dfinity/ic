@@ -263,6 +263,9 @@ require { type iptables_t; }
 search_dirs_pattern(iptables_t, var_run_t, ic_var_run_t)
 search_dirs_pattern(iptables_t, ic_var_run_t, ic_nftables_ruleset_t)
 read_files_pattern(iptables_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)
+# Allow nft -f - to read from standard input when started as a systemd service.
+require { type initrc_t; }
+allow iptables_t initrc_t : fifo_file { open read };
 
 # Allow orchestrator to write nftables ruleset
 manage_files_pattern(ic_orchestrator_t, ic_nftables_ruleset_t, ic_nftables_ruleset_t)

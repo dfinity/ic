@@ -98,6 +98,7 @@ component_files = {
     Label("networking/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("networking/resolv.conf"): "/etc/resolv.conf",
     Label("networking/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
+    Label("networking/nftables/nftables-add-operator-rules-guestos.conf"): "/etc/systemd/system/nftables.service.d/nftables-add-operator-rules.conf",
     Label("networking/hosts"): "/etc/hosts",
     Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
 
