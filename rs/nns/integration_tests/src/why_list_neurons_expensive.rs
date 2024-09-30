@@ -3,7 +3,7 @@ use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::ListNeurons;
-use ic_nns_test_utils::state_test_helpers::{list_neurons, unwrap_wasm_result, get_profiling};
+use ic_nns_test_utils::state_test_helpers::{get_profiling, list_neurons, unwrap_wasm_result};
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use std::io::Read; // For flate2.
 
@@ -30,20 +30,19 @@ fn test_why_list_neurons_expensive() {
         /* features = */ &[],
     )
     .bytes();
-    state_machine.upgrade_canister(
-        GOVERNANCE_CANISTER_ID,
-        governance_wasm_gz.clone(),
-        vec![], // args
-    )
-    .unwrap();
+    state_machine
+        .upgrade_canister(
+            GOVERNANCE_CANISTER_ID,
+            governance_wasm_gz.clone(),
+            vec![], // args
+        )
+        .unwrap();
     let (start_address, page_limit) = Decode!(
-        &unwrap_wasm_result(
-            state_machine.query(
-                GOVERNANCE_CANISTER_ID,
-                "where_ic_wasm_instrument_memory",
-                Encode!().unwrap(),
-            )
-        ),
+        &unwrap_wasm_result(state_machine.query(
+            GOVERNANCE_CANISTER_ID,
+            "where_ic_wasm_instrument_memory",
+            Encode!().unwrap(),
+        )),
         u64,
         u64
     )
@@ -58,8 +57,9 @@ fn test_why_list_neurons_expensive() {
     let page_limit = page_limit / 2;
 
     // Step 1.2.2: Enable ic-wasm profiling.
-    let mut instrumented_governance_wasm = walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
-        .expect("walrus cannot cope with our WASM.");
+    let mut instrumented_governance_wasm =
+        walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
+            .expect("walrus cannot cope with our WASM.");
     ic_wasm::instrumentation::instrument(
         &mut instrumented_governance_wasm,
         ic_wasm::instrumentation::Config {
@@ -71,12 +71,13 @@ fn test_why_list_neurons_expensive() {
     .unwrap();
     let instrumented_governance_wasm = instrumented_governance_wasm.emit_wasm();
     println!("\nInstalling instrumented governance WASM...\n");
-    state_machine.upgrade_canister(
-        GOVERNANCE_CANISTER_ID,
-        instrumented_governance_wasm,
-        vec![], // args
-    )
-    .unwrap();
+    state_machine
+        .upgrade_canister(
+            GOVERNANCE_CANISTER_ID,
+            instrumented_governance_wasm,
+            vec![], // args
+        )
+        .unwrap();
     println!("\nDone installing instrumented governance WASM. Ready for fine-grained performance measurement 👍\n");
 
     // Step 2: Run the code under test.
