@@ -38,15 +38,29 @@ class SlackVulnerabilityEvent:
 
     @staticmethod
     def vuln_changed(vuln_id: str, channel_id: str, updated_fields: Dict[str, str]):
-        return SlackVulnerabilityEvent(SlackVulnerabilityEventType.VULN_CHANGED, vuln_id, channel_id, updated_fields=updated_fields)
+        return SlackVulnerabilityEvent(
+            SlackVulnerabilityEventType.VULN_CHANGED, vuln_id, channel_id, updated_fields=updated_fields
+        )
 
     @staticmethod
     def dep_added(vuln_id: str, channel_id: str, finding_id: Tuple[str, str, str, str], added_projects: List[str]):
-        return SlackVulnerabilityEvent(SlackVulnerabilityEventType.DEP_ADDED, vuln_id, channel_id, finding_id=finding_id, added_projects=added_projects)
+        return SlackVulnerabilityEvent(
+            SlackVulnerabilityEventType.DEP_ADDED,
+            vuln_id,
+            channel_id,
+            finding_id=finding_id,
+            added_projects=added_projects,
+        )
 
     @staticmethod
     def dep_removed(vuln_id: str, channel_id: str, finding_id: Tuple[str, str, str, str], removed_projects: List[str]):
-        return SlackVulnerabilityEvent(SlackVulnerabilityEventType.DEP_REMOVED, vuln_id, channel_id, finding_id=finding_id, removed_projects=removed_projects)
+        return SlackVulnerabilityEvent(
+            SlackVulnerabilityEventType.DEP_REMOVED,
+            vuln_id,
+            channel_id,
+            finding_id=finding_id,
+            removed_projects=removed_projects,
+        )
 
 
 @dataclass
@@ -59,7 +73,13 @@ class SlackFinding:
 
     @staticmethod
     def from_finding(finding: Finding) -> "SlackFinding":
-        return SlackFinding(finding.repository, finding.scanner, finding.vulnerable_dependency.id, finding.vulnerable_dependency.version, sorted(finding.projects))
+        return SlackFinding(
+            finding.repository,
+            finding.scanner,
+            finding.vulnerable_dependency.id,
+            finding.vulnerable_dependency.version,
+            sorted(finding.projects),
+        )
 
     def id(self) -> Tuple[str, str, str, str]:
         return self.repository, self.scanner, self.dependency_id, self.dependency_version

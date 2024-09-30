@@ -22,6 +22,7 @@ IC_URL = f"https://github.com/dfinity/{REPOSITORY}"
 def jira_lib_mock():
     return Mock()
 
+
 class FakeBazel(BazelRustDependencyManager):
     def __init__(self, fake_type: int):
         super().__init__()
@@ -129,7 +130,11 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    repository = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY, owner=Team.EXECUTION_TEAM)])]
+    repository = Repository(
+        REPOSITORY,
+        IC_URL,
+        [Project(name=REPOSITORY, path=REPOSITORY, owner=Team.EXECUTION_TEAM)],
+    )
     finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
     finding.owning_teams = [Team.EXECUTION_TEAM]
@@ -173,7 +178,13 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2 = Mock()
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY, owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [
+        Repository(
+            REPOSITORY,
+            IC_URL,
+            [Project(name=REPOSITORY, path=_REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
+        )
+    ]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -227,7 +238,13 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
     failover_mock.can_handle.return_value = True
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2], failover_mock)
-    repos = [Repository(REPOSITORY, IC_URL, [Project(name=REPOSITORY, path=REPOSITORY, owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [
+        Repository(
+            REPOSITORY,
+            IC_URL,
+            [Project(name=REPOSITORY, path=_REPOSITORY, owner_by_path={"bear": [Team.NODE_TEAM]})],
+        )
+    ]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -410,7 +427,9 @@ def test_on_merge_request_changes_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository(REPOSITORY,IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_merge_request_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -458,7 +477,9 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_merge_request_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -495,7 +516,9 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     jira_lib_mock.commit_has_block_exception.return_value = "commit string"
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_merge_request_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -538,8 +561,10 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gith
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
-    assert e.type == SystemExit
+      scanner_job.do_merge_request_scan(
+          Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+      )
+    assert e.type is SystemExit
     assert e.value.code == 1
 
     fake_bazel.get_modified_packages.assert_called_once()
@@ -576,7 +601,9 @@ def test_on_merge_request_job_failed(jira_lib_mock):
     fake_bazel.has_dependencies_changed.side_effect = OSError("Call failed")
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_merge_request_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     sub1.on_scan_job_failed.assert_called_once()
     sub2.on_scan_job_failed.assert_called_once()
     sub1.on_scan_job_succeeded.assert_not_called()
@@ -590,7 +617,9 @@ def test_on_release_scan_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_merge_request_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     sub1.on_scan_job_succeeded.assert_called_once()
     sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_not_called()
@@ -636,9 +665,11 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+      scanner_job.do_merge_request_scan(
+          Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+      )
 
-    assert e.type == SystemExit
+    assert e.type is SystemExit
     assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
@@ -689,7 +720,9 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_release_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -740,9 +773,11 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+        scanner_job.do_release_scan(
+            Repository(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+        )
 
-    assert e.type == SystemExit
+    assert e.type is SystemExit
     assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
@@ -792,7 +827,9 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_release_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     sub1.on_scan_job_succeeded.assert_called_once()
@@ -840,9 +877,11 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-       scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+      scanner_job.do_release_scan(
+          Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+      )
 
-    assert e.type == SystemExit
+    assert e.type is SystemExit
     assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
@@ -893,7 +932,9 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_release_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -930,9 +971,11 @@ def test_on_release_scan_new_findings(jira_lib_mock):
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+        scanner_job.do_release_scan(
+            Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+        )
 
-    assert e.type == SystemExit
+    assert e.type is SystemExit
     assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
@@ -969,7 +1012,9 @@ def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_release_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -988,7 +1033,9 @@ def test_on_release_scan_job_failed(jira_lib_mock):
     fake_bazel.get_findings.side_effect = OSError("Call failed")
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
+    scanner_job.do_release_scan(
+        Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+    )
     sub1.on_scan_job_succeeded.assert_not_called()
     sub2.on_scan_job_succeeded.assert_not_called()
     sub1.on_scan_job_failed.assert_called_once()

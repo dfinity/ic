@@ -23,7 +23,21 @@ def is_env_for_periodic_job() -> bool:
 
 def get_ic_repo_for_rust() -> Repository:
     repo_name = REPO_NAME.replace("dfinity/", "")
-    return Repository(repo_name, f"https://github.com/dfinity/{repo_name}", [Project(name=repo_name, path=repo_name, owner_by_path={f"{repo_name}/rs/crypto": [Team.CRYPTO_TEAM], f"{repo_name}/rs/validator": [Team.CRYPTO_TEAM], f"{repo_name}/rs/canonical_state": [Team.CRYPTO_TEAM]})])
+    return Repository(
+        repo_name,
+        f"https://github.com/dfinity/{repo_name}",
+        [
+            Project(
+                name=repo_name,
+                path=repo_name,
+                owner_by_path={
+                    f"{repo_name}/rs/crypto": [Team.CRYPTO_TEAM],
+                    f"{repo_name}/rs/validator": [Team.CRYPTO_TEAM],
+                    f"{repo_name}/rs/canonical_state": [Team.CRYPTO_TEAM],
+                },
+            )
+        ],
+    )
 
 
 def get_ic_repo_merge_request_base_url() -> str:
