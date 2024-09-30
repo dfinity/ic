@@ -154,10 +154,6 @@ options may be specified:
     time between peeks by the certificate issuer to fetch a new task from the
     certificate orchestrator.
 
-  --certificate_syncer_polling_interval_sec
-    time between polling the certificate issuer for custom domain updates (i.e.,
-    newly registered, modified, or removed custom domains).
-
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
     registry replicator.
@@ -365,9 +361,6 @@ function build_ic_bootstrap_tar() {
             --certificate_issuer_peek_sleep_sec)
                 CERTIFICATE_ISSUER_PEEK_SLEEP_SEC="$2"
                 ;;
-            --certificate_syncer_polling_interval_sec)
-                CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC="$2"
-                ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
                 ;;
@@ -558,12 +551,6 @@ certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
 ${CERTIFICATE_ISSUER_TASK_DELAY_SEC:+certificate_issuer_task_delay_sec=${CERTIFICATE_ISSUER_TASK_DELAY_SEC}}
 ${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC:+certificate_issuer_task_error_delay_sec=${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC}}
 ${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC:+certificate_issuer_peek_sleep_sec=${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC}}
-EOF
-    fi
-
-    if [[ ! -z "${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC:-}" ]]; then
-        cat >"${BOOTSTRAP_TMPDIR}/certificate_syncer.conf" <<EOF
-certificate_syncer_polling_interval_sec=${CERTIFICATE_SYNCER_POLLING_INTERVAL_SEC}
 EOF
     fi
 

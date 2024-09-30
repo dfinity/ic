@@ -271,7 +271,11 @@ fn execute_response_traps() {
                 ingress_status,
                 IngressStatus::Known {
                     state: IngressState::Failed(
-                        HypervisorError::CalledTrap(String::new()).into_user_error(&a_id)
+                        HypervisorError::CalledTrap {
+                            message: String::new(),
+                            backtrace: None
+                        }
+                        .into_user_error(&a_id)
                     ),
                     receiver: a_id.get(),
                     time: Time::from_nanos_since_unix_epoch(0),
@@ -322,7 +326,10 @@ fn execute_response_with_trapping_cleanup() {
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
-            let err_trapped = Box::new(HypervisorError::CalledTrap(String::new()));
+            let err_trapped = Box::new(HypervisorError::CalledTrap {
+                message: String::new(),
+                backtrace: None,
+            });
             assert_eq!(
                 ingress_status,
                 IngressStatus::Known {
@@ -2480,7 +2487,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
         .unwrap();
 
     test.ingress(

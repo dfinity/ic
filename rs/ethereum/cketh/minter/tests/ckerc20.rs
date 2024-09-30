@@ -1173,7 +1173,7 @@ mod withdraw_erc20 {
             .start_processing_withdrawals()
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
-                    JsonRpcProvider::Pokt,
+                    JsonRpcProvider::BlockPi,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740742_u64.into()
                     },

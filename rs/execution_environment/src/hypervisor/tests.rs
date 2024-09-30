@@ -6,6 +6,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types::{
@@ -2109,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2168,7 +2169,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -3582,9 +3583,9 @@ fn ic0_trap_preserves_some_cycles() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     let expected_executed_instructions = NumInstructions::from(
-        instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 })
+        instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 }, WasmMemoryType::Wasm32)
             + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::TRAP.get()
-            + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 })
+            + 2 * instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 }, WasmMemoryType::Wasm32)
             + 12 /* trap data */
             + 1, // Function is 1 instruction.
     );
@@ -5413,7 +5414,6 @@ fn call_with_best_effort_response_test_helper(
     match test
         .canister_state_mut(canister_receiver)
         .system_state
-        .queues_mut()
         .pop_input()
         .unwrap()
     {

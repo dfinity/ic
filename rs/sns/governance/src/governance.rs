@@ -1,8 +1,6 @@
-#[cfg(feature = "test")]
 use crate::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
 };
-
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -690,6 +688,12 @@ pub struct Governance {
 
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
+
+    /// Whether test features are enabled.
+    /// Test features should not be exposed in production. But, code that should
+    /// not run in production can be gated behind a check for this flag as an
+    /// extra layer of protection.
+    pub test_features_enabled: bool,
 }
 
 impl Governance {
@@ -748,11 +752,21 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            test_features_enabled: false,
         };
 
         gov.initialize_indices();
 
         gov
+    }
+
+    pub fn enable_test_features(mut self) -> Self {
+        self.test_features_enabled = true;
+        self
+    }
+
+    pub fn check_test_features_enabled(&self) {
+        assert!(self.test_features_enabled, "Test features are not enabled");
     }
 
     pub fn get_mode(&self, _: GetMode) -> GetModeResponse {
@@ -1315,7 +1329,7 @@ impl Governance {
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
             maturity_e8s_equivalent: 0,
-            dissolve_state: parent_neuron.dissolve_state.clone(),
+            dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
             source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
             staked_maturity_e8s_equivalent: None,
@@ -1327,7 +1341,7 @@ impl Governance {
         // Add the child neuron's id to the set of neurons with ongoing operations.
         let in_flight_command = NeuronInFlightCommand {
             timestamp: creation_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
+            command: Some(InFlightCommand::Split(*split)),
         };
         let _child_lock = self.lock_neuron_for_command(&child_nid, in_flight_command)?;
 
@@ -1966,7 +1980,6 @@ impl Governance {
             .map(|proposal_data| {
                 proposal_data
                     .wait_for_quiet_state
-                    .clone()
                     .map(|w| w.current_deadline_timestamp_seconds)
                     .unwrap_or_else(|| {
                         proposal_data
@@ -5332,8 +5345,9 @@ impl Governance {
     /// - the followees are not changed (it's easy to update followees
     ///   via `manage_neuron` and doing it here would require updating
     ///   `function_followee_index`)
-    #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+        self.check_test_features_enabled();
+
         let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
 
         // Must clobber an existing neuron.
@@ -5403,15 +5417,16 @@ impl Governance {
         _: GetMaturityModulationRequest,
     ) -> GetMaturityModulationResponse {
         GetMaturityModulationResponse {
-            maturity_modulation: self.proto.maturity_modulation.clone(),
+            maturity_modulation: self.proto.maturity_modulation,
         }
     }
 
-    #[cfg(feature = "test")]
     pub fn add_maturity(
         &mut self,
         add_maturity_request: AddMaturityRequest,
     ) -> AddMaturityResponse {
+        self.check_test_features_enabled();
+
         let AddMaturityRequest { id, amount_e8s } = add_maturity_request;
         let id = id.expect("AddMaturityRequest::id is required");
         let amount_e8s = amount_e8s.expect("AddMaturityRequest::amount_e8s is required");
@@ -5427,11 +5442,12 @@ impl Governance {
         }
     }
 
-    #[cfg(feature = "test")]
     pub async fn mint_tokens(
         &mut self,
         mint_tokens_request: MintTokensRequest,
     ) -> MintTokensResponse {
+        self.check_test_features_enabled();
+
         self.ledger
             .transfer_funds(
                 mint_tokens_request.amount_e8s(),
@@ -6450,7 +6466,7 @@ mod tests {
                     action: Some(Action::ManageNervousSystemParameters(
                         NervousSystemParameters {
                             // The operative data is here. Foils make_proposal.
-                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS.clone()),
+                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS),
                             ..Default::default()
                         },
                     )),
@@ -6564,6 +6580,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         );
+
         // Step 1.3: Record original last_reward_event. That way, we can detect
         // changes (there aren't supposed to be any).
         let original_latest_reward_event = governance.proto.latest_reward_event.clone();
@@ -8591,6 +8608,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         )
+        .enable_test_features()
     }
 
     fn test_neuron_id(controller: PrincipalId) -> NeuronId {
@@ -9297,6 +9315,7 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(FakeCmc::new()),
         );
+
         SplitNeuronTestSetup {
             controller,
             neuron_id,
@@ -9780,7 +9799,7 @@ mod tests {
             };
             let filled_in_ballot = Ballot {
                 vote: vote_of_neuron as i32,
-                ..empty_ballot.clone()
+                ..empty_ballot
             };
 
             // Code under test.
@@ -9793,7 +9812,7 @@ mod tests {
                     &follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id,
                 ]
                 .into_iter()
-                .map(|neuron_id| (neuron_id.to_string(), empty_ballot.clone()))
+                .map(|neuron_id| (neuron_id.to_string(), empty_ballot))
                 .collect::<BTreeMap<String, Ballot>>();
 
                 // voter neuron votes, and the code under test deduces all of the implications of
@@ -9824,21 +9843,21 @@ mod tests {
                 btreemap! {
                     voting_neuron_id.to_string()
                         // Direct vote.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_catch_all_neuron_id.to_string()
                         // Thanks to catch-all/fallback following.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Because this only follows specifically on TransferSnsTreasuryFunds.
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Thanks to catch-all/fallback following, although from just this case, it
                         // is unclear why this happens (you need to look at behavior on many
                         // different proposals to explain the behavior of this neuron).
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9851,22 +9870,22 @@ mod tests {
                 critical_ballots,
                 btreemap! {
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Perhaps, surprisingly, even though this neuron follows on
                     // "catch-all/fallback", that does not apply here, because the proposal is
                     // "critical".
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     // Unsurprisingly, this neuron follows, because it specifically follows on
                     // proposals of this type.
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Even less surprisingly, this also follows for similar reasons.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9880,16 +9899,16 @@ mod tests {
                 btreemap! {
                     // Only direct vote.
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // No following.
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     // Even this "super follower" doesn't follow here.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                 }
             );
         }

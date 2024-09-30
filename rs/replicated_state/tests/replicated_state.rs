@@ -25,7 +25,7 @@ use ic_test_utilities_state::{arb_replicated_state_with_output_queues, Execution
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::messages::RejectContext;
+use ic_types::messages::{CallbackId, RejectContext};
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
@@ -538,6 +538,26 @@ fn push_input_queues_respects_local_remote_subnet() {
 }
 
 #[test]
+fn subnet_queue_push_input_response() {
+    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
+
+    let response = response_to(SUBNET_ID.into());
+    assert_eq!(
+        state.push_input(
+            response.clone().into(),
+            &mut SUBNET_AVAILABLE_MEMORY.clone()
+        ),
+        Err((
+            StateError::non_matching_response(
+                "Management canister does not accept canister responses",
+                &response
+            ),
+            response.into()
+        ))
+    );
+}
+
+#[test]
 fn insert_bitcoin_response_non_matching() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
@@ -665,10 +685,13 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
     // - one to a another local canister.
     // - one to a remote canister.
     let remote_canister_id = CanisterId::from_u64(123);
-    for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
-        fixture
-            .push_output_request(request_to(receiver), UNIX_EPOCH)
-            .unwrap();
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.sender_reply_callback = CallbackId::from(i as u64);
+        fixture.push_output_request(request, UNIX_EPOCH).unwrap();
     }
 
     // Time out everything, then check that subnet input schedules are as expected.

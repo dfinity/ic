@@ -64,7 +64,7 @@ async fn main() -> Result<(), Error> {
     .context("failed to write file")?;
     fs::set_permissions(hardware.path(), Permissions::from_mode(0o755)).await?;
     rootfs
-        .write_file(hardware.path(), Path::new("/opt/ic/bin/hardware.sh"))
+        .write_file(hardware.path(), Path::new("/opt/ic/bin/check-hardware.sh"))
         .await?;
 
     // Overwrite network checks
@@ -83,7 +83,7 @@ async fn main() -> Result<(), Error> {
     .context("failed to write file")?;
     fs::set_permissions(network.path(), Permissions::from_mode(0o755)).await?;
     rootfs
-        .write_file(network.path(), Path::new("/opt/ic/bin/network.sh"))
+        .write_file(network.path(), Path::new("/opt/ic/bin/check-network.sh"))
         .await?;
 
     // Close rootfs partition

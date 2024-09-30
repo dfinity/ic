@@ -729,6 +729,24 @@ fn get_principals_authorized_to_create_canisters_to_subnets_() {
     })
 }
 
+#[candid_method(query, rename = "get_default_subnets")]
+fn get_default_subnets() -> Vec<PrincipalId> {
+    with_state(|state| {
+        state
+            .default_subnets
+            .clone()
+            .iter()
+            .map(|s| s.get())
+            .collect()
+    })
+}
+
+/// Returns the list of default subnets to which anyone can deploy canisters to.
+#[export_name = "canister_query get_default_subnets"]
+fn get_default_subnets_() {
+    over(candid_one, |_: ()| get_default_subnets())
+}
+
 /// Constructs a hash tree that can be used to certify requests for the
 /// conversion rate (both the current and the average, if they are set).
 ///
@@ -771,13 +789,14 @@ fn convert_data_to_mixed_hash_tree(state: &State) -> WitnessGeneratorImpl {
 /// Candid-encoded IcpXdrConversionRate
 fn convert_conversion_rate_to_payload(
     conversion_rate: &IcpXdrConversionRate,
+    label: Label,
     witness_generator: WitnessGeneratorImpl,
 ) -> Vec<u8> {
     let icp_xdr_conversion_rate_buf = Encode!(&conversion_rate).unwrap();
 
     let mixed_hash_tree = witness_generator
-        .mixed_hash_tree(&LabeledTree::SubTree(flatmap!{
-            Label::from(LABEL_ICP_XDR_CONVERSION_RATE) => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
+        .mixed_hash_tree(&LabeledTree::SubTree(flatmap! {
+            label => LabeledTree::Leaf(icp_xdr_conversion_rate_buf)
         }))
         .expect("failed to produce a hash tree");
 
@@ -801,8 +820,11 @@ fn get_icp_xdr_conversion_rate() -> IcpXdrConversionRateCertifiedResponse {
             .as_ref()
             .expect("icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            icp_xdr_conversion_rate,
+            Label::from(LABEL_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         IcpXdrConversionRateCertifiedResponse {
             data: icp_xdr_conversion_rate.clone(),
@@ -827,8 +849,11 @@ fn get_average_icp_xdr_conversion_rate_() {
             .as_ref()
             .expect("average_icp_xdr_conversion_rate is not set");
 
-        let payload =
-            convert_conversion_rate_to_payload(average_icp_xdr_conversion_rate, witness_generator);
+        let payload = convert_conversion_rate_to_payload(
+            average_icp_xdr_conversion_rate,
+            Label::from(LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE),
+            witness_generator,
+        );
 
         over(
             candid_one,

@@ -44,7 +44,7 @@ lazy_static! {
     pub static ref TARGET_SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(435106);
     pub static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
         target_swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
-        params: Some(TEST_SWAP_PARAMS.clone()),
+        params: Some(TEST_SWAP_PARAMS),
         community_fund_investment_e8s: Some(500),
     };
     pub static ref SWAP_INIT: sns_swap_pb::Init = sns_swap_pb::Init {
@@ -214,7 +214,7 @@ impl Environment for MockEnvironment {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,

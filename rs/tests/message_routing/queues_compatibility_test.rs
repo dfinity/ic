@@ -252,9 +252,8 @@ fn test(env: TestEnv) {
 
     info!(logger, "Mainnet versions: {:?}", mainnet_versions);
 
-    let tests = mainnet_versions
-        .iter()
-        .map(|v| {
+    let tests = mainnet_versions.iter().flat_map(|v| {
+        [
             TestCase::new(
                 TestType::Bidirectional {
                     published_binary: "replicated-state-test".to_string(),
@@ -262,16 +261,17 @@ fn test(env: TestEnv) {
                 },
                 "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
-            )
-        })
-        .chain([TestCase::new(
-            TestType::Bidirectional {
-                published_binary: "replicated-state-test".to_string(),
-                mainnet_version: "2d220277bda0b29c90c48eac66fd56beeed59c11".to_string(),
-            },
-            "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
-            "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
-        )]);
+            ),
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "ic/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+            ),
+        ]
+    });
 
     for t in tests {
         t.run(&logger);

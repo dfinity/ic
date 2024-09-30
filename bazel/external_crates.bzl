@@ -347,8 +347,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "cloudflare": crate.spec(
-                git = "https://github.com/cloudflare/cloudflare-rs.git",
-                rev = "f14720e42184ee176a97676e85ef2d2d85bc3aae",
+                git = "https://github.com/dfinity/cloudflare-rs.git",
+                rev = "a6538a036926bd756986c9c0a5de356daef48881",
                 default_features = False,
                 features = [
                     "rustls-tls",
@@ -468,6 +468,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "group": crate.spec(
                 version = "^0.13",
             ),
+            "ic-sha3": crate.spec(
+                version = "^1.0.0",
+            ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
             ),
@@ -507,18 +510,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
-            ),
-            "hyper_0_14_27": crate.spec(
-                package = "hyper",
-                version = "^0.14.27",
-                features = [
-                    "client",
-                    "full",
-                    "http1",
-                    "http2",
-                    "server",
-                    "tcp",
-                ],
             ),
             "hyper": crate.spec(
                 version = "^1.4.1",
@@ -607,6 +598,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ic-certification": crate.spec(
                 version = "2.6.0",
             ),
+            "ic-certificate-verification": crate.spec(
+                version = "2.6.0",
+            ),
             "ic-http-certification": crate.spec(
                 version = "2.6.0",
             ),
@@ -629,6 +623,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
+            ),
+            "ic-transport-types": crate.spec(
+                version = "^0.37.1",
             ),
             "ic-utils": crate.spec(
                 version = "^0.37.0",
@@ -955,11 +952,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "proptest-derive": crate.spec(
                 version = "^0.5.0",
             ),
-            "prost": crate.spec(
+            "prost_0_12_0": crate.spec(
+                package = "prost",
                 version = "^0.12",
             ),
+            "prost": crate.spec(
+                version = "^0.13",
+            ),
             "prost-build": crate.spec(
-                version = "^0.12",
+                version = "^0.13",
             ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
@@ -1068,6 +1069,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rust_decimal_macros": crate.spec(
                 version = "^1.25.0",
+            ),
+            "rustc-demangle": crate.spec(
+                version = "^0.1.16",
             ),
             "rustc-hash": crate.spec(
                 version = "^1.1.0",
@@ -1319,10 +1323,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tonic-build": crate.spec(
-                version = "^0.11.0",
+                version = "^0.12.0",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
@@ -1411,7 +1415,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.212.0",
+                version = "^0.215.0",
                 features = [
                     "wasmparser",
                 ],
@@ -1424,10 +1428,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.212.0",
+                version = "^0.215.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.212.0",
+                version = "^0.215.0",
             ),
             "wasmtime": crate.spec(
                 version = "^24.0.0",

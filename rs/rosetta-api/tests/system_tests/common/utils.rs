@@ -5,7 +5,9 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
 use ic_icp_rosetta_client::RosettaClient;
+use ic_ledger_core::block::BlockType;
 use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -57,10 +59,32 @@ pub async fn wait_for_rosetta_to_sync_up_to_block(
             if last_block >= block_index {
                 return Some(last_block);
             }
+        } else {
+            eprintln!("Failed to get network status: {:?}", response);
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
     panic!("Failed to sync with the ledger");
+}
+
+pub async fn assert_rosetta_blockchain_is_valid(
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+    agent: &Agent,
+) {
+    // Let's check the network status
+    let network_status = rosetta_client
+        .network_status(network_identifier.clone())
+        .await
+        .unwrap();
+    let ledger_tip = query_encoded_blocks(agent, u64::MAX, u64::MAX).await.blocks[0].clone();
+    assert_eq!(
+        to_hash(&network_status.current_block_identifier.hash).unwrap(),
+        icp_ledger::Block::block_hash(&ledger_tip),
+        "Block hashes do not match: Expected Block {:?} but got Block {:?}",
+        network_status.current_block_identifier,
+        ledger_tip
+    );
 }
 
 pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
@@ -80,13 +104,13 @@ pub fn memo_bytebuf_to_u64(bytebuf: &[u8]) -> Option<u64> {
     Some(value)
 }
 
-/// This function calls the `query_encoded_blocks` endpoint on the ledger canister.
-/// The user can specify the maximum block height and the number of blocks to query.
-/// If the maximum block height is not specified then the current chain tip index will be used.
+/// This function calls the 'query_encoded_blocks' endpoint on the ledger canister.
+/// The user can specify the minimum block height and the number of blocks to query.
+/// If the minimum block height is greater than the current chain tip index, the function will cap the start index to the current chain tip index.
+/// If the number of blocks to query is greater than the chain length, the function will cap the length to the chain length.
 pub async fn query_encoded_blocks(
     agent: &Agent,
-    // If this is left None then the whatever the currently highest block is will be used.
-    max_block_height: Option<u64>,
+    min_block_height: u64,
     num_blocks: u64,
 ) -> QueryEncodedBlocksResponse {
     let response = Decode!(
@@ -108,12 +132,7 @@ pub async fn query_encoded_blocks(
 
     let current_chain_tip_index = response.chain_length.saturating_sub(1);
     let block_request = GetBlocksArgs {
-        // If max_block_height is None then we will use the current chain tip index.
-        // Otherwise we will use the minimum of the max_block_height and the current chain tip index.
-        start: std::cmp::min(
-            max_block_height.unwrap_or(current_chain_tip_index),
-            current_chain_tip_index,
-        ),
+        start: std::cmp::min(min_block_height, current_chain_tip_index),
         length: std::cmp::min(num_blocks, response.chain_length) as usize,
     };
     Decode!(

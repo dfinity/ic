@@ -2,7 +2,7 @@ import logging
 
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from model.ic import (
-    IS_PRIVATE,
+    REPO_NAME,
     get_ic_repo_ci_pipeline_base_url,
     get_ic_repo_for_rust,
     get_ic_repo_merge_request_base_url,
@@ -14,7 +14,7 @@ from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyMan
 from scanner.scanner_job_type import ScannerJobType
 
 if __name__ == "__main__":
-    if IS_PRIVATE:
+    if REPO_NAME == "dfinity/ic-private":
         logging.basicConfig(level=logging.INFO)
     else:
         logging.basicConfig(level=logging.WARNING)

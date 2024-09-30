@@ -28,10 +28,9 @@ const TEST_DURATION: Duration = Duration::from_secs(5 * 60);
 const INGRESS_BYTES_COUNT_METRIC: &str = "consensus_ingress_message_bytes_delivered_count";
 const INGRESS_BYTES_SUM_METRIC: &str = "consensus_ingress_message_bytes_delivered_sum";
 const INGRESS_MESSAGES_SUM_METRIC: &str = "consensus_ingress_messages_delivered_sum";
-const INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS: &str =
-    "replica_http_ingress_watcher_wait_for_certification_duration_seconds_sum";
-const INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS: &str =
-    "replica_http_ingress_watcher_wait_for_certification_duration_seconds_count";
+const INGRESS_MESSAGE_E2E_LATENCY_METRICS: &str =
+    "replica_http_ingress_watcher_wait_for_certification_duration_seconds";
+const TIME_TO_RECEIVE_BLOCK_METRICS: &str = "consensus_time_to_receive_block";
 
 pub fn test_with_rt_handle(
     env: TestEnv,
@@ -170,6 +169,7 @@ pub struct TestMetrics {
     throughput_bytes_per_second: f64,
     throughput_messages_per_second: f64,
     average_e2e_latency: f64,
+    average_time_to_receive_block: f64,
 }
 
 impl TestMetrics {
@@ -185,7 +185,8 @@ impl TestMetrics {
             metrics_difference.delivered_ingress_messages_bytes as f64 / duration.as_secs_f64();
         let throughput_messages_per_second =
             metrics_difference.delivered_ingress_messages as f64 / duration.as_secs_f64();
-        let e2e_latency = metrics_difference.latency_sum / metrics_difference.latency_count;
+        let e2e_latency = metrics_difference.latency.average();
+        let time_to_receive_block = metrics_difference.time_to_receive_block.average();
 
         Self {
             blocks_per_second,
@@ -194,6 +195,7 @@ impl TestMetrics {
             throughput_bytes_per_second,
             throughput_messages_per_second,
             average_e2e_latency: e2e_latency,
+            average_time_to_receive_block: time_to_receive_block,
         }
     }
 }
@@ -208,6 +210,11 @@ impl std::fmt::Display for TestMetrics {
             self.throughput_bytes_per_second / (1024. * 1024.),
             self.throughput_messages_per_second
         )?;
+        writeln!(
+            f,
+            "Average time to receive a rank 0 block: {:.1}s",
+            self.average_time_to_receive_block
+        )?;
         write!(
             f,
             "Avarage E2E ingress message latency: {:.1}s",
@@ -221,8 +228,8 @@ struct ConsensusMetrics {
     delivered_blocks: u64,
     delivered_ingress_messages: u64,
     delivered_ingress_messages_bytes: u64,
-    latency_sum: f64,
-    latency_count: f64,
+    latency: HistogramMetrics,
+    time_to_receive_block: HistogramMetrics,
 }
 
 impl std::ops::Sub for ConsensusMetrics {
@@ -235,8 +242,8 @@ impl std::ops::Sub for ConsensusMetrics {
                 - other.delivered_ingress_messages,
             delivered_ingress_messages_bytes: self.delivered_ingress_messages_bytes
                 - other.delivered_ingress_messages_bytes,
-            latency_sum: self.latency_sum - other.latency_sum,
-            latency_count: self.latency_count - other.latency_count,
+            latency: self.latency - other.latency,
+            time_to_receive_block: self.time_to_receive_block - other.time_to_receive_block,
         }
     }
 }
@@ -251,37 +258,78 @@ async fn get_consensus_metrics(nodes: &[IcNodeSnapshot]) -> ConsensusMetrics {
         ],
     );
 
-    let latency_fetcher = MetricsFetcher::new(
-        nodes.iter().cloned(),
-        vec![
-            INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS.to_string(),
-            INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS.to_string(),
-        ],
-    );
-
     let metrics = fetcher
         .fetch::<u64>()
         .await
         .expect("Should be able to fetch the metrics");
 
-    let latency_metrics = latency_fetcher
-        .fetch::<f64>()
-        .await
-        .expect("Should be able to fetch the latency metrics");
-
     let avg_blocks = average(&metrics[INGRESS_BYTES_COUNT_METRIC]);
     let avg_ingress_messages = average(&metrics[INGRESS_MESSAGES_SUM_METRIC]);
     let avg_ingress_bytes = average(&metrics[INGRESS_BYTES_SUM_METRIC]);
-    let avg_latency_sum = average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_SUM_METRICS]);
-    let avg_latency_count =
-        average_f64(&latency_metrics[INGRESS_MESSAGE_E2E_LATENCY_COUNT_METRICS]);
 
     ConsensusMetrics {
         delivered_blocks: avg_blocks,
         delivered_ingress_messages: avg_ingress_messages,
         delivered_ingress_messages_bytes: avg_ingress_bytes,
-        latency_sum: avg_latency_sum,
-        latency_count: avg_latency_count,
+        latency: HistogramMetrics::fetch(INGRESS_MESSAGE_E2E_LATENCY_METRICS, None, nodes).await,
+        time_to_receive_block: HistogramMetrics::fetch(
+            TIME_TO_RECEIVE_BLOCK_METRICS,
+            Some("rank=\"0\""),
+            nodes,
+        )
+        .await,
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct HistogramMetrics {
+    sum: f64,
+    count: f64,
+}
+
+impl HistogramMetrics {
+    async fn fetch(metrics_name: &str, filter: Option<&str>, nodes: &[IcNodeSnapshot]) -> Self {
+        let (metrics_sum, metrics_count) = if let Some(filter) = filter {
+            (
+                format!("{}_sum{{{}}}", metrics_name, filter),
+                format!("{}_count{{{}}}", metrics_name, filter),
+            )
+        } else {
+            (
+                format!("{}_sum", metrics_name),
+                format!("{}_count", metrics_name),
+            )
+        };
+
+        let fetcher = MetricsFetcher::new(
+            nodes.iter().cloned(),
+            vec![metrics_sum.clone(), metrics_count.clone()],
+        );
+
+        let metrics = fetcher
+            .fetch::<f64>()
+            .await
+            .expect("Should be able to fetch the metrics");
+
+        Self {
+            sum: average_f64(&metrics[&metrics_sum]),
+            count: average_f64(&metrics[&metrics_count]),
+        }
+    }
+
+    fn average(&self) -> f64 {
+        self.sum / self.count
+    }
+}
+
+impl std::ops::Sub for HistogramMetrics {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self {
+            sum: self.sum - other.sum,
+            count: self.count - other.count,
+        }
     }
 }
 
@@ -314,6 +362,7 @@ pub async fn persist_metrics(
                 "throughput_bytes_per_second": metrics.throughput_bytes_per_second,
                 "throughput_messages_per_second": metrics.throughput_messages_per_second,
                 "average_e2e_latency": metrics.average_e2e_latency,
+                "average_time_to_receive_block": metrics.average_time_to_receive_block,
             }
         }
     );

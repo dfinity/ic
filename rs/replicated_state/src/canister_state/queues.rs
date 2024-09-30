@@ -18,12 +18,14 @@ use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
-    CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
+    CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use message_pool::Class;
+use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
 use std::sync::Arc;
@@ -101,6 +103,9 @@ pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 ///    queue is at capacity. See https://github.com/dfinity/ic/pull/1293 for an
 ///    attempted implementation.
 ///
+///  * `callbacks_with_enqueued_response` contains the precise set of
+///    `CallbackIds` of all inbound responses.
+///
 /// # Soft invariants
 ///
 ///  * `QueueStats`' input / output queue slot reservation stats are consistent
@@ -128,13 +133,23 @@ pub struct CanisterQueues {
     /// message pool, some of which may be stale due to expiration or load shedding.
     ///
     /// The reference at the front of each queue, if any, is guaranteed to be
-    /// non-stale.
+    /// non-stale. A reference in an output queue is stale if there exists no
+    /// corresponding message in the message pool. This can happen if the message
+    /// was expired or shed. A reference in an input queue is stale if there exists
+    /// no corresponding message in the message pool; or entry in the
+    /// `shed_responses` map (which records the `CallbackIds` of shed inbound
+    /// best-effort responses).
     canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
 
     /// Pool holding the messages referenced by `canister_queues`, providing message
     /// stats (count, size) and support for time-based expiration and load shedding.
     #[validate_eq(CompareWithValidateEq)]
     pool: MessagePool,
+
+    /// The `CallbackIds` of shed inbound best-effort responses, to be returned as
+    /// `UnknownResponse` by `peek_input()` / `pop_input()` (and then be "inflated"
+    /// by `SystemState` into a reject response based on the actual callback).
+    shed_responses: BTreeMap<message_pool::Id, CallbackId>,
 
     /// Slot and memory reservation stats. Message count and size stats are
     /// maintained separately in the `MessagePool`.
@@ -144,6 +159,13 @@ pub struct CanisterQueues {
     /// and remote subnet senders; as well as within the local subnet senders and
     /// remote subnet senders groups.
     input_schedule: InputSchedule,
+
+    /// The `CallbackIds` of all responses enqueued in input queues, whether an
+    /// actual `Response` in the message pool or a `CallbackId` in `shed_responses`.
+    ///
+    /// Used for response deduplication (whether due to a locally generated reject
+    /// response to a best-effort call; or due to a malicious / buggy subnet).
+    callbacks_with_enqueued_response: BTreeSet<CallbackId>,
 }
 
 /// Circular iterator that consumes output queue messages: loops over output
@@ -206,8 +228,12 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         self.size -= queue.len();
 
         // Queue must be non-empty and message at the front of queue non-stale.
-        let msg = pop_and_advance(queue, self.pool).expect("Empty queue in output iterator.");
-        debug_assert_eq!(Ok(()), queue_front_not_stale(queue, self.pool, receiver));
+        let msg = output_queue_pop_and_advance(queue, self.pool)
+            .expect("Empty queue in output iterator.");
+        debug_assert_eq!(
+            Ok(()),
+            queue_front_not_stale(queue, self.pool, &NO_SHED_RESPONSES, receiver)
+        );
 
         if queue.len() > 0 {
             self.size += queue.len();
@@ -275,6 +301,46 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
     /// the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
         (0, Some(self.size))
+    }
+}
+
+/// Kinds of canister inputs returned by `CanisterQueues::pop_input()` /
+/// `CanisterQueues::peek_input()`: in addition to the regular ingress messages
+/// and canister requests / responses, `pop_input()` / `peek_input()` may also
+/// return concise "reject response for callback ID" messages.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CanisterInput {
+    Ingress(Arc<Ingress>),
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    /// A concise reject response meaning "call deadine has expired".
+    #[allow(dead_code)]
+    DeadlineExpired(CallbackId),
+    /// A concise reject response meaning "call response was dropped".
+    ResponseDropped(CallbackId),
+}
+
+impl CanisterInput {
+    /// Returns the underlying `CallbackId` if this is a `Response` or an
+    /// `UnknownResponse`; `None` otherwise.
+    fn response_callback_id(&self) -> Option<CallbackId> {
+        match self {
+            CanisterInput::Response(response) => Some(response.originator_reply_callback),
+
+            CanisterInput::DeadlineExpired(callback_id)
+            | CanisterInput::ResponseDropped(callback_id) => Some(*callback_id),
+
+            _ => None,
+        }
+    }
+}
+
+impl From<RequestOrResponse> for CanisterInput {
+    fn from(msg: RequestOrResponse) -> Self {
+        match msg {
+            RequestOrResponse::Request(request) => CanisterInput::Request(request),
+            RequestOrResponse::Response(response) => CanisterInput::Response(response),
+        }
     }
 }
 
@@ -349,28 +415,36 @@ impl CanisterQueues {
         self.ingress_queue.filter_messages(filter)
     }
 
-    /// Pushes a canister-to-canister message into the induction pool.
+    /// Enqueues a canister-to-canister message into the induction pool.
     ///
-    /// If the message is a `Request` this will also reserve a slot in the
-    /// corresponding output queue for the eventual response.
+    /// If the message is a `Request` and is enqueued successfully, this will also
+    /// reserve a slot in the corresponding output queue for the eventual response.
     ///
-    /// If the message is a `Response` the protocol will have already reserved a
-    /// slot for it, so the push should not fail due to the input queue being full
-    /// (although an error may be returned in case of a bug in the upper layers).
+    /// If the message is a `Response`, `SystemState` will have already checked for
+    /// a matching callback:
     ///
-    /// Adds the sender to the appropriate input schedule (local or remote), if not
-    /// already there.
+    ///  * If this is a guaranteed `Response`, the protocol should have reserved a
+    ///    slot for it, so the push should not fail for lack of one (although an
+    ///    error may be returned in case of a bug in the upper layers).
+    ///  * If this is a best-effort `Response`, a slot is available and no duplicate
+    ///    (time out) response is already enqueued, it is enqueued.
+    ///  * If this is a best-effort `Response` and a duplicate (time out) response
+    ///    is already enqueued (which is implicitly true when no slot is available),
+    ///    the response is silently dropped and `Ok(())` is returned.
+    ///
+    /// If the message was enqueued, adds the sender to the appropriate input
+    /// schedule (local or remote), if not already there.
     ///
     /// # Errors
     ///
-    /// If pushing fails, returns the provided message along with a
-    /// `StateError`:
+    /// If pushing fails, returns the provided message along with a `StateError`:
     ///
-    ///  * `QueueFull` if pushing a `Request` and the corresponding input or
-    ///    output queues are full.
+    ///  * `QueueFull` if pushing a `Request` and the corresponding input or output
+    ///    queues are full.
     ///
-    ///  * `NonMatchingResponse` if pushing a `Response` and the corresponding input
-    ///    queue does not have a reserved slot.
+    ///  * `NonMatchingResponse` if pushing a guaranteed `Response` and the
+    ///    corresponding input queue does not have a reserved slot; or it is a
+    ///    duplicate.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -393,20 +467,49 @@ impl CanisterQueues {
             }
             RequestOrResponse::Response(ref response) => {
                 match self.canister_queues.get_mut(&sender) {
-                    Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => queue,
+                    Some((queue, _)) if queue.check_has_reserved_response_slot().is_ok() => {
+                        // Check against duplicate responses.
+                        if !self
+                            .callbacks_with_enqueued_response
+                            .insert(response.originator_reply_callback)
+                        {
+                            debug_assert_eq!(Ok(()), self.test_invariants());
+                            if response.deadline == NO_DEADLINE {
+                                // This is a critical error for a guaranteed response.
+                                return Err((
+                                    StateError::non_matching_response(
+                                        "Duplicate response",
+                                        response,
+                                    ),
+                                    msg,
+                                ));
+                            } else {
+                                // But it's OK for a best-effort response. Silently drop it.
+                                return Ok(());
+                            }
+                        }
+                        queue
+                    }
 
                     // Queue does not exist or has no reserved slot for this response.
                     _ => {
-                        return Err((
-                            StateError::NonMatchingResponse {
-                                err_str: "No reserved response slot".to_string(),
-                                originator: response.originator,
-                                callback_id: response.originator_reply_callback,
-                                respondent: response.respondent,
-                                deadline: response.deadline,
-                            },
-                            msg,
-                        ));
+                        if response.deadline == NO_DEADLINE {
+                            // Critical error for a guaranteed response.
+                            return Err((
+                                StateError::non_matching_response(
+                                    "No reserved response slot",
+                                    response,
+                                ),
+                                msg,
+                            ));
+                        } else {
+                            // This must be a duplicate best-effort response (since `SystemState` has
+                            // aleady checked for a matching callback). Silently drop it.
+                            debug_assert!(self
+                                .callbacks_with_enqueued_response
+                                .contains(&response.originator_reply_callback));
+                            return Ok(());
+                        }
                     }
                 }
             }
@@ -439,7 +542,7 @@ impl CanisterQueues {
     /// It is possible for the input schedule to contain an empty or GC-ed input
     /// queue if all messages in said queue have expired / were shed since it was
     /// scheduled. Meaning that iteration may be required.
-    fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
+    fn pop_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterInput> {
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             let Some((input_queue, _)) = self.canister_queues.get_mut(sender) else {
                 // Queue pair was garbage collected.
@@ -448,7 +551,9 @@ impl CanisterQueues {
                     .expect("pop() should return the sender peeked above");
                 continue;
             };
-            let msg = pop_and_advance(input_queue, &mut self.pool);
+
+            let msg =
+                input_queue_pop_and_advance(input_queue, &mut self.pool, &mut self.shed_responses);
 
             // Update the input schedule.
             if input_queue.len() != 0 {
@@ -461,10 +566,13 @@ impl CanisterQueues {
                     .expect("pop() should return the sender peeked above");
             }
 
-            if let Some(msg) = msg {
+            if let Some(msg_) = &msg {
+                if let Some(callback_id) = msg_.response_callback_id() {
+                    assert!(self.callbacks_with_enqueued_response.remove(&callback_id));
+                }
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
-                return Some(msg.into());
+                return msg;
             }
         }
 
@@ -479,7 +587,7 @@ impl CanisterQueues {
     /// queue if all messages in said queue have expired / were shed since it was
     /// scheduled. Requires a `&mut self` reference to achieve amortized `O(1)` time
     /// complexity by immediately consuming empty input queues when encountered.
-    fn peek_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterMessage> {
+    fn peek_canister_input(&mut self, input_queue_type: InputQueueType) -> Option<CanisterInput> {
         while let Some(sender) = self.input_schedule.peek(input_queue_type) {
             if let Some(reference) = self
                 .canister_queues
@@ -487,12 +595,11 @@ impl CanisterQueues {
                 .and_then(|(input_queue, _)| input_queue.peek())
             {
                 let msg = self
-                    .pool
-                    .get(reference)
+                    .get_canister_input(reference)
                     .expect("stale reference at the front of input queue");
                 debug_assert_eq!(Ok(()), self.test_invariants());
                 debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
-                return Some(msg.clone().into());
+                return Some(msg);
             }
 
             // Queue was garbage collected or is empty.
@@ -506,6 +613,24 @@ impl CanisterQueues {
         None
     }
 
+    /// Returns the `CanisterInput` corresponding to the given reference, by looking
+    /// it up in the message pool or in the shed inbound responses map.
+    fn get_canister_input(&self, reference: message_pool::Id) -> Option<CanisterInput> {
+        assert_eq!(Context::Inbound, reference.context());
+
+        if let Some(msg) = self.pool.get(reference) {
+            debug_assert!(!self.shed_responses.contains_key(&reference));
+            Some(msg.clone().into())
+        } else if reference.kind() == Kind::Response && reference.class() == Class::BestEffort {
+            self.shed_responses
+                .get(&reference)
+                .map(|callback_id| CanisterInput::ResponseDropped(*callback_id))
+        } else {
+            debug_assert!(!self.shed_responses.contains_key(&reference));
+            None
+        }
+    }
+
     /// Skips the next sender canister from the given input schedule (local or
     /// remote).
     fn skip_canister_input(&mut self, input_queue_type: InputQueueType) {
@@ -516,8 +641,7 @@ impl CanisterQueues {
             if self
                 .canister_queues
                 .get(sender)
-                .map(|(input_queue, _)| input_queue.len() != 0)
-                .unwrap_or(false)
+                .map_or(false, |(input_queue, _)| input_queue.len() != 0)
             {
                 self.input_schedule.reschedule(*sender, input_queue_type);
                 break;
@@ -535,7 +659,9 @@ impl CanisterQueues {
     /// Returns `true` if `ingress_queue` or at least one of the canister input
     /// queues is not empty; `false` otherwise.
     pub fn has_input(&self) -> bool {
-        !self.ingress_queue.is_empty() || self.pool.message_stats().inbound_message_count > 0
+        !self.ingress_queue.is_empty()
+            || self.pool.message_stats().inbound_message_count > 0
+            || !self.shed_responses.is_empty()
     }
 
     /// Returns `true` if at least one output queue is not empty; false otherwise.
@@ -548,11 +674,11 @@ impl CanisterQueues {
     ///
     /// Requires a `&mut self` reference to achieve amortized `O(1)` time complexity
     /// by immediately consuming empty input queues when encountered.
-    pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
+    pub(crate) fn peek_input(&mut self) -> Option<CanisterInput> {
         // Try all 3 input sources: ingress, local and remote subnets.
         for _ in 0..InputSource::COUNT {
             let peeked = match self.input_schedule.input_source() {
-                InputSource::Ingress => self.peek_ingress().map(CanisterMessage::Ingress),
+                InputSource::Ingress => self.peek_ingress().map(CanisterInput::Ingress),
                 InputSource::RemoteSubnet => self.peek_canister_input(InputQueueType::RemoteSubnet),
                 InputSource::LocalSubnet => self.peek_canister_input(InputQueueType::LocalSubnet),
             };
@@ -591,13 +717,11 @@ impl CanisterQueues {
 
     /// Pops the next ingress or inter-canister input message (round-robin) and
     /// advances to the next input source.
-    pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
+    pub(crate) fn pop_input(&mut self) -> Option<CanisterInput> {
         // Try all 3 input sources: ingress, local and remote subnets.
         for _ in 0..InputSource::COUNT {
-            let input_source = self.input_schedule.next_input_source();
-
-            let popped = match input_source {
-                InputSource::Ingress => self.pop_ingress().map(CanisterMessage::Ingress),
+            let popped = match self.input_schedule.next_input_source() {
+                InputSource::Ingress => self.pop_ingress().map(CanisterInput::Ingress),
                 InputSource::RemoteSubnet => self.pop_canister_input(InputQueueType::RemoteSubnet),
                 InputSource::LocalSubnet => self.pop_canister_input(InputQueueType::LocalSubnet),
             };
@@ -617,7 +741,10 @@ impl CanisterQueues {
     ///
     /// Returns a `QueueFull` error along with the provided message if either
     /// the output queue or the matching input queue is full.
-    pub fn push_output_request(
+    //
+    // NOTE: DO NOT CHANGE THE VISIBILITY OF THIS METHOD. IT IS ONLY SUPPOSED TO BE
+    // CALLED FOR CANISTERS (I.E. NOT FOR THE SUBNET QUEUES).
+    pub(super) fn push_output_request(
         &mut self,
         request: Arc<Request>,
         time: Time,
@@ -752,7 +879,7 @@ impl CanisterQueues {
             .get_mut(&own_canister_id)
             .expect("Output queue existed above so lookup should not fail.")
             .1;
-        pop_and_advance(queue, &mut self.pool)
+        output_queue_pop_and_advance(queue, &mut self.pool)
             .expect("Message peeked above so pop should not fail.");
 
         debug_assert_eq!(Ok(()), self.test_invariants());
@@ -772,7 +899,7 @@ impl CanisterQueues {
 
     /// Returns the number of non-stale canister messages enqueued in input queues.
     pub fn input_queues_message_count(&self) -> usize {
-        self.pool.message_stats().inbound_message_count
+        self.pool.message_stats().inbound_message_count + self.shed_responses.len()
     }
 
     /// Returns the number of reserved slots across all input queues.
@@ -783,8 +910,11 @@ impl CanisterQueues {
         self.queue_stats.input_queues_reserved_slots
     }
 
-    /// Returns the total byte size of canister input queues (queues +
-    /// messages).
+    /// Returns the total byte size of canister input queues (queues + messages).
+    ///
+    /// Does not account for callback references for expired callbacks or dropped
+    /// responses, as these are constant size per callback and thus can be included
+    /// in the cost of a callback.
     pub fn input_queues_size_bytes(&self) -> usize {
         self.pool.message_stats().inbound_size_bytes
             + self.canister_queues.len() * size_of::<CanisterQueue>()
@@ -798,7 +928,7 @@ impl CanisterQueues {
 
     /// Returns the number of non-stale responses enqueued in input queues.
     pub fn input_queues_response_count(&self) -> usize {
-        self.pool.message_stats().inbound_response_count
+        self.pool.message_stats().inbound_response_count + self.shed_responses.len()
     }
 
     /// Returns the number of actual (non-stale) messages in output queues.
@@ -815,6 +945,10 @@ impl CanisterQueues {
     }
 
     /// Returns the memory usage of all best-effort messages.
+    ///
+    /// Does not account for callback references for expired callbacks or dropped
+    /// responses, as these are constant size per callback and thus can be included
+    /// in the cost of a callback.
     pub fn best_effort_memory_usage(&self) -> usize {
         self.pool.message_stats().best_effort_message_bytes
     }
@@ -879,8 +1013,11 @@ impl CanisterQueues {
             self.pool = MessagePool::default();
             self.input_schedule = InputSchedule::default();
 
-            // Trust but verify. Ensure that everything is actually set to default.
-            debug_assert_eq!(CanisterQueues::default(), *self);
+            // Trust but verify. Ensure that the `CanisterQueues` now encodes to zero bytes.
+            debug_assert_eq!(
+                0,
+                pb_queues::CanisterQueues::from(self as &Self).encoded_len()
+            );
         }
     }
 
@@ -972,7 +1109,20 @@ impl CanisterQueues {
     ) {
         use Context::*;
 
+        // If this is an inbound response, remember its `originator_reply_callback`, so
+        // we can later produce an `UnknownResponse` for it, when popped.
         let context = reference.context();
+        if let (Inbound, RequestOrResponse::Response(response)) = (context, msg) {
+            assert_eq!(
+                None,
+                self.shed_responses
+                    .insert(reference, response.originator_reply_callback)
+            );
+
+            // Leave the input queue unchanged, as "shed responses" are non-stale.
+            return;
+        }
+
         let remote = match context {
             Inbound => msg.sender(),
             Outbound => msg.receiver(),
@@ -986,7 +1136,7 @@ impl CanisterQueues {
             Outbound => (output_queue, input_queue),
         };
 
-        // Ensure that the first reference in a queue is never stale: if we dropped the
+        // Ensure that the first reference in a queue is never stale: if we drop the
         // message at the front of a queue, advance to the first non-stale reference.
         //
         // Defensive check, reference may have already been popped by an earlier
@@ -995,7 +1145,7 @@ impl CanisterQueues {
         // same `time_out_messages()` call; `on_message_dropped(1)` will also pop `2`).
         if queue.peek() == Some(reference) {
             queue.pop();
-            queue.pop_while(|reference| self.pool.get(reference).is_none());
+            queue.pop_while(|reference| is_stale(reference, &self.pool, &self.shed_responses));
         }
 
         // Release the response slot, generate reject responses or remember shed inbound
@@ -1007,13 +1157,16 @@ impl CanisterQueues {
                 self.queue_stats.on_drop_input_request(request);
             }
 
-            // Outbound request: produce a `SYS_TRANSIENT` timeout reject response.
+            // Outbound request: enqueue a `SYS_TRANSIENT` timeout reject response.
             (Outbound, RequestOrResponse::Request(request)) => {
                 let response = generate_timeout_response(request);
 
                 // Update stats for the generated response.
                 self.queue_stats.on_push_response(&response, Inbound);
 
+                assert!(self
+                    .callbacks_with_enqueued_response
+                    .insert(response.originator_reply_callback));
                 let reference = self.pool.insert_inbound(response.into());
                 reverse_queue.push_response(reference);
 
@@ -1024,11 +1177,12 @@ impl CanisterQueues {
                 }
             }
 
-            // Inbound or outbound response, nothing left to do.
-            //
-            // TODO(MR-603): Recall the `Id` -> `CallbackId` of shed inbound responses and
-            // generate a reject response on the fly when the respective `Id` is popped.
-            (_, RequestOrResponse::Response(_)) => {}
+            (Inbound, RequestOrResponse::Response(_)) => {
+                unreachable!("This case is handled above");
+            }
+
+            // Outbound (best-effort) responses can be dropped with impunity.
+            (Outbound, RequestOrResponse::Response(_)) => {}
         }
     }
 
@@ -1075,8 +1229,9 @@ impl CanisterQueues {
     }
 
     /// Helper function for concisely validating invariants other than those of
-    /// input queue schedules (no stale references at queue front, valid stats)
-    /// during deserialization; or in debug builds, by writing
+    /// input queue schedules (no stale references at queue front, valid stats,
+    /// accurate tracking of callbacks with enqueued responses) during
+    /// deserialization; or in debug builds, by writing
     /// `debug_assert_eq!(Ok(()), self.test_invariants())`.
     ///
     /// Time complexity: `O(n * log(n))`.
@@ -1084,8 +1239,8 @@ impl CanisterQueues {
         // Invariant: all canister queues (input or output) are either empty or start
         // with a non-stale reference.
         for (canister_id, (input_queue, output_queue)) in self.canister_queues.iter() {
-            queue_front_not_stale(input_queue, &self.pool, canister_id)?;
-            queue_front_not_stale(output_queue, &self.pool, canister_id)?;
+            queue_front_not_stale(input_queue, &self.pool, &self.shed_responses, canister_id)?;
+            queue_front_not_stale(output_queue, &self.pool, &NO_SHED_RESPONSES, canister_id)?;
         }
 
         // Reserved slot stats match the actual number of reserved slots.
@@ -1099,6 +1254,20 @@ impl CanisterQueues {
             return Err(format!(
                 "Inconsistent stats:\n  expected: {:?}\n  actual: {:?}",
                 calculated_stats, self.queue_stats
+            ));
+        }
+
+        // `callbacks_with_enqueued_response` contains the precise set of `CallbackIds`
+        // of all inbound responses.
+        let enqueued_response_callbacks = callbacks_with_enqueued_response(
+            &self.canister_queues,
+            &self.pool,
+            &self.shed_responses,
+        )?;
+        if self.callbacks_with_enqueued_response != enqueued_response_callbacks {
+            return Err(format!(
+                "Inconsistent `callbacks_with_enqueued_response`:\n  expected: {:?}\n  actual: {:?}",
+                enqueued_response_callbacks, self.callbacks_with_enqueued_response
             ));
         }
 
@@ -1148,11 +1317,63 @@ fn get_or_insert_queues<'a>(
     (input_queue, output_queue)
 }
 
-/// Pops and returns the message at the front of the queue and advances the
-/// queue to the next message / non-stale reference.
-fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<RequestOrResponse> {
+/// Checks whether the given reference is stale (i.e. neither in the pool, nor
+/// a shed inbound response).
+fn is_stale(
+    reference: message_pool::Id,
+    pool: &MessagePool,
+    shed_responses: &BTreeMap<message_pool::Id, CallbackId>,
+) -> bool {
+    pool.get(reference).is_none()
+        && (reference.context() != Context::Inbound
+            || reference.kind() != Kind::Response
+            || !shed_responses.contains_key(&reference))
+}
+
+/// An emoty map of shed responses, to be used for staleness checks in output
+/// queues (that cannot contain any inbound shed responses).
+const NO_SHED_RESPONSES: BTreeMap<message_pool::Id, CallbackId> = BTreeMap::new();
+
+/// Pops and returns the reference at the front of the given input queue and
+/// advances the queue to the next non-stale reference.
+fn input_queue_pop_and_advance(
+    queue: &mut CanisterQueue,
+    pool: &mut MessagePool,
+    shed_responses: &mut BTreeMap<message_pool::Id, CallbackId>,
+) -> Option<CanisterInput> {
     let reference = queue.pop()?;
-    queue.pop_while(|reference| pool.get(reference).is_none());
+    assert_eq!(Context::Inbound, reference.context());
+
+    // Advance to the next non-stale reference.
+    queue.pop_while(|reference| is_stale(reference, pool, shed_responses));
+
+    // Message must be either pooled; or a previously shed inbound response.
+    let msg = pool
+        .take(reference)
+        .map(|msg| msg.into())
+        .unwrap_or_else(|| {
+            debug_assert_eq!(Kind::Response, reference.kind());
+            debug_assert_eq!(Class::BestEffort, reference.class());
+
+            CanisterInput::ResponseDropped(
+                shed_responses
+                    .remove(&reference)
+                    .expect("stale reference at the front of input queue"),
+            )
+        });
+    Some(msg)
+}
+
+/// Pops and returns the reference at the front of the given output queue and
+/// advances the queue to the next non-stale reference.
+fn output_queue_pop_and_advance(
+    queue: &mut CanisterQueue,
+    pool: &mut MessagePool,
+) -> Option<RequestOrResponse> {
+    let reference = queue.pop()?;
+    assert!(reference.context() == Context::Outbound);
+
+    queue.pop_while(|reference| is_stale(reference, pool, &NO_SHED_RESPONSES));
 
     let msg = pool.take(reference);
     assert!(msg.is_some(), "stale reference at the front of queue");
@@ -1167,10 +1388,11 @@ fn pop_and_advance(queue: &mut CanisterQueue, pool: &mut MessagePool) -> Option<
 fn queue_front_not_stale(
     queue: &CanisterQueue,
     pool: &MessagePool,
+    shed_responses: &BTreeMap<message_pool::Id, CallbackId>,
     canister_id: &CanisterId,
 ) -> Result<(), String> {
     if let Some(reference) = queue.peek() {
-        if pool.get(reference).is_none() {
+        if is_stale(reference, pool, shed_responses) {
             return Err(format!(
                 "Stale reference at the front of {:?} queue to/from {}",
                 reference.context(),
@@ -1182,8 +1404,58 @@ fn queue_front_not_stale(
     Ok(())
 }
 
+/// Collects the `CallbackIds` of all responses and shed responses enqueued in
+/// input queues.
+///
+/// Returns an error if there are duplicate `CallbackIds` among the responses;
+/// or if not all inbound responses or shed responses are enqueued.
+///
+/// Time complexity: `O(n * log(n))`.
+fn callbacks_with_enqueued_response(
+    canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    pool: &MessagePool,
+    shed_responses: &BTreeMap<message_pool::Id, CallbackId>,
+) -> Result<BTreeSet<CallbackId>, String> {
+    let callbacks_vec = canister_queues
+        .values()
+        .flat_map(|(input_queue, _)| input_queue.iter())
+        .filter_map(
+            |reference| match (pool.get(*reference), shed_responses.get(reference)) {
+                (Some(RequestOrResponse::Response(rep)), None) => {
+                    Some(Ok(rep.originator_reply_callback))
+                }
+                (None, Some(callback_id)) => Some(Ok(*callback_id)),
+                (Some(_), Some(_)) => Some(Err(format!(
+                    "CanisterQueues: Both response and shed response for reference {:?}",
+                    reference
+                ))),
+                _ => None,
+            },
+        )
+        .collect::<Result<Vec<CallbackId>, String>>()?;
+
+    let callbacks: BTreeSet<_> = callbacks_vec.iter().cloned().collect();
+    if callbacks.len() != callbacks_vec.len() {
+        return Err(format!(
+            "CanisterQueues: Duplicate inbound response callback(s): {:?}",
+            callbacks_vec
+        ));
+    }
+
+    let response_count = pool.message_stats().inbound_response_count + shed_responses.len();
+    if callbacks_vec.len() != response_count {
+        return Err(format!(
+            "CanisterQueues: Have {} inbound responses, but only {} are enqueued",
+            response_count,
+            callbacks.len()
+        ));
+    }
+
+    Ok(callbacks)
+}
+
 /// Generates a timeout reject response from a request, refunding its payment.
-fn generate_timeout_response(request: &Arc<Request>) -> Response {
+fn generate_timeout_response(request: &Request) -> Response {
     Response {
         originator: request.sender,
         respondent: request.receiver,
@@ -1238,6 +1510,11 @@ impl From<&CanisterQueues> for pb_queues::CanisterQueues {
             } else {
                 None
             },
+            shed_responses: item
+                .shed_responses
+                .iter()
+                .map(|(&id, &callback_id)| message_pool::CallbackReference(id, callback_id).into())
+                .collect(),
             next_input_source,
             local_sender_schedule,
             remote_sender_schedule,
@@ -1256,6 +1533,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
     ) -> Result<Self, Self::Error> {
         let mut canister_queues = BTreeMap::new();
         let mut pool = MessagePool::default();
+        let mut shed_responses = BTreeMap::new();
 
         if !item.input_queues.is_empty() || !item.output_queues.is_empty() {
             // Backward compatibility: deserialize from `input_queues` and `output_queues`.
@@ -1303,6 +1581,14 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             }
         } else {
             pool = item.pool.unwrap_or_default().try_into()?;
+            shed_responses = item
+                .shed_responses
+                .into_iter()
+                .map(|sr| {
+                    let sr = message_pool::CallbackReference::try_from(sr)?;
+                    Ok((sr.0, sr.1))
+                })
+                .collect::<Result<_, Self::Error>>()?;
 
             let mut enqueued_pool_messages = BTreeSet::new();
             canister_queues = item
@@ -1325,7 +1611,7 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
                             && !enqueued_pool_messages.insert(reference)
                         {
                             metrics.observe_broken_soft_invariant(format!(
-                                "CanisterQueues: Message {:?} enqueued more than once",
+                                "CanisterQueues: {:?} enqueued more than once",
                                 reference
                             ));
                         }
@@ -1356,12 +1642,18 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
             item.remote_sender_schedule,
         ))?;
 
+        let callbacks_with_enqueued_response =
+            callbacks_with_enqueued_response(&canister_queues, &pool, &shed_responses)
+                .map_err(ProxyDecodeError::Other)?;
+
         let queues = Self {
             ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
             canister_queues,
             pool,
+            shed_responses,
             queue_stats,
             input_schedule,
+            callbacks_with_enqueued_response,
         };
 
         // Safe to pretend that all senders are remote, as the validation logic allows
@@ -1526,7 +1818,7 @@ pub mod testing {
     use super::input_schedule::testing::InputScheduleTesting;
     use super::CanisterQueues;
     use crate::{InputQueueType, StateError};
-    use ic_types::messages::{CanisterMessage, Request, RequestOrResponse};
+    use ic_types::messages::{Request, RequestOrResponse};
     use ic_types::{CanisterId, Time};
     use std::collections::VecDeque;
     use std::sync::Arc;
@@ -1554,9 +1846,6 @@ pub mod testing {
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)>;
 
-        /// Publicly exposes `CanisterQueues::pop_input()`.
-        fn pop_input(&mut self) -> Option<CanisterMessage>;
-
         /// Publicly exposes the local sender input_schedule.
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId>;
 
@@ -1578,7 +1867,7 @@ pub mod testing {
 
         fn pop_canister_output(&mut self, dst_canister: &CanisterId) -> Option<RequestOrResponse> {
             let queue = &mut self.canister_queues.get_mut(dst_canister).unwrap().1;
-            super::pop_and_advance(queue, &mut self.pool)
+            super::output_queue_pop_and_advance(queue, &mut self.pool)
         }
 
         fn output_queues_len(&self) -> usize {
@@ -1595,10 +1884,6 @@ pub mod testing {
             input_queue_type: InputQueueType,
         ) -> Result<(), (StateError, RequestOrResponse)> {
             self.push_input(msg, input_queue_type)
-        }
-
-        fn pop_input(&mut self) -> Option<CanisterMessage> {
-            self.pop_input()
         }
 
         fn local_sender_schedule(&self) -> &VecDeque<CanisterId> {
