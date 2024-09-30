@@ -340,7 +340,7 @@ fn lsmt_merge_overhead() {
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
-    let canister_ids = (0..1)
+    let canister_ids = (0..10)
         .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
         .collect::<Vec<_>>();
     for i in 0..30 {
@@ -3567,7 +3567,6 @@ fn can_recover_from_corruption_on_state_sync() {
     });
 }
 
-#[ignore]
 #[test]
 fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
     use ic_state_layout::{CheckpointLayout, RwPolicy};

@@ -480,8 +480,8 @@ impl PageMap {
         self.storage.is_loaded()
     }
 
-    pub fn load(&self) {
-        self.storage.load();
+    pub fn validate_load(&self) -> Result<(), PersistenceError> {
+        self.storage.validate_load()
     }
 
     /// Creates a new page map that always returns zeroed pages.

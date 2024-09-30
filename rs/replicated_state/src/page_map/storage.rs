@@ -166,7 +166,7 @@ pub(crate) struct Storage {
 }
 
 impl Storage {
-    fn init(&self) -> &StorageImpl {
+    fn init_or_die(&self) -> &StorageImpl {
         self.imp.get_or_init(|| match self.storage_layout.as_ref() {
             None => Default::default(),
             Some(storage_layout) => {
@@ -179,8 +179,14 @@ impl Storage {
         self.imp.get().is_some()
     }
 
-    pub fn load(&self) {
-        self.init();
+    pub fn validate_load(&self) -> Result<(), PersistenceError> {
+        match self.storage_layout.as_ref() {
+            None => Ok(()),
+            Some(storage_layout) => {
+                StorageImpl::load(storage_layout.deref())?;
+                Ok(())
+            }
+        }
     }
 
     pub fn lazy_load(
@@ -192,23 +198,23 @@ impl Storage {
         })
     }
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
-        self.init().get_page(page_index)
+        self.init_or_die().get_page(page_index)
     }
     pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
-        self.init().get_base_memory_instructions()
+        self.init_or_die().get_base_memory_instructions()
     }
     pub fn get_memory_instructions(
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
     ) -> MemoryInstructions {
-        self.init().get_memory_instructions(range, filter)
+        self.init_or_die().get_memory_instructions(range, filter)
     }
     pub fn num_logical_pages(&self) -> usize {
-        self.init().num_logical_pages()
+        self.init_or_die().num_logical_pages()
     }
     pub fn serialize(&self) -> StorageSerialization {
-        self.init().serialize()
+        self.init_or_die().serialize()
     }
     pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {
         let imp = OnceLock::new();

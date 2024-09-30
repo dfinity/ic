@@ -458,13 +458,6 @@ pub(crate) fn spawn_tip_thread(
                                 checkpointed_state,
                                 execution_state,
                             );
-                            for (_id, canister) in checkpointed_state.canister_states.into_iter() {
-                                if let Some(execution_state) = canister.execution_state {
-                                    execution_state.wasm_memory.page_map.load();
-                                    execution_state.stable_memory.page_map.load();
-                                    canister.system_state.wasm_chunk_store.page_map().load();
-                                }
-                            }
                         }
 
                         TipRequest::Noop => {}
