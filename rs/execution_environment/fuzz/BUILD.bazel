@@ -1,4 +1,4 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -18,20 +18,33 @@ rust_fuzz_test_binary(
     ],
 )
 
+SYSTEM_API_FUZZ_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/embedders/fuzz:wasm_fuzzers",
+    "//rs/registry/subnet_type",
+    "//rs/state_machine_tests",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:wasmtime",
+    "@crate_index//:wasmtime-environ",
+    "@crate_index//:wat",
+]
+
 rust_fuzz_test_binary(
     name = "execute_system_api_call",
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = [
-        # Keep sorted.
-        "//rs/embedders/fuzz:wasm_fuzzers",
-        "//rs/registry/subnet_type",
-        "//rs/state_machine_tests",
-        "//rs/types/management_canister_types",
-        "//rs/types/types",
-        "@crate_index//:libfuzzer-sys",
-        "@crate_index//:wat",
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES,
+)
+
+rust_fuzz_test_binary_afl(
+    name = "execute_system_api_call_afl",
+    srcs = [
+        "fuzz_targets/execute_system_api_call.rs",
     ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES,
 )
