@@ -335,11 +335,7 @@ impl<
             for artifact_event in artifact_events {
                 match artifact_event {
                     UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
-                        let unvalidated_artifact = UnvalidatedArtifact {
-                            message,
-                            peer_id,
-                            timestamp: time_source.get_relative_time(),
-                        };
+                        let unvalidated_artifact = UnvalidatedArtifact { message, peer_id };
                         pool.insert(unvalidated_artifact);
                     }
                     UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
@@ -397,11 +393,7 @@ impl<P: MutablePool<SignedIngress> + Send + Sync + 'static> ArtifactProcessor<Si
             for artifact_event in artifact_events {
                 match artifact_event {
                     UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
-                        let unvalidated_artifact = UnvalidatedArtifact {
-                            message,
-                            peer_id,
-                            timestamp: time_source.get_relative_time(),
-                        };
+                        let unvalidated_artifact = UnvalidatedArtifact { message, peer_id };
                         ingress_pool.insert(unvalidated_artifact);
                     }
                     UnvalidatedArtifactMutation::Remove(id) => ingress_pool.remove(&id),

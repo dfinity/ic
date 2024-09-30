@@ -145,7 +145,6 @@ pub trait BouncerFactory<Id, Pool>: Send + Sync {
 pub struct UnvalidatedArtifact<T> {
     pub message: T,
     pub peer_id: NodeId,
-    pub timestamp: Time,
 }
 
 impl<T> AsRef<T> for UnvalidatedArtifact<T> {

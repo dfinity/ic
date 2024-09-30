@@ -58,7 +58,18 @@ impl From<&IngressPoolObject> for IngressMessageId {
 pub type ValidatedIngressArtifact = ValidatedArtifact<IngressPoolObject>;
 
 /// Unvalidated ingress artifact
-pub type UnvalidatedIngressArtifact = UnvalidatedArtifact<IngressPoolObject>;
+#[derive(Clone)]
+pub struct UnvalidatedIngressArtifact {
+    pub message: IngressPoolObject,
+    pub peer_id: NodeId,
+    pub timestamp: Time,
+}
+
+impl AsRef<IngressPoolObject> for UnvalidatedIngressArtifact {
+    fn as_ref(&self) -> &IngressPoolObject {
+        &self.message
+    }
+}
 
 /// List of mutations
 pub type Mutations = Vec<ChangeAction>;

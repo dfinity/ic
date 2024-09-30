@@ -1,10 +1,10 @@
 use crate::{
     consensus_pool::{MutablePoolSection, PoolSectionOp, PoolSectionOps},
     height_index::{HeightIndex, Indexes, SelectIndex},
-    HasTimestamp, IntoInner,
+    IntoInner,
 };
 use ic_interfaces::consensus_pool::{
-    HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
+    HasTimestamp, HeightIndexedPool, HeightRange, OnlyError, PoolSection, PurgeableArtifactType,
 };
 use ic_types::{
     artifact::ConsensusMessageId,
