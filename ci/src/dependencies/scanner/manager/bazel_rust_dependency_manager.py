@@ -244,7 +244,7 @@ class BazelRustDependencyManager(DependencyManager):
         path = self.root.parent / project.path
 
         # currently only the ic repo uses bazel
-        use_bazel = repository_name == "ic"
+        use_bazel = (repository_name == "ic" or repository_name == "ic-private")
         if use_bazel:
             logging.info("Performing cargo audit on old Cargo.lock")
             old_cargo_audit = self.executor.get_cargo_audit_output(path)

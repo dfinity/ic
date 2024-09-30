@@ -5,11 +5,12 @@ import typing
 
 import pytest
 from model.dependency import Dependency
-from model.ic import __test_get_ic_path
+from model.ic import get_current_repo
 from model.project import Project
 from model.vulnerability import Vulnerability
 from scanner.manager.bazel_rust_dependency_manager import BazelCargoExecutor, BazelRustDependencyManager
 
+REPOSITORY=get_current_repo()
 
 @pytest.fixture
 def bazel_test():
@@ -316,12 +317,12 @@ def test_get_findings_for_bazel_repo():
         executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit), expected_bazel_queries=expected_queries, expected_bazel_responses=expected_responses)
         bazel_test = BazelRustDependencyManager(executor=executor)
 
-        findings = bazel_test.get_findings("ic", Project("ic", __test_get_ic_path()), None)
+        findings = bazel_test.get_findings(REPOSITORY, Project(REPOSITORY, REPOSITORY), None)
 
         assert findings is not None
         assert len(findings) == 3
         for finding in findings:
-            assert finding.repository == "ic"
+            assert finding.repository == REPOSITORY
             assert finding.scanner == bazel_test.get_scanner_id()
             assert finding.risk_assessor == []
             assert finding.risk is None
@@ -372,7 +373,7 @@ def test_get_findings_for_bazel_repo():
             assert len(projects) == len(findings[0].projects)
 
             for project, finding_project in zip(projects, findings[0].projects):
-                assert  __test_get_ic_path() + project == finding_project
+                assert  get_current_repo() + project == finding_project
             assert findings[0].score == -1
 
             # unique fields for second finding
@@ -384,7 +385,7 @@ def test_get_findings_for_bazel_repo():
                               description='Out-of-bounds read when opening multiple column families with TTL',
                               score=-1)]
             assert findings[1].first_level_dependencies == []
-            assert findings[1].projects == [__test_get_ic_path() + '/rs/artifact_pool']
+            assert findings[1].projects == [get_current_repo() + '/rs/artifact_pool']
             assert findings[1].score == -1
 
             # unique fields for third finding
@@ -437,7 +438,7 @@ def test_get_findings_for_bazel_repo():
                                             '/rs/sns/swap', '/rs/tests', '/rs/types/types', '/rs/validator', '/rs/validator/http_request_test_utils']
             assert len(projects_2) == len(findings[2].projects)
             for project, finding_project in zip(projects_2, findings[2].projects):
-                assert  __test_get_ic_path() + project == finding_project
+                assert  get_current_repo() + project == finding_project
             assert findings[2].score == 6
 
 

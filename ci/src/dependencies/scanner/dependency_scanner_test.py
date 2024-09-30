@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
-from model.ic import __test_get_ic_path
+from model.ic import get_current_repo
 from model.project import Project
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -15,6 +15,8 @@ from model.vulnerability import Vulnerability
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 
+REPOSITORY = get_current_repo()
+IC_URL = f"https://github.com/dfinity/{REPOSITORY}"
 
 @pytest.fixture
 def jira_lib_mock():
@@ -70,14 +72,13 @@ class FakeBazel(BazelRustDependencyManager):
                 )
             ]
 
-
 def test_on_periodic_job_no_findings(jira_lib_mock):
     # No findings
     jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {}
     sub1 = Mock()
     sub2 = Mock()
     scanner_job = DependencyScanner(FakeBazel(1), jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])]
+    repos = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -92,7 +93,7 @@ def test_on_periodic_job_no_findings(jira_lib_mock):
 
 def test_on_periodic_job_delete_finding(jira_lib_mock):
     # no findings, 1 present in JIRA
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])]
+    repos = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])]
     jira_finding = Finding(
         repository=repos[0].name,
         scanner="BAZEL_RUST",
@@ -128,7 +129,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path=__test_get_ic_path(), owner=Team.EXECUTION_TEAM)])
+    repository = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY, owner=Team.EXECUTION_TEAM)])]
     finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
     finding.owning_teams = [Team.EXECUTION_TEAM]
@@ -152,7 +153,6 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
     jira_finding = Finding(
         repository=repository.name,
         scanner=scanner,
@@ -173,7 +173,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2 = Mock()
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path=__test_get_ic_path(), owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY, owner_by_path={'bear': [Team.NODE_TEAM]})])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -203,7 +203,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_RUST"
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
+    repository = Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     jira_finding = Finding(
         repository=repository.name,
         scanner=scanner,
@@ -227,7 +227,7 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
     failover_mock.can_handle.return_value = True
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2], failover_mock)
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path=__test_get_ic_path(), owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [Repository(REPOSITORY, IC_URL, [Project(name=REPOSITORY, path=REPOSITORY, owner_by_path={'bear': [Team.NODE_TEAM]})])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -253,7 +253,7 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
 
 def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
+    repository = Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     jira_finding.risk = SecurityRisk.HIGH
@@ -274,7 +274,7 @@ def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_
 
 def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
+    repository = Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     jira_finding.risk = SecurityRisk.HIGH
@@ -291,7 +291,7 @@ def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
 
 def test_on_periodic_job_set_risk_for_related_finding(jira_lib_mock):
     # one finding, present in JIRA
-    repository = Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])
+    repository = Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
     fake_bazel = FakeBazel(2)
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     # different version means the finding is related
@@ -327,7 +327,7 @@ def test_on_periodic_job_failure(jira_lib_mock):
     fake_bazel.get_findings.side_effect = OSError("Call failed")
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])]
+    repos = [Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])]
 
     scanner_job.do_periodic_scan(repos)
     sub1.on_scan_job_succeeded.assert_not_called()
@@ -339,8 +339,8 @@ def test_on_periodic_job_failure(jira_lib_mock):
 @patch("scanner.dependency_scanner.DependencyScanner._DependencyScanner__clone_repository_from_url")
 @patch("shutil.rmtree")
 def test_get_findings_ic_dir(shutil, clone_repo, jira_lib_mock):
-    project = Project("ic", __test_get_ic_path())
-    repo = Repository("ic", "https://github.com/dfinity/ic", [project])
+    project = Project(REPOSITORY, REPOSITORY)
+    repo = Repository(REPOSITORY, IC_URL, [project])
     fake_bazel = Mock()
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
 
@@ -348,7 +348,7 @@ def test_get_findings_ic_dir(shutil, clone_repo, jira_lib_mock):
 
     shutil.assert_not_called()
     clone_repo.assert_not_called()
-    fake_bazel.get_findings.assert_called_once_with("ic", project, repo.engine_version)
+    fake_bazel.get_findings.assert_called_once_with(REPOSITORY, project, repo.engine_version)
 
 
 @patch("scanner.dependency_scanner.DependencyScanner._DependencyScanner__clone_repository_from_url")
@@ -374,7 +374,7 @@ def test_on_merge_request_no_changes_to_dependency_files(jira_lib_mock):
     fake_bazel.has_dependencies_changed.return_value = {"external_crates_bzl": False, "cargo_lock_toml": False}
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(REPOSITORY)
     fake_bazel.get_modified_packages.assert_not_called()
     fake_bazel.get_dependency_diff.assert_not_called()
     fake_bazel.get_findings.assert_not_called()
@@ -391,7 +391,7 @@ def test_on_merge_request_changes_to_dependency_files_but_not_external_crates(ji
     fake_bazel.has_dependencies_changed.return_value = {"external_crates_bzl": False, "cargo_lock_toml": True}
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan("ic")
+    scanner_job.do_merge_request_scan(REPOSITORY)
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_not_called()
@@ -410,7 +410,7 @@ def test_on_merge_request_changes_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_merge_request_scan(Repository(REPOSITORY,IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -423,7 +423,6 @@ def test_on_merge_request_changes_no_findings(jira_lib_mock):
 
 def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
     fake_bazel = Mock()
@@ -431,7 +430,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
     fake_bazel.get_modified_packages.return_value = ["package1", "package2"]
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -443,7 +442,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -459,7 +458,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -474,7 +473,6 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
 @patch("integration.github.github_api.GithubApi.comment_on_github")
 def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(github_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
     fake_bazel = Mock()
@@ -483,7 +481,7 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     fake_bazel.get_modified_packages.return_value = ["package1", "package2"]
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -497,7 +495,7 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     jira_lib_mock.commit_has_block_exception.return_value = "commit string"
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_modified_packages.assert_called_once()
     fake_bazel.get_dependency_diff.assert_called_once()
     fake_bazel.get_findings.assert_called_once()
@@ -513,7 +511,6 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
 @patch("integration.github.github_api.GithubApi.comment_on_github")
 def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(github_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
     fake_bazel = Mock()
@@ -523,7 +520,7 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gith
     fake_bazel.get_dependency_diff.return_value = [Dependency("VDID3", "fl dep", "0.1 beta", {"VID1": ["3.0 alpha"]})]
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -541,7 +538,7 @@ def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gith
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+        scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     assert e.type == SystemExit
     assert e.value.code == 1
 
@@ -579,7 +576,7 @@ def test_on_merge_request_job_failed(jira_lib_mock):
     fake_bazel.has_dependencies_changed.side_effect = OSError("Call failed")
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    scanner_job.do_merge_request_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_merge_request_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     sub1.on_scan_job_failed.assert_called_once()
     sub2.on_scan_job_failed.assert_called_once()
     sub1.on_scan_job_succeeded.assert_not_called()
@@ -593,7 +590,7 @@ def test_on_release_scan_no_findings(jira_lib_mock):
     fake_bazel.get_findings.return_value = []
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     sub1.on_scan_job_succeeded.assert_called_once()
     sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_not_called()
@@ -602,7 +599,6 @@ def test_on_release_scan_no_findings(jira_lib_mock):
 
 def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -610,7 +606,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -622,7 +618,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -640,7 +636,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -657,7 +653,6 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
 
 def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -665,7 +660,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -677,7 +672,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -694,7 +689,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -708,7 +703,6 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_date(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -716,7 +710,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -728,7 +722,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -746,7 +740,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -763,7 +757,6 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_due_date(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -771,7 +764,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -783,7 +776,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -799,7 +792,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     sub1.on_scan_job_succeeded.assert_called_once()
@@ -810,7 +803,6 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_due_date(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -818,7 +810,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -830,7 +822,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -848,7 +840,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+       scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -865,7 +857,6 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_due_date_with_exception(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -873,7 +864,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -885,7 +876,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
     ]
 
     jira_finding = Finding(
-        repository=repository,
+        repository=REPOSITORY,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -902,7 +893,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -916,7 +907,6 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
 def test_on_release_scan_new_findings(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -924,7 +914,7 @@ def test_on_release_scan_new_findings(jira_lib_mock):
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -940,7 +930,7 @@ def test_on_release_scan_new_findings(jira_lib_mock):
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     with pytest.raises(SystemExit) as e:
-        scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+        scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
 
     assert e.type == SystemExit
     assert e.value.code == 1
@@ -957,7 +947,6 @@ def test_on_release_scan_new_findings(jira_lib_mock):
 
 def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
     scanner = "BAZEL_RUST"
-    repository = "ic"
 
     sub1 = Mock()
     sub2 = Mock()
@@ -965,7 +954,7 @@ def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
 
     fake_bazel.get_findings.return_value = [
         Finding(
-            repository=repository,
+            repository=REPOSITORY,
             scanner=scanner,
             vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
             vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -980,7 +969,7 @@ def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -999,7 +988,7 @@ def test_on_release_scan_job_failed(jira_lib_mock):
     fake_bazel.get_findings.side_effect = OSError("Call failed")
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan(Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())]))
+    scanner_job.do_release_scan(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)]))
     sub1.on_scan_job_succeeded.assert_not_called()
     sub2.on_scan_job_succeeded.assert_not_called()
     sub1.on_scan_job_failed.assert_called_once()
