@@ -2085,24 +2085,19 @@ pub fn get_average_icp_xdr_conversion_rate(
 /// Basically, this de-paginates the __get_profiling (Candid) method of the
 /// callee canister. __get_profiling is a method that you can add to any WASM by
 /// calling ic_wasm::instrumentation::instrument.
-pub fn get_profiling(
-    state_machine: &StateMachine,
-    callee: CanisterId,
-) -> Vec<(i32, i64)> {
+pub fn get_profiling(state_machine: &StateMachine, callee: CanisterId) -> Vec<(i32, i64)> {
     let mut result = vec![];
     let mut current_index = 0;
     loop {
         // Call the canister.
-        let get_profiling_result = state_machine.query(
-            callee,
-            "__get_profiling",
-            Encode!(&current_index).unwrap(),
-        );
+        let get_profiling_result =
+            state_machine.query(callee, "__get_profiling", Encode!(&current_index).unwrap());
 
         // Unpack its response.
         let (mut page, next_index): (Vec<(i32, i64)>, Option<i32>) = Decode!(
             &unwrap_wasm_result(get_profiling_result),
-            Vec<(i32, i64)>, Option<i32>
+            Vec<(i32, i64)>,
+            Option<i32>
         )
         .unwrap();
 

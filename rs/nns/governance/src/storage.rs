@@ -156,13 +156,15 @@ impl State {
 /// Once this has been released, it can be deleted. At the same time, forgetting
 /// to delete this is also fine.
 pub fn allocate_ic_wasm_instrument_memory_once() {
-    let instrument_memory = MEMORY_MANAGER.with(|memory_manager| {
-        memory_manager.borrow().get(IC_WASM_INSTRUMENT_MEMORY_ID)
-    });
+    let instrument_memory = MEMORY_MANAGER
+        .with(|memory_manager| memory_manager.borrow().get(IC_WASM_INSTRUMENT_MEMORY_ID));
 
     let grow_pages = IC_WASM_INSTRUMENT_MEMORY_SIZE_PAGES.saturating_sub(instrument_memory.size());
     if grow_pages < 1 {
-        println!("ic-wasm instrument memory has already been alocated. grow_pages = {}", grow_pages /* DO NOT MERGE */);
+        println!(
+            "ic-wasm instrument memory has already been alocated. grow_pages = {}",
+            grow_pages /* DO NOT MERGE */
+        );
         return;
     }
 
@@ -194,8 +196,7 @@ pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
     // Read bucket size. This is usually 128 pages (where a page is 64 KiB).
     let bucket_size_pages = {
         type Array = [u8; 2];
-        let array = Array::try_from(&buffer[6..8])
-            .expect("Unable to convert from slice to u16.");
+        let array = Array::try_from(&buffer[6..8]).expect("Unable to convert from slice to u16.");
         u16::from_le_bytes(array) as u64
     };
 
@@ -240,7 +241,8 @@ pub fn where_ic_wasm_instrument_memory() -> (u64, u64) {
         // Haven't found any ic-wasm instrument buckets (yet).
     }
 
-    let Some(first_ic_wasm_instrument_bucket_number) = first_ic_wasm_instrument_bucket_number else {
+    let Some(first_ic_wasm_instrument_bucket_number) = first_ic_wasm_instrument_bucket_number
+    else {
         return (0, 0);
     };
 

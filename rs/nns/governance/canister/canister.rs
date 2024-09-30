@@ -26,9 +26,9 @@ use ic_nns_governance::{
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{
-        grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory,
-        allocate_ic_wasm_instrument_memory_once,
+        allocate_ic_wasm_instrument_memory_once, grow_upgrades_memory_to, validate_stable_storage,
         where_ic_wasm_instrument_memory as where_ic_wasm_instrument_memory_native,
+        with_upgrades_memory,
     },
 };
 #[cfg(feature = "test")]
