@@ -49,7 +49,7 @@ prometheus = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
-rustls-native-certs = "0.8.0"
+rustls-native-certs = "0.7.0"
 rustls-pemfile = "2.1.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
