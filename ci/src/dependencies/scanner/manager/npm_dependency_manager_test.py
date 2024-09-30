@@ -26,9 +26,11 @@ def test_clone_repository_from_url(process_executor_mock, npm_test):
     npm_test._NPMDependencyManager__clone_repository_from_url(url, path)
     process_executor_mock.assert_called_once_with("git clone --depth=1 https://localhost", resolved_path, {})
 
+
 def test_npm_check_engine_no_package_json(npm_test):
     path = pathlib.Path()
     assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
+
 
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"engines":"{}"}')
@@ -36,17 +38,20 @@ def test_npm_check_engine_no_engine_version(_fopen_mock, _path_patch, npm_test):
     path = pathlib.Path()
     assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is True
 
+
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":"<19"}}')
 def test_npm_check_engine_not_compatible(_fopen_mock, _path_patch, npm_test):
     path = pathlib.Path()
     assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
 
+
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":">=19"}}')
 def test_npm_check_engine_compatible(_fopen_mock, _path_patch, npm_test):
     path = pathlib.Path()
     assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is True
+
 
 @patch("pathlib.Path.exists", return_value=True)
 @patch("builtins.open", new_callable=mock_open, read_data='{"engines":{"node":"<19"}}')
@@ -56,6 +61,7 @@ def test_npm_check_engine_not_compatible_throws_runtime_error(_fopen_mock, _path
         assert npm_test._NPMDependencyManager__npm_check_engine("ic", DEFAULT_NODE_VERSION, path) is False
         _ = npm_test.get_findings("ic", Project("ic", __test_get_ic_path()), DEFAULT_NODE_VERSION)
         assert "Dependency scan for ic can't be executed due to engine version mismatch" in str(e.value)
+
 
 @patch("scanner.process_executor.ProcessExecutor.execute_command", return_value="{'key':'value'}")
 @patch("json.loads")
