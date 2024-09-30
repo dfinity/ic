@@ -13,10 +13,10 @@ if [[ ${{OVERRIDE_DIDC_CHECK:-}} == "true" ]]; then
     exit 0
 fi
 
-# Note that MERGE_BASE_SHA is only set on Pull Requests.
+# Note that TARGET_BRANCH_SHA is only set on Pull Requests.
 # On other events we set the merge_base to HEAD which means we compare the
 # did interface file against itself.
-readonly merge_base=${{MERGE_BASE_SHA:-HEAD}}
+readonly merge_base=${{TARGET_BRANCH_SHA:-HEAD}}
 
 readonly tmpfile=$(mktemp $TEST_TMPDIR/prev.XXXXXX)
 readonly errlog=$(mktemp $TEST_TMPDIR/err.XXXXXX)
@@ -53,7 +53,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["MERGE_BASE_SHA", "OVERRIDE_DIDC_CHECK"]),
+        RunEnvironmentInfo(inherited_environment = ["TARGET_BRANCH_SHA", "OVERRIDE_DIDC_CHECK"]),
     ]
 
 CHECK_DID = attr.label(
