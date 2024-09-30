@@ -774,7 +774,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
 
     with pytest.raises(SystemExit) as e:
         scanner_job.do_release_scan(
-            Repository(Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
+            Repository(REPOSITORY, IC_URL, [Project(REPOSITORY, REPOSITORY)])
         )
 
     assert e.type is SystemExit
