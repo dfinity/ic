@@ -1,7 +1,12 @@
 #![no_main]
+use ic_config::{
+    embedders::Config as EmbeddersConfig, embedders::FeatureFlags,
+    execution_environment::Config as ExecutionConfig, flag_status::FlagStatus,
+    subnet_config::SubnetConfig,
+};
 use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{CanisterId, StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{CanisterId, StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_types::Cycles;
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
@@ -28,8 +33,22 @@ const HELLO_WORLD_WAT: &str = r#"
 )"#;
 
 fn setup_env() -> (StateMachine, CanisterId) {
+    let exec_config = ExecutionConfig {
+        embedders_config: EmbeddersConfig {
+            feature_flags: FeatureFlags {
+                write_barrier: FlagStatus::Enabled,
+                wasm64: FlagStatus::Enabled, // Enable wasm64 to match generated ICWasmModule.
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let subnet_type = SubnetType::System;
+    let config = StateMachineConfig::new(SubnetConfig::new(subnet_type), exec_config);
     let env = StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::System)
+        .with_config(Some(config))
+        .with_subnet_type(subnet_type)
         .no_dts() // Disable DTS to avoid sandbox_launcher binary dependency (which does not work well with fuzz tests).
         .with_checkpoints_enabled(false)
         .build();
@@ -50,7 +69,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
 //
 // To execute the fuzzer run
 // bazel run --config=fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call -- -rss_limit_mb=4096 -runs=100 > output.secret 2>&1
-// bazel run --config=afl //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call_afl -- corpus/ > output.secret 2>&1
+// bazel run --config=afl //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call_afl
 
 fuzz_target!(|module: ICWasmModule| {
     with_env(|env, canister_id| {

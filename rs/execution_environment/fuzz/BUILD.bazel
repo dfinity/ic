@@ -20,6 +20,7 @@ rust_fuzz_test_binary(
 
 SYSTEM_API_FUZZ_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/embedders/fuzz:wasm_fuzzers",
     "//rs/registry/subnet_type",
     "//rs/state_machine_tests",
