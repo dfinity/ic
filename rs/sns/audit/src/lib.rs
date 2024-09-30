@@ -151,6 +151,7 @@ async fn validate_neurons_fund_sns_swap_participation(
                 neurons_fund_audit_info,
             },
         ) => neurons_fund_audit_info.unwrap(),
+
         get_neurons_fund_audit_info_response::Result::Err(err) => {
             if err.error_message.starts_with("Neurons Fund data not found") {
                 return Err(format!(
