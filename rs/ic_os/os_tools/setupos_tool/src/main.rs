@@ -60,7 +60,7 @@ pub fn main() -> Result<()> {
                 &setup_config.network_settings
             );
 
-            let mgmt_mac = match setup_config.network_settings.mgmt_mac {
+            let mgmt_mac = match setup_config.network_settings.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
