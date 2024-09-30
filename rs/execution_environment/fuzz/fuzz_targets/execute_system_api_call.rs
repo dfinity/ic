@@ -40,7 +40,7 @@ fn setup_env() -> (StateMachine, CanisterId) {
     );
     let wasm = wat::parse_str(HELLO_WORLD_WAT).unwrap();
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
-        .unwrap();
+        .expect("Failed to install valid wasm");
     (env, canister_id)
 }
 
@@ -54,12 +54,14 @@ fn setup_env() -> (StateMachine, CanisterId) {
 fuzz_target!(|module: ICWasmModule| {
     with_env(|env, canister_id| {
         let wasm = module.module.to_bytes();
-        env.install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![])
-            .unwrap();
-
-        // For determinism, all methods are executed.
-        for wasm_method in module.exported_functions.iter() {
-            let _ = env.execute_ingress(*canister_id, wasm_method.name(), vec![]);
+        let result =
+            env.install_wasm_in_mode(*canister_id, CanisterInstallMode::Reinstall, wasm, vec![]);
+        // Only execute the canister if the wasm was installed successfully.
+        if result.is_ok() {
+            // For determinism, all methods are executed.
+            for wasm_method in module.exported_functions.iter() {
+                let _ = env.execute_ingress(*canister_id, wasm_method.name(), vec![]);
+            }
         }
     });
 });
