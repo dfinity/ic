@@ -31,6 +31,7 @@ use ic_types::{
     time::current_time,
     CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
+use num_traits::ops::saturating::SaturatingSub;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -540,12 +541,7 @@ const DYNAMIC_DELAY_EXTRA_DURATION: Duration = Duration::from_secs(10);
 
 fn count_non_rank_0_blocks(pool: &PoolReader, block: Block) -> usize {
     let max_height = block.height();
-    let min_height = if max_height > DYNAMIC_DELAY_LOOK_BACK_DISTANCE {
-        max_height - DYNAMIC_DELAY_LOOK_BACK_DISTANCE
-    } else {
-        Height::new(0)
-    };
-
+    let min_height = max_height.saturating_sub(&DYNAMIC_DELAY_LOOK_BACK_DISTANCE);
     pool.get_range(block, min_height, max_height)
         .filter(|block| block.rank > Rank(0))
         .count()

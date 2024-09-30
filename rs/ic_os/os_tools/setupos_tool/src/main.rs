@@ -10,7 +10,7 @@ use config::{
 };
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::generate_mac_address;
+use network::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -60,10 +60,27 @@ pub fn main() -> Result<()> {
                 &setup_config.network_settings
             );
 
+            let mgmt_mac = match setup_config.network_settings.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac = generate_mac_address(
+                &mgmt_mac,
+                &setup_config.icos_settings.hostname,
+                &NodeType::SetupOS,
+            )?;
+            eprintln!("Using generated mac (unformatted) {}", generated_mac);
+
             generate_network_config(
                 &setup_config.network_settings,
-                &setup_config.icos_settings.hostname,
-                NodeType::SetupOS,
+                generated_mac,
                 Path::new(&output_directory),
             )
         }
@@ -71,15 +88,30 @@ pub fn main() -> Result<()> {
             let setup_config: SetupOSConfig =
                 deserialize_config(DEFAULT_SETUPOS_CONFIG_OBJECT_PATH)?;
 
+            eprintln!(
+                "Network settings config: {:?}",
+                &setup_config.network_settings
+            );
+
             let node_type = node_type.parse::<NodeType>()?;
 
-            let mac = generate_mac_address(
-                &setup_config.icos_settings.hostname,
-                &node_type,
-                setup_config.network_settings.mgmt_mac.as_deref(),
-            )?;
+            let mgmt_mac = match setup_config.network_settings.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac =
+                generate_mac_address(&mgmt_mac, &setup_config.icos_settings.hostname, &node_type)?;
+            eprintln!("Using generated mac (unformatted) {}", generated_mac);
+
             let ipv6_address =
-                generate_ipv6_address(&setup_config.network_settings.ipv6_prefix, &mac)?;
+                generate_ipv6_address(&setup_config.network_settings.ipv6_prefix, &generated_mac)?;
             println!(
                 "{}",
                 to_cidr(

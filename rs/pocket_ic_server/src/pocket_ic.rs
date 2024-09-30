@@ -86,7 +86,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, OnceCell};
 use tokio::task::JoinHandle;
 use tokio::{runtime::Runtime, sync::mpsc};
 use tonic::transport::{Channel, Server};
@@ -1111,7 +1111,7 @@ async fn setup_adapter_mock(
 
             async move {
                 if let Some(client) = client {
-                    Ok(client)
+                    Ok(hyper_util::rt::TokioIo::new(client))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -1148,6 +1148,11 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
+    let delegation = if let Some(d) = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id()) {
+        Arc::new(OnceCell::new_with(Some(d)))
+    } else {
+        Arc::new(OnceCell::new())
+    };
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
             let grpc_channel = pic
@@ -1182,6 +1187,7 @@ fn process_mock_canister_https_response(
                 1,
                 MetricsRegistry::new(),
                 subnet.get_subnet_type(),
+                delegation.clone(),
             );
             client
                 .send(ic_types::canister_http::CanisterHttpRequest {
@@ -1745,7 +1751,13 @@ impl Operation for CallRequest {
                 let svc = match self.version {
                     CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
                     CallRequestVersion::V3 => {
-                        let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                        let delegation = if let Some(d) =
+                            pic.get_nns_delegation_for_subnet(subnet.get_subnet_id())
+                        {
+                            Arc::new(OnceCell::new_with(Some(d)))
+                        } else {
+                            Arc::new(OnceCell::new())
+                        };
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
@@ -1755,7 +1767,7 @@ impl Operation for CallRequest {
                             metrics,
                             http_handler::Config::default()
                                 .ingress_message_certificate_timeout_seconds,
-                            Arc::new(RwLock::new(delegation)),
+                            delegation,
                             subnet.state_manager.clone(),
                         )
                     }
@@ -1848,7 +1860,7 @@ impl Operation for QueryRequest {
                     Arc::new(PocketNodeSigner(node.node_signing_key.clone())),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    Arc::new(RwLock::new(delegation)),
+                    Arc::new(OnceCell::new_with(delegation)),
                     BoxCloneService::new(service_fn(move |arg| {
                         let query_handler = query_handler.clone();
                         async {
@@ -1913,7 +1925,7 @@ impl Operation for CanisterReadStateRequest {
                     subnet.state_manager.clone(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    Arc::new(RwLock::new(delegation)),
+                    Arc::new(OnceCell::new_with(delegation)),
                 )
                 .build_service();
 
@@ -1963,7 +1975,7 @@ impl Operation for SubnetReadStateRequest {
                 let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
                 subnet.certify_latest_state();
                 let svc = SubnetReadStateServiceBuilder::builder(
-                    Arc::new(RwLock::new(delegation)),
+                    Arc::new(OnceCell::new_with(delegation)),
                     subnet.state_manager.clone(),
                 )
                 .build_service();

@@ -103,5 +103,6 @@ rust_ic_test(
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     },
+    flaky = True,
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

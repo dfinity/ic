@@ -15,7 +15,7 @@ use tokio::process::Command;
 
 use crate::CallCanisters;
 
-pub async fn query_sns_upgrade_steps<C: CallCanisters>(
+pub async fn query_mainline_sns_upgrade_steps<C: CallCanisters>(
     agent: &C,
 ) -> Result<ListUpgradeStepsResponse, C::Error> {
     let request = ListUpgradeStepsRequest {

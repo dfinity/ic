@@ -1,13 +1,11 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
-    TransformFunc,
-};
+use ic_cdk::api::management_canister::http_request::http_request;
 
 pub mod blocklist;
 mod fetch;
+mod providers;
 mod state;
 mod types;
 
@@ -16,6 +14,7 @@ pub use fetch::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+pub use state::{get_config, set_config, Config};
 use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
@@ -62,32 +61,8 @@ impl FetchEnv for KytCanisterEnv {
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
-        let host = "btcscan.org";
-        let url = format!("https://{}/api/tx/{}/raw", host, txid);
-        let request_headers = vec![
-            HttpHeader {
-                name: "Host".to_string(),
-                value: format!("{host}:443"),
-            },
-            HttpHeader {
-                name: "User-Agent".to_string(),
-                value: "bitcoin_inputs_collector".to_string(),
-            },
-        ];
-        let request = CanisterHttpRequestArgument {
-            url: url.to_string(),
-            method: HttpMethod::GET,
-            body: None,
-            max_response_bytes: Some(max_response_bytes as u64),
-            transform: Some(TransformContext {
-                function: TransformFunc(candid::Func {
-                    principal: ic_cdk::api::id(),
-                    method: "transform".to_string(),
-                }),
-                context: vec![],
-            }),
-            headers: request_headers,
-        };
+        let request = providers::create_request(get_config().btc_network, txid, max_response_bytes);
+        let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
             Ok((response,)) => {

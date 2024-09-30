@@ -506,8 +506,7 @@ impl NervousSystemParameters {
                 .or(base.max_age_bonus_percentage),
             voting_rewards_parameters: self
                 .voting_rewards_parameters
-                .clone()
-                .or_else(|| base.voting_rewards_parameters.clone())
+                .or(base.voting_rewards_parameters)
                 .map(|v| match base.voting_rewards_parameters.as_ref() {
                     None => v,
                     Some(base) => v.inherit_from(base),
@@ -973,6 +972,15 @@ impl From<prost::DecodeError> for GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!("Invalid mode for install_code: {}", decode_error),
+        )
+    }
+}
+
+impl From<prost::UnknownEnumValue> for GovernanceError {
+    fn from(unknown_enum_value: prost::UnknownEnumValue) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Unknown enum value: {}", unknown_enum_value),
         )
     }
 }
