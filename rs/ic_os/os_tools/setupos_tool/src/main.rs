@@ -72,7 +72,7 @@ pub fn main() -> Result<()> {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac.get()
+                        mgmt_mac
                     );
                     mgmt_mac
                 }
@@ -83,7 +83,7 @@ pub fn main() -> Result<()> {
                 deployment_settings.deployment.name.as_str(),
                 &NodeType::SetupOS,
             )?;
-            eprintln!("Using generated mac (unformatted) {}", generated_mac.get());
+            eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
         }
@@ -110,7 +110,7 @@ pub fn main() -> Result<()> {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac.get()
+                        mgmt_mac
                     );
                     mgmt_mac
                 }

@@ -77,7 +77,7 @@ pub fn main() -> Result<()> {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac.get()
+                        mgmt_mac
                     );
                     mgmt_mac
                 }
@@ -114,7 +114,7 @@ pub fn main() -> Result<()> {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac.get()
+                        mgmt_mac
                     );
                     mgmt_mac
                 }
@@ -152,7 +152,7 @@ pub fn main() -> Result<()> {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
                         "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac.get()
+                        mgmt_mac
                     );
                     mgmt_mac
                 }
@@ -165,7 +165,7 @@ pub fn main() -> Result<()> {
             )?;
 
             let generated_mac = FormattedMacAddress::from(&generated_mac);
-            println!("{}", generated_mac.get());
+            println!("{}", generated_mac);
             Ok(())
         }
         None => Err(anyhow!(

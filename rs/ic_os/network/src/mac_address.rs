@@ -1,3 +1,4 @@
+use std::fmt;
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
@@ -29,6 +30,18 @@ impl UnformattedMacAddress {
 impl FormattedMacAddress {
     pub fn get(&self) -> String {
         self.0.clone()
+    }
+}
+
+impl fmt::Display for UnformattedMacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.get())
+    }
+}
+
+impl fmt::Display for FormattedMacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.get())
     }
 }
 
