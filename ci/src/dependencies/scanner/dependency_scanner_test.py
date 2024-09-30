@@ -227,7 +227,7 @@ def test_on_periodic_job_one_finding_in_jira_transition_to_failover(jira_lib_moc
     failover_mock.can_handle.return_value = True
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2], failover_mock)
-    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path="ic", owner_by_path={'bear': [Team.NODE_TEAM]})])]
+    repos = [Repository("ic", "https://github.com/dfinity/ic", [Project(name="ic", path=__test_get_ic_path(), owner_by_path={'bear': [Team.NODE_TEAM]})])]
 
     scanner_job.do_periodic_scan(repos)
 

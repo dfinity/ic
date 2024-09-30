@@ -17,6 +17,7 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-governance = { path = "../../sns/governance" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-sns-root = { path = "../../sns/root" }
 serde = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

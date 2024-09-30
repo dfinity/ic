@@ -12,13 +12,15 @@ use ic_replicated_state::{
         execution_state::{
             CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
-        system_state::CyclesUseCase,
+        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
         testing::new_canister_output_queues_for_test,
     },
-    metadata_state::subnet_call_context_manager::{
-        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+    metadata_state::{
+        subnet_call_context_manager::{
+            BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
+        },
+        Stream, SubnetMetrics,
     },
-    metadata_state::{Stream, SubnetMetrics},
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
@@ -479,6 +481,20 @@ impl SystemStateBuilder {
 
     pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
         self.system_state.wasm_memory_threshold = wasm_memory_threshold;
+        self
+    }
+
+    pub fn wasm_memory_limit(mut self, wasm_memory_limit: Option<NumBytes>) -> Self {
+        self.system_state.wasm_memory_limit = wasm_memory_limit;
+        self
+    }
+
+    pub fn on_low_wasm_memory_hook_status(
+        mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) -> Self {
+        self.system_state
+            .set_on_low_wasm_memory_hook_status(on_low_wasm_memory_hook_status);
         self
     }
 
