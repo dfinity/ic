@@ -42,7 +42,7 @@ def image_deps(mode, _malicious = False):
         "component_files": component_files,
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
-        "rootfs_size": "3G",
+        "rootfs_size": "6G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/hostos:grub.cfg"),
         "extra_boot_args": Label("//ic-os/hostos/context:extra_boot_args"),

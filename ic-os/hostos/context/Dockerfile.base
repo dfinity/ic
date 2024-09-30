@@ -33,9 +33,7 @@ RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommend
 
 # Download and verify QEMU
 RUN cd /tmp/ && \
-    curl -L -O https://download.qemu.org/qemu-6.2.0.tar.xz && \
-    echo "68e15d8e45ac56326e0b9a4afa8b49a3dfe8aba3488221d098c84698bca65b45  qemu-6.2.0.tar.xz" > qemu.sha256 && \
-    shasum -c qemu.sha256
+    curl -L -O https://download.qemu.org/qemu-8.2.2.tar.xz
 
 # Download and verify node_exporter
 RUN cd /tmp/ && \
@@ -46,6 +44,44 @@ RUN cd /tmp/ && \
 
 #
 # Second build stage:
+# - Compile downloaded archives from first build stage
+#
+FROM ubuntu:24.04 AS build
+
+USER root:root
+
+ENV TZ=UTC
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# Install QEMU build dependencies
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
+    ca-certificates \
+    build-essential \
+    git-all \
+    libglib2.0-dev \
+    libpixman-1-dev \
+    libusb-1.0-0-dev \
+    ninja-build \
+    pkg-config \
+    python3 \
+    python3-setuptools \
+    python3-venv \
+    python3-sphinx \
+    python3-sphinx-rtd-theme
+
+# 7.2.9 works, 8.0.0 works, 8.0.5 works
+# 8.1.0 does not crash but guestos doesn't boot up properly
+# Configure and compile QEMU
+COPY --from=download /tmp/qemu-8.2.2.tar.xz /tmp/qemu-8.2.2.tar.xz
+RUN cd /tmp/ && \
+    tar xJf qemu-8.2.2.tar.xz && \
+    cd /tmp/qemu-8.2.2 && \
+    ./configure --target-list=x86_64-softmmu --enable-kvm --enable-libusb  --enable-debug   && \
+    echo "Compiling qemu..." && \
+    make -j 2 >/dev/null 2>&1 && \
+    DESTDIR="/out" ninja -C build install
+
+#
+# Third build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image.
 # - Install and cache upstream packages from built-in Ubuntu repositories.
 # - Install compiled packages from the second stage.
@@ -71,6 +107,10 @@ RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
+
+# Install QEMU
+COPY --from=build /out/usr/local/bin/qemu-system-x86_64 /usr/local/bin/
+COPY --from=build /out/usr/local/share/qemu /usr/local/share/qemu
 
 # Install node_exporter
 COPY --from=download /tmp/node_exporter-1.8.1.linux-amd64.tar.gz /tmp/node_exporter-1.8.1.linux-amd64.tar.gz

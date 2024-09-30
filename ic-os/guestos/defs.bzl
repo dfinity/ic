@@ -60,7 +60,7 @@ def image_deps(mode, malicious = False):
         "component_files": component_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
-        "rootfs_size": "3G",
+        "rootfs_size": "6G",
         "bootfs_size": "1G",
 
         # Add any custom partitions to the manifest

@@ -738,7 +738,7 @@ EOF
     ext4_image(
         name = "static-partition-root-unsigned.tzst",
         src = ":rootfs-tree.tar",
-        partition_size = "3G",
+        partition_size = "6G",
         strip_paths = [
             "/run",
             "/boot",

@@ -190,7 +190,9 @@ def system_test(
 
     _guestos = "//ic-os/guestos/envs/dev:"
     _hostos = "//ic-os/hostos/envs/dev:"
-    _setupos = "//ic-os/setupos/envs/dev:"
+
+    _setupos = "//ic-os/setupos/envs/local-base-dev:"
+    #    _setupos = "//ic-os/setupos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declare they use dev image.
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.

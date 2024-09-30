@@ -82,7 +82,7 @@ def _custom_partitions(mode):
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.zst")
         nns_url = "https://wiki.internetcomputer.org"
     elif mode == "local-base-dev":
-        guest_image = Label("//ic-os/guestos/envs/local-base-dev:disk-img.tar.zst")
+        guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.zst")
         host_image = Label("//ic-os/hostos/envs/local-base-dev:disk-img.tar.zst")
         nns_url = "https://wiki.internetcomputer.org"
     elif mode == "local-base-prod":
@@ -176,3 +176,11 @@ def _custom_partitions(mode):
         ":partition-config.tzst",
         ":partition-data.tzst",
     ]
+
+#
+#  /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/ic/bazel-out/k8-opt/bin/ic-os/guestos/envs/dev/disk-img.tar.zst
+#  /home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/sandbox/linux-sandbox/3511/execroot/ic/bazel-out/k8-opt/bin/rs/tests/nested/registration/run-test.sh.runfiles/ic/ic-os/setupos/envs/dev/disk-img.tar.zst
+#
+#
+#
+#

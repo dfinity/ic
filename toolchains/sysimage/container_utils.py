@@ -48,7 +48,7 @@ def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
     tmpfs_name = f"tmpfs_{unique_tag}"
     invoke.run(f"mkdir -p {temp_sys_dir}")
     invoke.run(f"sudo mount -t tmpfs {tmpfs_name} {temp_sys_dir}")
-    atexit.register(lambda: invoke.run(f"sudo umount {temp_sys_dir}"))
+    atexit.register(lambda: invoke.run(f"sudo umount {temp_sys_dir}", warn=True))
     return temp_sys_dir
 
 
@@ -86,7 +86,7 @@ def create_container_system_dirs(base_dir: Path) -> ContainerSystemDirs:
     # Use sudo to remove the files.
     # Remove sudo when rootless podman is functional
     # Remove this whole function when podman heisenbug no longer applies - see NODE-973
-    atexit.register(lambda: invoke.run(f"sudo rm -rf {container_sys_dir} {container_run_dir}"))
+    atexit.register(lambda: invoke.run(f"sudo rm -rf {container_sys_dir} {container_run_dir}", warn=True))
 
     return ContainerSystemDirs(Path(container_sys_dir),
                                Path(container_run_dir))
