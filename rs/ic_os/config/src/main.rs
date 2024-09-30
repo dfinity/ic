@@ -143,6 +143,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
