@@ -121,9 +121,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
 
     /// Get a consensus message by its hash
     pub fn remove_by_hash(&mut self, hash: &CryptoHash) -> Option<T> {
-        self.artifacts.remove(hash).map(|artifact| {
+        self.artifacts.remove(hash).inspect(|artifact| {
             self.indexes.remove(artifact.as_ref(), hash);
-            artifact
         })
     }
 

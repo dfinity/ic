@@ -99,11 +99,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
 
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -170,11 +165,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 [How to verify] this proposal (and others like it).
 
 [How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
-
-
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
 
 
 ## New Commits
@@ -343,10 +333,16 @@ EOF
 #### Helper functions
 encode_candid_args_in_file() {
     ARGS=$1
-    ENCODED_ARGS_FILE=$(mktemp)
-    didc encode \
-        "$ARGS" \
-        | xxd -r -p >"$ENCODED_ARGS_FILE"
+    ENCODED_ARGS_FILE=$(mktemp) || {
+        echo "Failed to create temp file" >&2
+        return 1
+    }
+
+    if ! didc encode "$ARGS" | xxd -r -p >"$ENCODED_ARGS_FILE"; then
+        echo "Error: Failed to encode arguments. Do you have didc on your PATH?" >&2
+        rm -f "$ENCODED_ARGS_FILE"
+        return 1
+    fi
 
     echo "$ENCODED_ARGS_FILE"
 }

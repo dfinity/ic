@@ -1,4 +1,3 @@
-use crate::governance::Governance;
 use crate::{
     governance::log_prefix,
     logs::{ERROR, INFO},
@@ -16,7 +15,6 @@ use ic_canister_log::log;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResultFromManagementCanister, CanisterStatusType},
-    update_settings::{CanisterSettings, UpdateSettings},
 };
 use std::convert::TryFrom;
 
@@ -321,33 +319,4 @@ pub async fn perform_execute_generic_nervous_system_function_call(
             Ok(())
         }
     }
-}
-
-pub async fn update_root_canister_settings(
-    governance: &Governance,
-    settings: CanisterSettings,
-) -> Result<(), GovernanceError> {
-    let update_settings_args = UpdateSettings {
-        canister_id: PrincipalId::from(governance.proto.root_canister_id_or_panic()),
-        settings,
-        // allowed to be None
-        sender_canister_version: None,
-    };
-    governance
-        .env
-        .call_canister(
-            ic_management_canister_types::IC_00,
-            "update_settings",
-            Encode!(&update_settings_args).expect("Unable to encode update_settings args."),
-        )
-        .await
-        .map(|_reply| ())
-        .map_err(|err| {
-            let err = GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("Failed to update settings of the root canister: {:?}", err),
-            );
-            log!(ERROR, "{}{:?}", log_prefix(), err);
-            err
-        })
 }

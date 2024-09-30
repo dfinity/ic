@@ -38,7 +38,6 @@ ALL_BINARIES = {
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
-    "sns-test-feature": "//rs/sns/cli:sns--test_feature",
     "state-tool": "//rs/state_tool:state-tool",
     "systemd-journal-gatewayd-shim": "//rs/boundary_node/systemd_journal_gatewayd_shim:systemd-journal-gatewayd-shim",
     "drun": "//rs/drun:drun",

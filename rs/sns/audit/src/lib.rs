@@ -7,7 +7,7 @@ use ic_neurons_fund::u64_to_dec;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance_api::pb::v1::{
     get_neurons_fund_audit_info_response, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse,
+    GetNeuronsFundAuditInfoResponse, NeuronsFundAuditInfo,
 };
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use ic_sns_swap::pb::v1::{
@@ -151,6 +151,21 @@ async fn validate_neurons_fund_sns_swap_participation(
         ));
     };
 
+    if let NeuronsFundAuditInfo {
+        initial_neurons_fund_participation: None,
+        final_neurons_fund_participation: None,
+        neurons_fund_refunds: None,
+    } = audit_info
+    {
+        // This indicates that the Neurons' Fund participation has not been requested by this SNS.
+        audit_check(
+            "SwapInit.neurons_fund_participation and NnsGov.get_neurons_fund_audit_info are \
+             consistent.",
+            !swap_init.neurons_fund_participation.unwrap(),
+        );
+        return Ok(());
+    }
+
     let neuron_basket_construction_parameters =
         swap_init.neuron_basket_construction_parameters.unwrap();
     let buyer_total_icp_e8s = swap_derived_state.buyer_total_icp_e8s.unwrap();
@@ -165,7 +180,7 @@ async fn validate_neurons_fund_sns_swap_participation(
         .filter_map(|recipe| {
             if let Some(Investor::CommunityFund(ref investment)) = recipe.investor {
                 let controller = investment.try_get_controller().unwrap();
-                let amount_sns_e8s = recipe.sns.clone().unwrap().amount_e8s;
+                let amount_sns_e8s = recipe.sns.unwrap().amount_e8s;
                 Some((controller, amount_sns_e8s))
             } else {
                 None
