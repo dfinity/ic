@@ -26,13 +26,12 @@ SYSTEM_API_FUZZ_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
-    "@crate_index//:wasmtime",
-    "@crate_index//:wasmtime-environ",
     "@crate_index//:wat",
 ]
 
 rust_fuzz_test_binary(
-    name = "execute_system_api_call",
+    name = "execute_with_wasm_executor_system_api_call",
+    testonly = True,
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
@@ -41,7 +40,8 @@ rust_fuzz_test_binary(
 )
 
 rust_fuzz_test_binary_afl(
-    name = "execute_system_api_call_afl",
+    name = "execute_with_wasm_executor_system_api_call_afl",
+    testonly = True,
     srcs = [
         "fuzz_targets/execute_system_api_call.rs",
     ],
