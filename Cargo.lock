@@ -6535,6 +6535,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cketh-minter",
+ "ic-ethereum-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-ledger-suite-orchestrator-test-utils",
