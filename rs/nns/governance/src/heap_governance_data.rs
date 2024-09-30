@@ -87,18 +87,7 @@ impl From<XdrConversionRate> for XdrConversionRatePb {
 /// Converts a vector of u8s to array of length 32, which is the length needed for our rng seed.
 /// If the array is the wrong size, this returns an error.
 fn vec_to_array(v: Vec<u8>) -> Result<[u8; 32], String> {
-    let boxed_slice = v.into_boxed_slice();
-    let boxed_array: Box<[u8; 32]> = match boxed_slice.try_into() {
-        Ok(hash) => hash,
-        Err(original) => {
-            return Err(format!(
-                "Expected a hash of length {} but it was {}",
-                32,
-                original.len()
-            ))
-        }
-    };
-    Ok(*boxed_array)
+    <[u8; 32]>::try_from(v).map_err(|v| format!("Expected 32 bytes, got {}", v.len()))
 }
 
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because

@@ -165,15 +165,15 @@ fn schedule_seeding(duration: Duration) {
                 Ok((seed,)) => seed,
                 Err((code, msg)) => {
                     println!(
-                        "Error seeding RNG. Error Code: {}. Error Message: {}",
-                        code, msg
+                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
+                        LOG_PREFIX, code, msg
                     );
                     schedule_seeding(RETRY_SEEDING_INTERVAL);
                     return;
                 }
             };
 
-            governance_mut().env.seed_rng(seed);
+            () = governance_mut().env.seed_rng(seed);
             // Schedule reseeding on a timer with duration SEEDING_INTERVAL
             schedule_seeding(SEEDING_INTERVAL);
         })
