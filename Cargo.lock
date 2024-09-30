@@ -5882,10 +5882,12 @@ dependencies = [
  "bitcoin 0.32.2",
  "candid",
  "candid_parser",
+ "ciborium",
  "futures",
  "ic-base-types",
  "ic-btc-interface",
  "ic-cdk 0.13.5",
+ "ic-stable-structures",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
@@ -6533,7 +6535,6 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-cketh-minter",
- "ic-ethereum-types",
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator",
  "ic-ledger-suite-orchestrator-test-utils",
@@ -8103,7 +8104,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ethereum-types"
-version = "0.9.0"
+version = "1.0.0"
 dependencies = [
  "assert_matches",
  "hex",
@@ -13190,6 +13191,7 @@ dependencies = [
  "hyper 1.4.1",
  "hyper-util",
  "ic-async-utils",
+ "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
  "ic-interfaces-certified-stream-store",
@@ -13199,7 +13201,6 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
- "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-replicated-state",
  "ic-test-utilities",

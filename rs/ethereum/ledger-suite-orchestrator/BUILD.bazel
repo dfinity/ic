@@ -35,9 +35,9 @@ package(default_visibility = ["//visibility:public"])
         version = "0.1.0",
         deps = [
             # Keep sorted.
+            "//packages/ic-ethereum-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/sha2",
-            "//rs/ethereum/types",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
             "//rs/rust_canisters/http_types",

@@ -1,10 +1,10 @@
-use bitcoin::{Address, Network};
+use bitcoin::Address;
 use ic_btc_interface::Txid;
 use ic_btc_kyt::{
-    blocklist_contains, check_transaction_inputs, CheckAddressArgs, CheckAddressResponse,
-    CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionResponse,
-    CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    blocklist_contains, check_transaction_inputs, get_config, set_config, CheckAddressArgs,
+    CheckAddressResponse, CheckTransactionArgs, CheckTransactionIrrecoverableError,
+    CheckTransactionResponse, CheckTransactionStatus, Config, KytArg,
+    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
 };
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use std::str::FromStr;
@@ -14,10 +14,13 @@ use std::str::FromStr;
 /// `Failed` otherwise.
 /// May throw error (trap) if the given address is malformed or not a mainnet address.
 fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
+    let btc_network = get_config().btc_network;
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
-        .require_network(Network::Bitcoin)
-        .unwrap_or_else(|err| ic_cdk::trap(&format!("Not a bitcoin mainnet address: {}", err)));
+        .require_network(btc_network.into())
+        .unwrap_or_else(|err| {
+            ic_cdk::trap(&format!("Not a bitcoin {} address: {}", btc_network, err))
+        });
 
     if blocklist_contains(&address) {
         CheckAddressResponse::Failed
@@ -68,6 +71,26 @@ fn transform(raw: TransformArgs) -> HttpResponse {
         status: raw.response.status.clone(),
         body: raw.response.body.clone(),
         headers: vec![],
+    }
+}
+
+#[ic_cdk::init]
+fn init(arg: KytArg) {
+    match arg {
+        KytArg::InitArg(init_arg) => set_config(Config {
+            btc_network: init_arg.btc_network,
+        }),
+        KytArg::UpgradeArg(_) => {
+            ic_cdk::trap("cannot init canister state without init args");
+        }
+    }
+}
+
+#[ic_cdk::post_upgrade]
+fn post_upgrade(arg: KytArg) {
+    match arg {
+        KytArg::UpgradeArg(_) => (),
+        KytArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
     }
 }
 
