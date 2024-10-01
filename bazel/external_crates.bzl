@@ -340,7 +340,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "clap": crate.spec(
-                version = "^4.0.0",
+                version = "^4.5.18",
                 features = [
                     "derive",
                     "string",

@@ -1,6 +1,3 @@
-use crate::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
-};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -39,18 +36,19 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
-            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
-            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
+            Account as AccountProto, AddMaturityRequest, AddMaturityResponse, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
             Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
             Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
             RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
@@ -1462,7 +1460,7 @@ impl Governance {
                 0, // Minting transfer don't pay a fee
                 None, // This is a minting transfer, no 'from' account is needed
                 self.neuron_account_id(subaccount), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await?;
 
@@ -5458,7 +5456,7 @@ impl Governance {
                     .expect("recipient must be set")
                     .try_into()
                     .unwrap(), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await
             .unwrap();
@@ -6511,11 +6509,7 @@ mod tests {
                 unimplemented!();
             }
 
-            fn random_u64(&mut self) -> u64 {
-                unimplemented!();
-            }
-
-            fn random_byte_array(&mut self) -> [u8; 32] {
+            fn insecure_random_u64(&mut self) -> u64 {
                 unimplemented!();
             }
 
