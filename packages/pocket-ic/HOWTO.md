@@ -47,6 +47,7 @@ Since version 4.0.0, the PocketIC server also exposes the IC's HTTP interface, j
 For that reason, you need to explicitly make an instance "live" by calling `make_live()` on it. This will do three things: 
 
 - It launches a thread that calls `tick()` and `advance_time(...)` on the instance regularly - several times per second. 
+- It creates a gateway which points to this live instance.
 - It returns a gateway URL which can then be passed to agent-like tools.
 
 Of course, other instances on the same PocketIC server remain unchanged - neither do they receive `tick`s nor can the gateway route requests to them. 
