@@ -33,7 +33,7 @@ use ic_types::{
     messages::SignedIngress,
     Height, NodeId, PrincipalId, SubnetId,
 };
-use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
+use ic_xnet_endpoint::XNetEndpoint;
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::{
     str::FromStr,
@@ -41,7 +41,7 @@ use std::{
 };
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
-    watch,
+    watch, OnceCell,
 };
 
 /// The buffer size for the channel that [`IngressHistoryWriterImpl`] uses to send
@@ -157,6 +157,9 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
+
+    let delegation_from_nns = Arc::new(OnceCell::new());
+
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the
     // persistent consensus pool is the only way for retrieving the height of the last CUP and/or
@@ -258,14 +261,12 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
-    let message_router = Arc::new(message_router);
-    let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        xnet_config,
+        config.message_routing,
         metrics_registry,
         log.clone(),
     );
@@ -310,6 +311,7 @@ pub fn construct_ic_stack(
         max_canister_http_requests_in_flight,
         log.clone(),
         subnet_type,
+        delegation_from_nns.clone(),
     );
     // ---------- QUERY STATS DEPS FOLLOW -----------
     let query_stats_payload_builder = execution_services
@@ -337,7 +339,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        message_router,
+        Arc::new(message_router),
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
@@ -370,7 +372,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        None,
+        delegation_from_nns,
         Arc::new(Pprof),
         tracing_handle,
         max_certified_height_rx,

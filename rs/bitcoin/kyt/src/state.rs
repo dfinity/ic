@@ -1,6 +1,11 @@
+use crate::types::BtcNetwork;
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
@@ -38,7 +43,7 @@ pub enum FetchTxStatus {
 /// that is initialized as `None`. Once a corresponding input
 /// transaction is fetched (see function `check_fetched`), its
 /// input address will be computed and filled in.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct FetchedTx {
     pub tx: Transaction,
     pub input_addresses: Vec<Option<Address>>,
@@ -120,5 +125,67 @@ impl Drop for FetchGuard {
             // Only clear the status when it is still `PendingOutcall`
             clear_fetch_status(txid);
         }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Config {
+    pub btc_network: BtcNetwork,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum ConfigState {
+    Uninitialized,
+    Initialized(Config),
+}
+
+impl Storable for ConfigState {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode ConfigState");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode ConfigState bytes {:?}: {}",
+                bytes.as_ref(),
+                e
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+type StableMemory = VirtualMemory<DefaultMemoryImpl>;
+
+const CONFIG_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+// Configuration is stored in stable memory.
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+            MemoryManager::init(DefaultMemoryImpl::default())
+    );
+    static CONFIG: RefCell<Cell<ConfigState, StableMemory>> = RefCell::new(
+        Cell::init(config_memory(), ConfigState::Uninitialized).expect("failed to initialize stable cell for config")
+    );
+}
+
+fn config_memory() -> StableMemory {
+    MEMORY_MANAGER.with(|m| m.borrow().get(CONFIG_MEMORY_ID))
+}
+
+pub fn set_config(config: Config) {
+    CONFIG
+        .with(|c| c.borrow_mut().set(ConfigState::Initialized(config)))
+        .expect("failed to set config");
+}
+
+pub fn get_config() -> Config {
+    match CONFIG.with(|c| c.borrow().get().clone()) {
+        ConfigState::Uninitialized => panic!("config is uninitialized"),
+        ConfigState::Initialized(config) => config,
     }
 }

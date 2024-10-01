@@ -2487,7 +2487,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
         .unwrap();
 
     test.ingress(

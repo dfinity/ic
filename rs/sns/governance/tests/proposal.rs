@@ -452,7 +452,7 @@ mod early_decision {
             no,
             total,
             timestamp_seconds: _,
-        } = initial_proposal.latest_tally.clone().unwrap();
+        } = initial_proposal.latest_tally.unwrap();
 
         // Ramp up yes votes.
         let max_yes = total - no;
