@@ -11339,7 +11339,7 @@ dependencies = [
  "pocket-ic",
  "prometheus",
  "proptest",
- "prost",
+ "prost 0.13.2",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest 0.12.7",
