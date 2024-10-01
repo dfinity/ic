@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <title>KYT Canister Dashboard for Bitcoin {{ btc_network }}</title>
+    <title>KYT Canister Dashboard for Bitcoin ({{ btc_network }})</title>
     <style>
         table {
             border: solid;
@@ -35,13 +35,17 @@
         tbody tr:nth-child(odd) {
             background-color: #eeeeee;
         }
+
+        tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
     </style>
 </head>
 
 <body>
     <div class="background">
         <div class="content">
-            <h2>KYT Canister Dashboard for Bitcoin {{ btc_network }}</h2>
+            <h2>KYT Canister Dashboard for Bitcoin ({{ btc_network }})</h2>
             <h3>Metadata</h3>
             <table>
                 <tbody>
@@ -55,27 +59,27 @@
             <table>
                 <thead>
                     <th>Txid</th>
-                    <td>Created</th>
+                    <th>Created</th>
                     <th>Status</th>
                 </thead>
                 <tbody>
                     {% for (txid, timestamp, status) in fetch_tx_status %}
                     <tr>
-                        <td>{{ txid.to_string() }}</td>
-                        <td>{{ timestamp|timestamp_to_datetime }}</td>
+                        <td><code>{{ txid.to_string() }}</code></td>
+                        <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
                         <td>
-                          <table><thead><th>{{ status.to_str() }}</th></thead>
-                            {% if status.is_fetched() %}
-                            <tbody>
-                              {% for address in status.as_fetched().input_addresses %}
-                              <tr><td><code>{{ address }}</code></td></tr>
-                              {% endfor %}
-                            </tbody>
-                            {% endif %}
-                            {% if status.is_error() %}
-                            <tbody><tr><td>{{ status.as_error() }}</td></tr></tbody>
-                            {% endif %}
-                          </table>
+                            <table><thead><th>{{ status.to_str() }}</th></thead>
+                                {% if status.is_fetched() %}
+                                <tbody>
+                                    {% for address in status.as_fetched().input_addresses %}
+                                    <tr><td><code>{{ address }}</code></td></tr>
+                                    {% endfor %}
+                                </tbody>
+                                {% endif %}
+                                {% if status.is_error() %}
+                                <tbody><tr><td>{{ status.as_error() }}</td></tr></tbody>
+                                {% endif %}
+                              </table>
                         </td>
                     </tr>
                     {% endfor %}

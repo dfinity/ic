@@ -87,16 +87,24 @@ pub fn dashboard() -> DashboardTemplate {
                             FetchTxStatus::PendingOutcall => Status::PendingOutcall,
                             FetchTxStatus::PendingRetry { .. } => Status::PendingRetry,
                             FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err)),
-                            FetchTxStatus::Fetched(fetched) => Status::Fetched(Fetched {
-                                input_addresses: fetched
-                                    .input_addresses
-                                    .iter()
-                                    .map(|addr| {
-                                        addr.clone()
-                                            .map_or("N/A".to_string(), |addr| format!("{}", addr))
-                                    })
-                                    .collect(),
-                            }),
+                            FetchTxStatus::Fetched(fetched) => {
+                                // Return an empty list if no input address is available yet.
+                                let input_addresses =
+                                    if fetched.input_addresses.iter().all(|x| x.is_none()) {
+                                        Vec::new()
+                                    } else {
+                                        fetched
+                                            .input_addresses
+                                            .iter()
+                                            .map(|addr| {
+                                                addr.clone().map_or("N/A".to_string(), |addr| {
+                                                    format!("{}", addr)
+                                                })
+                                            })
+                                            .collect()
+                                    };
+                                Status::Fetched(Fetched { input_addresses })
+                            }
                         },
                     )
                 })

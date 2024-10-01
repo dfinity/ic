@@ -1,5 +1,5 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{filters, DashboardTemplate, Status};
+use crate::dashboard::{filters, DashboardTemplate, Fetched, Status};
 use crate::state::Timestamp;
 use crate::BtcNetwork;
 use ic_btc_interface::Txid;
@@ -29,9 +29,25 @@ fn should_display_statuses() {
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
     let txid_3 = mock_txid(3);
+    let txid_4 = mock_txid(4);
+    let txid_5 = mock_txid(5);
+    let txid_6 = mock_txid(6);
     let status_1 = Status::PendingOutcall;
     let status_2 = Status::PendingRetry;
     let status_3 = Status::Error("Transaction not found".to_string());
+    let status_4 = Status::Fetched(Fetched {
+        input_addresses: vec![],
+    });
+    let status_5 = Status::Fetched(Fetched {
+        input_addresses: vec!["bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7".to_string()],
+    });
+
+    let status_6 = Status::Fetched(Fetched {
+        input_addresses: vec![
+            "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp".to_string(),
+            "bc1qz0z6xgaqa2qj87mwp093q8zj9l3sm53zeqa8ee".to_string(),
+        ],
+    });
 
     let dashboard = DashboardTemplate {
         btc_network: BtcNetwork::Mainnet,
@@ -40,12 +56,18 @@ fn should_display_statuses() {
             (txid_1, 0, status_1.clone()),
             (txid_2, 0, status_2.clone()),
             (txid_3, 0, status_3.clone()),
+            (txid_4, 0, status_4.clone()),
+            (txid_5, 0, status_5.clone()),
+            (txid_6, 0, status_6.clone()),
         ],
     };
     DashboardAssert::assert_that(dashboard)
         .has_status(1, txid_1, 0, &status_1)
         .has_status(2, txid_2, 0, &status_2)
-        .has_status(3, txid_3, 0, &status_3);
+        .has_status(3, txid_3, 0, &status_3)
+        .has_status(4, txid_4, 0, &status_4)
+        .has_status(5, txid_5, 0, &status_5)
+        .has_status(6, txid_6, 0, &status_6);
 }
 
 mod assertions {
@@ -72,7 +94,7 @@ mod assertions {
         pub fn has_btc_network_in_title(&self, btc_network: BtcNetwork) -> &Self {
             self.has_string_value(
                 "title",
-                &format!("KYT Canister Dashboard for Bitcoin {}", btc_network),
+                &format!("KYT Canister Dashboard for Bitcoin ({})", btc_network),
                 "wrong btc_network",
             )
         }
@@ -103,6 +125,16 @@ mod assertions {
             let mut expected_values = vec![&txid_str, &time_str, expected_status.to_str()];
             if expected_status.is_error() {
                 expected_values.push(expected_status.as_error());
+            }
+            let mut addresses;
+            if expected_status.is_fetched() {
+                addresses = expected_status
+                    .as_fetched()
+                    .input_addresses
+                    .iter()
+                    .map(|s| s.as_ref())
+                    .collect::<Vec<_>>();
+                expected_values.append(&mut addresses);
             }
             self.has_table_row_string_value(
                 &format!("#fetch-tx-status + table > tbody > tr:nth-child({row_index})"),
