@@ -806,7 +806,7 @@ fn is_successful_http_code(status: &u16) -> bool {
 }
 
 fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
-    use ic_crypto_sha3::Keccak256;
+    use ic_sha3::Keccak256;
     to_sort.sort_by(|a, b| {
         let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
         let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));

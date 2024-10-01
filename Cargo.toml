@@ -5,6 +5,8 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-ethereum-types",
+    "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
@@ -168,7 +170,9 @@ members = [
     "rs/nervous_system/common/test_canister",
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
+    "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/initial_supply",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -479,7 +483,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
     "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "4.4.6", features = ["derive", "string"] }
+clap = { version = "4.5.18", features = ["derive", "string"] }
 # cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
@@ -506,6 +510,7 @@ ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
 futures = "0.3.30"
 futures-util = "0.3.30"
+ic-sha3 = "1.0.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -539,6 +544,7 @@ ic-certification = "2.6.0"
 ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
 ic-stable-structures = "0.6.5"
+ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
 ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
     "groups",
@@ -597,8 +603,8 @@ prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
 proptest-derive = "0.5.0"
-prost = "^0.12"
-prost-build = "^0.12"
+prost = "^0.13"
+prost-build = "^0.13"
 protobuf = "2.28.0"
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
@@ -624,6 +630,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 ] }
 rolling-file = "0.2.0"
 rstest = "0.19.0"
+rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",
@@ -664,8 +671,8 @@ tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
 tokio-util = { version = "0.7.12", features = ["full"] }
-tonic = "0.11.0"
-tonic-build = "0.11.0"
+tonic = "0.12.0"
+tonic-build = "0.12.0"
 tower = { version = "0.4.13", features = ["full"] }
 tower-http = { version = "0.5.2", features = [
     "cors",

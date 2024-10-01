@@ -227,8 +227,12 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.80.0",
-        "nightly/2024-06-06",
+        "1.81.0",
+        # Use the nightly version from the day before the branch.
+        # -
+        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
+        # only back-ported to stable, we use a more recent version.
+        "nightly/2024-09-23",
     ],
 )
 
@@ -319,12 +323,6 @@ load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
 
 rules_pkg_dependencies()
 
-# Bitcoin core
-
-load("//third_party/bitcoin-core:bitcoin-core_repository.bzl", "bitcoin_core_repository")
-
-bitcoin_core_repository()
-
 # Third party dependencies that require special treatment
 
 lmdb_repository()
@@ -409,7 +407,7 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
-# shfmt binary for fast shell linting
+# shfmt binary for fast shell formatting
 load("//bazel:shfmt.bzl", "shfmt")
 
 shfmt(name = "shfmt")
@@ -686,9 +684,9 @@ http_file(
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "0aa541a4278cbcc39d4c92af25f0860b745e5ce5408e9aed641d307d4267c609",
-    strip_prefix = "rules_haskell-96e231409b772859926914e76296e894982db600",
-    url = "https://github.com/tweag/rules_haskell/archive/96e231409b772859926914e76296e894982db600.tar.gz",
+    sha256 = "cf5e0a00275f3ed974a3e961db0d6923390f85ba83f7d7f5d89ebe7c5a1c2b6b",
+    strip_prefix = "rules_haskell-220503b4c7403d02d8e3537eb57c722fe1f14c7a",
+    url = "https://github.com/tweag/rules_haskell/archive/220503b4c7403d02d8e3537eb57c722fe1f14c7a.tar.gz",
 )
 
 # Load the rules_haskell dependencies necessary for loading the toolchains
@@ -959,3 +957,33 @@ http_file(
 load("//rs/tests:kubeconfig.bzl", "kubeconfig")
 
 kubeconfig()
+
+http_archive(
+    name = "bitcoin_core",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "bitcoind",
+    srcs = ["bin/bitcoind"],
+)
+""",
+    sha256 = "2a6974c5486f528793c79d42694b5987401e4a43c97f62b1383abf35bcee44a8",
+    strip_prefix = "bitcoin-27.0",
+    urls = [
+        "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+        "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-x86_64-linux-gnu.tar.gz",
+    ],
+)
+
+http_file(
+    name = "bitcoin_example_canister",
+    downloaded_file_path = "basic_bitcoin.wasm.gz",
+    sha256 = "2a428e8d35518ce22002e498f7d618a9eeeddf57371f965e92cf480dd3cbd046",
+    url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-24-09-16/basic_bitcoin.wasm.gz",
+)
+
+http_file(
+    name = "pocket-ic-mainnet-gz",
+    sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
+    url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
+)

@@ -2,16 +2,18 @@ mod call_context_manager;
 pub mod wasm_chunk_store;
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
+use super::queues::{can_push, CanisterInput};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
+use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
     CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
+use ic_error_types::RejectCode;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
@@ -20,10 +22,11 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-    Request, RequestOrResponse, Response, StopCanisterContext,
+    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
+use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
@@ -371,6 +374,51 @@ pub struct SystemState {
     /// This amount contributes to the total `memory_usage` of the canister as
     /// reported by `CanisterState::memory_usage`.
     pub snapshots_memory_usage: NumBytes,
+
+    /// Status of low_on_wasm_memory hook execution.
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+/// A wrapper around the different statuses of `OnLowWasmMemory` hook execution.
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+pub enum OnLowWasmMemoryHookStatus {
+    #[default]
+    ConditionNotSatisfied,
+    Ready,
+    Executed,
+}
+
+impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
+    fn from(item: &OnLowWasmMemoryHookStatus) -> Self {
+        use OnLowWasmMemoryHookStatus::*;
+
+        match *item {
+            ConditionNotSatisfied => Self::ConditionNotSatisfied,
+            Ready => Self::Ready,
+            Executed => Self::Executed,
+        }
+    }
+}
+
+impl TryFrom<pb::OnLowWasmMemoryHookStatus> for OnLowWasmMemoryHookStatus {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::OnLowWasmMemoryHookStatus) -> Result<Self, Self::Error> {
+        match value {
+            pb::OnLowWasmMemoryHookStatus::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "OnLowWasmMemoryHookStatus",
+                err: format!(
+                    "Unexpected value of status of on low wasm memory hook: {:?}",
+                    value
+                ),
+            }),
+            pb::OnLowWasmMemoryHookStatus::ConditionNotSatisfied => {
+                Ok(OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            }
+            pb::OnLowWasmMemoryHookStatus::Ready => Ok(OnLowWasmMemoryHookStatus::Ready),
+            pb::OnLowWasmMemoryHookStatus::Executed => Ok(OnLowWasmMemoryHookStatus::Executed),
+        }
+    }
 }
 
 /// A wrapper around the different canister statuses.
@@ -740,6 +788,7 @@ impl SystemState {
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::from(0),
+            on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus::default(),
         }
     }
 
@@ -770,6 +819,7 @@ impl SystemState {
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
         metrics: &dyn CheckpointLoadingMetrics,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
         let system_state = Self {
             controllers,
@@ -798,6 +848,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
+            on_low_wasm_memory_hook_status,
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
@@ -1071,7 +1122,58 @@ impl SystemState {
 
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
-        self.queues.pop_input()
+        Some(match self.queues.pop_input()? {
+            CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
+            CanisterInput::Request(msg) => CanisterMessage::Request(msg),
+            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::DeadlineExpired(callback_id) => {
+                self.to_reject_response(callback_id, "Call deadline has expired.")
+            }
+            CanisterInput::ResponseDropped(callback_id) => {
+                self.to_reject_response(callback_id, "Response was dropped.")
+            }
+        })
+    }
+
+    /// Generates a reject response for the given callback ID with the given
+    /// message.
+    ///
+    /// If the `CallContextManager` does not hold a callback with the given
+    /// `CallbackId`, generates a reject response with arbitrary values (but
+    /// matching `CallbackId`). The missing callback will generate a critical error
+    /// when the response is about to be executed, regardless.
+    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        const UNKNOWN_CANISTER_ID: CanisterId =
+            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+        const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
+
+        let call_context_manager = self.call_context_manager().unwrap();
+        let (originator, respondent, deadline) =
+            match call_context_manager.callbacks().get(&callback_id) {
+                // Populate reject responses from the callback.
+                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+
+                // This should be unreachable, but if we somehow end up here, we can populate
+                // the reject response with arbitrary values, as trying to execute it it will
+                // fail anyway and produce a critical error. This is safer than panicking.
+                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
+            };
+
+        CanisterMessage::Response(
+            Response {
+                originator,
+                respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::SysUnknown,
+                    message,
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline,
+            }
+            .into(),
+        )
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.
@@ -1148,9 +1250,13 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    call_context_manager
-                        .validate_response(response)
-                        .map_err(|err| (err, msg.clone()))?;
+                    if !call_context_manager
+                        .should_enqueue(response)
+                        .map_err(|err| (err, msg.clone()))?
+                    {
+                        // Best effort response whose callback is gone. Silently drop it.
+                        return Ok(());
+                    }
                 }
                 push_input(
                     &mut self.queues,
@@ -1553,6 +1659,14 @@ impl SystemState {
             _ => None,
         }
     }
+
+    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
+        self.on_low_wasm_memory_hook_status = status;
+    }
+
+    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
@@ -1652,5 +1766,49 @@ pub mod testing {
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
+    }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing system state fields to think about and/or ask the Execution
+    /// team to think about any repercussions to the canister snapshot logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the system state to also require changes
+    /// to the canister snapshot logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `CanisterSnapshot::from_canister()` for more context.
+    #[allow(dead_code)]
+    fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _system_state = SystemState {
+            controllers: Default::default(),
+            canister_id: 0.into(),
+            queues: Default::default(),
+            memory_allocation: Default::default(),
+            wasm_memory_threshold: Default::default(),
+            freeze_threshold: Default::default(),
+            status: CanisterStatus::Stopped,
+            certified_data: Default::default(),
+            canister_metrics: Default::default(),
+            cycles_balance: Default::default(),
+            ingress_induction_cycles_debit: Default::default(),
+            reserved_balance: Default::default(),
+            reserved_balance_limit: Default::default(),
+            task_queue: Default::default(),
+            global_timer: CanisterTimer::Inactive,
+            canister_version: Default::default(),
+            canister_history: Default::default(),
+            wasm_chunk_store: WasmChunkStore::new_for_testing(),
+            log_visibility: Default::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: Default::default(),
+            next_snapshot_id: Default::default(),
+            snapshots_memory_usage: Default::default(),
+            on_low_wasm_memory_hook_status: Default::default(),
+        };
     }
 }

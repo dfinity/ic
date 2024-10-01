@@ -46,9 +46,10 @@ use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
-    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError,
-    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger_validation::MAX_LOGO_LENGTH, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
+use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
@@ -505,8 +506,7 @@ impl NervousSystemParameters {
                 .or(base.max_age_bonus_percentage),
             voting_rewards_parameters: self
                 .voting_rewards_parameters
-                .clone()
-                .or_else(|| base.voting_rewards_parameters.clone())
+                .or(base.voting_rewards_parameters)
                 .map(|v| match base.voting_rewards_parameters.as_ref() {
                     None => v,
                     Some(base) => v.inherit_from(base),
@@ -972,6 +972,15 @@ impl From<prost::DecodeError> for GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!("Invalid mode for install_code: {}", decode_error),
+        )
+    }
+}
+
+impl From<prost::UnknownEnumValue> for GovernanceError {
+    fn from(unknown_enum_value: prost::UnknownEnumValue) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Unknown enum value: {}", unknown_enum_value),
         )
     }
 }
@@ -1949,12 +1958,7 @@ pub trait Environment: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
-    fn random_u64(&mut self) -> u64;
-
-    /// Returns a random byte array with 32 bytes.
-    ///
-    /// This byte array is the same in all replicas.
-    fn random_byte_array(&mut self) -> [u8; 32];
+    fn insecure_random_u64(&mut self) -> u64;
 
     /// Calls another canister. The return value indicates whether the call can be successfully
     /// initiated. If initiating the call is successful, the call could later be rejected by the
@@ -2522,7 +2526,7 @@ impl From<NeuronRecipes> for Vec<NeuronRecipe> {
 
 pub mod test_helpers {
     use super::*;
-    use rand::{Rng, RngCore};
+    use rand::Rng;
     use std::{
         borrow::BorrowMut,
         collections::HashMap,
@@ -2668,14 +2672,8 @@ pub mod test_helpers {
             self.now
         }
 
-        fn random_u64(&mut self) -> u64 {
+        fn insecure_random_u64(&mut self) -> u64 {
             rand::thread_rng().gen()
-        }
-
-        fn random_byte_array(&mut self) -> [u8; 32] {
-            let mut result = [0_u8; 32];
-            rand::thread_rng().fill_bytes(&mut result[..]);
-            result
         }
 
         async fn call_canister(

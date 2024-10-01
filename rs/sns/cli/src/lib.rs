@@ -1,5 +1,5 @@
 use crate::{
-    deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
+    deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
@@ -11,7 +11,7 @@ use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
+use ic_nns_governance_api::pb::v1::{
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::{self, MakeProposalResponse},
     ManageNeuron, ManageNeuronResponse, Proposal,
@@ -30,6 +30,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 pub mod deploy;
+pub mod health;
 pub mod init_config_file;
 pub mod list;
 pub mod neuron_id_to_candid_subaccount;
@@ -77,6 +78,8 @@ pub enum SubCommand {
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
     /// List SNSes
     List(list::ListArgs),
+    /// Check SNSes for warnings and errors.
+    Health(HealthArgs),
 }
 
 impl CliArgs {
@@ -160,7 +163,7 @@ pub(crate) fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload> {
 
 fn read_create_service_nervous_system_from_init_yaml(
     path: &Path,
-) -> Result<ic_nns_governance::pb::v1::CreateServiceNervousSystem> {
+) -> Result<ic_nns_governance_api::pb::v1::CreateServiceNervousSystem> {
     let contents = std::fs::read_to_string(path).context(format!("Unable to read {path:?}"))?;
     let configuration =
         serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)

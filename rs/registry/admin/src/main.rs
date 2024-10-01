@@ -62,7 +62,7 @@ use ic_nns_governance_api::{
         NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
         UpdateCanisterSettings,
     },
-    proposal_helpers::{
+    proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },
@@ -1038,11 +1038,7 @@ impl ProposalAction for ProposeToChangeNnsCanisterCmd {
             )
             .await,
         );
-        let arg = Some(
-            self.arg
-                .as_ref()
-                .map_or(vec![], |path| read_file_fully(path)),
-        );
+        let arg = Some(read_arg(&self.arg, &self.arg_sha256));
         let skip_stopping_before_installing = Some(self.skip_stopping_before_installing);
         let install_mode = match self.mode {
             CanisterInstallMode::Install => Some(GovernanceInstallMode::Install as i32),
@@ -3071,12 +3067,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             governance_parameters,
         };
 
-        let result = ic_nns_governance::pb::v1::CreateServiceNervousSystem::from(result);
-
         // TODO migrate validation out of SnsInitPayload so we no longer have to support ic_nns_gov types
         SnsInitPayload::try_from(result.clone())?;
 
-        Ok(result.into())
+        Ok(result)
     }
 }
 

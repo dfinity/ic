@@ -45,11 +45,13 @@ function monitor_guestos() {
             "GuestOS virtual machine state" \
             "gauge"
     else
-        write_log "GuestOS virtual machine is not running."
+        write_log "GuestOS virtual machine is not running, attempting to start."
         write_metric "hostos_guestos_state" \
             "2" \
             "GuestOS virtual machine state" \
             "gauge"
+
+        virsh start guestos
     fi
 }
 

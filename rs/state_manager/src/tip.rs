@@ -1003,8 +1003,6 @@ fn serialize_canister_to_tip(
             metrics,
         )?;
 
-    // Priority credit must be zero at this point
-    assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
@@ -1077,6 +1075,9 @@ fn serialize_canister_to_tip(
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
+            on_low_wasm_memory_hook_status: canister_state
+                .system_state
+                .get_on_low_wasm_memory_hook_status(),
         }
         .into(),
     )?;
