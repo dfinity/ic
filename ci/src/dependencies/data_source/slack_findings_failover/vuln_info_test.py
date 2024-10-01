@@ -4,7 +4,11 @@ from data_source.slack_findings_failover.data import (
     SlackVulnerabilityEvent,
     SlackVulnerabilityEventType,
 )
-from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, VulnerabilityInfo
+from data_source.slack_findings_failover.vuln_info import (
+    SlackVulnerabilityInfo,
+    SlackVulnerabilityMessageInfo,
+    VulnerabilityInfo,
+)
 from model.dependency import Dependency
 from model.finding import Finding
 from model.vulnerability import Vulnerability
@@ -19,7 +23,7 @@ def test_from_vuln_info():
     svi = SlackVulnerabilityInfo.from_vuln_info(vi)
 
     assert svi.vulnerability == v
-    assert len(svi.msg_id_by_channel) == 0
+    assert len(svi.msg_info_by_channel) == 0
     assert svi.finding_by_id[f1.id()].repository == "repo1"
     assert svi.finding_by_id[f1.id()].scanner == "scanner1"
     assert svi.finding_by_id[f1.id()].dependency_id == "did1"
@@ -40,13 +44,13 @@ def test_merge_with():
     sf3 = SlackFinding("repo", "scanner", "did", "dvers1", ["proj3"])
     svi = SlackVulnerabilityInfo(v, {})
 
-    svi.merge_with({sf1.id(): sf1}, "channel1", "mid1")
-    svi.merge_with({sf2.id(): sf2}, "channel2", "mid1")
-    svi.merge_with({sf3.id(): sf3}, "channel3", "mid1")
+    svi.merge_with({sf1.id(): sf1}, SlackVulnerabilityMessageInfo("channel1", "mid1"))
+    svi.merge_with({sf2.id(): sf2}, SlackVulnerabilityMessageInfo("channel2", "mid1"))
+    svi.merge_with({sf3.id(): sf3}, SlackVulnerabilityMessageInfo("channel3", "mid1"))
 
-    assert len(svi.msg_id_by_channel) == 3
-    assert svi.msg_id_by_channel["channel1"] == "mid1"
-    assert svi.msg_id_by_channel["channel2"] == "mid1"
+    assert len(svi.msg_info_by_channel) == 3
+    assert svi.msg_info_by_channel["channel1"].message_id == "mid1"
+    assert svi.msg_info_by_channel["channel2"].message_id == "mid1"
 
     assert sf1.id() in svi.finding_by_id
     assert svi.finding_by_id[sf1.id()].id() == sf1.id()
@@ -92,7 +96,9 @@ def test_events_for_remove():
         "proj3": SlackProjectInfo("proj3", {"c2"}, {}),
     }
     svi = SlackVulnerabilityInfo(
-        v, {sf1.id(): sf1, sf2.id(): sf2, sf_keep.id(): sf_keep}, {"c1": "msgid1", "c2": "msgid2"}
+        v,
+        {sf1.id(): sf1, sf2.id(): sf2, sf_keep.id(): sf_keep},
+        {"c1": SlackVulnerabilityMessageInfo("c1", "msgid1"), "c2": SlackVulnerabilityMessageInfo("c2", "msgid2")},
     )
     dr1 = SlackVulnerabilityEvent.dep_removed(v.id, "c1", sf1.id(), sf1.projects)
     dr2 = SlackVulnerabilityEvent.dep_removed(v.id, "c2", sf2.id(), sf2.projects)
@@ -122,7 +128,11 @@ def test_update_with():
         "proj3": SlackProjectInfo("proj3", {"c3"}, {}),
     }
 
-    svi = SlackVulnerabilityInfo(v, {sf1.id(): sf1, sf_fixed.id(): sf_fixed}, {"c1": "msgid1", "c2": "msgid2"})
+    svi = SlackVulnerabilityInfo(
+        v,
+        {sf1.id(): sf1, sf_fixed.id(): sf_fixed},
+        {"c1": SlackVulnerabilityMessageInfo("c1", "msgid1"), "c2": SlackVulnerabilityMessageInfo("c2", "msgid2")},
+    )
     vi = VulnerabilityInfo(v_changed, {f1.id(): f1, f_new.id(): f_new})
 
     da1 = SlackVulnerabilityEvent.dep_added("vid", "c1", f_new.id(), ["proj1"])

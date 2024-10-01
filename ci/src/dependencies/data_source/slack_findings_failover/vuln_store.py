@@ -9,7 +9,7 @@ from data_source.slack_findings_failover.data import (
     SlackVulnerabilityEventType,
 )
 from data_source.slack_findings_failover.scan_result import SlackScanResult
-from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, SlackVulnerabilityMessageInfo
 from integration.slack.slack_api import SlackApi
 from integration.slack.slack_block_kit_utils import (
     BlockKitListHeadline,
@@ -30,14 +30,14 @@ class SlackVulnerabilityStore:
         updated_messages: Set[Tuple[str, str]],
         info_by_project: Dict[str, SlackProjectInfo],
     ) -> str:
-        slack_msg_id = slack_vuln_info.msg_id_by_channel.get(channel_id, None)
-        if not slack_msg_id:
+        slack_msg_info = slack_vuln_info.msg_info_by_channel.get(channel_id, None)
+        if not slack_msg_info:
             raise RuntimeError(
                 f"could not update slack message for channel {channel_id} for vuln {slack_vuln_info.vulnerability.id}: unknown message id"
             )
-        msg_key = (channel_id, slack_msg_id)
+        msg_key = (channel_id, slack_msg_info.message_id)
         if msg_key in updated_messages:
-            return slack_msg_id
+            return slack_msg_info.message_id
 
         slack_msg = slack_vuln_info.get_slack_msg_for(channel_id, info_by_project)
         if not slack_msg:
@@ -45,10 +45,10 @@ class SlackVulnerabilityStore:
                 f"could not update slack message for channel {channel_id} for vuln {slack_vuln_info.vulnerability.id}: could not create message"
             )
         self.slack_api_by_channel[channel_id].update_message(
-            message=slack_msg, is_block_kit_message=True, message_id=slack_msg_id
+            message=slack_msg, is_block_kit_message=True, message_id=slack_msg_info.message_id
         )
         updated_messages.add(msg_key)
-        return slack_msg_id
+        return slack_msg_info.message_id
 
     def handle_events(
         self,
@@ -76,19 +76,23 @@ class SlackVulnerabilityStore:
                 )
                 if not slack_msg_id:
                     raise RuntimeError(f"could not send slack message for channel {event.channel_id}")
-                slack_vuln_info.msg_id_by_channel[event.channel_id] = slack_msg_id
+                slack_vuln_info.msg_info_by_channel[event.channel_id] = SlackVulnerabilityMessageInfo(
+                    event.channel_id, slack_msg_id
+                )
                 updated_messages.add((event.channel_id, slack_msg_id))
             elif t == SlackVulnerabilityEventType.VULN_REMOVED:
                 scan_result_by_channel[event.channel_id].fixed_vulnerabilities += 1
-                if event.channel_id not in slack_vuln_info.msg_id_by_channel:
+                if event.channel_id not in slack_vuln_info.msg_info_by_channel:
                     raise RuntimeError(
                         f"could not mark slack message as fixed for channel {event.channel_id} for vuln {slack_vuln_info.vulnerability.id}"
                     )
                 self.slack_api_by_channel[event.channel_id].add_reaction(
                     reaction=VULNERABILITY_MSG_FIXED_REACTION,
-                    message_id=slack_vuln_info.msg_id_by_channel[event.channel_id],
+                    message_id=slack_vuln_info.msg_info_by_channel[event.channel_id].message_id,
                 )
-                updated_messages.add((event.channel_id, slack_vuln_info.msg_id_by_channel[event.channel_id]))
+                updated_messages.add(
+                    (event.channel_id, slack_vuln_info.msg_info_by_channel[event.channel_id].message_id)
+                )
             elif t == SlackVulnerabilityEventType.VULN_CHANGED:
                 scan_result_by_channel[event.channel_id].changed_vulnerabilities += 1
                 slack_msg_id = self.__update_message_if_needed(
@@ -126,5 +130,20 @@ class SlackVulnerabilityStore:
                     event.removed_projects
                 )
                 self.__update_message_if_needed(event.channel_id, slack_vuln_info, updated_messages, info_by_project)
+            elif t == SlackVulnerabilityEventType.RISK_UNKNOWN:
+                if event.channel_id not in slack_vuln_info.msg_info_by_channel:
+                    raise RuntimeError(
+                        f"could not send risk assessment reminder for channel {event.channel_id} for vuln {slack_vuln_info.vulnerability.id}"
+                    )
+                risk_assessors = set()
+                for finding in slack_vuln_info.finding_by_id.values():
+                    for proj in finding.projects:
+                        if event.channel_id in info_by_project[proj].channels:
+                            risk_assessors.update(info_by_project[proj].risk_assessors_by_channel[event.channel_id])
+                self.slack_api_by_channel[event.channel_id].send_message(
+                    message="This finding needs risk assessment from " + ", ".join(sorted(list(risk_assessors))),
+                    is_block_kit_message=False,
+                    thread_id=slack_vuln_info.msg_info_by_channel[event.channel_id].message_id,
+                )
             else:
                 raise RuntimeError(f"event has unknown type: {event}")

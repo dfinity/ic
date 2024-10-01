@@ -7,6 +7,7 @@ from model.finding import Finding
 VULNERABILITY_HEADER = "Vulnerability Info"
 VULNERABILITY_MSG_AUTHOR = "U047BLM1V42"
 VULNERABILITY_MSG_FIXED_REACTION = "fixed"
+VULNERABILITY_MSG_RISK_REACTIONS = {"informational-risk-psec", "low-risk-psec", "medium-risk-psec", "high-risk-psec"}
 VULNERABILITY_THRESHOLD_SCORE = 8
 
 
@@ -16,6 +17,7 @@ class SlackVulnerabilityEventType(Enum):
     VULN_CHANGED = 3
     DEP_ADDED = 4
     DEP_REMOVED = 5
+    RISK_UNKNOWN = 6
 
 
 @dataclass
@@ -61,6 +63,10 @@ class SlackVulnerabilityEvent:
             finding_id=finding_id,
             removed_projects=removed_projects,
         )
+
+    @staticmethod
+    def risk_unknown(vuln_id: str, channel_id: str):
+        return SlackVulnerabilityEvent(SlackVulnerabilityEventType.RISK_UNKNOWN, vuln_id, channel_id)
 
 
 @dataclass

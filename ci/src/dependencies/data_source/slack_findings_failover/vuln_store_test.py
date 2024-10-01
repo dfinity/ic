@@ -3,6 +3,7 @@ from unittest.mock import Mock, call
 import pytest
 from data_source.slack_findings_failover.data import VULNERABILITY_MSG_FIXED_REACTION, SlackVulnerabilityEvent
 from data_source.slack_findings_failover.scan_result import SlackScanResult
+from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityMessageInfo
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
 
 TEST_SLACK_MSG = "SLACK_MSG"
@@ -35,7 +36,10 @@ def slack_store(slack_api):
 def slack_vuln_info():
     svi = Mock()
     svi.vulnerability.id = "vid"
-    svi.msg_id_by_channel = {"c1": "m1", "c2": "m2"}
+    svi.msg_info_by_channel = {
+        "c1": SlackVulnerabilityMessageInfo("c1", "m1"),
+        "c2": SlackVulnerabilityMessageInfo("c2", "m2"),
+    }
     svi.get_slack_msg_for.return_value = TEST_SLACK_MSG
     return svi
 
@@ -48,7 +52,10 @@ def test_handle_vuln_added_event(slack_store, slack_vuln_info, slack_api):
 
     assert scan_res["c1"].new_vulnerabilities == 1 and scan_res["c2"].new_vulnerabilities == 1
     slack_api.assert_has_calls([TEST_SLACK_API_SEND_MSG_CALL, TEST_SLACK_API_SEND_MSG_CALL])
-    assert slack_vuln_info.msg_id_by_channel == {"c1": TEST_SLACK_MSG_ID, "c2": TEST_SLACK_MSG_ID}
+    assert slack_vuln_info.msg_info_by_channel == {
+        "c1": SlackVulnerabilityMessageInfo("c1", TEST_SLACK_MSG_ID),
+        "c2": SlackVulnerabilityMessageInfo("c2", TEST_SLACK_MSG_ID),
+    }
 
 
 def test_handle_vuln_removed_event(slack_store, slack_vuln_info, slack_api):
