@@ -7,7 +7,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::memory_manager_upgrade_storage::{load_protobuf, store_protobuf};
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
@@ -54,6 +54,11 @@ use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+#[cfg(feature = "tla")]
+use ic_nns_tla_instrumented_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This

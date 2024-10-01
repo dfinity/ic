@@ -1,9 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/nervous_system/tla:feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
-BASE_DEPENDENCIES = [
+DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
@@ -14,16 +13,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/types/base_types",
-]
-
-DEPENDENCIES = BASE_DEPENDENCIES + [
-    # Keep sorted.
-    "//rs/nervous_system/tla",
-]
-
-DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    # Keep sorted.
-    "//rs/nervous_system/tla:tla--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -39,16 +28,4 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
-)
-
-rust_library(
-    name = "canisters--test_feature",
-    srcs = glob(["src/**"]),
-    crate_features = test_with_tla(),
-    crate_name = "ic_nervous_system_canisters",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
-        "//rs/tla_instrumentation",
-    ],
 )

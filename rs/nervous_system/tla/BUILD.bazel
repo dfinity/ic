@@ -24,7 +24,7 @@ DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "tla",
+    name = "tla-noop",
     srcs = glob(["src/**"]),
     crate_name = "ic_nervous_system_tla",
     version = "0.1.0",
@@ -32,7 +32,7 @@ rust_library(
 )
 
 rust_library(
-    name = "tla--test_feature",
+    name = "tla-enabled",
     srcs = glob(["src/**"]),
     crate_features = test_with_tla(),
     crate_name = "ic_nervous_system_tla",

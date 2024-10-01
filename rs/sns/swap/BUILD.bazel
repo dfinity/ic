@@ -15,6 +15,7 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/neurons_fund",
@@ -47,12 +48,10 @@ BASE_DEPENDENCIES = [
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/sns/governance",
-    "//rs/nervous_system/canisters",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/sns/governance:governance--test_feature",
-    "//rs/nervous_system/canisters:canisters--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [

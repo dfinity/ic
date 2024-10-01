@@ -27,6 +27,7 @@ use icp_ledger::Subaccount;
 mod common;
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
+pub mod ledger;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = gov

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use uuid::Uuid;
 
 use crate::ResolvedStatePair;
 use crate::TlaConstantAssignment;
@@ -74,6 +75,23 @@ fn mk_constant_definitions(constants: HashMap<String, String>) -> Vec<String> {
         .collect()
 }
 
+fn unique_tmp_dir() -> String {
+    let test_tmpdir = std::env::var("TEST_TMPDIR").expect("TEST_TMPDIR not set");
+    // Generate a unique subdirectory using a random UUID
+    let subdir_name = Uuid::new_v4().to_string();
+    let mut tmp_subdir = PathBuf::from(test_tmpdir);
+    tmp_subdir.push(subdir_name);
+
+    // Create the subdirectory
+    fs::create_dir(&tmp_subdir).expect("Failed to create subdirectory in TEST_TMPDIR");
+
+    // Convert the subdirectory path to a string
+    tmp_subdir
+        .to_str()
+        .expect("Failed to convert subdirectory path to string")
+        .to_string()
+}
+
 /* Check whether Apalache complains about deadlocks with traces of length one */
 fn run_apalache(
     apalache_binary: &Path,
@@ -82,11 +100,19 @@ fn run_apalache(
     next_predicate: String,
 ) -> Result<(), ApalacheError> {
     let mut cmd = Command::new(apalache_binary);
+    // TODO: There's a race condition when running multiple instances of Apalache in parallel,
+    // as they all seem to try to write to the same file in /tmp. So we create
+    // Get the Bazel-provided temporary directory
+    let tmp_subdir_str = unique_tmp_dir();
+    // Construct the JVM_ARGS value so that Apalache uses the new temporary subdirectory
+    let jvm_args = format!("-Djava.io.tmpdir={}", tmp_subdir_str);
+
     cmd.arg("check")
         .arg(format!("--init={}", init_predicate))
         .arg(format!("--next={}", next_predicate))
         .arg("--length=1")
-        .arg(tla_module);
+        .arg(tla_module)
+        .env("JVM_ARGS", jvm_args);
     cmd.status()
         .map_err(|e| ApalacheError::SetupError(e.to_string()))
         .and_then(|e| {

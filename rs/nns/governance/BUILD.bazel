@@ -41,6 +41,7 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sns/root",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
@@ -77,23 +78,21 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/tla",
+    "//rs/nervous_system/tla:tla-noop",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/init",
-    "//rs/sns/root",
     "//rs/nns/governance/init",
     "//rs/sns/swap",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nervous_system/tla:tla--test_feature",
+    "//rs/nervous_system/tla:tla-enabled",
     "//rs/nns/governance/api:api--test_feature",
     "//rs/nns/constants:constants--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/root:root--test_feature",
     "//rs/sns/swap:swap--test_feature",
     "//rs/nns/governance/init:init--test_feature",
 ]
@@ -239,7 +238,8 @@ rust_canister(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
         ":governance--test_feature",
-        "//rs/nervous_system/canisters:canisters--test_feature",
+        ":tla_instrummented_ledger",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -287,6 +287,7 @@ rust_test(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
+        ":tla_instrummented_ledger",
         "//rs/nervous_system/canisters",
     ],
 )
@@ -314,7 +315,7 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
-        "//rs/nervous_system/canisters:canisters--test_feature",
+        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -365,5 +366,25 @@ rust_test_suite_with_extra_srcs(
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
+    ],
+)
+
+rust_library(
+    name = "tla_instrummented_ledger",
+    srcs = glob(["tla_ledger/src/**/*.rs"]),
+    crate_features = ["tla"],
+    crate_name = "ic_nns_tla_instrumented_ledger",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/canisters",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/tla:tla-enabled",
+        "//rs/rosetta-api/icp_ledger",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/tla_instrumentation",
     ],
 )
