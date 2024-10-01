@@ -210,7 +210,7 @@ fn model_transfer(
     ((from_balance, to_balance), None)
 }
 
-fn send_transfer(
+pub fn send_transfer(
     env: &StateMachine,
     ledger: CanisterId,
     from: Principal,
@@ -534,6 +534,19 @@ pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account
         Nat
     )
     .expect("failed to decode balance_of response")
+    .0
+    .to_u64()
+    .unwrap()
+}
+
+pub fn fee(env: &StateMachine, ledger: CanisterId) -> u64 {
+    Decode!(
+        &env.query(ledger, "icrc1_fee", Encode!().unwrap())
+            .expect("failed to query fee")
+            .bytes(),
+        Nat
+    )
+    .expect("failed to decode icrc1_fee response")
     .0
     .to_u64()
     .unwrap()
@@ -1948,16 +1961,7 @@ where
     .expect("failed to decode balance_of response");
     assert_eq!(token_name_after_upgrade, OTHER_TOKEN_NAME);
 
-    let token_fee_after_upgrade: u64 = Decode!(
-        &env.query(canister_id, "icrc1_fee", Encode!().unwrap())
-            .expect("failed to query fee")
-            .bytes(),
-        Nat
-    )
-    .expect("failed to decode balance_of response")
-    .0
-    .to_u64()
-    .unwrap();
+    let token_fee_after_upgrade = fee(&env, canister_id);
     assert_eq!(token_fee_after_upgrade, NEW_FEE);
 }
 
@@ -2556,20 +2560,6 @@ pub fn test_upgrade_serialization(
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
-
-                    // Current mainnet wasm cannot deserialize from memory manager
-                    match env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm_mainnet.clone(),
-                        upgrade_args.clone(),
-                    ) {
-                        Ok(_) => {
-                            panic!("Upgrade from memory manager directly to mainnet should fail!")
-                        }
-                        Err(e) => {
-                            assert!(e.description().contains("failed to decode ledger state"))
-                        }
-                    };
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());

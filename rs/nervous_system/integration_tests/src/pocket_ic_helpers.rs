@@ -2,6 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
+use ic_nervous_system_agent::sns::Sns;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -45,8 +46,8 @@ use ic_sns_swap::pb::v1::{
 use ic_sns_test_utils::itest_helpers::populate_canister_ids;
 use ic_sns_wasm::pb::v1::{
     get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult, AddWasmRequest,
-    DeployedSns, GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
-    SnsCanisterType, SnsWasm,
+    GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse, SnsCanisterType,
+    SnsWasm,
 };
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use icrc_ledger_types::icrc1::{
@@ -845,7 +846,7 @@ pub mod nns {
             pocket_ic: &PocketIc,
             create_service_nervous_system: CreateServiceNervousSystem,
             sns_instance_label: &str,
-        ) -> (DeployedSns, ProposalId) {
+        ) -> (Sns, ProposalId) {
             let proposal_info = propose_and_wait(
                 pocket_ic,
                 MakeProposalRequest {
@@ -868,7 +869,8 @@ pub mod nns {
                     nns_proposal_id, sns_instance_label,
                 );
             };
-            (deployed_sns, nns_proposal_id)
+            let sns = Sns::try_from(deployed_sns).expect("Failed to convert DeployedSns to Sns");
+            (sns, nns_proposal_id)
         }
 
         pub fn get_network_economics_parameters(pocket_ic: &PocketIc) -> NetworkEconomics {

@@ -1,10 +1,10 @@
 use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError};
 use crate::types::{
-    CheckTransactionError, CheckTransactionPending, CheckTransactionResponse,
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
 };
 use crate::{blocklist_contains, state};
-use bitcoin::{address::FromScriptError, Address, Network, Transaction};
+use bitcoin::{address::FromScriptError, Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
 use std::convert::Infallible;
@@ -186,8 +186,10 @@ pub trait FetchEnv {
                         match transaction_output_address(&fetched.tx, vout) {
                             Ok(address) => state::set_fetched_address(txid, index, address),
                             Err(err) => {
-                                return CheckTransactionError::InvalidTransaction(err.to_string())
-                                    .into()
+                                return CheckTransactionIrrecoverableError::InvalidTransaction(
+                                    err.to_string(),
+                                )
+                                .into()
                             }
                         }
                     }
@@ -202,7 +204,7 @@ pub trait FetchEnv {
             if self.cycles_available() == 0 {
                 return CheckTransactionStatus::NotEnoughCycles.into();
             } else {
-                return CheckTransactionPending::HighLoad.into();
+                return CheckTransactionRetriable::HighLoad.into();
             }
         }
 
@@ -219,8 +221,11 @@ pub trait FetchEnv {
                         Ok(address) => state::set_fetched_address(txid, index, address),
                         Err(err) => {
                             error = Some(
-                                CheckTransactionError::InvalidTransaction(format!("{:?}", err))
-                                    .into(),
+                                CheckTransactionIrrecoverableError::InvalidTransaction(format!(
+                                    "{:?}",
+                                    err
+                                ))
+                                .into(),
                             );
                         }
                     }
@@ -238,12 +243,15 @@ pub trait FetchEnv {
             _ => None,
         }) {
             Some(result) => result,
-            None => CheckTransactionPending::Pending.into(),
+            None => CheckTransactionRetriable::Pending.into(),
         }
     }
 }
 
 fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, FromScriptError> {
     let output = &tx.output[vout as usize];
-    Address::from_script(&output.script_pubkey, Network::Bitcoin)
+    Address::from_script(
+        &output.script_pubkey,
+        bitcoin::Network::from(state::get_config().btc_network),
+    )
 }

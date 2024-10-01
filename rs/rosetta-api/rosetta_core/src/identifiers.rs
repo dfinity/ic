@@ -65,7 +65,7 @@ impl SubNetworkIdentifier {
 }
 
 /// The block_identifier uniquely identifies a block in a particular network.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct BlockIdentifier {
     /// This is also known as the block height.
     pub index: u64,
@@ -137,7 +137,7 @@ impl From<BlockIdentifier> for PartialBlockIdentifier {
 ///
 /// The transaction_identifier uniquely identifies a transaction in a particular
 /// network and block or in the mempool.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct TransactionIdentifier {
     /// Any transactions that are attributable only to a block (ex: a block event) should use the hash of the block as the identifier. This should be normalized according to the case specified in the transaction_hash_case in network options.
     pub hash: String,
@@ -198,7 +198,7 @@ impl OperationIdentifier {
 /// The account_identifier uniquely identifies an account within a network. All
 /// fields in the account_identifier are utilized to determine this uniqueness
 /// (including the metadata field, if populated).
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct AccountIdentifier {
     /// The address may be a cryptographic public key (or some encoding of it)
     /// or a provided username.
@@ -278,7 +278,7 @@ impl TryFrom<AccountIdentifier> for icp_ledger::AccountIdentifier {
 /// An account may have state specific to a contract address (ERC-20 token)
 /// and/or a stake (delegated balance). The sub_account_identifier should
 /// specify which state (if applicable) an account instantiation refers to.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct SubAccountIdentifier {
     /// The SubAccount address may be a cryptographic value or some other
     /// identifier (ex: bonded) that uniquely specifies a SubAccount.
@@ -293,7 +293,7 @@ pub struct SubAccountIdentifier {
 }
 
 /// CoinIdentifier uniquely identifies a Coin.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct CoinIdentifier {
     /// Identifier should be populated with a globally unique identifier of a
     /// Coin. In Bitcoin, this identifier would be transaction_hash:index.

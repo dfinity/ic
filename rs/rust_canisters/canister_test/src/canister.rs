@@ -811,7 +811,8 @@ impl<'a> Canister<'a> {
 
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
-        self.runtime
+        () = self
+            .runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("delete_canister", candid_multi_arity, (self.as_record(),))
             .await?;

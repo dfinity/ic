@@ -186,7 +186,7 @@ fn test_list_node_provider_rewards() {
     for _ in 0..12 {
         // Assert that advancing time by a month triggers an automated monthly NP reward event
         state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS + 1));
-        state_machine.advance_time(Duration::from_secs(60));
+        state_machine.tick();
         state_machine.tick();
 
         let rewards = nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();

@@ -219,7 +219,7 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Get the latest certified height of an active node");
     let message = b"Are you actively making progress?";
-    store_and_read_stable(message, &universal_canister).await;
+    store_and_read_stable(&logger, message, &universal_canister).await;
     let res =
         fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
     let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
@@ -245,7 +245,7 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(message, &universal_canister).await;
+    store_and_read_stable(&logger, message, &universal_canister).await;
 
     info!(
         logger,
