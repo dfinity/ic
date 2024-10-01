@@ -3912,7 +3912,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             );
 
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(4), CertificationScope::Full, None);
+            dst_state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata, None);
             certify_height(&*dst_state_manager, height(3));
             certify_height(&*dst_state_manager, height(4));
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
@@ -3923,7 +3923,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             // checkpoint @2 should be removable.
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(4));
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(4)]);
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
             // Snapshots below 4 should be removable.
             assert_eq!(
