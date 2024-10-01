@@ -76,7 +76,8 @@ impl TestLedger {
         }
     }
 
-    pub(crate) async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
+    #[allow(dead_code)]
+    pub async fn add_block(&self, hb: HashedBlock) -> Result<(), ApiError> {
         let mut blockchain = self.blockchain.write().await;
         blockchain.push(&hb).map_err(ApiError::from)?;
         blockchain

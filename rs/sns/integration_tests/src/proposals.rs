@@ -1758,7 +1758,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1792,7 +1792,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()

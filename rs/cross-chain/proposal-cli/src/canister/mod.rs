@@ -20,6 +20,7 @@ pub enum TargetCanister {
     CkEthMinter,
     IcpArchive1,
     IcpArchive2,
+    IcpArchive3,
     IcpIndex,
     IcpLedger,
     LedgerSuiteOrchestrator,
@@ -35,6 +36,7 @@ impl TargetCanister {
             TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
             TargetCanister::IcpArchive1 => "icp-archive1",
             TargetCanister::IcpArchive2 => "icp-archive2",
+            TargetCanister::IcpArchive3 => "icp-archive3",
             TargetCanister::IcpIndex => "icp-index",
             TargetCanister::IcpLedger => "icp-ledger",
             TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
@@ -59,7 +61,9 @@ impl TargetCanister {
             TargetCanister::CkEthMinter => {
                 PathBuf::from("rs/ethereum/cketh/minter/cketh_minter.did")
             }
-            TargetCanister::IcpArchive1 | TargetCanister::IcpArchive2 => {
+            TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3 => {
                 PathBuf::from("rs/rosetta-api/icp_ledger/ledger_archive.did")
             }
             TargetCanister::IcpIndex => PathBuf::from("rs/rosetta-api/icp_ledger/index/index.did"),
@@ -76,7 +80,9 @@ impl TargetCanister {
 
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
         match &self {
-            TargetCanister::IcpArchive1 | TargetCanister::IcpArchive2 => {
+            TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3 => {
                 vec![
                     PathBuf::from("packages/icrc-ledger_types"),
                     PathBuf::from("rs/rosetta-api/icp_ledger/archive"),
@@ -126,9 +132,9 @@ impl TargetCanister {
             TargetCanister::CkEthIndex => "ic-icrc1-index-ng-u256.wasm.gz",
             TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
-            TargetCanister::IcpArchive1 | TargetCanister::IcpArchive2 => {
-                "ledger-archive-node-canister.wasm.gz"
-            }
+            TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3 => "ledger-archive-node-canister.wasm.gz",
             TargetCanister::IcpIndex => "ic-icp-index-canister.wasm.gz",
             TargetCanister::IcpLedger => "ledger-canister_notify-method.wasm.gz",
             TargetCanister::LedgerSuiteOrchestrator => {
@@ -155,6 +161,7 @@ impl TargetCanister {
             }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger => {
                 PathBuf::from("rs/rosetta-api/icp_ledger/canister_ids.json")
@@ -187,6 +194,7 @@ impl FromStr for TargetCanister {
             ["ckerc20", "orchestrator"] => Ok(TargetCanister::LedgerSuiteOrchestrator),
             ["icp", "archive1"] => Ok(TargetCanister::IcpArchive1),
             ["icp", "archive2"] => Ok(TargetCanister::IcpArchive2),
+            ["icp", "archive3"] => Ok(TargetCanister::IcpArchive3),
             ["icp", "index"] => Ok(TargetCanister::IcpIndex),
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
             _ => Err(format!("Unknown canister name: {}", canister)),
@@ -208,6 +216,7 @@ impl Display for TargetCanister {
             TargetCanister::CkEthMinter => write!(f, "ckETH minter"),
             TargetCanister::IcpArchive1 => write!(f, "ICP archive1"),
             TargetCanister::IcpArchive2 => write!(f, "ICP archive2"),
+            TargetCanister::IcpArchive3 => write!(f, "ICP archive3"),
             TargetCanister::IcpIndex => write!(f, "ICP index"),
             TargetCanister::IcpLedger => write!(f, "ICP ledger"),
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),

@@ -20,7 +20,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential},
+    governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
         Motion, NetworkEconomics, Neuron, Proposal, Topic,
@@ -48,11 +48,19 @@ impl Environment for MockEnvironment {
         self.secs
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
         todo!()
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        todo!()
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
         todo!()
     }
 
@@ -69,7 +77,7 @@ impl Environment for MockEnvironment {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,

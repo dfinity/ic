@@ -13,8 +13,7 @@ set -euo pipefail
 set -x
 cd "$(git rev-parse --show-toplevel)"
 
-git fetch origin "$CI_PULL_REQUEST_TARGET_BRANCH_NAME" --quiet
-MERGE_BASE="$(git merge-base HEAD origin/$CI_PULL_REQUEST_TARGET_BRANCH_NAME)"
+MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
@@ -32,7 +31,7 @@ for file in $DIFF_FILES; do
 done
 
 if grep -qE ".*\.sh" <<<"$DIFF_FILES"; then
-    files+=(//pre-commit:shfmt-lint)
+    files+=(//pre-commit:shfmt-check)
 fi
 
 if grep -qE ".*\.py" <<<"$DIFF_FILES"; then

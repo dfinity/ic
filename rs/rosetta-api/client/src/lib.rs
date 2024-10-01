@@ -3,6 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_rosetta_api::convert::to_model_account_identifier;
+use ic_rosetta_api::models::BlockIdentifier;
 use ic_rosetta_api::models::ConstructionMetadataRequestOptions;
 use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
@@ -260,6 +261,23 @@ impl RosettaClient {
             "/block",
             &BlockRequest {
                 network_identifier,
+                block_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn block_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+        block_identifier: BlockIdentifier,
+    ) -> anyhow::Result<BlockTransactionResponse> {
+        self.call_endpoint(
+            "/block/transaction",
+            &BlockTransactionRequest {
+                network_identifier,
+                transaction_identifier,
                 block_identifier,
             },
         )

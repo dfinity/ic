@@ -1889,7 +1889,7 @@ impl ProposalData {
 
         // Every time the tally changes, (possibly) update the wait-for-quiet
         // dynamic deadline.
-        if let Some(old_tally) = self.latest_tally.clone() {
+        if let Some(old_tally) = self.latest_tally {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
                 && new_tally.total == old_tally.total
@@ -2168,7 +2168,7 @@ impl ProposalData {
         let limited_ballots: BTreeMap<_, _> = ballots
             .iter()
             .filter(|(neuron_id, _)| caller_neurons_set.contains(*neuron_id))
-            .map(|(neuron_id, ballot)| (neuron_id.clone(), ballot.clone()))
+            .map(|(neuron_id, ballot)| (neuron_id.clone(), *ballot))
             .take(MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
             .collect();
 
@@ -2178,13 +2178,13 @@ impl ProposalData {
             proposer: proposer.clone(),
             reject_cost_e8s: *reject_cost_e8s,
             proposal_creation_timestamp_seconds: *proposal_creation_timestamp_seconds,
-            latest_tally: latest_tally.clone(),
+            latest_tally: *latest_tally,
             decided_timestamp_seconds: *decided_timestamp_seconds,
             executed_timestamp_seconds: *executed_timestamp_seconds,
             failed_timestamp_seconds: *failed_timestamp_seconds,
             failure_reason: failure_reason.clone(),
             reward_event_round: *reward_event_round,
-            wait_for_quiet_state: wait_for_quiet_state.clone(),
+            wait_for_quiet_state: *wait_for_quiet_state,
             is_eligible_for_rewards: *is_eligible_for_rewards,
             initial_voting_period_seconds: *initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,

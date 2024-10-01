@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 53
+assertion_line: 62
 expression: out
 ---
 (module
@@ -12,14 +12,14 @@ expression: out
   (type (;5;) (func (param i64 i64 i64)))
   (type (;6;) (func (param i64) (result i64)))
   (type (;7;) (func (param i32 i32) (result i32 i32)))
-  (import "__" "out_of_instructions" (func $cycles_add (;0;) (type 1)))
+  (import "__" "out_of_instructions" (func (;0;) (type 1)))
   (import "__" "try_grow_wasm_memory" (func (;1;) (type 2)))
   (import "__" "try_grow_stable_memory" (func (;2;) (type 3)))
   (import "__" "internal_trap" (func (;3;) (type 4)))
   (import "__" "stable_read_first_access" (func (;4;) (type 5)))
-  (import "ic0" "call_cycles_add" (func (;5;) (type 0)))
+  (import "ic0" "call_cycles_add" (func $cycles_add (;5;) (type 0)))
   (func (;6;) (type 1)
-    (local i64)
+    (local $i i64)
     global.get 0
     i64.const 3
     i64.sub
@@ -27,12 +27,12 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if ;; label = @1
-      call $cycles_add
+    if $end
+      call 0
     end
     i64.const 0
-    local.set 0
-    block ;; label = @1
+    local.set $i
+    block $start
       loop ;; label = @2
         global.get 0
         i64.const 5
@@ -42,28 +42,28 @@ expression: out
         i64.const 0
         i64.lt_s
         if ;; label = @3
-          call $cycles_add
+          call 0
         end
-        local.get 0
+        local.get $i
         i64.const 10
         i64.eq
-        br_if 1 (;@1;)
+        br_if $start
         global.get 0
         i64.const 12
         i64.sub
         global.set 0
-        local.get 0
-        call 5
-        local.get 0
+        local.get $i
+        call $cycles_add
+        local.get $i
         i64.const 1
         i64.add
-        local.set 0
+        local.set $i
         br 0 (;@2;)
       end
     end
   )
-  (func (;7;) (type 0) (param i64)
-    (local i64)
+  (func (;7;) (type 0) (param $max i64)
+    (local $c i64)
     global.get 0
     i64.const 3
     i64.sub
@@ -71,11 +71,11 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if ;; label = @1
-      call $cycles_add
+    if $counting
+      call 0
     end
     i64.const 0
-    local.set 1
+    local.set $c
     loop ;; label = @1
       global.get 0
       i64.const 15
@@ -85,21 +85,21 @@ expression: out
       i64.const 0
       i64.lt_s
       if ;; label = @2
-        call $cycles_add
+        call 0
       end
-      local.get 1
-      call 5
-      local.get 1
+      local.get $c
+      call $cycles_add
+      local.get $c
       i64.const 1
       i64.add
-      local.set 1
-      local.get 0
-      local.get 1
+      local.set $c
+      local.get $max
+      local.get $c
       i64.ne
       br_if 0 (;@1;)
     end
   )
-  (func (;8;) (type 0) (param i64)
+  (func (;8;) (type 0) (param $i i64)
     global.get 0
     i64.const 6
     i64.sub
@@ -108,9 +108,9 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call $cycles_add
+      call 0
     end
-    local.get 0
+    local.get $i
     i64.const 0
     i64.eq
     if ;; label = @1
@@ -119,14 +119,14 @@ expression: out
       i64.sub
       global.set 0
       i64.const 3
-      call 5
+      call $cycles_add
     else
       global.get 0
       i64.const 6
       i64.sub
       global.set 0
       i64.const 5
-      call 5
+      call $cycles_add
     end
   )
   (func (;9;) (type 6) (param i64) (result i64)
@@ -147,7 +147,7 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call $cycles_add
+      call 0
     end
     local.get 0
   )
@@ -215,3 +215,4 @@ expression: out
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
 )
+
