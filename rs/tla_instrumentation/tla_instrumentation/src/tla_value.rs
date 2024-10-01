@@ -34,8 +34,13 @@ impl Display for TlaValue {
                 write!(f, "[{}]", elements.join(", "))
             }
             TlaValue::Function(map) => {
-                let elements: Vec<_> = map.iter().map(|(k, v)| format!("{} :> {}", k, v)).collect();
-                write!(f, "({})", elements.join(" @@ "))
+                if map.is_empty() {
+                    f.write_str("[x \\in {} -> {}]")
+                } else {
+                    let elements: Vec<_> =
+                        map.iter().map(|(k, v)| format!("{} :> {}", k, v)).collect();
+                    write!(f, "({})", elements.join(" @@ "))
+                }
             }
             TlaValue::Seq(vec) => {
                 let elements: Vec<_> = vec.iter().map(|x| format!("{}", x)).collect();
