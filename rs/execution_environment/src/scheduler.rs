@@ -228,7 +228,7 @@ impl SchedulerImpl {
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
             if !has_aborted_or_paused_execution {
-                canister.scheduler_state.long_execution_mode = Default::default();
+                canister.apply_priority_credit();
             }
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
@@ -567,26 +567,16 @@ impl SchedulerImpl {
     /// Invoked in the first iteration of the inner round to add the `Heartbeat`
     /// and `GlobalTimer` tasks that are carried out prior to processing
     /// any input messages.
-    /// It also returns the list of canisters that have non-zero priority credit.
-    fn initialize_inner_round(
-        &self,
-        state: &mut ReplicatedState,
-    ) -> (BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
+    fn initialize_inner_round(&self, state: &mut ReplicatedState) -> BTreeSet<CanisterId> {
         let _timer = self
             .metrics
             .round_inner_heartbeat_overhead_duration
             .start_timer();
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-        let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
 
         let now = state.time();
         for canister in state.canisters_iter_mut() {
-            // Remember all non-zero priority_credit canisters to apply it after the round.
-            if canister.scheduler_state.priority_credit != AccumulatedPriority::default() {
-                non_zero_priority_credit_canister_ids.insert(canister.system_state.canister_id);
-            }
-
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
             match canister.system_state.status {
                 CanisterStatus::Running { .. } => {}
@@ -627,10 +617,7 @@ impl SchedulerImpl {
                 }
             }
         }
-        (
-            heartbeat_and_timer_canister_ids,
-            non_zero_priority_credit_canister_ids,
-        )
+        heartbeat_and_timer_canister_ids
     }
 
     /// Performs multiple iterations of canister execution until the instruction
@@ -657,7 +644,6 @@ impl SchedulerImpl {
         let mut total_heap_delta = NumBytes::from(0);
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-        let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
         let mut round_executed_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
@@ -709,10 +695,7 @@ impl SchedulerImpl {
 
             // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
             if is_first_iteration {
-                (
-                    heartbeat_and_timer_canister_ids,
-                    non_zero_priority_credit_canister_ids,
-                ) = self.initialize_inner_round(&mut state)
+                heartbeat_and_timer_canister_ids = self.initialize_inner_round(&mut state);
             }
 
             // Update subnet available memory before taking out the canisters.
@@ -829,16 +812,6 @@ impl SchedulerImpl {
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
                 });
-            }
-            // Apply priority credit for all the finished executions.
-            for canister_id in &non_zero_priority_credit_canister_ids {
-                let canister = state.canister_state_mut(canister_id).unwrap();
-                match canister.next_execution() {
-                    NextExecution::None
-                    | NextExecution::StartNew
-                    | NextExecution::ContinueInstallCode => canister.apply_priority_credit(),
-                    NextExecution::ContinueLong => {}
-                }
             }
         }
 
