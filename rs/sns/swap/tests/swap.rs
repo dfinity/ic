@@ -38,20 +38,20 @@ use ic_neurons_fund::{
     PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_response::ClaimSwapNeuronsResult, governance, ClaimSwapNeuronsResponse,
-    NeuronId, SetMode, SetModeResponse,
+    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
+    claim_swap_neurons_response::ClaimSwapNeuronsResult,
+    governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, NeuronId, NeuronIds, SetMode,
+    SetModeResponse,
 };
 use ic_sns_swap::{
     environment::CanisterClients,
     memory,
     pb::v1::{
-        claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
         settle_neurons_fund_participation_response::NeuronsFundNeuron,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::CommunityFund, NeuronAttributes},
-        ClaimSwapNeuronsRequest,
         Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
-        NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NeuronIds as SwapNeuronIds,
-        SetDappControllersRequest, SetDappControllersResponse, *,
+        NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
+        *,
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
@@ -194,7 +194,7 @@ fn create_generic_committed_swap() -> Swap {
     Swap {
         lifecycle: Committed as i32,
         init: Some(init),
-        params: Some(params.clone()),
+        params: Some(params),
         buyers: buyers(),
         cf_participants: vec![],
         neuron_recipes: vec![],
@@ -1825,10 +1825,10 @@ fn test_error_refund_single_user() {
 
     // The minimum number of participants is 1, so when calling commit with the appropriate end
     // time a commit should be possible, but an abort should not be possible
-    assert!(!swap.can_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(!swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.can_abort(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.try_abort(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.can_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
 
     // The life cycle should have changed to COMMITTED
     assert_eq!(swap.lifecycle(), Committed);
@@ -1959,8 +1959,8 @@ fn test_error_refund_multiple_users() {
 
     // The minimum number of participants is 1, so when calling abort with the appropriate end time an abort should be possible
     // (but a commit should not be possible)
-    assert!(!swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_abort(swap.params.unwrap().swap_due_timestamp_seconds));
 
     //The life cycle should have changed to ABORTED
     assert_eq!(swap.lifecycle(), Aborted);
@@ -2072,8 +2072,8 @@ fn test_error_refund_after_close() {
     assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
     //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
-    assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(swap.can_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
 
     //The life cycle should have changed to COMMITTED
     assert_eq!(swap.lifecycle(), Committed);
@@ -3509,25 +3509,28 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
             neuron_recipes: vec![
                 NeuronRecipe {
                     controller: Some(*TEST_USER1_PRINCIPAL),
-                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
-                        compute_neuron_staking_subaccount_bytes(*TEST_USER1_PRINCIPAL, 10),
+                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                        *TEST_USER1_PRINCIPAL,
+                        10,
                     ))),
                     stake_e8s: Some((10 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
-                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(10)])),
+                    followees: Some(NeuronIds {
+                        neuron_ids: vec![NeuronId::new_test_neuron_id(10)],
+                    }),
                     participant: Some(neuron_recipe::Participant::Direct(neuron_recipe::Direct {})),
                 },
                 NeuronRecipe {
                     controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
-                    neuron_id: Some(SwapNeuronId::from(NeuronId::from(
-                        compute_neuron_staking_subaccount_bytes(
-                            NNS_GOVERNANCE_CANISTER_ID.get(),
-                            0,
-                        ),
+                    neuron_id: Some(NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                        NNS_GOVERNANCE_CANISTER_ID.get(),
+                        0,
                     ))),
                     stake_e8s: Some((20 * E8) - init().transaction_fee_e8s()),
                     dissolve_delay_seconds: Some(0),
-                    followees: Some(SwapNeuronIds::from(vec![NeuronId::new_test_neuron_id(20)])),
+                    followees: Some(NeuronIds {
+                        neuron_ids: vec![NeuronId::new_test_neuron_id(20)],
+                    }),
                     participant: Some(neuron_recipe::Participant::NeuronsFund(
                         neuron_recipe::NeuronsFund {
                             nns_neuron_id: Some(100),
@@ -3538,7 +3541,6 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_recipes() {
                 },
             ],
         }),
-        ..Default::default()
     });
     assert_eq!(sns_governance_client.get_calls_snapshot(), vec![expected])
 }
@@ -4750,7 +4752,7 @@ fn test_refresh_buyer_tokens_token_limit() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     // Buy limit of tokens available per user
     buy_token_ok(
@@ -4801,7 +4803,7 @@ fn test_refresh_buyer_tokens_quota() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     //The limit per user is 40 E8s and we want to test the maximum participation limit per user
@@ -4866,7 +4868,7 @@ fn test_refresh_buyer_tokens_not_enough_tokens_left() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     let amount_user2_0 = 40 * E8;
@@ -4933,7 +4935,7 @@ fn test_refresh_buyer_tokens_no_sns_neuron_baskets_available() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     let amount_user2_0 = 40 * E8;
@@ -5028,7 +5030,7 @@ fn test_refresh_buyer_tokens_committed_tokens_below_minimum() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 3 * E8;
     let amount_user1_1 = 150_000_000;
@@ -5140,7 +5142,7 @@ fn test_refresh_buyer_tokens_committing_with_no_funds_sent() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 3 * E8;
     let amount_user2_0 = 40 * E8;

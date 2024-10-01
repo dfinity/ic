@@ -4,4 +4,5 @@
 # over to the rootfs. Since policy is not loaded in initramfs yet, it has
 # wrong security context. Fix this up, but ignore failures (this will not
 # work on first boot).
+systemd-machine-id-setup --commit
 restorecon -v /etc/machine-id || true

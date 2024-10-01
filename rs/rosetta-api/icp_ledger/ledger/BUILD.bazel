@@ -137,6 +137,7 @@ rust_ic_test(
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
     },
+    flaky = True,
     deps = [
         # Keep sorted.
         ":ledger",
@@ -158,4 +159,16 @@ rust_ic_test(
         "@crate_index//:num-traits",
         "@crate_index//:serde_bytes",
     ],
+)
+
+# Deploys the ledger canister to a running local replica.
+sh_binary(
+    name = "dfx_deploy",
+    srcs = ["scripts/dfx_deploy.sh"],
+    data = [
+        "dfx.json",
+        ":ledger-canister-wasm",
+        "//rs/rosetta-api/icp_ledger:ledger.did",
+    ],
+    visibility = ["//visibility:public"],
 )

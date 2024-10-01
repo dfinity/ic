@@ -32,9 +32,10 @@ pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
 
-pub struct BlockMakerMetrics {
-    pub get_payload_calls: IntCounterVec,
-    pub block_size_bytes_estimate: IntGaugeVec,
+pub(crate) struct BlockMakerMetrics {
+    pub(crate) get_payload_calls: IntCounterVec,
+    pub(crate) block_size_bytes_estimate: IntGaugeVec,
+    pub(crate) dynamic_delay_triggered: IntCounter,
 }
 
 impl BlockMakerMetrics {
@@ -48,7 +49,11 @@ impl BlockMakerMetrics {
             block_size_bytes_estimate: metrics_registry.int_gauge_vec(
                 "consensus_block_size_bytes_estimate",
                 "An estimate about the block size produced by the block maker.",
-                &["payload_type"])
+                &["payload_type"]),
+            dynamic_delay_triggered: metrics_registry.int_counter(
+                "consensus_block_maker_dynamic_delay_triggered",
+                "The number of times the dynamic delay has been triggered",
+                ),
         }
     }
 
@@ -91,7 +96,7 @@ impl ConsensusMetrics {
             ),
             on_state_change_change_set_size: metrics_registry.histogram_vec(
                 "consensus_on_state_change_change_set_size",
-                "The size of the ChangeSet returned by on_state_change()",
+                "The size of the Mutations returned by on_state_change()",
                 // 0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000
                 decimal_buckets_with_zero(0, 3),
                 &["sub_component"],

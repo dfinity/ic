@@ -23,17 +23,11 @@ impl IngressBouncer {
 }
 
 impl<Pool: IngressPoolThrottler> BouncerFactory<IngressMessageId, Pool> for IngressBouncer {
-    fn new_bouncer(&self, pool: &Pool) -> Bouncer<IngressMessageId> {
-        // EXPLANATION: Because ingress messages are included in blocks, consensus
-        // does not rely on ingress gossip for correctness. Ingress gossip exists to
+    fn new_bouncer(&self, _pool: &Pool) -> Bouncer<IngressMessageId> {
+        // EXPLANATION:  Ingress messages are broadcast to
         // reduce latency in cases where replicas don't have enough ingress messages
-        // to fill their block. Once a replica's pool is full, ingress gossip just
-        // causes redundant traffic between replicas, and is thus not needed.
-        // Please note that all P2P ingress messages will be dropped if 'exceeds_threshold'
-        // returns true until the next invocation of 'get_priority_function'.
-        if pool.exceeds_threshold() {
-            return Box::new(move |_| BouncerValue::Unwanted);
-        }
+        // to fill their block. Ingress messages with expiry times outside the bounds
+        // tolerated when notarizing blocks are not requested from peers.
         let time_source = self.time_source.clone();
         Box::new(move |ingress_id| {
             let start = time_source.get_relative_time();

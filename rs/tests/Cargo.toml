@@ -36,9 +36,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 http = "0.2.12"
 humantime = "2.0"
-ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
-ic-backup = { path = "../backup" }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
@@ -83,7 +81,6 @@ ic-nns-init = { path = "../nns/init" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
-ic-recovery = { path = "../recovery" }
 ic-registry-canister-api = { path = "../registry/canister/api" }
 ic-regedit = { path = "../registry/regedit" }
 ic-registry-client = { path = "../registry/client" }
@@ -316,10 +313,6 @@ name = "ic-systest-general-execution"
 path = "execution/general_execution_test.rs"
 
 [[bin]]
-name = "ic-systest-backup-manager"
-path = "consensus/backup_manager_test.rs"
-
-[[bin]]
 name = "ic-systest-mainnet"
 path = "testing_verification/mainnet_test.rs"
 
@@ -330,50 +323,6 @@ path = "testing_verification/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes"
-path = "consensus/orchestrator/sr_app_same_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes"
-path = "consensus/orchestrator/sr_app_failover_nodes_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade"
-path = "consensus/orchestrator/sr_app_no_upgrade_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
-path = "consensus/orchestrator/sr_app_same_nodes_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
-path = "consensus/orchestrator/sr_app_failover_nodes_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
-path = "consensus/orchestrator/sr_app_no_upgrade_enable_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
-path = "consensus/orchestrator/sr_app_same_nodes_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
-path = "consensus/orchestrator/sr_app_failover_nodes_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
-path = "consensus/orchestrator/sr_app_no_upgrade_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-app-large-with-tecdsa"
-path = "consensus/orchestrator/sr_app_large_with_tecdsa_test.rs"
-
-[[bin]]
-name = "ic-systest-subnet-recovery-nns-same-nodes"
-path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-network-reliability"
