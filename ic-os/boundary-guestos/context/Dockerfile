@@ -126,7 +126,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-journal-gatewayd
 
 # TODO remove when nginx is removed from base image
-RUN systemctl status nginx 2>/dev/null && systemctl disable nginx
+RUN systemctl disable nginx
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
 # E.g., systemd-timesync/coredump
