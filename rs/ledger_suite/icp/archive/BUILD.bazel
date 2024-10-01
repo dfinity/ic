@@ -1,0 +1,74 @@
+load("@rules_rust//rust:defs.bzl", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_canister(
+    name = "ledger-archive-node-canister-wasm",
+    srcs = ["src/main.rs"],
+    compile_data = [
+        "//rs/ledger_suite/icp:ledger_archive.did",
+    ],
+    crate_name = "ledger_archive_node",
+    rustc_env = {
+        "LEDGER_ARCHIVE_DID_PATH": "$(execpath //rs/ledger_suite/icp:ledger_archive.did)",
+    },
+    service_file = "//rs/ledger_suite/icp:ledger_archive.did",
+    version = "0.9.0",
+    deps = [
+        # Keep sorted.
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/dfn_core",
+        "//rs/rust_canisters/dfn_http_metrics",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:lazy_static",
+        "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "ledger_archive_node_test",
+    crate = "_wasm_ledger-archive-node-canister-wasm",
+    data = [
+        "//rs/ledger_suite/icp:ledger_archive.did",
+    ],
+    rustc_env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/archive",
+    },
+    deps = ["@crate_index//:candid_parser"],
+)
+
+rust_ic_test(
+    name = "ledger_archive_node_canister_integration",
+    srcs = ["tests/tests.rs"],
+    data = [
+        "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/archive",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    },
+    deps = [
+        # Keep sorted.
+        "//packages/pocket-ic",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icp/test_utils",
+        "//rs/rust_canisters/http_types",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:serde_bytes",
+    ],
+)
