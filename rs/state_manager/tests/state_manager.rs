@@ -6270,7 +6270,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
         Memory::from(&snapshot.execution_snapshot().stable_memory),
         Default::default(),
         Default::default(),
-        false,
+        None,
     ));
 
     state

@@ -187,7 +187,6 @@ impl HypervisorMetrics {
             largest_function_instruction_count,
             compilation_time,
             max_complexity,
-            ..
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);

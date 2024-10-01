@@ -264,6 +264,13 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn execution_state_mut(&mut self, canister_id: CanisterId) -> &mut ExecutionState {
+        self.canister_state_mut(canister_id)
+            .execution_state
+            .as_mut()
+            .unwrap()
+    }
+
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
         &self.xnet_messages
     }

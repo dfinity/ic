@@ -261,7 +261,6 @@ fn compile_inner(
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
             max_complexity,
-            is_wasm64,
         },
         serialized_module,
     ))

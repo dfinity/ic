@@ -11,6 +11,7 @@ use ic_types::{
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use ic_wasm_transform::Module;
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
@@ -478,7 +479,11 @@ pub struct ExecutionState {
     /// Round-robin across canister method types.
     pub next_scheduled_method: NextScheduledMethod,
 
-    /// The execution is in Wasm64 mode.
+    /// Checks if execution is in Wasm64 mode. This field is used as a cache to avoid
+    /// parsing the wasm module to determine if it is a Wasm64 module.
+    /// Should not be accessed directly, use `is_wasm64()` method instead.
+    /// Also this field does not need to be saved in the checkpoint/state.
+    #[validate_eq(Ignore)]
     pub is_wasm64: Option<bool>,
 }
 
@@ -499,7 +504,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
+            is_wasm64: _,
         } = rhs;
 
         (
@@ -511,7 +516,6 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
-            &self.is_wasm64,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -521,7 +525,6 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
         )
     }
 }
@@ -538,7 +541,7 @@ impl ExecutionState {
         stable_memory: Memory,
         exported_globals: Vec<Global>,
         wasm_metadata: WasmMetadata,
-        is_wasm64: bool,
+        is_wasm64: Option<bool>,
     ) -> Self {
         Self {
             canister_root,
@@ -550,7 +553,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: Some(is_wasm64),
+            is_wasm64,
         }
     }
 
@@ -584,6 +587,30 @@ impl ExecutionState {
         let delta_pages = self.wasm_memory.page_map.num_delta_pages()
             + self.stable_memory.page_map.num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64)
+    }
+
+    /// Returns true if the canister executes in Wasm64 mode.
+    /// Uses the .is_wasm64 field as a cache if it is set, otherwise
+    /// parses the wasm module to determine if it is a Wasm64 module
+    /// and caches the result.
+    pub fn is_wasm64(&mut self) -> bool {
+        if let Some(is_wasm64) = self.is_wasm64 {
+            return is_wasm64;
+        }
+        let wasm_binary = self.wasm_binary.binary.as_slice();
+        let module = Module::parse(wasm_binary, true);
+
+        let is_wasm64 = match module {
+            Ok(module) => module
+                .memories
+                .first()
+                .map_or(false, |memory| memory.memory64),
+            Err(_) => false,
+        };
+
+        // Cache the result.
+        self.is_wasm64 = Some(is_wasm64);
+        is_wasm64
     }
 }
 

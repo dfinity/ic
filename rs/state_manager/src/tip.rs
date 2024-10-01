@@ -982,7 +982,6 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
-                is_wasm64: execution_state.is_wasm64,
             })
         }
         None => {

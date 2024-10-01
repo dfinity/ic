@@ -1008,7 +1008,7 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory,
             exported_globals,
             serialized_module.wasm_metadata.clone(),
-            is_wasm64,
+            Some(is_wasm64),
         );
 
         Ok((
