@@ -72,5 +72,3 @@ runs:
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}
-          # Only run ci/bazel-scripts/diff.sh on PRs but don't run it if the PR is labeled with CI_ALL_BAZEL_TARGETS.
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
