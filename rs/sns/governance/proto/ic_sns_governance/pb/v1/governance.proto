@@ -1187,6 +1187,7 @@ message RewardEvent {
   optional uint64 total_available_e8s_equivalent = 8;
 }
 
+
 // The representation of the whole governance system, containing all
 // information about the governance system that must be kept
 // across upgrades of the governance system, i.e. kept in stable memory.
@@ -1449,6 +1450,15 @@ message Governance {
 
   reserved "migrated_root_wasm_memory_limit";
   reserved 27;
+
+  Governance.Version target_version = 28;
+
+  message CachedUpgradeSteps {
+    repeated Governance.Version upgrade_steps = 1;
+    optional uint64 requested_refresh_at_timestamp_seconds = 2;
+    optional uint64 received_refresh_at_timestamp_seconds = 3;
+  }
+  CachedUpgradeSteps cached_upgrade_steps = 29;
 }
 
 // Request message for 'get_metadata'.
@@ -1480,6 +1490,8 @@ message GetRunningSnsVersionResponse {
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
   Governance.UpgradeInProgress pending_version = 2;
+  // The target version that the SNS is in the process of upgrading to.
+  Governance.Version target_version = 3;
 }
 
 // Request to fail an upgrade proposal that is Adopted but not Executed or
@@ -2137,4 +2149,12 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+message AdvanceTargetVersionRequest {
+
+}
+
+message AdvanceTargetVersionResponse {
+
 }

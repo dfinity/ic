@@ -267,10 +267,15 @@ type GetProposalResponse = record {
 type GetRunningSnsVersionResponse = record {
   deployed_version : opt Version;
   pending_version : opt UpgradeInProgress;
+  target_version : opt Version;
 };
 
 type GetSnsInitializationParametersResponse = record {
   sns_initialization_parameters : text;
+};
+
+type CachedUpgradeSteps = record {
+  upgrade_steps : vec Version;
 };
 
 type Governance = record {
@@ -282,6 +287,8 @@ type Governance = record {
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
+  target_version : opt Version;
+  cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
   pending_version : opt UpgradeInProgress;
