@@ -9,7 +9,7 @@ use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JS
 use network::generate_network_config;
 use network::info::NetworkInfo;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::generate_mac_address;
+use network::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
 use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -51,55 +51,77 @@ pub fn main() -> Result<()> {
 
     match opts.command {
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
+            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
+                "Failed to get config.ini settings for path: {}",
+                &opts.config
+            ))?;
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file));
-            let deployment_name: Option<&str> = match &deployment_settings {
-                Ok(deployment) => Some(deployment.deployment.name.as_str()),
-                Err(e) => {
-                    eprintln!("Error retrieving deployment file: {e}. Continuing without it");
-                    None
-                }
-            };
-
-            let mgmt_mac: Option<&str> = match &deployment_settings {
-                Ok(deployment) => deployment.deployment.mgmt_mac.as_deref(),
-                Err(_) => None,
-            };
-
-            generate_network_config(
-                &network_info,
-                mgmt_mac,
-                deployment_name,
-                NodeType::SetupOS,
-                Path::new(&output_directory),
-            )
-        }
-        Some(Commands::GenerateIpv6Address { node_type }) => {
             let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context("Please specify a valid deployment file with '--deployment-file'")?;
+                .context(format!(
+                    "Failed to get deployment settings for file: {}",
+                    &opts.deployment_file
+                ))?;
             eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let config_map = config_map_from_path(Path::new(&opts.config))
-                .context("Please specify a valid config file with '--config'")?;
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac = generate_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
+                &NodeType::SetupOS,
+            )?;
+            eprintln!("Using generated mac (unformatted) {}", generated_mac);
+
+            generate_network_config(&network_info, generated_mac, Path::new(&output_directory))
+        }
+        Some(Commands::GenerateIpv6Address { node_type }) => {
+            let config_map = config_map_from_path(Path::new(&opts.config)).context(format!(
+                "Failed to get config.ini settings for path: {}",
+                &opts.config
+            ))?;
             eprintln!("Using config: {:?}", config_map);
 
             let network_info = NetworkInfo::from_config_map(&config_map)?;
             eprintln!("Network info config: {:?}", &network_info);
 
-            let node_type = node_type.parse::<NodeType>()?;
+            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
+                .context(format!(
+                    "Failed to get deployment settings for file: {}",
+                    &opts.deployment_file
+                ))?;
+            eprintln!("Deployment config: {:?}", deployment_settings);
 
-            let mac = generate_mac_address(
-                &deployment_settings.deployment.name,
+            let node_type = node_type.parse::<NodeType>()?;
+            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    eprintln!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+            let generated_mac = generate_mac_address(
+                &mgmt_mac,
+                deployment_settings.deployment.name.as_str(),
                 &node_type,
-                deployment_settings.deployment.mgmt_mac.as_deref(),
             )?;
-            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &mac)?;
+            let ipv6_address = generate_ipv6_address(&network_info.ipv6_prefix, &generated_mac)?;
             println!("{}", to_cidr(ipv6_address, network_info.ipv6_subnet));
             Ok(())
         }

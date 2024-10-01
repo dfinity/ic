@@ -105,7 +105,6 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use maplit::hashmap;
-use mockall::automock;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
@@ -1451,8 +1450,23 @@ impl fmt::Display for RewardEvent {
     }
 }
 
+#[derive(Debug)]
+pub enum RngError {
+    RngNotInitialized,
+}
+
+impl From<RngError> for GovernanceError {
+    fn from(e: RngError) -> Self {
+        match e {
+            RngError::RngNotInitialized => GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Rng not initialized.  Try again later.".to_string(),
+            ),
+        }
+    }
+}
+
 /// A general trait for the environment in which governance is running.
-#[automock]
 #[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
@@ -1465,12 +1479,18 @@ pub trait Environment: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
-    fn random_u64(&mut self) -> u64;
+    fn random_u64(&mut self) -> Result<u64, RngError>;
 
     /// Returns a random byte array with 32 bytes.
     ///
     /// This number is the same in all replicas.
-    fn random_byte_array(&mut self) -> [u8; 32];
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError>;
+
+    // Seed the random number generator.
+    fn seed_rng(&mut self, seed: [u8; 32]);
+
+    // Get the current RNG seed (used in pre-upgrade)
+    fn get_rng_seed(&self) -> Option<[u8; 32]>;
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
@@ -1770,7 +1790,8 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
-        let (neurons, topic_followee_index, heap_governance_proto) =
+        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
+        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         assert!(
@@ -1802,12 +1823,18 @@ impl Governance {
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
         governance_proto: GovernanceProto,
-        env: Box<dyn Environment>,
+        mut env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto) =
+        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
+
+        // Carry over the previous rng seed to avoid race conditions in handling queued ingress
+        // messages that may require a functioning RNG.
+        if let Some(rng_seed) = maybe_rng_seed {
+            env.seed_rng(rng_seed);
+        }
 
         Self {
             heap_data: heap_governance_proto,
@@ -1829,14 +1856,26 @@ impl Governance {
         let neuron_store = std::mem::take(&mut self.neuron_store);
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.get_rng_seed();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
     pub fn clone_proto(&self) -> GovernanceProto {
         let neurons = self.neuron_store.clone_neurons();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.get_rng_seed();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
     /// Validates that the underlying protobuf is well formed.
@@ -2617,11 +2656,11 @@ impl Governance {
         }
 
         let created_timestamp_seconds = self.env.now();
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.env.random_byte_array());
+        let to_subaccount = Subaccount(self.env.random_byte_array()?);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -3024,11 +3063,11 @@ impl Governance {
             ));
         }
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
 
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.env.random_byte_array()),
+            None => Subaccount(self.env.random_byte_array()?),
             Some(nonce_val) => {
                 ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
             }
@@ -3305,7 +3344,7 @@ impl Governance {
             )
         })?;
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
         let from_subaccount = parent_neuron.subaccount();
 
         // The account is derived from the new owner's principal so it can be found by
@@ -4089,7 +4128,7 @@ impl Governance {
                 "Reward node provider proposal must have a reward mode.",
             )),
             Some(RewardMode::RewardToNeuron(reward_to_neuron)) => {
-                let to_subaccount = Subaccount(self.env.random_byte_array());
+                let to_subaccount = Subaccount(self.env.random_byte_array()?);
                 let _block_height = self
                     .ledger
                     .transfer_funds(
@@ -4100,7 +4139,7 @@ impl Governance {
                         now,
                     )
                     .await?;
-                let nid = self.neuron_store.new_neuron_id(&mut *self.env);
+                let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
@@ -6112,7 +6151,7 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-        let nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
         let now = self.env.now();
         let neuron = NeuronBuilder::new(
             nid,
@@ -7816,7 +7855,9 @@ impl Governance {
     /// Picks a value at random in [00:00, 23:45] that is a multiple of 15
     /// minutes past midnight.
     pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
-        let time_of_day_seconds = self.env.random_u64() % ONE_DAY_SECONDS;
+        // It's not critical that we have perfect randomness here, so we can default to a fixed value
+        // for the edge case where the RNG is not initialized (which should never happen in practice).
+        let time_of_day_seconds = self.env.random_u64().unwrap_or(10_000) % ONE_DAY_SECONDS;
 
         // Round down to nearest multiple of 15 min.
         let remainder_seconds = time_of_day_seconds % (15 * 60);
