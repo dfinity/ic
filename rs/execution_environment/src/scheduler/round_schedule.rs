@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_types::{AccumulatedPriority, ComputeAllocation, LongExecutionMode};
+use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
+
+use super::SchedulerImpl;
 
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
@@ -228,5 +230,78 @@ impl RoundSchedule {
         }
 
         (canisters_partitioned_by_cores, canisters)
+    }
+
+    /// Finishes canister execution on thread.
+    pub fn finish_canister_execution_on_thread(
+        canister: &mut CanisterState,
+        executed_priority_ids: &mut BTreeMap<CanisterId, AccumulatedPriority>,
+        round_id: ExecutionRound,
+        is_first_iteration: bool,
+        rank: usize,
+    ) {
+        let full_message_execution = match canister.next_execution() {
+            NextExecution::None => true,
+            NextExecution::StartNew => false,
+            // We just finished a full slice of executions.
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
+        };
+        let scheduled_first = is_first_iteration && rank == 0;
+
+        if full_message_execution || scheduled_first {
+            // The very first canister is considered to have a full execution round for
+            // scheduling purposes even if it did not complete within the round.
+            canister.scheduler_state.last_full_execution_round = round_id;
+
+            // For now the priority for full execution is always 100.
+            // In future we might use a proportion to the actual load.
+            executed_priority_ids.insert(canister.canister_id(), 100.into());
+        }
+    }
+
+    /// Finishes inner round execution.
+    pub(crate) fn finish_inner_round(
+        &self,
+        canister_states: &mut BTreeMap<CanisterId, CanisterState>,
+        executed_priority_ids: BTreeMap<CanisterId, AccumulatedPriority>,
+    ) {
+        let scheduler_cores = self.scheduler_cores;
+        let compute_capacity_percent =
+            SchedulerImpl::compute_capacity_percent(scheduler_cores) as i64;
+        let number_of_canisters = canister_states.len();
+        let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
+
+        // Charge canisters for the priority executed in the previous round.
+        let mut total_executed_priority = 0;
+        for (canister_id, executed_priority) in executed_priority_ids {
+            if let Some(canister) = canister_states.get_mut(&canister_id) {
+                total_executed_priority += executed_priority.get() * multiplier;
+                // If priority credit is non-zero, use it instead of accumulated priority.
+                if canister.scheduler_state.priority_credit != 0.into() {
+                    canister.scheduler_state.priority_credit += executed_priority * multiplier;
+                } else {
+                    canister.scheduler_state.accumulated_priority -= executed_priority * multiplier;
+                }
+            }
+        }
+
+        // Scale the executed priority to compute capacity.
+        let executed_multiplier = total_executed_priority / compute_capacity_percent;
+        // Distribute the executed priority across canisters according to their allocations.
+        let mut total_allocated = 0;
+        for (_canister_id, canister) in canister_states.iter_mut() {
+            let allocated = canister.scheduler_state.compute_allocation.as_percent() as i64
+                * executed_multiplier;
+            total_allocated += allocated;
+            canister.scheduler_state.accumulated_priority += allocated.into();
+        }
+        // Fully distribute the rest across all canisters.
+        let mut to_distribute = total_executed_priority - total_allocated;
+        let n = canister_states.len();
+        for (i, (_canister_id, canister)) in canister_states.iter_mut().enumerate() {
+            let distributed = to_distribute / (n - i) as i64;
+            to_distribute -= distributed;
+            canister.scheduler_state.accumulated_priority += distributed.into();
+        }
     }
 }

@@ -271,8 +271,8 @@ impl SchedulerImpl {
         // `(compute_capacity - total_compute_allocation) * multiplier / number_of_canisters`
         // can be simplified to just
         // `(compute_capacity - total_compute_allocation) * scheduler_cores`
-        let free_capacity_per_canister = (compute_capacity_percent
-            .saturating_sub(total_compute_allocation_percent))
+        let free_capacity_per_canister = compute_capacity_percent
+            .saturating_sub(total_compute_allocation_percent)
             * scheduler_cores as i64;
 
         // Fully divide the free allocation across all canisters.
@@ -725,6 +725,7 @@ impl SchedulerImpl {
             let (
                 active_canisters,
                 executed_canister_ids,
+                executed_priority_ids,
                 mut loop_ingress_execution_results,
                 heap_delta,
             ) = self.execute_canisters_in_inner_round(
@@ -739,9 +740,9 @@ impl SchedulerImpl {
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
-            round_executed_canister_ids.extend(executed_canister_ids);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
+            round_executed_canister_ids.extend(executed_canister_ids);
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
 
@@ -755,6 +756,8 @@ impl SchedulerImpl {
                     .map(|canister| (canister.canister_id(), canister)),
             );
             state.put_canister_states(canisters);
+
+            round_schedule.finish_inner_round(&mut state.canister_states, executed_priority_ids);
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
@@ -879,6 +882,7 @@ impl SchedulerImpl {
     ) -> (
         Vec<CanisterState>,
         BTreeSet<CanisterId>,
+        BTreeMap<CanisterId, AccumulatedPriority>,
         Vec<(MessageId, IngressStatus)>,
         NumBytes,
     ) {
@@ -891,6 +895,7 @@ impl SchedulerImpl {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 BTreeSet::new(),
+                BTreeMap::new(),
                 vec![],
                 NumBytes::from(0),
             );
@@ -955,6 +960,7 @@ impl SchedulerImpl {
         // Aggregate `results_by_thread` to get the result of this function.
         let mut canisters = Vec::new();
         let mut executed_canister_ids = BTreeSet::new();
+        let mut executed_priority_ids = BTreeMap::new();
         let mut ingress_results = Vec::new();
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
@@ -962,6 +968,7 @@ impl SchedulerImpl {
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             executed_canister_ids.extend(result.executed_canister_ids);
+            executed_priority_ids.extend(result.executed_priority_ids);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
                 round_limits_per_thread.instructions - result.round_limits.instructions,
@@ -995,6 +1002,7 @@ impl SchedulerImpl {
         (
             canisters,
             executed_canister_ids,
+            executed_priority_ids,
             ingress_results,
             heap_delta,
         )
@@ -1943,6 +1951,7 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     executed_canister_ids: BTreeSet<CanisterId>,
+    executed_priority_ids: BTreeMap<CanisterId, AccumulatedPriority>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,
@@ -1980,6 +1989,7 @@ fn execute_canisters_on_thread(
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut executed_canister_ids = BTreeSet::new();
+    let mut executed_priority_ids = BTreeMap::new();
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::from(0);
     let mut total_messages_executed = NumMessages::from(0);
@@ -2092,18 +2102,13 @@ fn execute_canisters_on_thread(
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
         }
-        let full_message_execution = match canister.next_execution() {
-            NextExecution::None => true,
-            NextExecution::StartNew => false,
-            // We just finished a full slice of executions.
-            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
-        };
-        let scheduled_first = is_first_iteration && rank == 0;
-        if full_message_execution || scheduled_first {
-            // The very first canister is considered to have a full execution round for
-            // scheduling purposes even if it did not complete within the round.
-            canister.scheduler_state.last_full_execution_round = round_id;
-        }
+        RoundSchedule::finish_canister_execution_on_thread(
+            &mut canister,
+            &mut executed_priority_ids,
+            round_id,
+            is_first_iteration,
+            rank,
+        );
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
         round_limits.instructions -=
@@ -2113,6 +2118,7 @@ fn execute_canisters_on_thread(
     ExecutionThreadResult {
         canisters,
         executed_canister_ids,
+        executed_priority_ids,
         ingress_results,
         slices_executed: total_slices_executed,
         messages_executed: total_messages_executed,
