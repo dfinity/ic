@@ -322,6 +322,7 @@ allow ic_canister_sandbox_t ic_canister_mem_t : file { map read write getattr };
 allow ic_replica_t ic_canister_mem_t : file { map read write getattr };
 
 # Wants to read its own control group. Should deny that.
+require { type cgroup_t; }
 dontaudit ic_canister_sandbox_t cgroup_t : dir { search };
 dontaudit ic_canister_sandbox_t cgroup_t : file { open read getattr };
 

@@ -1824,4 +1824,48 @@ pub mod testing {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
     }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing system state fields to think about and/or ask the Execution
+    /// team to think about any repercussions to the canister snapshot logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the system state to also require changes
+    /// to the canister snapshot logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `CanisterSnapshot::from_canister()` for more context.
+    #[allow(dead_code)]
+    fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _system_state = SystemState {
+            controllers: Default::default(),
+            canister_id: 0.into(),
+            queues: Default::default(),
+            memory_allocation: Default::default(),
+            wasm_memory_threshold: Default::default(),
+            freeze_threshold: Default::default(),
+            status: CanisterStatus::Stopped,
+            certified_data: Default::default(),
+            canister_metrics: Default::default(),
+            cycles_balance: Default::default(),
+            ingress_induction_cycles_debit: Default::default(),
+            reserved_balance: Default::default(),
+            reserved_balance_limit: Default::default(),
+            task_queue: Default::default(),
+            global_timer: CanisterTimer::Inactive,
+            canister_version: Default::default(),
+            canister_history: Default::default(),
+            wasm_chunk_store: WasmChunkStore::new_for_testing(),
+            log_visibility: Default::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: Default::default(),
+            next_snapshot_id: Default::default(),
+            snapshots_memory_usage: Default::default(),
+            on_low_wasm_memory_hook_status: Default::default(),
+        };
+    }
 }

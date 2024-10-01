@@ -33,7 +33,7 @@ use ic_types::{
     messages::SignedIngress,
     Height, NodeId, PrincipalId, SubnetId,
 };
-use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
+use ic_xnet_endpoint::XNetEndpoint;
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::{
     str::FromStr,
@@ -261,14 +261,12 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
-    let message_router = Arc::new(message_router);
-    let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        xnet_config,
+        config.message_routing,
         metrics_registry,
         log.clone(),
     );
@@ -341,7 +339,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        message_router,
+        Arc::new(message_router),
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
