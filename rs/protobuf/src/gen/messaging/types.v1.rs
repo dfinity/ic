@@ -70,9 +70,9 @@ impl NiDkgTag {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
-            NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
-            NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+            Self::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
+            Self::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
+            Self::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

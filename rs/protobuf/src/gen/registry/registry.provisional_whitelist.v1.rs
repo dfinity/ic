@@ -35,9 +35,9 @@ pub mod provisional_whitelist {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                ListType::Unspecified => "LIST_TYPE_UNSPECIFIED",
-                ListType::All => "LIST_TYPE_ALL",
-                ListType::Set => "LIST_TYPE_SET",
+                Self::Unspecified => "LIST_TYPE_UNSPECIFIED",
+                Self::All => "LIST_TYPE_ALL",
+                Self::Set => "LIST_TYPE_SET",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
