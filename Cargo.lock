@@ -1970,33 +1970,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "certificate-syncer"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.7.5",
- "candid",
- "clap 4.5.18",
- "futures",
- "mockall 0.13.0",
- "nix 0.24.3",
- "opentelemetry 0.23.0",
- "opentelemetry-prometheus 0.16.0",
- "opentelemetry_sdk 0.23.0",
- "prometheus",
- "reqwest 0.12.7",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "x509-parser",
-]
-
-[[package]]
 name = "certificate_orchestrator"
 version = "0.9.0"
 dependencies = [
@@ -13702,55 +13675,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.77",
-]
-
-[[package]]
-name = "icx-proxy"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "arc-swap",
- "async-trait",
- "axum 0.7.5",
- "bytes",
- "candid",
- "clap 4.5.18",
- "form_urlencoded",
- "futures",
- "http 1.1.0",
- "http-body 1.0.1",
- "http-body-util",
- "httptest",
- "hyper 1.4.1",
- "hyper-rustls 0.27.3",
- "hyper-util",
- "hyperlocal-next",
- "ic-agent",
- "ic-http-certification",
- "ic-response-verification",
- "ic-utils 0.37.0",
- "itertools 0.12.1",
- "maxminddb",
- "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
- "prometheus",
- "regex",
- "reqwest 0.12.7",
- "rustls 0.23.13",
- "rustls-native-certs 0.7.3",
- "rustls-pemfile 2.1.3",
- "serde",
- "serde_json",
- "thiserror",
- "tikv-jemallocator",
- "tokio",
- "tokio-test",
- "tokio-util",
- "tower 0.4.13",
- "tower-http",
- "tracing",
- "tracing-subscriber",
- "url",
 ]
 
 [[package]]
