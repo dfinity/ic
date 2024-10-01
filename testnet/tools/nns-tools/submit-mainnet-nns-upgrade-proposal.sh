@@ -49,6 +49,7 @@ submit_nns_upgrade_proposal_mainnet() {
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
     CANDID_UPGRADE_ARGS=$(extract_candid_upgrade_args "$PROPOSAL_FILE")
+    echo "CANDID_UPGRADE_ARGS=${CANDID_UPGRADE_ARGS}"
 
     # Functions that exit if error
     validate_no_todos "$PROPOSAL_FILE"
@@ -59,6 +60,7 @@ submit_nns_upgrade_proposal_mainnet() {
     CANDID_ARGS_FILE=""
     if [ ! -z "$CANDID_UPGRADE_ARGS" ]; then
         CANDID_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_UPGRADE_ARGS")
+        echo "CANDID_ARGS_FILE=$CANDID_ARGS_FILE"
         CANDID_ARGS_HASH=$(sha_256 $CANDID_ARGS_FILE)
     fi
 
