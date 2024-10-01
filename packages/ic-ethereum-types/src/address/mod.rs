@@ -8,6 +8,21 @@ use std::fmt::{Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
 /// An Ethereum account address.
+///
+/// # Examples
+///
+/// Parse an address from a string:
+/// ```
+/// use std::str::FromStr;
+/// let address = ic_ethereum_types::Address::from_str("0x7a250d5630b4cf539739df2c5dacb4c659f2488d").unwrap();
+/// assert_eq!(address.into_bytes(), [0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97, 0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48, 0x8d]);
+/// ```
+///
+/// Instantiate an address from raw bytes:
+/// ```
+/// let address = ic_ethereum_types::Address::new([0x7a, 0x25, 0x0d, 0x56, 0x30, 0xb4, 0xcf, 0x53, 0x97, 0x39, 0xdf, 0x2c, 0x5d, 0xac, 0xb4, 0xc6, 0x59, 0xf2, 0x48, 0x8d]);
+/// assert_eq!(address.to_string(), "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D");
+/// ```
 #[derive(
     Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Decode, Deserialize, Encode, Serialize,
 )]
@@ -26,10 +41,23 @@ impl AsRef<[u8]> for Address {
 }
 
 impl Address {
+    /// Ethereum zero address.
+    ///
+    /// ```
+    /// let address = ic_ethereum_types::Address::ZERO;
+    /// assert_eq!(address.to_string(), "0x0000000000000000000000000000000000000000");
+    /// assert_eq!(address.into_bytes(), [0u8; 20]);
+    /// ```
     pub const ZERO: Self = Self([0u8; 20]);
 
+    /// Create a new Ethereum address from raw bytes.
     pub const fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
+    }
+
+    /// Convert an Ethereum address into a 20-byte array.
+    pub const fn into_bytes(self) -> [u8; 20] {
+        self.0
     }
 }
 
@@ -45,6 +73,7 @@ impl UpperHex for Address {
     }
 }
 
+/// Parse an address from a 32-byte array with left zero padding.
 impl TryFrom<&[u8; 32]> for Address {
     type Error = String;
 
@@ -62,7 +91,7 @@ impl TryFrom<&[u8; 32]> for Address {
     }
 }
 
-// Converting from 20-byte address to 32-byte, with left zero padding.
+/// Convert a 20-byte address to 32-byte array, with left zero padding.
 impl From<&Address> for [u8; 32] {
     fn from(address: &Address) -> Self {
         let bytes = address.as_ref();
@@ -93,10 +122,9 @@ impl fmt::Debug for Address {
     }
 }
 
+/// Display address using [EIP-55](https://eips.ethereum.org/EIPS/eip-55).
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Display address using EIP-55
-        // https://eips.ethereum.org/EIPS/eip-55
         let mut addr_chars = [0u8; 20 * 2];
         hex::encode_to_slice(self.0, &mut addr_chars)
             .expect("bug: failed to encode an address as hex");
@@ -121,5 +149,5 @@ impl fmt::Display for Address {
 }
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
-    ic_crypto_sha3::Keccak256::hash(bytes)
+    ic_sha3::Keccak256::hash(bytes)
 }

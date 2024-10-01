@@ -222,23 +222,6 @@ pub trait StateManager: StateReader {
         cup_interval_length: Height,
     );
 
-    /// Returns the list of heights corresponding to accessible states matching
-    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
-    /// accessible states.
-    ///
-    /// Note that the initial state at height 0 is considered uncertified from
-    /// the State Manager point of view.  This is because the protocol requires
-    /// each replica to individually obtain the initial state using some
-    /// out-of-band mechanism (i.e., not state sync).  Also note that the
-    /// authenticity of this initial state will be verified by some protocol
-    /// external to this component.
-    ///
-    /// The list of heights is guaranteed to be
-    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
-    ///   0 even if no states were committed yet.
-    /// * Sorted in ascending order.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height>;
-
     /// Notify this state manager that states with heights strictly less than
     /// the specified `height` can be removed.
     ///

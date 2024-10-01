@@ -41,6 +41,7 @@ init_daemon_domain(filebeat_t, filebeat_exec_t)
 # Allow filebeat to perform its primary function, namely to read
 # the journal files.
 systemd_read_journal_files(filebeat_t)
+systemd_watch_journal_dirs(filebeat_t)
 
 # It wants to send the logs to remote host, allow unrestricted TCP for
 # this for now. Maybe this can be reasonably constrained more tightly.
@@ -56,6 +57,7 @@ corenet_all_recvfrom_unlabeled(filebeat_t)
 
 # Read generic etc files (e.g. nsswitch.conf)
 files_read_etc_files(filebeat_t)
+files_read_etc_runtime_files(filebeat_t)
 
 # Read CA certificate
 miscfiles_read_generic_certs(filebeat_t)
@@ -124,6 +126,7 @@ require {
 search_dirs_pattern(filebeat_t, bin_t, bin_t)
 
 # Allow to read `/sys/fs/cgroup/unified/system.slice/filebeat.service/cgroup.controllers`
+require { type cgroup_t; }
 fs_read_cgroup_files(filebeat_t)
 allow filebeat_t cgroup_t:dir read;
 
