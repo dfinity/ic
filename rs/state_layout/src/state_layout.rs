@@ -1520,7 +1520,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         collect_subdirs(snapshots_dir.as_path(), 1, parse_snapshot_id)
     }
 
-    /// List all PageMaps with at least one file in the Checkpoint, including canister and snaphot
+    /// List all PageMaps with at least one file in the Checkpoint, including canister and snapshot
     /// ones.
     pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
         Ok(self
