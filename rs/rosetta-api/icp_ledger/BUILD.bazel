@@ -77,8 +77,8 @@ motoko_binary(
 
 rust_canister(
     name = "test_notified_canister",
-    srcs = ["tests/notified.rs"],
-    service_file = ":tests/notified.did",
+    srcs = ["tests/notified/notified.rs"],
+    service_file = ":tests/notified/notified.did",
     deps = [
         # Keep sorted.
         ":icp_ledger",
