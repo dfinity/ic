@@ -156,8 +156,7 @@ fn setup_execution_state(
         Memory::new_for_testing(),
         persisted_globals,
         WasmMetadata::default(),
-        // This will need to be adjusted for Wasm64 mode.
-        false,
+        None,
     )
 }
 
