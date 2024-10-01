@@ -86,13 +86,13 @@ DEV_DATA = [
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "//rs/registry/canister:registry-canister",
-    "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
 ]
 
 DEV_ENV = {
     "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+    "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
     "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",

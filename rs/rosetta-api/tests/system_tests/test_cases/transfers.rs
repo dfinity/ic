@@ -2,6 +2,7 @@ use crate::common::system_test_environment::RosettaTestingEnvironment;
 use crate::common::utils::assert_rosetta_blockchain_is_valid;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::test_identity;
+use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
@@ -61,9 +62,16 @@ fn test_icp_transfer() {
                         .await;
 
                     rosetta_testing_environment
-                        .generate_blocks(args_with_caller)
+                        .generate_blocks(args_with_caller.clone())
                         .await;
 
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &rosetta_testing_environment.rosetta_client,
+                        rosetta_testing_environment.network_identifier.clone(),
+                        args_with_caller.len() as u64,
+                    )
+                    .await
+                    .unwrap();
                     // Let's check that rosetta has a valid blockchain when compared to the ledger
                     assert_rosetta_blockchain_is_valid(
                         &rosetta_testing_environment.rosetta_client,
