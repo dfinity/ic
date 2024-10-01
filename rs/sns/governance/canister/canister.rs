@@ -133,15 +133,8 @@ impl Environment for CanisterEnv {
     }
 
     // Returns a random u64.
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.rng.next_u64()
-    }
-
-    // Returns a random byte array.
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.rng.fill_bytes(&mut bytes);
-        bytes
     }
 
     // Calls an external method (i.e., on a canister outside the nervous system) to execute a
