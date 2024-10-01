@@ -18,12 +18,14 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
+pub use ic_error_types::RejectCode;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
+use ic_interfaces::execution_environment::QueryExecutionResponse;
 use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
     batch_payload::{IntoMessages, PastPayload, ProposalContext},
@@ -31,7 +33,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::IngressHistoryReader,
     ingress_pool::{
         IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
@@ -156,21 +158,22 @@ use ic_xnet_payload_builder::{
     ExpectedIndices, RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics,
     XNetSlicePool,
 };
-use rcgen::{CertificateParams, KeyPair};
-use serde::Deserialize;
-
-pub use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{rngs::StdRng, Rng, SeedableRng};
+use rcgen::{CertificateParams, KeyPair};
+use serde::Deserialize;
 use serde::Serialize;
 pub use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet},
+    convert::Infallible,
     convert::TryFrom,
     fmt,
+    future::Future,
     io::{self, stderr},
     net::Ipv6Addr,
     path::{Path, PathBuf},
+    pin::Pin,
     str::FromStr,
     string::ToString,
     sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
@@ -816,14 +819,18 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    pub ingress_filter:
-        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
+    pub ingress_filter: tower::buffer::Buffer<
+        (ProvisionalWhitelist, SignedIngressContent),
+        Pin<Box<dyn Future<Output = Result<Result<(), UserError>, Infallible>> + Send>>,
+    >,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: tower::buffer::Buffer<
+        (Query, Option<CertificateDelegation>),
+        Pin<Box<dyn Future<Output = Result<QueryExecutionResponse, Infallible>> + Send>>,
+    >,
     runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -1784,7 +1791,7 @@ impl StateMachine {
             query_stats_payload_builder,
             nodes.iter().map(|n| n.node_id).collect(),
         ));
-
+        let _enter = runtime.enter();
         Self {
             subnet_id,
             subnet_type,
@@ -1799,15 +1806,12 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: runtime
-                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
+            ingress_filter: TowerBuffer::new(execution_services.ingress_filter.clone(), 1),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry: metrics_registry.clone(),
-            query_handler: runtime.block_on(async {
-                TowerBuffer::new(execution_services.query_execution_service, 1)
-            }),
+            query_handler: TowerBuffer::new(execution_services.query_execution_service, 1),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,

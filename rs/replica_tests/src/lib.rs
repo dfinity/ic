@@ -371,7 +371,7 @@ where
 
         let runtime = LocalTestRuntime {
             query_handler: tokio::runtime::Handle::current()
-                .block_on(async { TowerBuffer::new(query_handler, 1) }),
+                .block_on(async { BoxCloneService::new(TowerBuffer::new(query_handler, 1)) }),
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader,
