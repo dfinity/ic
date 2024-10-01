@@ -1,7 +1,7 @@
 = ckETH +
 
 The ckETH minter canister converts ETH to ckETH and back, where ckETH is a token issued on the Internet Computer that is backed 1:1 by ETH.
-The minter works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
+The minter works with a link:../../../ledger_suite/icrc1/README.md[Ledger Canister], handling the ckETH token transfers and with https://internetcomputer.org/https-outcalls[HTTP outcalls], to query multiple JSON-RPC providers to interact with the Ethereum blockchain.
 
 TIP: A demonstration of the interactions described in this file is available link:https://www.youtube.com/watch?v=y_2im2V66k0[here].
 

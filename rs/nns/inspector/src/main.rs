@@ -148,7 +148,7 @@ fn decode_governance_stable_memory(gov_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(["-I", "nns/governance/proto"])
-        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "ledger_suite/icp/proto"])
         .args(["-I", "types/base_types/proto"])
         .args(["-I", "nns/common/proto"])
         // Main arg: the main proto file
@@ -227,7 +227,7 @@ fn decode_gtc_stable_memory(gtc_pb: PathBuf, output: &Path, rs: &Path) {
     let cmd = cmd_base
         // -I: where to find included protos (transitively)
         .args(["-I", "nns/governance/proto"])
-        .args(["-I", "rosetta-api/icp_ledger/proto"])
+        .args(["-I", "ledger_suite/icp/proto"])
         .args(["-I", "types/base_types/proto"])
         .args(["-I", "nns/common/proto"])
         .args(["-I", "nns/gtc/proto"])
