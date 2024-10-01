@@ -367,9 +367,16 @@ impl SchedulerImpl {
             let active_cores = scheduler_cores.min(number_of_canisters);
             for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
                 let canister_state = canister_states.get_mut(canister_id).unwrap();
-                // Decrease accumulated priorities of the top `scheduler_cores` canisters.
-                // This is required to respect scheduler invariant after the round is finished.
-                canister_state.scheduler_state.accumulated_priority -=
+                // As top `scheduler_cores` canisters are guaranteed to be scheduled
+                // this round, their accumulated priorities must be decreased here
+                // by `capacity * multiplier / scheduler_cores`. But instead this
+                // value is accumulated in the `priority_credit`, and applied later:
+                // * For short executions, the `priority_credit` is deducted from
+                //   the `accumulated_priority` at the end of the round.
+                // * For long executions, the `priority_credit` is accumulated
+                //   for a few rounds, and deducted from the `accumulated_priority`
+                //   at the end of the long execution.
+                canister_state.scheduler_state.priority_credit +=
                     (compute_capacity_percent * multiplier / active_cores as i64).into();
                 if i < round_schedule.long_execution_cores {
                     canister_state.scheduler_state.long_execution_mode =

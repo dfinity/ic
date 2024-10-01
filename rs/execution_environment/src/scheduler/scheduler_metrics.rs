@@ -474,7 +474,7 @@ impl SchedulerMetrics {
             },
             round_scheduling_duration: duration_histogram(
                 "execution_round_scheduling_duration_seconds",
-                "The duration of execution round scheduling in seconds.",
+                "The duration of execution inner round scheduling in seconds.",
                 metrics_registry,
             ),
             round_update_signature_request_contexts_duration: duration_histogram(

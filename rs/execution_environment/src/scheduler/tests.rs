@@ -4816,7 +4816,8 @@ fn filter_after_long_executions() {
 
     // Remember the initial accumulated priority.
     let canister = test.state().canister_state(&long_canister_id).unwrap();
-    let ap_before_execution = canister.scheduler_state.accumulated_priority;
+    let ap_before_execution =
+        canister.scheduler_state.accumulated_priority - canister.scheduler_state.priority_credit;
 
     // After the first round the canister should have a paused long execution.
     test.execute_round(ExecutionRoundType::OrdinaryRound);
@@ -4831,7 +4832,8 @@ fn filter_after_long_executions() {
     assert!(!canister.has_paused_execution());
 
     // The accumulated priority should not increase after the long execution is finished.
-    let ap_after_execution = canister.scheduler_state.accumulated_priority;
+    let ap_after_execution =
+        canister.scheduler_state.accumulated_priority - canister.scheduler_state.priority_credit;
     assert!(ap_after_execution <= ap_before_execution);
 }
 
@@ -5871,38 +5873,48 @@ fn apply_scheduling_strategy_in_inner_round(#[strategy(2..10_usize)] scheduler_c
 
     let test = run_inner_rounds_on_cores(1, scheduler_cores);
     let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
         // After just one inner round, the first `scheduler_cores` canisters
         // should be charged for execution.
         if i < scheduler_cores {
-            prop_assert!(scheduler_state.accumulated_priority < 0.into());
+            prop_assert!(
+                scheduler_state.accumulated_priority - scheduler_state.priority_credit < 0.into()
+            );
         } else {
-            prop_assert!(scheduler_state.accumulated_priority > 0.into());
+            prop_assert!(
+                scheduler_state.accumulated_priority + scheduler_state.priority_credit > 0.into()
+            );
         }
         // All ingresses should be executed in the previous round.
         prop_assert_eq!(system_state.queues().ingress_queue_size(), 0);
         prop_assert_eq!(system_state.canister_metrics.executed, 1);
         prop_assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         total_accumulated_priority += scheduler_state.accumulated_priority.get();
+        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
-    prop_assert_eq!(total_accumulated_priority, 0);
+    prop_assert_eq!(total_accumulated_priority, total_priority_credit);
 
     let test = run_inner_rounds_on_cores(2, scheduler_cores);
     let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
         // After two inner rounds, all canisters should be charged for execution.
-        prop_assert!(scheduler_state.accumulated_priority == 0.into());
+        prop_assert!(
+            scheduler_state.accumulated_priority - scheduler_state.priority_credit == 0.into()
+        );
         // All ingresses should be executed twice in the previous round.
         prop_assert_eq!(system_state.queues().ingress_queue_size(), 0);
         prop_assert_eq!(system_state.canister_metrics.executed, 2);
         prop_assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         total_accumulated_priority += scheduler_state.accumulated_priority.get();
+        total_priority_credit += scheduler_state.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
-    prop_assert_eq!(total_accumulated_priority, 0);
+    prop_assert_eq!(total_accumulated_priority, total_priority_credit);
 }
