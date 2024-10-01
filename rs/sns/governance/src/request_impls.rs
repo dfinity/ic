@@ -4,9 +4,9 @@ use crate::pb::v1::{
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
     GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuronResponse, GetProposalResponse, GetSnsInitializationParametersRequest,
-    GetSnsInitializationParametersResponse, ListNeuronsResponse, ListProposalsResponse,
-    ManageNeuronResponse,
+    GetModeResponse, GetNeuronResponse, GetProposalResponse, GetRunningSnsVersionResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    ListNeuronsResponse, ListProposalsResponse, ManageNeuronResponse,
 };
 
 impl Request for ClaimSwapNeuronsRequest {
@@ -72,5 +72,11 @@ impl Request for crate::pb::v1::ListProposals {
 impl Request for crate::pb::v1::ManageNeuron {
     type Response = ManageNeuronResponse;
     const METHOD: &'static str = "manage_neuron";
+    const UPDATE: bool = true;
+}
+
+impl Request for crate::pb::v1::GetRunningSnsVersionRequest {
+    type Response = GetRunningSnsVersionResponse;
+    const METHOD: &'static str = "get_running_sns_version";
     const UPDATE: bool = true;
 }

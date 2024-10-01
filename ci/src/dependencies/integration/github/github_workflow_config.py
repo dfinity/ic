@@ -13,4 +13,6 @@ class GithubWorkflowConfig:
 
 
 class GithubWorklow(Enum):
-    IC_BUILD_PUSH_BASE_CONTAINER_IMAGES = GithubWorkflowConfig(project="dfinity/ic", workflow_name="container-base-images.yml")
+    IC_BUILD_PUSH_BASE_CONTAINER_IMAGES = GithubWorkflowConfig(
+        project="dfinity/ic", workflow_name="container-base-images.yml"
+    )

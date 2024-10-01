@@ -305,7 +305,7 @@ where
 {
     // stop_canister returns the candid empty type, which cannot be parsed using
     // dfn_candid::candid
-    Rt::call_with_cleanup(
+    () = Rt::call_with_cleanup(
         CanisterId::ic_00(),
         "stop_canister",
         (CanisterIdRecord::from(canister_id),),
