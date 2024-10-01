@@ -124,8 +124,6 @@ jobs:
         uses:  ./.github/actions/bazel-test-all/
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-          # if the PR is labeled with CI_ALL_BAZEL_TARGETS, set RUN_ON_DIFF_ONLY to false
-          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
