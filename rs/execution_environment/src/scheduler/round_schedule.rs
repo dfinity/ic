@@ -143,39 +143,12 @@ impl RoundSchedule {
             .cloned()
             .collect();
 
-        let ordered_long_execution_canister_ids = self
-            .ordered_long_execution_canister_ids
-            .iter()
-            .filter(
-                |canister_id| match canister_next_executions.get(canister_id) {
-                    Some(NextExecution::ContinueLong) => true,
-
-                    // We expect long execution, but there is none,
-                    // so the long execution was finished in the
-                    // previous inner round.
-                    //
-                    // We should avoid scheduling this canister to:
-                    // 1. Avoid the canister to bypass the logic in
-                    //    `apply_scheduling_strategy()`.
-                    // 2. Charge canister for resources at the end
-                    //    of the round.
-                    Some(NextExecution::StartNew) => false,
-
-                    None // No such canister. Should not happen.
-                        | Some(NextExecution::None) // Idle canister.
-                        | Some(NextExecution::ContinueInstallCode) // Subnet message.
-                         => false,
-                },
-            )
-            .cloned()
-            .collect();
-
         (
             RoundSchedule::new(
                 self.scheduler_cores,
                 self.long_execution_cores,
                 ordered_new_execution_canister_ids,
-                ordered_long_execution_canister_ids,
+                self.ordered_long_execution_canister_ids.clone(),
             ),
             rate_limited_canister_ids,
         )
