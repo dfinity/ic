@@ -38,7 +38,7 @@ protoc \
   -I nns/governance/proto \
   -I nns/common/proto \
   -I types/base_types/proto \
-  -I rosetta-api/icp_ledger/proto \
+  -I ledger_suite/icp/proto \
   nns/governance/proto/ic_nns_governance/pb/v1/governance.proto \
   --decode ic_nns_governance.pb.v1.Governance \
   < ../testnet/env/bootstrap/initial-governance.pb \
