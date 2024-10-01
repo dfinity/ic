@@ -259,7 +259,7 @@ mod tests {
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
             // For these tests, execution in Wasm64 mode is not relevant.
-            is_wasm64: Some(false),
+            is_wasm64: None,
         };
 
         canister_state.execution_state = Some(execution_state);
