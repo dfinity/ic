@@ -26,12 +26,18 @@ function validate_node_remuneration() {
     fi
 
     if [[ ! "$node_remuneration_type" =~ ^type[0-9]+(\.[0-9])?$ ]]; then
-        log_and_halt_installation_on_error "Configuration error: node_remuneration_type is invalid: (${node_remuneration_type})"
+        log_and_halt_installation_on_error "Configuration error: node_remuneration_type is invalid: ${node_remuneration_type}"
     fi
+
+    echo "Valid node remuneration type: ${node_remuneration_type}"
 }
 
 # Establish run order
 main() {
+    log_start "$(basename $0)"
     read_variables
     validate_node_remuneration
+    log_end "$(basename $0)"
 }
+
+main
