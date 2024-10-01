@@ -35,7 +35,7 @@ impl Display for TlaValue {
             }
             TlaValue::Function(map) => {
                 if map.is_empty() {
-                    f.write_str("[x \\in {} -> {}]")
+                    f.write_str("[x \\in {} |-> CHOOSE y \\in {}: TRUE]")
                 } else {
                     let elements: Vec<_> =
                         map.iter().map(|(k, v)| format!("{} :> {}", k, v)).collect();
