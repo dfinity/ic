@@ -90,12 +90,8 @@ ENV SOURCE_DATE_EPOCH=0
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Preparation and install of packages for nginx
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install gnupg 
-RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys ABF5BD827BD9BF62
-
-RUN echo "deb http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list && \
-    echo "deb-src http://nginx.org/packages/mainline/ubuntu/ focal nginx" >> /etc/apt/sources.list.d/nginx.list 
+# Preparation
+RUN apt-get -y update && apt-get -y upgrade
 
 RUN \
     apt-get update && \
@@ -128,7 +124,6 @@ RUN \
         net-tools \
         netbase \
         nftables \
-        nginx=1.25.4-1~focal \
         opensc \
         openssh-client openssh-server \
         parted \
