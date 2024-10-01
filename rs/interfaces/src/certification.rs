@@ -27,7 +27,7 @@ pub enum ChangeAction {
 }
 
 /// Trait containing only immutable functions wrt. Certification Pool
-pub trait CertificationPool {
+pub trait CertificationPool: Send + Sync {
     /// Returns the certification for the given height, if available.
     fn certification_at_height(&self, height: Height) -> Option<Certification>;
 
@@ -57,6 +57,8 @@ pub trait CertificationPool {
 
     /// Returns all heights which have a full validated certification.
     fn certified_heights(&self) -> HashSet<Height>;
+
+    fn max_certified_height(&self) -> Option<Height>;
 }
 
 /// Reasons for why a certification might be invalid.

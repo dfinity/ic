@@ -16,6 +16,7 @@ mod priority;
 mod purger;
 mod random_beacon_maker;
 mod random_tape_maker;
+mod recovery;
 mod share_aggregator;
 mod status;
 pub mod validator;
@@ -36,6 +37,7 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
+    certification::CertificationPool,
     consensus_pool::{
         ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
     },
@@ -59,6 +61,7 @@ use ic_types::{
     replica_version::ReplicaVersion, Time,
 };
 pub use metrics::ValidatorMetrics;
+use recovery::Recovery;
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -79,6 +82,7 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
+    Recovery,
 }
 
 /// When purging consensus or certification artifacts, we always keep a
@@ -109,6 +113,7 @@ pub struct ConsensusImpl {
     pub notary: Notary,
     /// Finalizer
     pub finalizer: Finalizer,
+    recovery: Recovery,
     random_beacon_maker: RandomBeaconMaker,
     random_tape_maker: RandomTapeMaker,
     /// Blockmaker
@@ -146,6 +151,7 @@ impl ConsensusImpl {
         query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+        certification_pool: Arc<RwLock<dyn CertificationPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -187,6 +193,7 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Validator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
+        last_invoked.insert(ConsensusSubcomponent::Recovery, current_time);
 
         ConsensusImpl {
             dkg_key_manager,
@@ -206,6 +213,19 @@ impl ConsensusImpl {
                 crypto.clone(),
                 message_routing.clone(),
                 ingress_selector.clone(),
+                logger.clone(),
+                metrics_registry.clone(),
+            ),
+            recovery: Recovery::new(
+                replica_config.clone(),
+                registry_client.clone(),
+                membership.clone(),
+                crypto.clone(),
+                state_manager.clone(),
+                certification_pool,
+                message_routing.clone(),
+                ingress_selector.clone(),
+                Arc::clone(&time_source),
                 logger.clone(),
                 metrics_registry.clone(),
             ),
@@ -415,7 +435,9 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
                 self.log,
                 "consensus is halted by instructions of the subnet record in the registry"
             );
-            return Mutations::new();
+            return self.call_with_metrics(ConsensusSubcomponent::Recovery, || {
+                self.recovery.on_state_change(&pool_reader)
+            });
         }
 
         // Log some information about the state of consensus
@@ -510,6 +532,9 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             let unit_delay = settings.unit_delay;
             let current_time = self.time_source.get_relative_time();
             for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
+                if *component == ConsensusSubcomponent::Recovery {
+                    continue;
+                }
                 let time_since_last_invoked =
                     current_time.saturating_duration_since(*last_invoked_time);
                 let component_name = component.as_ref();

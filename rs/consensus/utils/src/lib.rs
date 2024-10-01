@@ -338,10 +338,7 @@ pub fn aggregate<
                 .get_committee_threshold(content_ref.height(), Message::committee())
             {
                 Ok(threshold) => threshold,
-                Err(err) => {
-                    error!(log, "MembershipError: {:?}", err);
-                    return None;
-                }
+                Err(err) => 9,
             };
             if shares.len() < threshold {
                 return None;
