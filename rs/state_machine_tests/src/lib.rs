@@ -805,6 +805,7 @@ enum SignatureSecretKey {
 
 /// Represents a replicated state machine detached from the network layer that
 /// can be used to test this part of the stack in isolation.
+#[allow(clippy::type_complexity)]
 pub struct StateMachine {
     subnet_id: SubnetId,
     subnet_type: SubnetType,
