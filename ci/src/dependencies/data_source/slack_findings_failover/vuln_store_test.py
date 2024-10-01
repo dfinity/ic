@@ -1,7 +1,12 @@
 from unittest.mock import Mock, call
 
 import pytest
-from data_source.slack_findings_failover.data import VULNERABILITY_MSG_FIXED_REACTION, SlackVulnerabilityEvent
+from data_source.slack_findings_failover.data import (
+    VULNERABILITY_MSG_FIXED_REACTION,
+    SlackFinding,
+    SlackProjectInfo,
+    SlackVulnerabilityEvent,
+)
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityMessageInfo
 from data_source.slack_findings_failover.vuln_store import SlackVulnerabilityStore
@@ -18,6 +23,12 @@ def slack_api_update_msg_call(msg_id):
 
 def slack_api_react_msg_call(msg_id):
     return call.add_reaction(reaction=VULNERABILITY_MSG_FIXED_REACTION, message_id=msg_id)
+
+
+def slack_api_risk_ass_msg_call(msg_id, risk_ass):
+    return call.send_message(
+        message=f"This finding needs risk assessment from {risk_ass}", is_block_kit_message=False, thread_id=msg_id
+    )
 
 
 @pytest.fixture
@@ -40,8 +51,14 @@ def slack_vuln_info():
         "c1": SlackVulnerabilityMessageInfo("c1", "m1"),
         "c2": SlackVulnerabilityMessageInfo("c2", "m2"),
     }
+    svi.finding_by_id = {("a", "b", "c", "d"): SlackFinding("a", "b", "c", "d", ["p1"])}
     svi.get_slack_msg_for.return_value = TEST_SLACK_MSG
     return svi
+
+
+@pytest.fixture()
+def info_by_project():
+    return {"p1": SlackProjectInfo("p1", {"c1", "c2"}, {"c1": ["risk_ass1"], "c2": ["risk_ass2"]})}
 
 
 def test_handle_vuln_added_event(slack_store, slack_vuln_info, slack_api):
@@ -109,3 +126,13 @@ def test_handle_dep_removed_event(slack_store, slack_vuln_info, slack_api):
     assert scan_res["c1"].removed_dependencies[("scanner", "repo", "did", "dvers")] == {"proj1"}
     assert scan_res["c2"].removed_dependencies[("scanner", "repo", "did", "dvers")] == {"proj2"}
     slack_api.assert_has_calls([slack_api_update_msg_call("m1"), slack_api_update_msg_call("m2")])
+
+
+def test_handle_risk_unknown_event(slack_store, slack_vuln_info, slack_api, info_by_project):
+    events = [SlackVulnerabilityEvent.risk_unknown("vid", "c1"), SlackVulnerabilityEvent.risk_unknown("vid", "c2")]
+
+    slack_store.handle_events(events, {}, slack_vuln_info, info_by_project)
+
+    slack_api.assert_has_calls(
+        [slack_api_risk_ass_msg_call("m1", "risk_ass1"), slack_api_risk_ass_msg_call("m2", "risk_ass2")]
+    )

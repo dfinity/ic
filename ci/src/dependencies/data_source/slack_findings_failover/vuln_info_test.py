@@ -142,12 +142,13 @@ def test_update_with():
 
     events = svi.update_with(vi, info_by_project, "repo", "scanner")
 
-    assert len(events) == 7
+    assert len(events) == 8
     assert events[0] == SlackVulnerabilityEvent.vuln_added("vid", "c3")
     assert events[1] == SlackVulnerabilityEvent.vuln_removed("vid", "c2")
-    assert events[2] == SlackVulnerabilityEvent.vuln_changed("vid", "c1", {"Description": "vdesc", "Score": "8"})
-    assert events[3] in [da1, da2, dr1]
+    assert events[2] == SlackVulnerabilityEvent.risk_unknown("vid", "c1")
+    assert events[3] == SlackVulnerabilityEvent.vuln_changed("vid", "c1", {"Description": "vdesc", "Score": "8"})
     assert events[4] in [da1, da2, dr1]
     assert events[5] in [da1, da2, dr1]
-    assert events[3] != events[4] and events[4] != events[5] and events[3] != events[5]
-    assert events[6] == dr2
+    assert events[6] in [da1, da2, dr1]
+    assert events[4] != events[5] and events[5] != events[6] and events[4] != events[6]
+    assert events[7] == dr2
