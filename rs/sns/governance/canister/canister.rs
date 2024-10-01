@@ -32,8 +32,8 @@ use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, GovernanceError, MintTokensRequest,
-    MintTokensResponse, Neuron,
+    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
 };
 use ic_sns_governance::{
     governance::{
@@ -524,6 +524,7 @@ fn get_running_sns_version_(_: GetRunningSnsVersionRequest) -> GetRunningSnsVers
     GetRunningSnsVersionResponse {
         deployed_version: governance().proto.deployed_version.clone(),
         pending_version: governance().proto.pending_version.clone(),
+        target_version: governance().proto.target_version.clone(),
     }
 }
 
@@ -724,6 +725,14 @@ fn add_maturity() {
 #[candid_method(update, rename = "add_maturity")]
 fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
     governance_mut().add_maturity(request)
+}
+
+#[cfg(feature = "test")]
+#[export_name = "canister_update advance_target_version"]
+fn advance_target_version(request: AdvanceTargetVersionRequest) {
+    over(candid_one, |request: AdvanceTargetVersionRequest| {
+        AdvanceTargetVersionResponse {}
+    })
 }
 
 /// Mints tokens for testing

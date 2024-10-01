@@ -20,7 +20,7 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version, CachedUpgradeSteps
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -4632,6 +4632,44 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+
+        self.maybe_update_cached_upgrade_steps().await;
+    }
+
+    async fn maybe_update_cached_upgrade_steps(&mut self) {
+        let update_interval = 5 * 60; // 5 minutes // TODO: move to a constant
+        let should_update = match self.proto.cached_upgrade_steps.clone() {
+            Some(cached_upgrade_steps) => {
+                let requested_update_at_timestamp_seconds = cached_upgrade_steps.requested_update_at_timestamp_seconds.unwrap_or(0);
+                let received_update_at_timestamp_seconds = cached_upgrade_steps.received_update_at_timestamp_seconds.unwrap_or(0);
+                let last_update = requested_update_at_timestamp_seconds.max(received_update_at_timestamp_seconds);
+                self.env.now() - last_update > update_interval
+            }
+            None => {
+                true
+            }
+        };
+
+        if should_update {
+            let current_version = self.proto.deployed_version_or_panic();
+            let requested_update_at_timestamp_seconds = self.env.now();
+            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                requested_update_at_timestamp_seconds: Some(requested_update_at_timestamp_seconds),
+                ..self.proto.cached_upgrade_steps.clone().unwrap_or_default()
+            });
+            match crate::sns_upgrade::get_upgrade_path(&*self.env, current_version, self.env.canister_id().get()).await {
+                Ok(upgrade_path) => {
+                    self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                        upgrade_steps: upgrade_path,
+                        requested_update_at_timestamp_seconds: Some(requested_update_at_timestamp_seconds),
+                        received_update_at_timestamp_seconds: Some(self.env.now()),
+                    });
+                }
+                Err(err) => {
+                    log!(ERROR, "Failed to get upgrade path: {}", err);
+                }
+            }
+        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
