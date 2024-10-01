@@ -764,7 +764,7 @@ impl CanisterQueuesMultiFixture {
     }
 
     fn pool_is_empty(&self) -> bool {
-        self.queues.pool.len() == 0
+        self.queues.store.is_empty()
     }
 }
 
@@ -1035,7 +1035,7 @@ fn test_peek_input_round_robin() {
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1158,7 +1158,7 @@ fn test_peek_input_with_stale_references() {
     assert_eq!(expected, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1174,7 +1174,7 @@ fn test_pop_input_with_stale_references() {
     assert_eq!(expected, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1202,7 +1202,7 @@ fn test_skip_input_with_stale_references() {
     assert_eq!(request_3, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 /// Produces a `CanisterQueues` with 3 local input queues and 3 remote input
@@ -1282,7 +1282,7 @@ fn test_pop_input_with_empty_queue_in_input_schedule() {
     assert!(!queues.has_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
     assert_eq!(
         Ok(()),
         queues.schedules_ok(&input_queue_type_from_local_canisters(vec![
@@ -1311,7 +1311,7 @@ fn test_pop_input_with_gced_queue_in_input_schedule() {
     assert!(!queues.has_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
     assert_eq!(Ok(()), queues.schedules_ok(&|_| RemoteSubnet));
 }
 
@@ -1328,7 +1328,7 @@ fn test_peek_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1349,7 +1349,7 @@ fn test_peek_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1366,7 +1366,7 @@ fn test_skip_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1388,7 +1388,7 @@ fn test_skip_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1515,7 +1515,7 @@ fn test_output_into_iter() {
     }
 
     assert_eq!(0, queues.output_message_count());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1763,8 +1763,8 @@ fn encode_non_default_pool() {
         .unwrap();
     queues.pop_canister_input(RemoteSubnet).unwrap();
     // Sanity check that the pool is empty but not equal to the default.
-    assert_eq!(0, queues.pool.len());
-    assert_ne!(MessagePool::default(), queues.pool);
+    assert!(queues.store.is_empty());
+    assert_ne!(MessageStoreImpl::default(), queues.store);
 
     // And a roundtrip encode preserves the `CanisterQueues` unaltered.
     let encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -1807,7 +1807,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     assert!(queues.shed_largest_message(&canister_test_id(13), &BTreeMap::new()));
     assert_eq!(
         Some(&CallbackId::from(3)),
-        queues.shed_responses.values().next()
+        queues.store.shed_responses.values().next()
     );
 
     // Sanity check: roundtrip encode succeeds.
@@ -1890,7 +1890,7 @@ fn decode_with_both_response_and_shed_response_for_reference() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Both response and shed response for reference Id(")
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
     );
 }
 
@@ -2023,7 +2023,7 @@ fn test_stats_best_effort() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Best-effort requests and best-effort responses, to be enqueued one each into
     // an input and an output queue.
@@ -2084,7 +2084,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming request and the outgoing response.
@@ -2113,7 +2113,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 1,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Time out the one message with a deadline of less than 20 (the outgoing
@@ -2149,7 +2149,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 0,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
     // But the `CanisterQueues` getter methods know that there are two responses.
     assert_eq!(2, queues.input_queues_message_count());
@@ -2170,7 +2170,7 @@ fn test_stats_best_effort() {
     // No changes in slot and memory reservations.
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 #[test]
@@ -2179,7 +2179,7 @@ fn test_stats_guaranteed_response() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Guaranteed response requests and guaranteed responses, to be enqueued one
     // each into an input and an output queue.
@@ -2240,7 +2240,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming request and the outgoing response.
@@ -2269,7 +2269,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 1,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Time out the one message that has an (implicit) deadline (the outgoing
@@ -2297,7 +2297,7 @@ fn test_stats_guaranteed_response() {
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Consume the output queue slot reservation.
     queues.push_output_response(response4_.clone().into());
@@ -2305,7 +2305,7 @@ fn test_stats_guaranteed_response() {
 
     // Default stats throughout.
     assert_eq!(QueueStats::default(), queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 #[test]
@@ -2314,7 +2314,7 @@ fn test_stats_oversized_requests() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // One oversized best-effort request and one oversized guaranteed response
     // request, to be enqueued into both an input and an output queue.
@@ -2370,7 +2370,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming best-effort request and the incoming guaranteed request.
@@ -2399,7 +2399,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
@@ -2429,7 +2429,7 @@ fn test_stats_oversized_requests() {
     // No change in slot and memory reservations.
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // But back to all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 /// Simulates sending an outgoing request and receiving an incoming response,
@@ -2557,7 +2557,7 @@ fn test_reject_subnet_output_request() {
     // And after popping it, there are no messages or reserved slots left.
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -2646,7 +2646,7 @@ fn test_output_queues_for_each() {
     // No output left.
     assert!(!queues.has_output());
     // And the pool is also empty.
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -2683,22 +2683,22 @@ fn test_peek_output_with_stale_references() {
     assert!(queues.has_output());
 
     // One message to canister 1.
-    let peeked = requests.get(2).unwrap().clone().into();
-    assert_eq!(Some(&peeked), queues.peek_output(&canister1));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister1));
+    let request2: RequestOrResponse = requests.get(2).unwrap().clone().into();
+    assert_eq!(Some(&request2), queues.peek_output(&canister1));
+    assert_eq!(Some(request2), queues.pop_canister_output(&canister1));
     assert_eq!(None, queues.peek_output(&canister1));
 
     // No message to canister 2.
     assert_eq!(None, queues.peek_output(&canister2));
 
     // One message to canister 3.
-    let peeked = requests.get(3).unwrap().clone().into();
-    assert_eq!(Some(&peeked), queues.peek_output(&canister3));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister3));
+    let request3: RequestOrResponse = requests.get(3).unwrap().clone().into();
+    assert_eq!(Some(&request3), queues.peek_output(&canister3));
+    assert_eq!(Some(request3), queues.pop_canister_output(&canister3));
     assert_eq!(None, queues.peek_output(&canister3));
 
     assert!(!queues.has_output());
-    assert!(queues.pool.len() == 2);
+    assert!(queues.store.pool.len() == 2);
 }
 
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
@@ -2737,7 +2737,7 @@ fn output_into_iter_peek_and_next_consistent(
 
     prop_assert_eq!(output_iter.next(), None);
     prop_assert_eq!(raw_requests.len(), popped);
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -2809,7 +2809,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
     // Ensure that there are no messages left in the canister queues.
     prop_assert_eq!(canister_queues.output_message_count(), 0);
     // And the pool is empty.
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -2864,7 +2864,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
     // Ensure that there are no messages left in the canister queues.
     prop_assert_eq!(canister_queues.output_message_count(), 0);
     // And the pool is empty.
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -3108,7 +3108,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
     // Check that each canister has one request timed out in the output queue and one
     // reject response in the corresponding input queue.
     assert_eq!(1, canister_queues.queue_stats.input_queues_reserved_slots);
-    let message_stats = canister_queues.pool.message_stats();
+    let message_stats = canister_queues.message_stats();
     assert_eq!(3, message_stats.inbound_message_count);
     assert_eq!(2, message_stats.inbound_guaranteed_response_count);
     assert_eq!(1, message_stats.outbound_message_count);
@@ -3124,9 +3124,9 @@ fn time_out_messages_pushes_correct_reject_responses() {
             .0;
         assert_eq!(1, input_queue_from_canister.len());
         let reference = input_queue_from_canister.peek().unwrap();
-        let reject_response = canister_queues.pool.get(reference).unwrap();
+        let reject_response = canister_queues.store.get(reference);
         assert_eq!(
-            RequestOrResponse::from(Response {
+            CanisterInput::from(RequestOrResponse::from(Response {
                 originator: own_canister_id,
                 respondent: from_canister,
                 originator_reply_callback: CallbackId::from(callback_id),
@@ -3137,8 +3137,8 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
                 )),
                 deadline,
-            }),
-            *reject_response,
+            })),
+            reject_response,
         );
     };
     check_reject_response(own_canister_id, 0, NO_DEADLINE);
@@ -3163,7 +3163,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 
     // Zero input queue reserved slots, 4 inbound responses,
     assert_eq!(0, canister_queues.queue_stats.input_queues_reserved_slots);
-    let message_stats = canister_queues.pool.message_stats();
+    let message_stats = canister_queues.message_stats();
     assert_eq!(4, message_stats.inbound_message_count);
     assert_eq!(3, message_stats.inbound_guaranteed_response_count);
     assert_eq!(0, message_stats.outbound_message_count);

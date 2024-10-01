@@ -12,13 +12,13 @@ hyper = { workspace = true }
 hyper-util = { workspace = true }
 crossbeam-channel = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
+ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
-ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 serde = { workspace = true }

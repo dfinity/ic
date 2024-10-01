@@ -120,6 +120,13 @@ list_dirs_pattern(systemd_tmpfiles_t, unlabeled_t, unlabeled_t)
 read_files_pattern(systemd_tmpfiles_t, tmpfs_t, tmpfs_t)
 
 ###############################################################################
+# systemd-generator
+
+# systemd_generator_t is missing this permission, and it blocks ssh
+require { type systemd_generator_t; }
+init_delete_runtime_files(systemd_generator_t)
+
+###############################################################################
 # udev
 
 # not clear why, but harmless
@@ -145,6 +152,12 @@ systemd_connect_userdb(local_login_t)
 
 # ssh also needs access to userdb
 systemd_connect_userdb(sshd_t)
+
+###############################################################################
+# systemd-notify
+
+require { type systemd_runtime_notify_t; }
+allow sshd_t systemd_runtime_notify_t : sock_file write_sock_file_perms;
 
 ###############################################################################
 # pcscd

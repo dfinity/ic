@@ -1,8 +1,7 @@
-use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
-
 use super::super::message_pool::tests::*;
-use super::super::message_pool::Class;
+use super::super::message_pool::{Class, InboundReference};
 use super::*;
+use crate::canister_state::DEFAULT_QUEUE_CAPACITY;
 use assert_matches::assert_matches;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
@@ -11,7 +10,7 @@ use proptest::prelude::*;
 #[test]
 fn canister_queue_constructor_test() {
     const CAPACITY: usize = 14;
-    let mut queue = CanisterQueue::new(CAPACITY);
+    let mut queue = InputQueue::new(CAPACITY);
 
     assert_eq!(0, queue.len());
     assert!(!queue.has_used_slots());
@@ -29,9 +28,9 @@ fn canister_queue_constructor_test() {
 #[test]
 fn canister_queue_push_request_succeeds() {
     const CAPACITY: usize = 1;
-    let mut queue = CanisterQueue::new(CAPACITY);
+    let mut queue = InputQueue::new(CAPACITY);
 
-    let reference = new_request_message_id(13, Class::BestEffort);
+    let reference = new_request_reference(13, Class::BestEffort);
     queue.push_request(reference);
 
     assert_eq!(1, queue.len());
@@ -78,7 +77,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_reserved_response_slot());
 
     // Push response into reseerved slot.
-    let reference = new_response_message_id(13, GuaranteedResponse);
+    let reference = new_response_reference(13, GuaranteedResponse);
     queue.push_response(reference);
 
     assert_eq!(1, queue.len());
@@ -111,7 +110,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY {
-        queue.push_request(new_request_message_id(i as u64, Class::BestEffort));
+        queue.push_request(new_request_reference(i as u64, Class::BestEffort));
     }
 
     assert_eq!(CAPACITY, queue.len());
@@ -125,7 +124,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(Err(()), queue.check_has_reserved_response_slot());
 
-    queue.push_request(new_request_message_id(13, Class::BestEffort));
+    queue.push_request(new_request_reference(13, Class::BestEffort));
 }
 
 /// Test that overfilling an output queue with slot reservations results in
@@ -164,7 +163,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
         } else {
             GuaranteedResponse
         };
-        queue.push_response(new_response_message_id(i as u64, class));
+        queue.push_response(new_response_reference(i as u64, class));
     }
 
     assert_eq!(2, queue.len());
@@ -188,11 +187,11 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
 fn canister_queue_full_duplex() {
     // First fill up the queue.
     const CAPACITY: usize = 2;
-    let mut queue = CanisterQueue::new(CAPACITY);
+    let mut queue = InputQueue::new(CAPACITY);
     for i in 0..CAPACITY as u64 {
-        queue.push_request(new_request_message_id(i * 2, Class::BestEffort));
+        queue.push_request(new_request_reference(i * 2, Class::BestEffort));
         queue.try_reserve_response_slot().unwrap();
-        queue.push_response(new_response_message_id(i * 2 + 1, Class::BestEffort));
+        queue.push_response(new_response_reference(i * 2 + 1, Class::BestEffort));
     }
 
     assert_eq!(2 * CAPACITY, queue.len());
@@ -212,17 +211,17 @@ fn canister_queue_full_duplex() {
 #[test]
 #[should_panic(expected = "No reserved response slot")]
 fn canister_queue_push_without_reserved_slot_panics() {
-    let mut queue = CanisterQueue::new(10);
-    queue.push_response(new_response_message_id(13, Class::BestEffort));
+    let mut queue = InputQueue::new(10);
+    queue.push_response(new_response_reference(13, Class::BestEffort));
 }
 
-/// Generator for an arbitrary message reference.
-fn arbitrary_message_reference() -> impl Strategy<Value = message_pool::Id> + Clone {
+/// Generator for an arbitrary inbound message reference.
+fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
     prop_oneof![
-        1 => any::<u64>().prop_map(|gen| new_request_message_id(gen, Class::GuaranteedResponse)),
-        1 => any::<u64>().prop_map(|gen| new_request_message_id(gen, Class::BestEffort)),
-        1 => any::<u64>().prop_map(|gen| new_response_message_id(gen, Class::GuaranteedResponse)),
-        1 => any::<u64>().prop_map(|gen| new_response_message_id(gen, Class::BestEffort)),
+        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
+        1 => any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
+        1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
+        1 => any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
     ]
 }
 
@@ -235,7 +234,7 @@ proptest! {
         )
     ) {
         // Create a queue with large enough capacity.
-        let mut queue = CanisterQueue::new(20);
+        let mut queue = InputQueue::new(20);
 
         // Push all references onto the queue.
         for reference in references.iter() {
@@ -292,7 +291,7 @@ proptest! {
         prop_assert_eq!(Ok(()), queue.check_invariants());
 
         let encoded: pb_queues::CanisterQueue = (&queue).into();
-        let decoded = (encoded, Context::Inbound).try_into().unwrap();
+        let decoded = encoded.try_into().unwrap();
 
         assert_eq!(queue, decoded);
     }
@@ -300,42 +299,39 @@ proptest! {
 
 #[test]
 fn decode_inbound_message_in_output_queue_fails() {
-    // Queue with an inbound request.
-    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    queue.push_request(new_request_message_id(13, Class::BestEffort));
+    // Input queue with a request.
+    let mut queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
+    queue.push_request(new_request_reference(13, Class::BestEffort));
     let encoded: pb_queues::CanisterQueue = (&queue).into();
 
     // Cannot be decoded as an output queue.
     assert_matches!(
-        CanisterQueue::try_from((encoded.clone(), Context::Outbound)),
+        OutputQueue::try_from(encoded.clone()),
         Err(ProxyDecodeError::Other(_))
     );
 
     // But can be decoded as an input queue.
-    assert_eq!(queue, (encoded, Context::Inbound).try_into().unwrap());
+    assert_eq!(queue, encoded.try_into().unwrap());
 }
 
 #[test]
 fn decode_with_invalid_response_slots_fails() {
     // Queue with two inbound responses.
-    let mut queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+    let mut queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
     queue.try_reserve_response_slot().unwrap();
-    queue.push_response(new_response_message_id(13, Class::BestEffort));
+    queue.push_response(new_response_reference(13, Class::BestEffort));
     queue.try_reserve_response_slot().unwrap();
-    queue.push_response(new_response_message_id(14, Class::BestEffort));
+    queue.push_response(new_response_reference(14, Class::BestEffort));
     let encoded: pb_queues::CanisterQueue = (&queue).into();
 
     // Can be decoded as is.
-    assert_eq!(
-        queue,
-        (encoded.clone(), Context::Inbound).try_into().unwrap()
-    );
+    assert_eq!(queue, encoded.clone().try_into().unwrap());
 
     // But fails to decode with a too low `response_slots` value.
     let mut too_few_response_slots = encoded.clone();
     too_few_response_slots.response_slots = 1;
     assert_matches!(
-        CanisterQueue::try_from((too_few_response_slots.clone(), Context::Inbound)),
+        InputQueue::try_from(too_few_response_slots),
         Err(ProxyDecodeError::Other(_))
     );
 }

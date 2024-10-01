@@ -1,25 +1,28 @@
-use super::message_pool::{self, Context, Kind};
+use super::message_pool::{Kind, Reference};
+use super::CanisterInput;
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::messages::Ingress;
+use ic_protobuf::state::ingress::v1 as pb_ingress;
+use ic_protobuf::state::queues::v1 as pb_queues;
+use ic_types::messages::{Ingress, RequestOrResponse};
 use ic_types::CountBytes;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
+use std::fmt::Debug;
 use std::mem::size_of;
 use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
-/// A FIFO queue with equal but separate capacities for requests and responses,
-/// ensuring full-duplex communication up to its capacity.
+/// A typed FIFO queue with equal but separate capacities for requests and
+/// responses, ensuring full-duplex communication up to its capacity.
 ///
-/// The queue holds weak references into a `MessagePool`. The messages that
-/// these references point to may expire or be shed, resulting in stale
+/// The queue holds typed weak references into a `MessageStore`. The messages
+/// that these references point to may expire or be shed, resulting in stale
 /// references that are not immediately removed from the queue. Which is why the
 /// queue stats track "request slots" and "response slots" instead of "requests"
 /// and "responses"; and `len()` returns the length of the queue, not the number
@@ -39,7 +42,7 @@ mod tests;
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub(crate) struct CanisterQueue {
+pub(crate) struct CanisterQueue<T> {
     /// A FIFO queue of request and response weak references into the pool.
     ///
     /// Since responses may be enqueued at arbitrary points in time, reserved slots
@@ -64,7 +67,7 @@ pub(crate) struct CanisterQueue {
     ///    as dangling references to begin with. They are to be handled as
     ///    `SYS_UNKNOWN` reject responses ("timeout" if their deadline expired,
     ///    "drop" otherwise).
-    queue: VecDeque<message_pool::Id>,
+    queue: VecDeque<Reference<T>>,
 
     /// Maximum number of requests; or responses + reserved slots; that can be held
     /// in the queue at any one time.
@@ -84,9 +87,20 @@ pub(crate) struct CanisterQueue {
     ///  * `response_slots >= queue.iter().filter(|r| r.kind() == Kind::Response).count()`
     ///  * `response_slots <= capacity`
     response_slots: usize,
+
+    /// The type of item referenced by the queue.
+    marker: std::marker::PhantomData<T>,
 }
 
-impl CanisterQueue {
+/// An `InputQueue` is a `CanisterQueue` holding references to `CanisterInput`
+/// items, i.e. either pooled messages or compact responses.
+pub(super) type InputQueue = CanisterQueue<CanisterInput>;
+
+/// An `OutputQueue` is a `CanisterQueue` holding references to outbound
+/// `RequestOrResponse` items.
+pub(super) type OutputQueue = CanisterQueue<RequestOrResponse>;
+
+impl<T> CanisterQueue<T> {
     /// Creates a new `CanisterQueue` with the given capacity.
     pub(super) fn new(capacity: usize) -> Self {
         Self {
@@ -94,6 +108,7 @@ impl CanisterQueue {
             capacity,
             request_slots: 0,
             response_slots: 0,
+            marker: std::marker::PhantomData,
         }
     }
 
@@ -117,7 +132,7 @@ impl CanisterQueue {
     /// Enqueues a request.
     ///
     /// Panics if there is no available request slot.
-    pub(super) fn push_request(&mut self, reference: message_pool::Id) {
+    pub(super) fn push_request(&mut self, reference: Reference<T>) {
         debug_assert!(reference.kind() == Kind::Request);
         assert!(self.request_slots < self.capacity);
 
@@ -177,7 +192,7 @@ impl CanisterQueue {
     /// Enqueues a response into a reserved slot, consuming the slot.
     ///
     /// Panics if there is no reserved response slot.
-    pub(super) fn push_response(&mut self, reference: message_pool::Id) {
+    pub(super) fn push_response(&mut self, reference: Reference<T>) {
         debug_assert!(reference.kind() == Kind::Response);
         self.check_has_reserved_response_slot()
             .expect("No reserved response slot");
@@ -187,7 +202,7 @@ impl CanisterQueue {
     }
 
     /// Pops a reference from the queue. Returns `None` if the queue is empty.
-    pub(super) fn pop(&mut self) -> Option<message_pool::Id> {
+    pub(super) fn pop(&mut self) -> Option<Reference<T>> {
         let reference = self.queue.pop_front()?;
 
         if reference.kind() == Kind::Response {
@@ -203,7 +218,7 @@ impl CanisterQueue {
     }
 
     /// Returns the next reference in the queue; or `None` if the queue is empty.
-    pub(super) fn peek(&self) -> Option<message_pool::Id> {
+    pub(super) fn peek(&self) -> Option<Reference<T>> {
         self.queue.front().cloned()
     }
 
@@ -225,7 +240,7 @@ impl CanisterQueue {
     /// Discards all references at the front of the queue for which the predicate
     /// holds. Stops when it encounters the first reference for which the predicate
     /// is false.
-    pub(super) fn pop_while(&mut self, predicate: impl Fn(message_pool::Id) -> bool) {
+    pub(super) fn pop_while(&mut self, predicate: impl Fn(Reference<T>) -> bool) {
         while let Some(reference) = self.peek() {
             if !predicate(reference) {
                 break;
@@ -272,13 +287,13 @@ impl CanisterQueue {
     }
 
     /// Returns an iterator over the underlying references.
-    pub(super) fn iter(&self) -> impl Iterator<Item = &message_pool::Id> {
+    pub(super) fn iter(&self) -> impl Iterator<Item = &Reference<T>> {
         self.queue.iter()
     }
 }
 
-impl From<&CanisterQueue> for pb_queues::CanisterQueue {
-    fn from(item: &CanisterQueue) -> Self {
+impl<T> From<&CanisterQueue<T>> for pb_queues::CanisterQueue {
+    fn from(item: &CanisterQueue<T>) -> Self {
         Self {
             queue: item.queue.iter().map(Into::into).collect(),
             capacity: item.capacity as u64,
@@ -287,24 +302,19 @@ impl From<&CanisterQueue> for pb_queues::CanisterQueue {
     }
 }
 
-impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
+impl<T> TryFrom<pb_queues::CanisterQueue> for CanisterQueue<T>
+where
+    Reference<T>: TryFrom<pb_queues::canister_queue::QueueItem, Error = ProxyDecodeError>,
+{
     type Error = ProxyDecodeError;
 
-    fn try_from((item, context): (pb_queues::CanisterQueue, Context)) -> Result<Self, Self::Error> {
-        let queue: VecDeque<message_pool::Id> = item
+    fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
+        let queue: VecDeque<Reference<T>> = item
             .queue
             .into_iter()
             .map(|queue_item| match queue_item.r {
                 Some(pb_queues::canister_queue::queue_item::R::Reference(_)) => {
-                    let reference = message_pool::Id::try_from(queue_item)?;
-                    if reference.context() != context {
-                        return Err(ProxyDecodeError::Other(format!(
-                            "CanisterQueue: {:?} message in {:?} queue",
-                            reference.context(),
-                            context
-                        )));
-                    }
-                    Ok(reference)
+                    Ok(Reference::<T>::try_from(queue_item)?)
                 }
                 None => Err(ProxyDecodeError::MissingField("CanisterQueue::queue::r")),
             })
@@ -319,6 +329,7 @@ impl TryFrom<(pb_queues::CanisterQueue, Context)> for CanisterQueue {
             capacity: super::DEFAULT_QUEUE_CAPACITY,
             request_slots,
             response_slots: item.response_slots as usize,
+            marker: std::marker::PhantomData,
         };
 
         res.check_invariants()

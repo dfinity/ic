@@ -1,3 +1,5 @@
+//! Serde serialization and deserialization for Ethereum hexadecimal types (prefixed by `0x`).
+
 #[cfg(test)]
 mod tests;
 
@@ -35,7 +37,7 @@ where
     {
         type Value = T;
 
-        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "a hex-encoded DATA string")
         }
 

@@ -58,6 +58,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
     ],
 )
 
