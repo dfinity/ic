@@ -472,7 +472,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     type TRef<'a> = CanisterInput;
 
     fn get(&self, reference: InboundReference) -> CanisterInput {
-        assert_eq!(Context::Inbound, reference.context());
+        debug_assert_eq!(Context::Inbound, reference.context());
 
         if let Some(msg) = self.pool.get(reference) {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
@@ -491,7 +491,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     }
 
     fn take(&mut self, reference: InboundReference) -> CanisterInput {
-        assert_eq!(Context::Inbound, reference.context());
+        debug_assert_eq!(Context::Inbound, reference.context());
 
         if let Some(msg) = self.pool.take(reference) {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
@@ -510,13 +510,13 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     }
 
     fn is_stale(&self, reference: InboundReference) -> bool {
-        assert_eq!(Context::Inbound, reference.context());
+        debug_assert_eq!(Context::Inbound, reference.context());
 
         self.pool.get(reference).is_none()
-            && (reference.class() != Class::BestEffort
-                || reference.kind() != Kind::Response
-                || (!self.expired_callbacks.contains_key(&reference)
-                    && !self.shed_responses.contains_key(&reference)))
+            && !(reference.class() == Class::BestEffort
+                && reference.kind() == Kind::Response
+                && (self.expired_callbacks.contains_key(&reference)
+                    || self.shed_responses.contains_key(&reference)))
     }
 }
 
@@ -524,7 +524,7 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     type TRef<'a> = &'a RequestOrResponse;
 
     fn get(&self, reference: OutboundReference) -> &RequestOrResponse {
-        assert_eq!(Context::Outbound, reference.context());
+        debug_assert_eq!(Context::Outbound, reference.context());
 
         self.pool
             .get(reference)
@@ -532,7 +532,7 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     }
 
     fn take(&mut self, reference: OutboundReference) -> RequestOrResponse {
-        assert_eq!(Context::Outbound, reference.context());
+        debug_assert_eq!(Context::Outbound, reference.context());
 
         self.pool
             .take(reference)
@@ -540,7 +540,7 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     }
 
     fn is_stale(&self, reference: OutboundReference) -> bool {
-        assert_eq!(Context::Outbound, reference.context());
+        debug_assert_eq!(Context::Outbound, reference.context());
         self.pool.get(reference).is_none()
     }
 }
@@ -1447,7 +1447,7 @@ impl CanisterQueues {
     /// Releases the outbound slot reservation of a shed or expired inbound request.
     /// Updates the stats for the dropped message.
     fn on_inbound_message_dropped(&mut self, reference: InboundReference, msg: RequestOrResponse) {
-        assert_eq!(Context::Inbound, reference.context());
+        debug_assert_eq!(Context::Inbound, reference.context());
 
         match msg {
             RequestOrResponse::Response(response) => {
@@ -1494,7 +1494,7 @@ impl CanisterQueues {
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
     ) {
-        assert_eq!(Context::Outbound, reference.context());
+        debug_assert_eq!(Context::Outbound, reference.context());
 
         let remote = msg.receiver();
         let (input_queue, output_queue) = self
