@@ -79,6 +79,7 @@ struct FetchTxCache<T> {
 
 impl<T> FetchTxCache<T> {
     fn new(max_entries: usize) -> Self {
+        assert!(max_entries > 0);
         Self {
             max_entries,
             status: BTreeMap::new(),
