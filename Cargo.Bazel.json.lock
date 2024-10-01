@@ -1,5 +1,5 @@
 {
-  "checksum": "3a08a75f1d522d5c81bca41650f260e101b698b03f580a96e84541a52fca44d4",
+  "checksum": "38365946e8b16346a7e3fdc8d48085f19b1f7b3e8bb627f0c6ac4f40b52ee354",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -49476,7 +49476,7 @@
               "target": "bytes"
             },
             {
-              "id": "heck 0.4.1",
+              "id": "heck 0.5.0",
               "target": "heck"
             },
             {
