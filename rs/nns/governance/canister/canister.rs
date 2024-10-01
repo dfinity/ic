@@ -6,6 +6,7 @@ use ic_cdk::{
     api::call::arg_data_raw, caller as ic_cdk_caller, heartbeat, post_upgrade, pre_upgrade,
     println, query, spawn, update,
 };
+use ic_management_canister_types::IC_00;
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
@@ -20,7 +21,7 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     decoder_config, encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp as GovTimeWarp},
+    governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
@@ -149,8 +150,38 @@ fn set_governance(gov: Governance) {
         .expect("Error initializing the governance canister.");
 }
 
+// Seeding interval seeks to find a balance between the need for rng secrecy, and
+// avoiding the overhead of frequent reseeding.
+const SEEDING_INTERVAL: Duration = Duration::from_secs(3600);
+const RETRY_SEEDING_INTERVAL: Duration = Duration::from_secs(30);
+
+fn schedule_seeding(duration: Duration) {
+    ic_cdk_timers::set_timer(duration, || {
+        spawn(async {
+            let result: Result<([u8; 32],), (i32, String)> =
+                CdkRuntime::call_with_cleanup(IC_00, "raw_rand", ()).await;
+
+            let seed = match result {
+                Ok((seed,)) => seed,
+                Err((code, msg)) => {
+                    println!(
+                        "{}Error seeding RNG. Error Code: {}. Error Message: {}",
+                        LOG_PREFIX, code, msg
+                    );
+                    schedule_seeding(RETRY_SEEDING_INTERVAL);
+                    return;
+                }
+            };
+
+            () = governance_mut().env.seed_rng(seed);
+            // Schedule reseeding on a timer with duration SEEDING_INTERVAL
+            schedule_seeding(SEEDING_INTERVAL);
+        })
+    });
+}
+
 struct CanisterEnv {
-    rng: ChaCha20Rng,
+    rng: Option<ChaCha20Rng>,
     time_warp: GovTimeWarp,
 }
 
@@ -174,23 +205,7 @@ fn now_seconds() -> u64 {
 impl CanisterEnv {
     fn new() -> Self {
         CanisterEnv {
-            // Seed the PRNG with the current time.
-            //
-            // This is safe since all replicas are guaranteed to see the same result of time()
-            // and it isn't easily predictable from the outside.
-            //
-            // Using raw_rand from the ic00 api is an asynchronous call so can't really be
-            // used to generate random numbers for most cases. It could be used to seed
-            // the PRNG, but that wouldn't help much since after inception the pseudo-random
-            // numbers could be predicted.
-            rng: {
-                let now_nanos = Duration::from_nanos(now_nanoseconds()).as_nanos();
-                let mut seed = [0u8; 32];
-                seed[..16].copy_from_slice(&now_nanos.to_be_bytes());
-                seed[16..32].copy_from_slice(&now_nanos.to_be_bytes());
-                ChaCha20Rng::from_seed(seed)
-            },
-
+            rng: None,
             time_warp: GovTimeWarp { delta_s: 0 },
         }
     }
@@ -206,14 +221,30 @@ impl Environment for CanisterEnv {
         self.time_warp = new_time_warp;
     }
 
-    fn random_u64(&mut self) -> u64 {
-        self.rng.next_u64()
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        match self.rng.as_mut() {
+            Some(rand) => Ok(rand.next_u64()),
+            None => Err(RngError::RngNotInitialized),
+        }
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.rng.fill_bytes(&mut bytes);
-        bytes
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        match self.rng.as_mut() {
+            Some(rand) => {
+                let mut bytes = [0u8; 32];
+                rand.fill_bytes(&mut bytes);
+                Ok(bytes)
+            }
+            None => Err(RngError::RngNotInitialized),
+        }
+    }
+
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.rng.replace(ChaCha20Rng::from_seed(seed));
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.rng.as_ref().map(|rng| rng.get_seed())
     }
 
     fn execute_nns_function(
@@ -369,6 +400,7 @@ fn canister_init_(init_payload: ApiGovernanceProto) {
         init_payload.neurons.len()
     );
 
+    schedule_seeding(Duration::from_nanos(0));
     set_governance(Governance::new(
         InternalGovernanceProto::from(init_payload),
         Box::new(CanisterEnv::new()),
@@ -411,6 +443,8 @@ fn canister_post_upgrade() {
         restored_state.neurons.len(),
         restored_state.xdr_conversion_rate,
     );
+
+    schedule_seeding(Duration::from_nanos(0));
     set_governance(Governance::new_restored(
         restored_state,
         Box::new(CanisterEnv::new()),
@@ -739,7 +773,7 @@ async fn heartbeat() {
 fn manage_neuron_pb() {
     debug_log("manage_neuron_pb");
     panic_with_probability(
-        0.7,
+        0.1,
         "manage_neuron_pb is deprecated. Please use manage_neuron instead.",
     );
 
@@ -774,7 +808,7 @@ fn list_proposals_pb() {
 fn list_neurons_pb() {
     debug_log("list_neurons_pb");
     panic_with_probability(
-        0.7,
+        0.1,
         "list_neurons_pb is deprecated. Please use list_neurons instead.",
     );
 

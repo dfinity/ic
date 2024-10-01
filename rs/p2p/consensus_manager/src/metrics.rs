@@ -22,6 +22,7 @@ pub(crate) struct ConsensusManagerMetrics {
     // Slot table
     pub slot_table_updates_total: IntCounter,
     pub slot_table_updates_with_artifact_total: IntCounter,
+    pub slot_table_limit_exceeded_total: IntCounter,
     pub slot_table_overwrite_total: IntCounter,
     pub slot_table_stale_total: IntCounter,
     pub slot_table_new_entry_total: IntCounterVec,
@@ -101,6 +102,14 @@ impl ConsensusManagerMetrics {
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_slot_table_updates_total",
                     "Slot table updates.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            slot_table_limit_exceeded_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_slot_table_limit_exceeded_total",
+                    "Slot updates that would exceed slot table limit.",
                     const_labels.clone(),
                 ))
                 .unwrap(),

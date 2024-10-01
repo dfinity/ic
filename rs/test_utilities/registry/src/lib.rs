@@ -18,6 +18,7 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use std::time::Duration;
 use std::{collections::BTreeMap, sync::Arc};
 
 fn empty_ni_dkg_transcripts_with_committee(
@@ -301,6 +302,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_chain_key_config(mut self, chain_key_config: ChainKeyConfig) -> Self {
         self.record.chain_key_config = Some(chain_key_config.into());
+        self
+    }
+
+    pub fn with_unit_delay(mut self, unit_delay: Duration) -> Self {
+        self.record.unit_delay_millis = unit_delay.as_millis() as u64;
         self
     }
 

@@ -9,10 +9,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 env:
-  CI_PULL_REQUEST_TITLE: ${{ github.event.pull_request.title }}
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 jobs:
@@ -22,7 +20,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+      image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
       options: >-
         -e NODE_NAME
     steps:
@@ -67,7 +65,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+      image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
       options: >-
         -e NODE_NAME
     steps:
@@ -105,7 +103,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+      image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
       options: >-
         -e NODE_NAME
     steps:
@@ -122,7 +120,7 @@ jobs:
     runs-on:
       labels: dind-small
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:d883e7f6e5a355d63f6d8a294cfbeb47161bc27055e34730c21c6eeae0617acb
+      image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
       options: >-
         -e NODE_NAME
     timeout-minutes: 60
@@ -138,6 +136,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
+      REPO_NAME: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

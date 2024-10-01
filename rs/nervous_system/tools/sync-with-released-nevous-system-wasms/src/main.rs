@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<CanisterUpdate>>>()?;
 
-    let sns_upgrade_steps = sns_wasm::query_sns_upgrade_steps(&agent).await?;
+    let sns_upgrade_steps = sns_wasm::query_mainline_sns_upgrade_steps(&agent).await?;
     let latest_sns_version = &sns_upgrade_steps
         .steps
         .last()
