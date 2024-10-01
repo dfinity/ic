@@ -2112,7 +2112,7 @@ fn decode_with_duplicate_response_callback_in_pool() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1, 3, 4]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
     );
 }
 
@@ -2127,7 +2127,7 @@ fn decode_with_duplicate_response_callback_in_shed_responses() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 1, 4]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
     );
 }
 
@@ -2143,7 +2143,7 @@ fn decode_with_duplicate_response_callback_in_expired_callbacks() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 3, 1]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
     );
 }
 
@@ -2159,7 +2159,7 @@ fn decode_with_duplicate_reference() {
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 3, 3, 4]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 3"
     );
     // A critical error should also have been observed.
     assert_eq!(1, *metrics.0.borrow());
@@ -2307,7 +2307,7 @@ fn decode_with_duplicate_inbound_response() {
     // Decoding should now fail because of the duplicate `CallbackId`.
     let err = CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics))
         .unwrap_err();
-    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1]");
+    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback: 1");
 }
 
 #[test]

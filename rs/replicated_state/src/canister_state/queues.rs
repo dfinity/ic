@@ -346,7 +346,7 @@ impl From<RequestOrResponse> for CanisterInput {
 ///
 ///  * a `MessagePool`, holding messages and providing message stats (count,
 ///    size) and support for time-based expiration and load shedding; and
-///  * maps of compact resopnses (`CallbackIds` that have either expired or
+///  * maps of compact responses (`CallbackIds` that have either expired or
 ///    whose responses have been shed.
 ///
 /// Implements the `MessageStore` trait for both inbound messages
@@ -573,50 +573,55 @@ impl InboundMessageStore for MessageStoreImpl {
         &self,
         canister_queues: &BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
     ) -> Result<BTreeSet<CallbackId>, String> {
-        let callbacks_vec = canister_queues
+        let mut callbacks = BTreeSet::new();
+        canister_queues
             .values()
             .flat_map(|(input_queue, _)| input_queue.iter())
-            .filter_map(|reference| {
+            .try_for_each(|reference| {
                 let (a, b, c) = (
                     self.pool.get(*reference),
                     self.expired_callbacks.get(reference),
                     self.shed_responses.get(reference),
                 );
-                match (a, b, c) {
+                let callback_id = match (a, b, c) {
                     // Pooled response.
                     (Some(RequestOrResponse::Response(rep)), None, None) => {
-                        Some(Ok(rep.originator_reply_callback))
+                        rep.originator_reply_callback
                     }
 
                     // Compact response.
                     (None, Some(callback_id), None) | (None, None, Some(callback_id)) => {
-                        Some(Ok(*callback_id))
+                        *callback_id
                     }
 
                     // Request or stale reference.
-                    (Some(RequestOrResponse::Request(_)), None, None) | (None, None, None) => None,
+                    (Some(RequestOrResponse::Request(_)), None, None) | (None, None, None) => {
+                        return Ok(())
+                    }
 
                     // Two or more of the above. This should never happen.
-                    _ => Some(Err(format!(
-                        "CanisterQueues: Multiple responses for {:?}",
-                        reference
-                    ))),
-                }
-            })
-            .collect::<Result<Vec<CallbackId>, String>>()?;
+                    _ => {
+                        return Err(format!(
+                            "CanisterQueues: Multiple responses for {:?}",
+                            reference
+                        ))
+                    }
+                };
 
-        let callbacks: BTreeSet<_> = callbacks_vec.iter().cloned().collect();
-        if callbacks.len() != callbacks_vec.len() {
-            return Err(format!(
-                "CanisterQueues: Duplicate inbound response callback(s): {:?}",
-                callbacks_vec
-            ));
-        }
+                if callbacks.insert(callback_id) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "CanisterQueues: Duplicate inbound response callback: {:?}",
+                        callback_id
+                    ))
+                }
+            })?;
 
         let response_count = self.pool.message_stats().inbound_response_count
             + self.expired_callbacks.len()
             + self.shed_responses.len();
-        if callbacks_vec.len() != response_count {
+        if callbacks.len() != response_count {
             return Err(format!(
                 "CanisterQueues: Have {} inbound responses, but only {} are enqueued",
                 response_count,

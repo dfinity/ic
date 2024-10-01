@@ -135,6 +135,33 @@ fn test_get() {
 
 #[test]
 fn test_take() {
+    fn test_take_impl<T>(
+        request_id: Reference<T>,
+        response_id: Reference<T>,
+        request: Request,
+        response: Response,
+        pool: &mut MessagePool,
+    ) {
+        let request: RequestOrResponse = request.into();
+        let response: RequestOrResponse = response.into();
+
+        // Ensure that the messages are now in the pool.
+        assert_eq!(Some(&request), pool.get(request_id));
+        assert_eq!(Some(&response), pool.get(response_id));
+
+        // Actually take the messages.
+        assert_eq!(Some(request), pool.take(request_id));
+        assert_eq!(Some(response), pool.take(response_id));
+
+        // Messages are gone.
+        assert_eq!(None, pool.get(request_id));
+        assert_eq!(None, pool.get(response_id));
+
+        // And cannot be taken out again.
+        assert_eq!(None, pool.take(request_id));
+        assert_eq!(None, pool.take(response_id));
+    }
+
     let mut pool = MessagePool::default();
 
     for deadline in [NO_DEADLINE, time(13)] {
@@ -154,33 +181,6 @@ fn test_take() {
                     let response_id = pool.insert_outbound_response(response.clone().into());
                     test_take_impl(request_id, response_id, request, response, &mut pool);
                 }
-            }
-
-            fn test_take_impl<T>(
-                request_id: Reference<T>,
-                response_id: Reference<T>,
-                request: Request,
-                response: Response,
-                pool: &mut MessagePool,
-            ) {
-                let request: RequestOrResponse = request.into();
-                let response: RequestOrResponse = response.into();
-
-                // Ensure that the messages are now in the pool.
-                assert_eq!(Some(&request), pool.get(request_id));
-                assert_eq!(Some(&response), pool.get(response_id));
-
-                // Actually take the messages.
-                assert_eq!(Some(request), pool.take(request_id));
-                assert_eq!(Some(response), pool.take(response_id));
-
-                // Messages are gone.
-                assert_eq!(None, pool.get(request_id));
-                assert_eq!(None, pool.get(response_id));
-
-                // And cannot be taken out again.
-                assert_eq!(None, pool.take(request_id));
-                assert_eq!(None, pool.take(response_id));
             }
         }
     }
