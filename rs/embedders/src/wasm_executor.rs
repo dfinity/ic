@@ -311,6 +311,7 @@ impl WasmExecutor for WasmExecutorImpl {
             ),
             globals,
             wasm_metadata,
+            serialized_module.is_wasm64,
         );
         Ok((
             execution_state,

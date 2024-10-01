@@ -1241,6 +1241,7 @@ impl TestWasmExecutorCore {
             Memory::new_for_testing(),
             vec![],
             WasmMetadata::default(),
+            false,
         );
         let compilation_result = CompilationResult::empty_for_testing();
         Ok((

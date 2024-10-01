@@ -841,122 +841,129 @@ impl WasmExecutor for SandboxedExecutionController {
 
         let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
 
-        let (memory_modifications, exported_globals, serialized_module, compilation_result) =
-            match compilation_cache.get(&wasm_binary.binary) {
-                None => {
-                    self.metrics.inc_cache_lookup(CACHE_MISS);
-                    let _compilation_timer = self
-                        .metrics
-                        .sandboxed_execution_replica_create_exe_state_wait_compile_duration
-                        .start_timer();
+        let (
+            memory_modifications,
+            exported_globals,
+            serialized_module,
+            compilation_result,
+            is_wasm64,
+        ) = match compilation_cache.get(&wasm_binary.binary) {
+            None => {
+                self.metrics.inc_cache_lookup(CACHE_MISS);
+                let _compilation_timer = self
+                    .metrics
+                    .sandboxed_execution_replica_create_exe_state_wait_compile_duration
+                    .start_timer();
 
-                    let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
-                        HypervisorError::WasmEngineError(
-                            ic_wasm_types::WasmEngineError::Unexpected(
-                                "Couldn't find compiler binary".to_string(),
-                            ),
-                        )
-                    })?;
+                let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
+                    HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
+                        "Couldn't find compiler binary".to_string(),
+                    ))
+                })?;
 
-                    let compiler = WasmCompilerProxy::start(
-                        self.logger.clone(),
-                        &*self.launcher_service,
-                        &compiler_command[0],
-                        &compiler_command[1..],
-                    )?;
-                    let reply = compiler.compile(wasm_binary.binary.as_slice().to_vec());
-                    // Let the compiler proxy know that it can start shutting down, since
-                    // we are not planning to send any addtional requests to it.
-                    compiler.initiate_stop();
+                let compiler = WasmCompilerProxy::start(
+                    self.logger.clone(),
+                    &*self.launcher_service,
+                    &compiler_command[0],
+                    &compiler_command[1..],
+                )?;
+                let reply = compiler.compile(wasm_binary.binary.as_slice().to_vec());
+                // Let the compiler proxy know that it can start shutting down, since
+                // we are not planning to send any addtional requests to it.
+                compiler.initiate_stop();
 
-                    match reply {
-                        Err(err) => {
-                            compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
-                            return Err(err);
-                        }
-                        Ok((compilation_result, serialized_module)) => {
-                            let serialized_module = Arc::new(serialized_module);
-                            compilation_cache
-                                .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
+                match reply {
+                    Err(err) => {
+                        compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                        return Err(err);
+                    }
+                    Ok((compilation_result, serialized_module)) => {
+                        let serialized_module = Arc::new(serialized_module);
+                        compilation_cache
+                            .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
 
-                            sandbox_process.history.record(format!(
-                                "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
-                                wasm_id, next_wasm_memory_id
-                            ));
-                            let sandbox_result = sandbox_process
-                                .sandbox_service
-                                .create_execution_state_serialized(
-                                    protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                        wasm_id,
-                                        serialized_module: Arc::clone(&serialized_module),
-                                        wasm_page_map: wasm_page_map.serialize(),
-                                        next_wasm_memory_id,
-                                        canister_id,
-                                        stable_memory_page_map: stable_memory_page_map.serialize(),
-                                    },
-                                )
-                                .sync()
-                                .unwrap()
-                                .0?;
-                            self.metrics
-                                .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
-                                .observe(sandbox_result.total_sandbox_time.as_secs_f64());
-                            self.metrics
-                                .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
-                                .observe(sandbox_result.deserialization_time.as_secs_f64());
-                            (
-                                sandbox_result.wasm_memory_modifications,
-                                sandbox_result.exported_globals,
-                                serialized_module,
-                                Some(compilation_result),
+                        sandbox_process.history.record(format!(
+                            "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                            wasm_id, next_wasm_memory_id
+                        ));
+                        let sandbox_result = sandbox_process
+                            .sandbox_service
+                            .create_execution_state_serialized(
+                                protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                    wasm_id,
+                                    serialized_module: Arc::clone(&serialized_module),
+                                    wasm_page_map: wasm_page_map.serialize(),
+                                    next_wasm_memory_id,
+                                    canister_id,
+                                    stable_memory_page_map: stable_memory_page_map.serialize(),
+                                },
                             )
-                        }
+                            .sync()
+                            .unwrap()
+                            .0?;
+                        self.metrics
+                            .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                            .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                        self.metrics
+                            .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
+                            .observe(sandbox_result.deserialization_time.as_secs_f64());
+                        let is_wasm64 = serialized_module.is_wasm64;
+                        (
+                            sandbox_result.wasm_memory_modifications,
+                            sandbox_result.exported_globals,
+                            serialized_module,
+                            Some(compilation_result),
+                            is_wasm64,
+                        )
                     }
                 }
-                Some(Err(err)) => {
-                    self.metrics
-                        .inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
-                    return Err(err);
-                }
-                Some(Ok(serialized_module)) => {
-                    self.metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
-                    let _deserialization_timer = self
-                        .metrics
-                        .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
-                        .start_timer();
-                    sandbox_process.history.record(format!(
-                        "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
-                        wasm_id, next_wasm_memory_id
-                    ));
-                    let sandbox_result = sandbox_process
-                        .sandbox_service
-                        .create_execution_state_serialized(
-                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
-                                wasm_id,
-                                serialized_module: Arc::clone(&serialized_module),
-                                wasm_page_map: wasm_page_map.serialize(),
-                                next_wasm_memory_id,
-                                canister_id,
-                                stable_memory_page_map: stable_memory_page_map.serialize(),
-                            },
-                        )
-                        .sync()
-                        .unwrap()
-                        .0?;
-                    self.metrics
-                        .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
-                        .observe(sandbox_result.total_sandbox_time.as_secs_f64());
-                    self.metrics
-                        .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
-                        .observe(sandbox_result.deserialization_time.as_secs_f64());
-                    (
-                        sandbox_result.wasm_memory_modifications,
-                        sandbox_result.exported_globals,
-                        serialized_module,
-                        None,
+            }
+            Some(Err(err)) => {
+                self.metrics
+                    .inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
+                return Err(err);
+            }
+            Some(Ok(serialized_module)) => {
+                self.metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
+                let _deserialization_timer = self
+                    .metrics
+                    .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
+                    .start_timer();
+                sandbox_process.history.record(format!(
+                    "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                    wasm_id, next_wasm_memory_id
+                ));
+                let sandbox_result = sandbox_process
+                    .sandbox_service
+                    .create_execution_state_serialized(
+                        protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                            wasm_id,
+                            serialized_module: Arc::clone(&serialized_module),
+                            wasm_page_map: wasm_page_map.serialize(),
+                            next_wasm_memory_id,
+                            canister_id,
+                            stable_memory_page_map: stable_memory_page_map.serialize(),
+                        },
                     )
-                }
-            };
+                    .sync()
+                    .unwrap()
+                    .0?;
+                self.metrics
+                    .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                    .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                self.metrics
+                    .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
+                    .observe(sandbox_result.deserialization_time.as_secs_f64());
+                let is_wasm64 = serialized_module.is_wasm64;
+                (
+                    sandbox_result.wasm_memory_modifications,
+                    sandbox_result.exported_globals,
+                    serialized_module,
+                    None,
+                    is_wasm64,
+                )
+            }
+        };
         let _finish_timer = self
             .metrics
             .sandboxed_execution_replica_create_exe_state_finish_duration
@@ -1001,7 +1008,9 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory,
             exported_globals,
             serialized_module.wasm_metadata.clone(),
+            is_wasm64,
         );
+
         Ok((
             execution_state,
             serialized_module.compilation_cost,

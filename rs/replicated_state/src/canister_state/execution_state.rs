@@ -477,6 +477,9 @@ pub struct ExecutionState {
 
     /// Round-robin across canister method types.
     pub next_scheduled_method: NextScheduledMethod,
+
+    /// The execution is in Wasm64 mode.
+    pub is_wasm64: Option<bool>,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -496,6 +499,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         } = rhs;
 
         (
@@ -507,6 +511,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
+            &self.is_wasm64,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -516,6 +521,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         )
     }
 }
@@ -532,6 +538,7 @@ impl ExecutionState {
         stable_memory: Memory,
         exported_globals: Vec<Global>,
         wasm_metadata: WasmMetadata,
+        is_wasm64: bool,
     ) -> Self {
         Self {
             canister_root,
@@ -543,6 +550,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: Some(is_wasm64),
         }
     }
 

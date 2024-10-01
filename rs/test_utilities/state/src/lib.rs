@@ -588,6 +588,7 @@ impl Default for ExecutionStateBuilder {
                 metadata: wasm_metadata,
                 last_executed_round: ExecutionRound::from(0),
                 next_scheduled_method: NextScheduledMethod::default(),
+                is_wasm64: Some(false),
             },
         }
     }

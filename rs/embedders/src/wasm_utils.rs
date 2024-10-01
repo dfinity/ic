@@ -237,14 +237,32 @@ fn compile_inner(
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
-    let serialized_module =
-        SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
+
+    let is_wasm64 =
+        if let Some(export) = module.get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME) {
+            let is_wasm64 = if let Some(mem) = export.memory() {
+                mem.is_64()
+            } else {
+                false
+            };
+            is_wasm64
+        } else {
+            false
+        };
+
+    let serialized_module = SerializedModule::new(
+        &module,
+        instrumentation_output,
+        wasm_validation_details,
+        is_wasm64,
+    )?;
     Ok((
         instance_pre,
         CompilationResult {
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
             max_complexity,
+            is_wasm64,
         },
         serialized_module,
     ))

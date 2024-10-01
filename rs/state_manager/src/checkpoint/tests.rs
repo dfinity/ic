@@ -249,6 +249,7 @@ fn can_recover_from_a_checkpoint() {
             metadata: WasmMetadata::default(),
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: Some(false),
         };
 
         canister_state.execution_state = Some(execution_state);

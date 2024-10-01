@@ -144,6 +144,7 @@ message ExecutionStateBits {
   WasmMetadata metadata = 5;
   optional bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
+  optional bool is_wasm64 = 8;
 }
 
 message StopCanisterContext {
