@@ -131,9 +131,9 @@ impl Enum {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Enum::Unspecified => "ENUM_UNSPECIFIED",
-            Enum::One => "ENUM_ONE",
-            Enum::Many => "ENUM_MANY",
+            Self::Unspecified => "ENUM_UNSPECIFIED",
+            Self::One => "ENUM_ONE",
+            Self::Many => "ENUM_MANY",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
