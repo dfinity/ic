@@ -495,9 +495,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-body-util": crate.spec(
                 version = "^0.1.2",
             ),
-            "httptest": crate.spec(
-                version = "^0.15.4",
-            ),
             "hmac": crate.spec(
                 version = "^0.12",
             ),
@@ -531,9 +528,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "ring",
                     "tls12",
                 ],
-            ),
-            "hyperlocal-next": crate.spec(
-                version = "^0.9.0",
             ),
             "ic0": crate.spec(
                 version = "^0.18.11",
@@ -1013,7 +1007,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.7",
+                version = "^0.12.8",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1078,9 +1072,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "std",
                     "brotli",
                 ],
-            ),
-            "rustls-native-certs": crate.spec(
-                version = "^0.7.0",
             ),
             "rustls-pemfile": crate.spec(
                 version = "^2.1.2",
@@ -1337,9 +1328,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "compression-full",
                     "tracing",
                 ],
-            ),
-            "tower-layer": crate.spec(
-                version = "^0.3.3",
             ),
             "tower_governor": crate.spec(
                 version = "^0.4.2",

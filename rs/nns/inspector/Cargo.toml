@@ -12,8 +12,8 @@ ic-base-types = { path = "../../types/base_types" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-governance-api = { path = "../governance/api" }
 ic-nns-gtc = { path = "../gtc" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-ledger-canister = { path = "../../rosetta-api/icp_ledger/ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
+ledger-canister = { path = "../../ledger_suite/icp/ledger" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
