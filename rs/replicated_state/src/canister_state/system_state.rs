@@ -268,10 +268,14 @@ impl CanisterHistory {
     }
 }
 
+/// `TaskQueue` represents the implementation of queue structure for tasks satisfying  conditions:
+///
+/// 1. If there is a `Paused` or `Aborted` task it will be returned first.
+/// 2. If an `OnLowWasmMemoryHook` is ready to be executed, it will be returned next.
+/// 3. All other tasks will be returned based on the order in which they are added to the queue.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
-    /// Tasks to execute before processing input messages.
-    /// Currently the task queue is empty outside of execution rounds.
+    /// Queue of tasks.
     queue: VecDeque<ExecutionTask>,
 
     /// Status of low_on_wasm_memory hook execution.
@@ -558,8 +562,7 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
-    /// Tasks to execute before processing input messages.
-    /// Currently the task queue is empty outside of execution rounds.
+    /// Queue of the tasks to be executed next.
     pub task_queue: TaskQueue,
 
     /// Canister global timer.
