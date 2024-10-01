@@ -29,7 +29,7 @@ RUN sed -e '/.*pam_motd.so.*/d' -i /etc/pam.d/login && \
 # but this is per system (so backups are not persisted across upgrades)
 # and thus not very useful, and /etc is read-only.
 # So simply suppress generating backups.
-RUN sed -e 's/\(backup *= *\)1/\10/' -e 's/\(archive *= *\)1/\10/' -i /etc/lvm/lvm.conf
+RUN sed -e 's/\(# \)\?\(backup *= *\)[01]/\20/' -e 's/\(# \)\?\(archive *= *\)[01]/\20/' -i /etc/lvm/lvm.conf
 
 # Deactivate systemd userdb. We don't use it.
 RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
@@ -39,7 +39,7 @@ RUN localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
 # Clear files that may lead to indeterministic build.
 RUN apt-get clean && \
-    find /usr/lib/python3.8 -name "*.pyc" | xargs rm && \
+    find /usr/lib/python3.12 -name "*.pyc" | xargs rm && \
     find /usr/lib/python3 -name "*.pyc" | xargs rm && \
     find /usr/share/python3 -name "*.pyc" | xargs rm && \
     truncate --size 0 /etc/machine-id
@@ -91,6 +91,7 @@ RUN systemctl enable \
     chrony \
     libvirtd \
     nftables \
+    ssh \
     systemd-journal-gatewayd \
     systemd-networkd \
     systemd-networkd-wait-online \
@@ -117,14 +118,8 @@ RUN rm -rf \
         /usr/local/share/qemu/edk2-arm-code.fd \
         /usr/local/share/qemu/edk2-arm-vars.fd
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf E.g., systemd-timesync/coredump
-RUN systemd-sysusers && \
-    # Fix reproducibility issue. Notes in hostos/context/Dockerfile    
-    usermod -p '!!' systemd-timesync && \
-    usermod -p '!!' systemd-coredump
-
 # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
+RUN ln -sf bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.

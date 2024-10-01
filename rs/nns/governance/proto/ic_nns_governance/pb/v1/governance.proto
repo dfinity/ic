@@ -2415,6 +2415,10 @@ message Governance {
 
   // The summary of restore aging event.
   optional RestoreAgingSummary restore_aging_summary = 27;
+
+  // Used to initialize an internal pseudorandom number generator. This gets replaced periodically using a secure
+  // source of randomness (from the platform)
+  optional bytes rng_seed = 28;
 }
 
 message XdrConversionRate {

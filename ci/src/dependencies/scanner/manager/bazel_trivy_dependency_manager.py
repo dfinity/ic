@@ -124,7 +124,6 @@ class TrivyResultParser(abc.ABC):
 
 
 class OSPackageTrivyResultParser(TrivyResultParser):
-
     def get_parser_id(self) -> str:
         return "OSP"
 
@@ -183,7 +182,6 @@ class OSPackageTrivyResultParser(TrivyResultParser):
 
 
 class BinaryTrivyResultParser(TrivyResultParser):
-
     def get_parser_id(self) -> str:
         return "BIN"
 
@@ -208,7 +206,9 @@ class BinaryTrivyResultParser(TrivyResultParser):
         binary_name = binary_id.split("/")[-1] if "/" in binary_id and not binary_id.endswith("/") else binary_id
         if binary_id not in file_to_hash:
             raise RuntimeError(f"binary {binary_id} not found in file hash list in repo {repository} project {project}")
-        vulnerable_dependency = Dependency(id=self.sanitize_dependency_id(binary_id), name=binary_name, version=file_to_hash[binary_id])
+        vulnerable_dependency = Dependency(
+            id=self.sanitize_dependency_id(binary_id), name=binary_name, version=file_to_hash[binary_id]
+        )
         all_vulnerability_ids = set()
         max_score = 0
         for _, vulnerabilities in vulnerabilities_by_vuln_dep:
@@ -243,7 +243,6 @@ class BinaryTrivyResultParser(TrivyResultParser):
 
 
 class SecretTrivyResultParser(TrivyResultParser):
-
     def get_parser_id(self) -> str:
         return "SEC"
 
@@ -262,7 +261,9 @@ class SecretTrivyResultParser(TrivyResultParser):
         """For secrets one finding is created"""
         secret_id: str = trivy_data["Results"][result_index]["Target"]
         secret_name = secret_id.split("/")[-1] if "/" in secret_id and not secret_id.endswith("/") else secret_id
-        vulnerable_dependency = Dependency(id=self.sanitize_dependency_id(secret_id), name=secret_name, version="current")
+        vulnerable_dependency = Dependency(
+            id=self.sanitize_dependency_id(secret_id), name=secret_name, version="current"
+        )
         vulnerabilities = []
         for secret in trivy_data["Results"][result_index]["Secrets"]:
             vulnerabilities.append(
@@ -313,7 +314,11 @@ class TrivyExecutor:
 class BazelTrivyContainer(DependencyManager):
     """Helper for Trivy-related functions."""
 
-    def __init__(self, executor: TrivyExecutor = TrivyExecutor(), app_owner_msg_subscriber: AppOwnerMsgSubscriber = ConsoleLoggerAppOwnerMsgSubscriber()):
+    def __init__(
+        self,
+        executor: TrivyExecutor = TrivyExecutor(),
+        app_owner_msg_subscriber: AppOwnerMsgSubscriber = ConsoleLoggerAppOwnerMsgSubscriber(),
+    ):
         super().__init__()
         self.parsers = (OSPackageTrivyResultParser(), BinaryTrivyResultParser(), SecretTrivyResultParser())
         self.executor = executor
