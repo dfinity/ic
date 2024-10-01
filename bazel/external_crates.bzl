@@ -1325,11 +1325,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.3",
             ),
             "tower": crate.spec(
-                version = "^0.4.13",
+                version = "^0.5.1",
                 features = ["full"],
             ),
             "tower-http": crate.spec(
-                version = "^0.5.2",
+                version = "^0.6.1",
                 features = [
                     "cors",
                     "limit",

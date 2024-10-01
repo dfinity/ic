@@ -1,5 +1,5 @@
 {
-  "checksum": "38365946e8b16346a7e3fdc8d48085f19b1f7b3e8bb627f0c6ac4f40b52ee354",
+  "checksum": "16506ca22748c2cc3205ef9ffca5de718dd50b23d7b2992630c8cc9a98862570",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18643,11 +18643,11 @@
               "target": "tonic_build"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.1",
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.2",
+              "id": "tower-http 0.6.1",
               "target": "tower_http"
             },
             {
@@ -67782,26 +67782,18 @@
             "default",
             "discover",
             "filter",
-            "full",
             "futures-core",
             "futures-util",
-            "hdrhistogram",
-            "hedge",
             "indexmap",
             "limit",
             "load",
-            "load-shed",
             "log",
             "make",
             "pin-project",
             "pin-project-lite",
             "rand",
             "ready-cache",
-            "reconnect",
-            "retry",
             "slab",
-            "spawn-ready",
-            "steer",
             "timeout",
             "tokio",
             "tokio-util",
@@ -67819,10 +67811,6 @@
             {
               "id": "futures-util 0.3.30",
               "target": "futures_util"
-            },
-            {
-              "id": "hdrhistogram 7.5.2",
-              "target": "hdrhistogram"
             },
             {
               "id": "indexmap 1.9.3",
@@ -67908,13 +67896,32 @@
         "crate_features": {
           "common": [
             "__common",
+            "balance",
+            "buffer",
+            "discover",
+            "filter",
+            "full",
             "futures-core",
             "futures-util",
+            "hdrhistogram",
+            "hedge",
+            "indexmap",
+            "limit",
+            "load",
+            "load-shed",
             "log",
             "make",
             "pin-project-lite",
+            "ready-cache",
+            "reconnect",
+            "retry",
+            "slab",
+            "spawn-ready",
+            "steer",
             "sync_wrapper",
+            "timeout",
             "tokio",
+            "tokio-util",
             "tracing",
             "util"
           ],
@@ -67931,8 +67938,20 @@
               "target": "futures_util"
             },
             {
+              "id": "hdrhistogram 7.5.2",
+              "target": "hdrhistogram"
+            },
+            {
+              "id": "indexmap 2.2.6",
+              "target": "indexmap"
+            },
+            {
               "id": "pin-project-lite 0.2.13",
               "target": "pin_project_lite"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
             },
             {
               "id": "sync_wrapper 0.1.2",
@@ -67941,6 +67960,10 @@
             {
               "id": "tokio 1.40.0",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-util 0.7.12",
+              "target": "tokio_util"
             },
             {
               "id": "tower-layer 0.3.3",
@@ -67997,39 +68020,21 @@
         ],
         "crate_features": {
           "common": [
-            "async-compression",
             "auth",
             "base64",
-            "compression-br",
-            "compression-deflate",
-            "compression-full",
-            "compression-gzip",
-            "compression-zstd",
-            "cors",
             "default",
-            "futures-core",
-            "limit",
             "map-response-body",
             "mime",
-            "request-id",
             "timeout",
             "tokio",
-            "tokio-util",
-            "tower",
             "trace",
             "tracing",
-            "util",
-            "uuid",
             "validate-request"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
-            {
-              "id": "async-compression 0.4.3",
-              "target": "async_compression"
-            },
             {
               "id": "base64 0.21.6",
               "target": "base64"
@@ -68041,10 +68046,6 @@
             {
               "id": "bytes 1.7.1",
               "target": "bytes"
-            },
-            {
-              "id": "futures-core 0.3.30",
-              "target": "futures_core"
             },
             {
               "id": "http 1.1.0",
@@ -68071,11 +68072,125 @@
               "target": "tokio"
             },
             {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.3",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.40",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "tower-http 0.6.1": {
+      "name": "tower-http",
+      "version": "0.6.1",
+      "package_url": "https://github.com/tower-rs/tower-http",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tower-http/0.6.1/download",
+          "sha256": "8437150ab6bbc8c5f0f519e3d5ed4aa883a83dd4cdd3d1b21f9482936046cb97"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tower_http",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tower_http",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async-compression",
+            "compression-br",
+            "compression-deflate",
+            "compression-full",
+            "compression-gzip",
+            "compression-zstd",
+            "cors",
+            "default",
+            "futures-core",
+            "limit",
+            "request-id",
+            "tokio",
+            "tokio-util",
+            "tower",
+            "trace",
+            "tracing",
+            "util",
+            "uuid"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-compression 0.4.3",
+              "target": "async_compression"
+            },
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "bytes 1.7.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 1.1.0",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.2",
+              "target": "http_body_util"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "tokio 1.40.0",
+              "target": "tokio"
+            },
+            {
               "id": "tokio-util 0.7.12",
               "target": "tokio_util"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.1",
               "target": "tower"
             },
             {
@@ -68098,7 +68213,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.2"
+        "version": "0.6.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -79874,8 +79989,8 @@
     "toml 0.5.11",
     "tonic 0.12.3",
     "tonic-build 0.12.3",
-    "tower 0.4.13",
-    "tower-http 0.5.2",
+    "tower 0.5.1",
+    "tower-http 0.6.1",
     "tower-layer 0.3.3",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
