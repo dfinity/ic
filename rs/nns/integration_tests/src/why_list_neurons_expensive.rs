@@ -141,7 +141,7 @@ fn test_why_list_neurons_expensive() {
     // Step 2: Run the code under test (while profiling is enabled).
 
     let caller = PrincipalId::new_user_test_id(42); // DO NOT MERGE
-    list_neurons(
+    let result = list_neurons(
         &state_machine,
         caller,
         ListNeurons {
@@ -151,6 +151,9 @@ fn test_why_list_neurons_expensive() {
             neuron_ids: vec![],
         },
     );
+    println!("");
+    println!("list_neurons result:\n{:#?}", result);
+    println!("");
 
     // Step 3: Inspect results. In particular, generate flame graph.
 
