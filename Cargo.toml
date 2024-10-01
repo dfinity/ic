@@ -120,8 +120,9 @@ members = [
     "rs/execution_environment",
     "rs/execution_environment/benches/lib",
     "rs/execution_environment/tools",
-    "rs/http_endpoints/public",
     "rs/http_endpoints/metrics",
+    "rs/http_endpoints/public",
+    "rs/http_endpoints/xnet",
     "rs/http_utils",
     "rs/ic_os/dev_test_tools/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
@@ -246,6 +247,7 @@ members = [
     "rs/registry/proto_data_provider",
     "rs/registry/provisional_whitelist",
     "rs/registry/regedit",
+    "rs/registry/node_provider_rewards",
     "rs/registry/nns_data_provider",
     "rs/registry/nns_data_provider_wrappers",
     "rs/registry/routing_table",
@@ -394,11 +396,9 @@ members = [
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
     "rs/workload_generator",
-    "rs/xnet/endpoint",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
-    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
