@@ -283,6 +283,30 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
     }
 }
 
+impl<T> TryFrom<u64> for Reference<T>
+where
+    T: ToContext,
+{
+    type Error = ProxyDecodeError;
+    fn try_from(item: u64) -> Result<Self, Self::Error> {
+        let reference = Reference(item, PhantomData);
+        if reference.context() == T::context() {
+            Ok(reference)
+        } else {
+            Err(ProxyDecodeError::Other(format!(
+                "Mismatched reference context: {}",
+                item
+            )))
+        }
+    }
+}
+
+impl<T> From<&Reference<T>> for u64 {
+    fn from(item: &Reference<T>) -> Self {
+        item.0
+    }
+}
+
 /// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);

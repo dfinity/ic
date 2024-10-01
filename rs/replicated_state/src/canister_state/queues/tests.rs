@@ -2006,7 +2006,8 @@ fn decode_with_duplicate_reference() {
     // Replace the reference to the second response with a duplicate reference to
     // the third.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.queue[1] = input_queue.queue.get(2).cloned().unwrap();
+    input_queue.queue_items[1] = input_queue.queue_items.get(2).cloned().unwrap();
+    input_queue.queue[1] = input_queue.queue[2];
 
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
@@ -2023,11 +2024,8 @@ fn decode_with_both_response_and_shed_response_for_reference() {
 
     // Make the the shed response have the same reference as one of the responses.
     let input_queue = encoded.canister_queues[0].input_queue.as_ref().unwrap();
-    let queue_item = input_queue.queue.get(1).unwrap();
-    let pb_queues::canister_queue::queue_item::R::Reference(response_id) =
-        queue_item.r.as_ref().unwrap();
     for shed_response in &mut encoded.shed_responses {
-        shed_response.id = *response_id;
+        shed_response.id = input_queue.queue[1];
     }
 
     assert_matches!(
@@ -2042,6 +2040,7 @@ fn decode_with_unreferenced_inbound_response() {
 
     // Remove the reference to the second response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.queue_items.remove(1);
     input_queue.queue.remove(1);
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2059,6 +2058,7 @@ fn decode_with_unreferenced_shed_response() {
 
     // Remove the reference to the third (shed) response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.queue_items.remove(2);
     input_queue.queue.remove(2);
 
     assert_matches!(
