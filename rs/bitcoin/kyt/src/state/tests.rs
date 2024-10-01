@@ -80,58 +80,47 @@ fn test_fetch_status() {
 }
 
 #[test]
-fn test_fetch_tx_cache_expiry() {
+fn test_fetch_tx_cache_bounds() {
     let txid_0 = Txid::from([0u8; 32]);
     let txid_1 = Txid::from([1u8; 32]);
     let txid_2 = Txid::from([2u8; 32]);
     let txid_3 = Txid::from([3u8; 32]);
-    let expiry = 1_000_000; // 1 sec
     let max_entries = 3;
-    let mut cache = FetchTxCache::new(expiry, max_entries);
-    let mut now = 0;
-    cache.set_status_with(txid_0, (), now);
-    assert!(cache.get_status(txid_0).is_some());
+    let mut cache = FetchTxCache::new(max_entries);
+    assert_eq!(cache.set_status_with(txid_0, (), 0), None);
+    assert_eq!(cache.set_status_with(txid_1, (), 100), None);
+    assert_eq!(cache.set_status_with(txid_2, (), 200), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_0, 0, &()), (txid_1, 100, &()), (txid_2, 200, &())]
+    );
 
-    now += 500_001;
-    cache.set_status_with(txid_1, (), now);
-    assert!(cache.get_status(txid_1).is_some());
+    assert_eq!(
+        cache.set_status_with(txid_3, (), 300),
+        Some((txid_0, 0, ()))
+    );
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_2, 200, &()), (txid_3, 300, &())]
+    );
 
-    now += 500_001;
-    cache.set_status_with(txid_2, (), now);
-    assert!(cache.get_status(txid_2).is_some());
-    assert!(cache.get_status(txid_1).is_some());
-    // txid_0 expired
-    assert!(cache.get_status(txid_0).is_none());
-
-    now += 200_000;
-    cache.set_status_with(txid_3, (), now);
-    assert!(cache.get_status(txid_3).is_some());
-    assert!(cache.get_status(txid_2).is_some());
-    // Oldest has not expired
-    assert!(cache.get_status(txid_1).is_some());
-
-    now += 200_000;
-    cache.set_status_with(txid_0, (), now);
-    assert!(cache.get_status(txid_0).is_some());
-    assert!(cache.get_status(txid_3).is_some());
-    assert!(cache.get_status(txid_2).is_some());
-    // Oldest has not expired, but still removed due to max_entries reached
-    assert!(cache.get_status(txid_1).is_none());
-
-    // setting status of an existing entry will not expire oldest one
-    now += 100_000;
-    cache.set_status_with(txid_3, (), now);
-    assert!(cache.get_status(txid_0).is_some());
-    assert!(cache.get_status(txid_3).is_some());
-    assert!(cache.get_status(txid_2).is_some());
+    // setting status of an existing entry will not change its creation
+    // time, neither will it purge any existing entry.
+    assert_eq!(cache.set_status_with(txid_2, (), 400), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_2, 200, &()), (txid_3, 300, &())]
+    );
 
     // clear_status should make room for one more entry
-    cache.clear_status(txid_3);
-    assert!(cache.get_status(txid_0).is_some());
-    assert!(cache.get_status(txid_3).is_none());
-    assert!(cache.get_status(txid_2).is_some());
-    cache.set_status_with(txid_1, (), now);
-    assert!(cache.get_status(txid_1).is_some());
-    assert!(cache.get_status(txid_0).is_some());
-    assert!(cache.get_status(txid_2).is_some());
+    cache.clear_status(txid_2);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_3, 300, &())]
+    );
+    assert_eq!(cache.set_status_with(txid_0, (), 500), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_3, 300, &()), (txid_0, 500, &())]
+    );
 }

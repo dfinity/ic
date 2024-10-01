@@ -52,9 +52,6 @@ pub struct FetchedTx {
 // Max number of concurrent http outcalls.
 const MAX_CONCURRENT: u32 = 50;
 
-// Default expiry of cached fetch transaction entries is 7 days (in nano seconds).
-const DEFAULT_FETCH_TX_EXPIRY: u64 = 7 * 24 * 3600 * 1000000;
-
 // Max number of entries in the cache is set to 10_000. Since the average transaction size
 // is about 400 bytes, the estimated memory usage of the cache is in the order of 10s of MBs.
 const MAX_FETCH_TX_ENTRIES: usize = 10_000;
@@ -67,27 +64,22 @@ const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 thread_local! {
     static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
     static FETCH_TX_CACHE: RefCell<FetchTxCache<FetchTxStatus>> = RefCell::new(
-        FetchTxCache::new(DEFAULT_FETCH_TX_EXPIRY, MAX_FETCH_TX_ENTRIES)
+        FetchTxCache::new(MAX_FETCH_TX_ENTRIES)
     );
 }
 
 // Time in nanoseconds since the epoch (1970-01-01).
 type Timestamp = u64;
 
-// Time duration in nanoseconds.
-type Duration = u64;
-
 struct FetchTxCache<T> {
-    expiry: Duration,
     max_entries: usize,
     status: BTreeMap<Txid, T>,
     created: VecDeque<(Txid, Timestamp)>,
 }
 
 impl<T> FetchTxCache<T> {
-    fn new(expiry: Duration, max_entries: usize) -> Self {
+    fn new(max_entries: usize) -> Self {
         Self {
-            expiry,
             max_entries,
             status: BTreeMap::new(),
             created: VecDeque::new(),
@@ -102,26 +94,39 @@ impl<T> FetchTxCache<T> {
     // already have a status, a new status entry is created and associated
     // with the given the timestamp.
     //
-    // When called with non-decreasing timestamps, this function will remove
-    // at most one past (i.e. the oldest) entry based on the `expiry` and
-    // `max_entries` settings, when either condition satisfies.
-    fn set_status_with(&mut self, txid: Txid, status: T, now: Timestamp) {
+    // This function may also remove and return the oldest entry if we
+    // exceeds the `max_entries` settings.
+    fn set_status_with(
+        &mut self,
+        txid: Txid,
+        status: T,
+        now: Timestamp,
+    ) -> Option<(Txid, Timestamp, T)> {
         if self.status.insert(txid, status).is_none() {
             // This is a new entry, record its created time.
             self.created.push_back((txid, now));
-            // Expire the oldest entry if it has already expired, or when we exceed max_entries.
-            if let Some((txid, created_time)) = self.created.front().cloned() {
-                if created_time + self.expiry < now || self.created.len() > self.max_entries {
-                    self.created.pop_front();
-                    self.status.remove(&txid);
-                }
+            // Purge the oldest entry when we exceed max_entries.
+            if self.created.len() > self.max_entries {
+                return self.created.pop_front().and_then(|(txid, timestamp)| {
+                    self.status
+                        .remove(&txid)
+                        .map(|status| (txid, timestamp, status))
+                });
             }
         }
+        None
     }
 
     fn clear_status(&mut self, txid: Txid) {
         let _ = self.status.remove(&txid);
         self.created.retain(|(id, _)| *id != txid);
+    }
+
+    #[cfg(test)]
+    fn iter(&self) -> impl Iterator<Item = (Txid, Timestamp, &T)> + '_ {
+        self.created
+            .iter()
+            .map(|(txid, timestamp)| (*txid, *timestamp, self.status.get(txid).unwrap()))
     }
 }
 
@@ -141,7 +146,7 @@ fn time() -> u64 {
 }
 
 pub fn set_fetch_status(txid: Txid, status: FetchTxStatus) {
-    FETCH_TX_CACHE.with(|cache| cache.borrow_mut().set_status_with(txid, status, time()))
+    let _ = FETCH_TX_CACHE.with(|cache| cache.borrow_mut().set_status_with(txid, status, time()));
 }
 
 pub fn clear_fetch_status(txid: Txid) {
