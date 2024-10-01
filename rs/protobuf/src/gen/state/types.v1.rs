@@ -58,9 +58,9 @@ impl NiDkgTag {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NiDkgTag::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
-            NiDkgTag::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
-            NiDkgTag::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
+            Self::Unspecified => "NI_DKG_TAG_UNSPECIFIED",
+            Self::LowThreshold => "NI_DKG_TAG_LOW_THRESHOLD",
+            Self::HighThreshold => "NI_DKG_TAG_HIGH_THRESHOLD",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -91,13 +91,13 @@ impl RejectCode {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            RejectCode::Unspecified => "REJECT_CODE_UNSPECIFIED",
-            RejectCode::SysFatal => "REJECT_CODE_SYS_FATAL",
-            RejectCode::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
-            RejectCode::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
-            RejectCode::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
-            RejectCode::CanisterError => "REJECT_CODE_CANISTER_ERROR",
-            RejectCode::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
+            Self::Unspecified => "REJECT_CODE_UNSPECIFIED",
+            Self::SysFatal => "REJECT_CODE_SYS_FATAL",
+            Self::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
+            Self::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
+            Self::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
+            Self::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+            Self::SysUnknown => "REJECT_CODE_SYS_UNKNOWN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -155,10 +155,10 @@ impl CanisterInstallMode {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            CanisterInstallMode::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
-            CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
-            CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
-            CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+            Self::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
+            Self::Install => "CANISTER_INSTALL_MODE_INSTALL",
+            Self::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
+            Self::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -186,9 +186,9 @@ impl WasmMemoryPersistence {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            WasmMemoryPersistence::Unspecified => "WASM_MEMORY_PERSISTENCE_UNSPECIFIED",
-            WasmMemoryPersistence::Keep => "WASM_MEMORY_PERSISTENCE_KEEP",
-            WasmMemoryPersistence::Replace => "WASM_MEMORY_PERSISTENCE_REPLACE",
+            Self::Unspecified => "WASM_MEMORY_PERSISTENCE_UNSPECIFIED",
+            Self::Keep => "WASM_MEMORY_PERSISTENCE_KEEP",
+            Self::Replace => "WASM_MEMORY_PERSISTENCE_REPLACE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
