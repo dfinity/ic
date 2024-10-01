@@ -90,9 +90,6 @@ ENV SOURCE_DATE_EPOCH=0
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Preparation
-RUN apt-get -y update && apt-get -y upgrade
-
 RUN \
     apt-get update && \
     apt-get -y dist-upgrade && \
