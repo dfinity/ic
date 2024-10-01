@@ -12,6 +12,9 @@ concurrency:
   group: ${{ github.ref }}
   cancel-in-progress: true
 
+# Skip the workflow if the branch is a hotfix branch and it is running on ic-private
+if: ${{ !(startsWith(github.ref, 'refs/heads/hotfix-') && github.repository != 'ic') }}
+
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
