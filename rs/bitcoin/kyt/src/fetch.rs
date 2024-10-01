@@ -4,7 +4,7 @@ use crate::types::{
     CheckTransactionStatus,
 };
 use crate::{blocklist_contains, state};
-use bitcoin::{address::FromScriptError, Address, Network, Transaction};
+use bitcoin::{address::FromScriptError, Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
 use std::convert::Infallible;
@@ -250,5 +250,8 @@ pub trait FetchEnv {
 
 fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, FromScriptError> {
     let output = &tx.output[vout as usize];
-    Address::from_script(&output.script_pubkey, Network::Bitcoin)
+    Address::from_script(
+        &output.script_pubkey,
+        bitcoin::Network::from(state::get_config().btc_network),
+    )
 }

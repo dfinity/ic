@@ -8,6 +8,7 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
 use ic_ledger_core::block::BlockType;
 use ic_rosetta_api::convert::to_hash;
+use ic_rosetta_api::request_types::ApproveMetadata;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use proptest::strategy::Strategy;
@@ -303,14 +304,36 @@ fn test_search_transactions_by_account() {
                                 search_transactions_request.clone(),
                             )
                             .await;
-                            assert!(result.clone().into_iter().all(|block_transaction| {
-                                block_transaction.transaction.operations.into_iter().any(
-                                    |operation| {
-                                        operation.account
-                                            == search_transactions_request.account_identifier
-                                    },
-                                )
-                            }));
+                            let search_account = search_transactions_request
+                                .account_identifier
+                                .clone()
+                                .unwrap();
+                            assert!(
+                                result.clone().into_iter().all(|block_transaction| {
+                                    block_transaction.transaction.operations.into_iter().any(
+                                        |operation| {
+                                            let involved_accounts =
+                                                if operation.type_.as_str() == "APPROVE" {
+                                                    vec![
+                                                        operation.account.unwrap(),
+                                                        ApproveMetadata::try_from(
+                                                            operation.metadata.clone(),
+                                                        )
+                                                        .unwrap()
+                                                        .spender
+                                                        .into(),
+                                                    ]
+                                                } else {
+                                                    vec![operation.account.unwrap()]
+                                                };
+                                            involved_accounts.contains(&search_account)
+                                        },
+                                    )
+                                }),
+                                "Account: {:?} not found in transactions: {:?}",
+                                search_transactions_request.account_identifier,
+                                result
+                            );
 
                             assert!(!result.is_empty());
                             // Make sure every fetched transaction is unique

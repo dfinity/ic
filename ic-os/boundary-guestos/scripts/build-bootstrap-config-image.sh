@@ -75,7 +75,7 @@ options may be specified:
     Specify an initial denylist of canisters for the Boundary Nodes
 
   --denylist_url url
-    Specify the url for the denylist updater
+    Specify the url where to download denylist
 
   --prober-identity path
     specify an identity file for the prober
