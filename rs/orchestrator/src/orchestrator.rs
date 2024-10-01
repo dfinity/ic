@@ -8,6 +8,7 @@ use crate::{
     ipv4_network::Ipv4Configurator,
     metrics::OrchestratorMetrics,
     process_manager::ProcessManager,
+    recovery::Recovery,
     registration::NodeRegistration,
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
@@ -49,6 +50,7 @@ pub struct Orchestrator {
     _async_log_guard: AsyncGuard,
     _metrics_runtime: MetricsHttpEndpoint,
     upgrade: Option<Upgrade>,
+    recovery: Option<Recovery>,
     hostos_upgrade: Option<HostosUpgrader>,
     boundary_node_manager: Option<BoundaryNodeManager>,
     firewall: Option<Firewall>,
@@ -307,6 +309,17 @@ impl Orchestrator {
 
         let subnet_id: Arc<RwLock<Option<SubnetId>>> = Default::default();
 
+        let recovery = Some(Recovery::new(
+            node_id,
+            args.replica_config_file.clone(),
+            args.orchestrator_data_directory.clone(),
+            Arc::clone(&metrics),
+            Arc::clone(&registry),
+            Arc::clone(&replica_process),
+            Arc::clone(&cup_provider),
+            logger.clone(),
+        ));
+
         let orchestrator_dashboard = Some(OrchestratorDashboard::new(
             Arc::clone(&registry),
             node_id,
@@ -318,6 +331,7 @@ impl Orchestrator {
             replica_version,
             hostos_version.ok(),
             cup_provider,
+            args.orchestrator_data_directory.clone(),
             logger.clone(),
         ));
 
@@ -328,6 +342,7 @@ impl Orchestrator {
             _async_log_guard,
             _metrics_runtime,
             upgrade,
+            recovery,
             hostos_upgrade,
             boundary_node_manager: Some(boundary_node),
             firewall: Some(firewall),
@@ -491,6 +506,30 @@ impl Orchestrator {
             );
         }
 
+        async fn recovery_checkpoint_checks(
+            maybe_subnet_id: Arc<RwLock<Option<SubnetId>>>,
+            recovery: Recovery,
+            mut exit_signal: Receiver<bool>,
+            log: ReplicaLogger,
+        ) {
+            let metrics = recovery.metrics.clone();
+            while !*exit_signal.borrow() {
+                // Check if a recovery checkpoint should be created
+                let _ = recovery
+                    .check_for_recovery(*maybe_subnet_id.read().await)
+                    .await
+                    .inspect_err(|err| {
+                        error!(log, "Failed to run recovery checkpoint check: {err:?}");
+                        metrics.critical_error_recovery_checkpoint_failed.inc();
+                    });
+                tokio::select! {
+                    _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
+                    _ = exit_signal.changed() => {}
+                }
+            }
+            info!(log, "Shut down the recovery checkpoint loop");
+        }
+
         async fn serve_dashboard(
             dashboard: OrchestratorDashboard,
             exit_signal: Receiver<bool>,
@@ -508,6 +547,17 @@ impl Orchestrator {
                 self.exit_signal.clone(),
                 self.logger.clone(),
             )));
+        }
+
+        if let Some(recovery) = self.recovery.take() {
+            info!(self.logger, "Spawning the recovery checkpoint loop");
+            self.task_handles
+                .push(tokio::spawn(recovery_checkpoint_checks(
+                    Arc::clone(&self.subnet_id),
+                    recovery,
+                    self.exit_signal.clone(),
+                    self.logger.clone(),
+                )));
         }
 
         if let Some(hostos_upgrade) = self.hostos_upgrade.take() {

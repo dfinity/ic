@@ -299,8 +299,10 @@ impl Upgrade {
         // If it is, we restart to pass the unsigned CUP to consensus.
         self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
 
-        // This will start a new replica process if none is running.
-        self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
+        if !self.registry.should_create_checkpoint(subnet_id) {
+            // This will start a new replica process if none is running.
+            self.ensure_replica_is_running(&self.replica_version, subnet_id)?;
+        }
 
         // This will trigger an image download if one is already scheduled but we did
         // not arrive at the corresponding CUP yet.

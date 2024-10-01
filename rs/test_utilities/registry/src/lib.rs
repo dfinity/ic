@@ -209,6 +209,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
         halt_at_cup_height: false,
+        create_checkpoint: false,
         features: Some(Default::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
@@ -287,6 +288,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_halt_at_cup_height(mut self, halt_at_cup_height: bool) -> Self {
         self.record.halt_at_cup_height = halt_at_cup_height;
+        self
+    }
+
+    pub fn with_create_checkpoint(mut self, create_checkpoint: bool) -> Self {
+        self.record.create_checkpoint = create_checkpoint;
         self
     }
 

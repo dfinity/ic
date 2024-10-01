@@ -1130,6 +1130,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         .into();
 
         // Set the `halt_at_cup_height` to `true`, to verify that it will be later set to `false`.
+        subnet_to_recover.create_checkpoint = true;
         subnet_to_recover.halt_at_cup_height = true;
         subnet_to_recover.is_halted = false;
 
@@ -1214,6 +1215,7 @@ fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
         let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
 
         assert!(!subnet_record.halt_at_cup_height);
+        assert!(!subnet_record.create_checkpoint);
         assert!(subnet_record.is_halted);
     });
 }

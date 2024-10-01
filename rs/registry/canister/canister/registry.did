@@ -390,6 +390,7 @@ type UpdateSubnetPayload = record {
   features : opt SubnetFeatures;
   set_gossip_config_to_default : bool;
   halt_at_cup_height : opt bool;
+  create_checkpoint: opt bool;
   pfn_evaluation_period_ms : opt nat32;
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;

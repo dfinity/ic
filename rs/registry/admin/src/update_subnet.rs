@@ -85,6 +85,9 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     pub halt_at_cup_height: Option<bool>,
 
     #[clap(long)]
+    pub create_checkpoint: Option<bool>,
+
+    #[clap(long)]
     /// Configuration for chain key:
     /// The key configurations to be added to (or edited) for this subnet. If a key configuration
     /// is new for the specified subnet, it must also not already exist on the IC.
@@ -312,6 +315,7 @@ impl ProposeToUpdateSubnetCmd {
 
             is_halted: self.is_halted,
             halt_at_cup_height: self.halt_at_cup_height,
+            create_checkpoint: self.create_checkpoint,
             features: self.features.map(|v| v.into()),
 
             ssh_readonly_access: self.ssh_readonly_access.clone(),
@@ -380,6 +384,7 @@ mod tests {
             subnet_type: None,
             is_halted: None,
             halt_at_cup_height: None,
+            create_checkpoint: None,
             features: None,
             ecdsa_config: None,
             ecdsa_key_signing_enable: None,
@@ -414,6 +419,7 @@ mod tests {
             start_as_nns: None,
             is_halted: None,
             halt_at_cup_height: None,
+            create_checkpoint: None,
             chain_key_configs_to_generate: None,
             chain_key_signing_enable: None,
             chain_key_signing_disable: None,

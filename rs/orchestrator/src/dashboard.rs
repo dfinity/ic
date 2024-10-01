@@ -11,6 +11,7 @@ use ic_types::{
     SubnetId,
 };
 use std::{
+    path::PathBuf,
     process::Command,
     sync::{Arc, Mutex},
 };
@@ -30,6 +31,7 @@ pub(crate) struct OrchestratorDashboard {
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
     cup_provider: Arc<CatchUpPackageProvider>,
+    orchestrator_data_directory: PathBuf,
     logger: ReplicaLogger,
 }
 
@@ -50,6 +52,8 @@ impl Dashboard for OrchestratorDashboard {
              host os version: {}\n\
              scheduled upgrade: {}\n\
              {}\n\
+             last checkpoint height: {}\n\
+             recovery checkpoint data: {}\n\
              firewall config registry version: {}\n\
              ipv4 config registry version: {}\n\
              {}\n\
@@ -68,6 +72,13 @@ impl Dashboard for OrchestratorDashboard {
                 .unwrap_or_else(|| "None".to_string()),
             self.get_scheduled_upgrade().await,
             self.get_local_cup_info(),
+            self.cup_provider
+                .get_checkpoint_heights()
+                .map(|res| res.max().map(|res| res.to_string()))
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| "None".to_string()),
+            self.get_recovery_checkpoint_data(),
             *self.last_applied_firewall_version.read().await,
             *self.last_applied_ipv4_config_version.read().await,
             self.display_last_applied_ssh_parameters().await,
@@ -94,6 +105,7 @@ impl OrchestratorDashboard {
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
         cup_provider: Arc<CatchUpPackageProvider>,
+        orchestrator_data_directory: PathBuf,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -107,6 +119,7 @@ impl OrchestratorDashboard {
             replica_version,
             hostos_version,
             cup_provider,
+            orchestrator_data_directory,
             logger,
         }
     }
@@ -182,6 +195,16 @@ impl OrchestratorDashboard {
             "cup height: {}\ncup signed: {}\ncup state hash: {}",
             height, signed, hash
         )
+    }
+
+    fn get_recovery_checkpoint_data(&self) -> String {
+        match std::fs::read_to_string(
+            self.orchestrator_data_directory
+                .join("recovery_checkpoint.txt"),
+        ) {
+            Ok(data) => data,
+            Err(_) => String::from("None"),
+        }
     }
 }
 

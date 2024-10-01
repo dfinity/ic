@@ -81,6 +81,8 @@ message SubnetRecord {
   // key. If the removed key is not held by another subnet, it will be lost.
   optional ChainKeyConfig chain_key_config = 29;
 
+  bool create_checkpoint = 30;
+  
   reserved 1, 2, 4, 6, 13, 20, 21, 22;
   reserved "ic_version_id";
   reserved "initial_dkg_transcript";

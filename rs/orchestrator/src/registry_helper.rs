@@ -90,6 +90,16 @@ impl RegistryHelper {
         }
     }
 
+    pub(crate) fn should_create_checkpoint(&self, subnet_id: SubnetId) -> bool {
+        match self
+            .registry_client
+            .get_create_checkpoint(subnet_id, self.get_latest_version())
+        {
+            Ok(Some(value)) => value,
+            _ => false,
+        }
+    }
+
     pub(crate) fn get_api_boundary_node_record(
         &self,
         node_id: NodeId,

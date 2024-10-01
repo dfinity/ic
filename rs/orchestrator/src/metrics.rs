@@ -15,6 +15,7 @@ pub struct OrchestratorMetrics {
     pub master_public_key_changed_errors: IntCounterVec,
     pub failed_consecutive_upgrade_checks: IntCounter,
     pub critical_error_cup_deserialization_failed: IntCounter,
+    pub critical_error_recovery_checkpoint_failed: IntCounter,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
@@ -81,6 +82,10 @@ impl OrchestratorMetrics {
             critical_error_cup_deserialization_failed: metrics_registry.int_counter(
                 "orchestrator_cup_deserialization_failed_total",
                 "Number of times the deserialization of the locally persisted CUP failed",
+            ),
+            critical_error_recovery_checkpoint_failed: metrics_registry.int_counter(
+                "orchestrator_recovery_checkpoint_failed_total",
+                "Number of times an error occured during creation of the recovery checkpoint",
             ),
         }
     }

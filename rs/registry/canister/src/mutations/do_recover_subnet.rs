@@ -76,6 +76,7 @@ impl Registry {
                 subnet_record.halt_at_cup_height = false;
                 subnet_record.is_halted = true;
             }
+            subnet_record.create_checkpoint = false;
 
             let dkg_nodes = if let Some(replacement_nodes) = payload.replacement_nodes.clone() {
                 self.replace_subnet_record_membership(

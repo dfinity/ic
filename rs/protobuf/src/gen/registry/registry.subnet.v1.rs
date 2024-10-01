@@ -77,6 +77,8 @@ pub struct SubnetRecord {
     /// key. If the removed key is not held by another subnet, it will be lost.
     #[prost(message, optional, tag = "29")]
     pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
+    #[prost(bool, tag = "30")]
+    pub create_checkpoint: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaInitialization {

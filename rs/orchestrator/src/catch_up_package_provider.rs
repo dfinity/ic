@@ -432,6 +432,19 @@ impl CatchUpPackageProvider {
             }
         }
     }
+
+    pub(crate) fn get_checkpoint_heights(&self) -> OrchestratorResult<impl Iterator<Item = u64>> {
+        Ok(std::fs::read_dir("/var/lib/ic/data/ic_state/checkpoints")
+            .map_err(|err| {
+                OrchestratorError::IoError("Couldn't create a checkpoints directory".into(), err)
+            })?
+            .flatten()
+            .flat_map(|entry| {
+                let file_name = entry.file_name();
+                let file_name = file_name.to_string_lossy();
+                u64::from_str_radix(&file_name, 16)
+            }))
+    }
 }
 
 // Returns the height of the CUP without converting the protobuf
