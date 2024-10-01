@@ -160,6 +160,11 @@ pub(crate) struct Storage {
 }
 
 impl Storage {
+    pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
+        Self::load(storage_layout)?;
+        Ok(())
+    }
+
     pub fn load(storage_layout: &dyn StorageLayout) -> Result<Self, PersistenceError> {
         // For each shard, the oldest (i.e. lowest height) overlay belongs to `BaseFile` if it
         // consists of a single range.
