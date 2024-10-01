@@ -62,7 +62,10 @@ def test_handle_vuln_removed_event(slack_store, slack_vuln_info, slack_api):
 
 
 def test_handle_vuln_changed_event(slack_store, slack_vuln_info, slack_api):
-    events = [SlackVulnerabilityEvent.vuln_changed("vid", "c1", {"desc": "changed"}), SlackVulnerabilityEvent.vuln_changed("vid", "c2", {"desc": "changed"})]
+    events = [
+        SlackVulnerabilityEvent.vuln_changed("vid", "c1", {"desc": "changed"}),
+        SlackVulnerabilityEvent.vuln_changed("vid", "c2", {"desc": "changed"}),
+    ]
     scan_res = {"c1": SlackScanResult(), "c2": SlackScanResult()}
 
     slack_store.handle_events(events, scan_res, slack_vuln_info, {})
@@ -74,7 +77,10 @@ def test_handle_vuln_changed_event(slack_store, slack_vuln_info, slack_api):
 
 
 def test_handle_dep_added_event(slack_store, slack_vuln_info, slack_api):
-    events = [SlackVulnerabilityEvent.dep_added("vid", "c1", ("scanner", "repo", "did", "dvers"), ["proj1"]), SlackVulnerabilityEvent.dep_added("vid", "c2", ("scanner", "repo", "did", "dvers"), ["proj2"])]
+    events = [
+        SlackVulnerabilityEvent.dep_added("vid", "c1", ("scanner", "repo", "did", "dvers"), ["proj1"]),
+        SlackVulnerabilityEvent.dep_added("vid", "c2", ("scanner", "repo", "did", "dvers"), ["proj2"]),
+    ]
     scan_res = {"c1": SlackScanResult(), "c2": SlackScanResult()}
 
     slack_store.handle_events(events, scan_res, slack_vuln_info, {})
@@ -85,7 +91,10 @@ def test_handle_dep_added_event(slack_store, slack_vuln_info, slack_api):
 
 
 def test_handle_dep_removed_event(slack_store, slack_vuln_info, slack_api):
-    events = [SlackVulnerabilityEvent.dep_removed("vid", "c1", ("scanner", "repo", "did", "dvers"), ["proj1"]), SlackVulnerabilityEvent.dep_removed("vid", "c2", ("scanner", "repo", "did", "dvers"), ["proj2"])]
+    events = [
+        SlackVulnerabilityEvent.dep_removed("vid", "c1", ("scanner", "repo", "did", "dvers"), ["proj1"]),
+        SlackVulnerabilityEvent.dep_removed("vid", "c2", ("scanner", "repo", "did", "dvers"), ["proj2"]),
+    ]
     scan_res = {"c1": SlackScanResult(), "c2": SlackScanResult()}
 
     slack_store.handle_events(events, scan_res, slack_vuln_info, {})
