@@ -69,4 +69,4 @@ path = "tests/protobuf_encoding.rs"
 
 [[bin]]
 name = "test-notified"
-path = "tests/notified.rs"
+path = "tests/notified/notified.rs"
