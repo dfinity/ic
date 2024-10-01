@@ -124,3 +124,30 @@ fn test_fetch_tx_cache_bounds() {
         vec![(txid_1, 100, &()), (txid_3, 300, &()), (txid_0, 500, &())]
     );
 }
+
+#[test]
+fn cache_should_have_same_size() {
+    enum Status {
+        Status0,
+        Status1,
+        Status2,
+    }
+
+    let txid_0 = Txid::from([0u8; 32]);
+    let max_entries = 3;
+    let mut cache = FetchTxCache::new(max_entries);
+    assert_eq!(cache.status.len(), 0);
+    assert_eq!(cache.created.len(), 0);
+
+    cache.set_status_with(txid_0, Status::Status0, 0);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
+
+    cache.set_status_with(txid_0, Status::Status1, 1);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
+
+    cache.set_status_with(txid_0, Status::Status2, 2);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
+}

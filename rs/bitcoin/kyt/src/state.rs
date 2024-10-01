@@ -106,13 +106,17 @@ impl<T> FetchTxCache<T> {
         if self.status.insert(txid, status).is_none() {
             // This is a new entry, record its created time.
             self.created.push_back((txid, now));
+            assert_eq!(self.status.len(), self.created.len());
             // Purge the oldest entry when we exceed max_entries.
             if self.created.len() > self.max_entries {
-                return self.created.pop_front().and_then(|(txid, timestamp)| {
+                let removed = self.created.pop_front().and_then(|(txid, timestamp)| {
                     self.status
                         .remove(&txid)
                         .map(|status| (txid, timestamp, status))
                 });
+                assert_eq!(self.status.len(), self.created.len());
+                assert!(self.created.len() <= self.max_entries);
+                return removed;
             }
         }
         None
