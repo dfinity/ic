@@ -1496,9 +1496,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         );
 
         // 10 is the latest checkpoint, hence cannot have been deleted
-        assert!(state_manager
-            .list_state_heights(CERT_ANY)
-            .contains(&height(10)));
+        assert!(state_manager.checkpoint_heights().contains(&height(10)));
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
@@ -1510,9 +1508,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
             Some(&height(11))
         );
 
-        assert!(state_manager
-            .list_state_heights(CERT_ANY)
-            .contains(&height(10)));
+        assert!(state_manager.checkpoint_heights().contains(&height(10)));
     });
 }
 
@@ -1539,18 +1535,14 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.remove_inmemory_states_below(height(6), &BTreeSet::new());
 
-        // Only odd heights should have been removed
+        // Snapshots from @1 to @5 are purged are removed while no checkpoints are removed.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(2),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(6), height(7), height(8), height(9)],
+        );
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(2), height(4), height(6), height(8)]
         );
 
         state_manager.remove_states_below(height(4));
@@ -1558,14 +1550,12 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![
-                height(0),
-                height(4),
-                height(6),
-                height(7),
-                height(8),
-                height(9)
-            ],
+            vec![height(0), height(6), height(7), height(8), height(9)],
+        );
+        // Checkpoints at @2 is removed.
+        assert_eq!(
+            state_manager.checkpoint_heights(),
+            vec![height(4), height(6), height(8)]
         );
 
         let state_manager = restart_fn(state_manager, Some(height(6)));
@@ -1696,9 +1686,12 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
             );
         }
 
+        // Although snapshot at height 8 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(8)).is_ok());
+
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(8), height(9)],
+            vec![height(0), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -1761,9 +1754,19 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
             );
         }
 
+        assert_eq!(state_manager.checkpoint_heights(), vec![height(6)]);
+        assert_eq!(
+            state_manager
+                .state_layout()
+                .unfiltered_checkpoint_heights()
+                .expect("failed to get unfiltered checkpoint heights"),
+            vec![height(6), height(8)]
+        );
+        // Although snapshot at height 6 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(6)).is_ok());
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(9)],
+            vec![height(0), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -1811,12 +1814,14 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
         }
 
         // The checkpoint at height 6 is the latest checkpoint requested to remove.
-        // Therefore, it should be kept.
+        // Therefore, the checkpoint should be kept while the snapshot is removed.
+        assert!(state_manager.checkpoint_heights().contains(&height(6)));
+        // Although snapshot at height 6 is removed,  `get_state_at` will load the checkpoint at height to serve the state.
+        assert!(state_manager.get_state_at(height(6)).is_ok());
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
                 height(0),
-                height(6),
                 height(7),
                 height(8),
                 height(9),
@@ -2105,8 +2110,8 @@ fn latest_certified_state_is_not_removed() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            // 1 is protected as latest certified state, 2 is protected as latest checkpoint
-            vec![height(0), height(1), height(2), height(4)],
+            // 1 is protected as latest certified state
+            vec![height(0), height(1), height(4)],
         );
     });
 }
@@ -3878,6 +3883,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             dst_state_manager.flush_tip_channel();
 
             dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
 
             // Checkpoint @2 should be removed
             // while checkpoint @1 is still kept because it is referenced by state sync as a base.
@@ -3912,7 +3918,12 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             );
 
             let (_height, state) = dst_state_manager.take_tip();
-            dst_state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata, None);
+            dst_state_manager.commit_and_certify(
+                state,
+                height(4),
+                CertificationScope::Metadata,
+                None,
+            );
             certify_height(&*dst_state_manager, height(3));
             certify_height(&*dst_state_manager, height(4));
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
@@ -3923,6 +3934,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             // checkpoint @2 should be removable.
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(4));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
             // Snapshots below 4 should be removable.
