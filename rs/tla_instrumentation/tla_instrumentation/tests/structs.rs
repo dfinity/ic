@@ -41,6 +41,7 @@ mod tla_stuff {
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
         state.add("counter", c.counter.to_tla_value());
+        state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
     }
 
