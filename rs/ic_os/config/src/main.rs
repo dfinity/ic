@@ -6,10 +6,7 @@ use config::serialize_and_write_config;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::types::{
-    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, NetworkSettings,
-    SetupOSConfig, SetupOSSettings,
-};
+use config::types::*;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -62,7 +59,6 @@ pub fn main() -> Result<()> {
             setupos_config_json_path,
         }) => {
             // get config.ini settings
-            let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
             let ConfigIniSettings {
                 ipv6_prefix,
                 ipv6_prefix_length,
@@ -72,25 +68,44 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain,
                 verbose,
-            } = config_ini_settings;
+            } = get_config_ini_settings(&config_ini_path)?;
+
+            // create NetworkSettings
+            let deterministic_config = DeterministicIpv6Config {
+                prefix: ipv6_prefix,
+                prefix_length: ipv6_prefix_length,
+                gateway: ipv6_gateway,
+            };
+
+            let ipv4_config =
+                if let (Some(address), Some(gateway), Some(prefix_length), Some(domain)) =
+                    (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
+                {
+                    Some(Ipv4Config {
+                        address,
+                        gateway,
+                        prefix_length,
+                        domain,
+                    })
+                } else {
+                    None
+                };
+
+            let network_settings = NetworkSettings {
+                ipv6_config: Ipv6Config::Deterministic(deterministic_config),
+                ipv4_config,
+            };
 
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
-            let network_settings = NetworkSettings {
-                ipv6_prefix,
-                ipv6_prefix_length,
-                ipv6_gateway,
-                ipv4_address,
-                ipv4_gateway,
-                ipv4_prefix_length,
-                domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
-            };
-
             let logging = Logging {
                 elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
                 elasticsearch_tags: None,
+            };
+
+            let icos_dev_settings = ICOSDevSettings {
+                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
             };
 
             let icos_settings = ICOSSettings {
@@ -104,6 +119,7 @@ pub fn main() -> Result<()> {
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
+                icos_dev_settings,
             };
 
             let setupos_settings = SetupOSSettings;
@@ -127,6 +143,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;

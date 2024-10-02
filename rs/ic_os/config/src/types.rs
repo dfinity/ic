@@ -58,15 +58,15 @@ pub struct GuestOSSettings {
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
     pub ic_registry_local_store_path: Option<PathBuf>,
-    pub guestos_dev: GuestosDevConfig,
+    pub guestos_dev_settings: GuestOSDevSettings,
 }
 
 /// GuestOS development configuration. These settings are strictly used for development images.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
-pub struct GuestosDevConfig {
+pub struct GuestOSDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
-    pub query_stats_epoch_length: Option<String>,
+    pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
@@ -76,21 +76,9 @@ pub struct GuestosDevConfig {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct BackupSpoolSettings {
     /// The maximum age of any file or directory kept in the backup spool.
-    pub backup_retention_time_seconds: Option<String>,
+    pub backup_retention_time_seconds: Option<u64>,
     /// The interval at which the backup spool directory will be scanned for files to delete.
-    pub backup_purging_interval_seconds: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct NetworkSettings {
-    pub ipv6_prefix: String,
-    pub ipv6_prefix_length: u8,
-    pub ipv6_gateway: Ipv6Addr,
-    pub ipv4_address: Option<Ipv4Addr>,
-    pub ipv4_gateway: Option<Ipv4Addr>,
-    pub ipv4_prefix_length: Option<u8>,
-    pub domain: Option<String>,
-    pub mgmt_mac: Option<String>,
+    pub backup_purging_interval_seconds: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -111,6 +99,12 @@ pub struct ICOSSettings {
     /// backup and readonly can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
     pub ssh_authorized_keys_path: Option<PathBuf>,
+    pub icos_dev_settings: ICOSDevSettings,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct ICOSDevSettings {
+    pub mgmt_mac: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -119,4 +113,38 @@ pub struct Logging {
     pub elasticsearch_hosts: String,
     /// Space-separated list of tags to apply to exported log records.
     pub elasticsearch_tags: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct NetworkSettings {
+    pub ipv6_config: Ipv6Config,
+    pub ipv4_config: Option<Ipv4Config>,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct Ipv4Config {
+    pub address: Ipv4Addr,
+    pub gateway: Ipv4Addr,
+    pub prefix_length: u8,
+    pub domain: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub enum Ipv6Config {
+    Deterministic(DeterministicIpv6Config),
+    Fixed(FixedIpv6Config),
+    RouterAdvertisement,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct DeterministicIpv6Config {
+    pub prefix: String,
+    pub prefix_length: u8,
+    pub gateway: Ipv6Addr,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct FixedIpv6Config {
+    pub address: Ipv6Addr,
+    pub gateway: Ipv6Addr,
 }
