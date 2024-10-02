@@ -9,9 +9,7 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::state_machine_helpers::index::{
-    call_index_get_blocks, index_get_blocks, wait_until_sync_is_completed,
-};
+use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
@@ -180,6 +178,15 @@ fn index_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
     accountidentifier_balance
 }
 
+fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&query)
+}
+
 fn index_get_blocks_update(
     env: &StateMachine,
     index_id: CanisterId,
@@ -191,6 +198,22 @@ fn index_get_blocks_update(
             .bytes()
     };
     call_index_get_blocks(&update)
+}
+
+fn call_index_get_blocks(query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksRequest {
+        start: 0u8.into(),
+        length: u64::MAX.into(),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetBlocksResponse)
+        .expect("Failed to decode ic_icp_index::GetBlocksResponse")
+        .blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap()
 }
 
 fn get_account_id_transactions_len(
