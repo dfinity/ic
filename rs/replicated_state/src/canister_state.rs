@@ -222,7 +222,7 @@ impl CanisterState {
             (None, true) => NextExecution::StartNew,
             (Some(ExecutionTask::Heartbeat), _) => NextExecution::StartNew,
             (Some(ExecutionTask::GlobalTimer), _) => NextExecution::StartNew,
-            (Some(ExecutionTask::OnLowWasmMemory), _) => NextExecution::StartNew,
+            (Some(ExecutionTask::OnLowWasmMemory(..)), _) => NextExecution::StartNew,
             (Some(ExecutionTask::AbortedExecution { .. }), _)
             | (Some(ExecutionTask::PausedExecution { .. }), _) => NextExecution::ContinueLong,
             (Some(ExecutionTask::AbortedInstallCode { .. }), _)
@@ -242,7 +242,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
+            | Some(ExecutionTask::OnLowWasmMemory(..))
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -256,7 +256,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
+            | Some(ExecutionTask::OnLowWasmMemory(..))
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -270,7 +270,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
+            | Some(ExecutionTask::OnLowWasmMemory(..))
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::AbortedExecution { .. })
             | Some(ExecutionTask::AbortedInstallCode { .. }) => false,
@@ -284,7 +284,7 @@ impl CanisterState {
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory)
+            | Some(ExecutionTask::OnLowWasmMemory(..))
             | Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(..))
             | Some(ExecutionTask::AbortedExecution { .. }) => false,

@@ -39,7 +39,6 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::OnLowWasmMemoryHookStatus;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
     page_map::{
@@ -1006,10 +1005,16 @@ impl ExecutionTest {
                     .push_front(ExecutionTask::GlobalTimer);
             }
             CanisterTask::OnLowWasmMemory => {
+                // Set `OnLowWasmMemoryHookStatus` to `ConditionNotSatisfied`.
                 canister
                     .system_state
                     .task_queue
-                    .set_on_low_wasm_memory_hook_status(OnLowWasmMemoryHookStatus::Ready);
+                    .push_front(ExecutionTask::OnLowWasmMemory(Some(false)));
+                // Set `OnLowWasmMemoryHookStatus` to `Ready`.
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::OnLowWasmMemory(Some(true)));
             }
         }
         let result = execute_canister(

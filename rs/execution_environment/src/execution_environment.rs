@@ -3086,7 +3086,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::OnLowWasmMemory(..)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3187,7 +3187,7 @@ impl ExecutionEnvironment {
                 | ExecutionTask::AbortedInstallCode { .. }
                 | ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => {
+                | ExecutionTask::OnLowWasmMemory(..) => {
                     unreachable!("Here must be a paused task.")
                 }
             })
@@ -3772,7 +3772,7 @@ pub fn execute_canister(
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
                 (task, None)
             }
-            ExecutionTask::OnLowWasmMemory => {
+            ExecutionTask::OnLowWasmMemory(..) => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
                 (task, None)
             }

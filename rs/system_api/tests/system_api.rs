@@ -1456,7 +1456,7 @@ fn helper_test_on_low_wasm_memory(
         .unwrap();
 
     assert_eq!(
-        system_state.get_on_low_wasm_memory_hook_status(),
+        system_state.task_queue.get_on_low_wasm_memory_hook_status(),
         expected_status
     );
 }

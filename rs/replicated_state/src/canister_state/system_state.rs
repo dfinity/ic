@@ -307,8 +307,20 @@ impl TaskQueue {
     }
 
     pub fn push_front(&mut self, task: ExecutionTask) {
-        debug_assert_ne!(task, ExecutionTask::OnLowWasmMemory);
-        self.queue.push_front(task);
+        match task {
+            ExecutionTask::OnLowWasmMemory(hook_condition_check_result) => {
+                if let Some(is_hook_condition_satisfied) = hook_condition_check_result {
+                    self.on_low_wasm_memory_hook_status
+                        .update(is_hook_condition_satisfied);
+                }
+            }
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => self.queue.push_front(task),
+        };
     }
 
     #[cfg(test)]
@@ -326,10 +338,6 @@ impl TaskQueue {
 
     pub fn len(&self) -> usize {
         self.queue.len()
-    }
-
-    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
-        self.on_low_wasm_memory_hook_status = status;
     }
 
     pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
@@ -373,7 +381,7 @@ impl TaskQueue {
                         id
                     );
                 }
-                ExecutionTask::OnLowWasmMemory => {
+                ExecutionTask::OnLowWasmMemory(..) => {
                     panic!(
                         "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
                         id
@@ -405,7 +413,7 @@ impl TaskQueue {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::OnLowWasmMemory(..)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
@@ -420,7 +428,7 @@ impl TaskQueue {
             | ExecutionTask::PausedInstallCode(..)
             | ExecutionTask::AbortedExecution { .. }
             | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::OnLowWasmMemory => true,
+            | ExecutionTask::OnLowWasmMemory(..) => true,
         });
     }
 
@@ -436,7 +444,7 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::AbortedExecution { .. }
                 | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::OnLowWasmMemory => (),
+                | ExecutionTask::OnLowWasmMemory(..) => (),
             }
         }
         res
@@ -457,7 +465,7 @@ impl TaskQueue {
                 | ExecutionTask::AbortedInstallCode { .. }
                 | ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => task,
+                | ExecutionTask::OnLowWasmMemory(..) => task,
                 ExecutionTask::PausedExecution { id, .. } => {
                     let aborted = aborted_tasks.remove(&id).unwrap();
                     debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
@@ -589,6 +597,19 @@ pub enum OnLowWasmMemoryHookStatus {
     ConditionNotSatisfied,
     Ready,
     Executed,
+}
+
+impl OnLowWasmMemoryHookStatus {
+    fn update(&mut self, is_hook_condition_satisfied: bool) {
+        *self = if is_hook_condition_satisfied {
+            match *self {
+                Self::ConditionNotSatisfied | Self::Ready => Self::Ready,
+                Self::Executed => Self::Executed,
+            }
+        } else {
+            Self::ConditionNotSatisfied
+        };
+    }
 }
 
 impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
@@ -723,7 +744,10 @@ pub enum ExecutionTask {
 
     /// On low Wasm memory hook.
     /// The task exists only within an execution round, it never gets serialized.
-    OnLowWasmMemory,
+    /// If the encapsulated field is `None` that represents that hook condition was
+    /// not checked. Otherwise, the value inside `Some` represents the outcome of
+    /// the checking for hook condition.
+    OnLowWasmMemory(Option<bool>),
 
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
@@ -770,7 +794,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::OnLowWasmMemory(..)
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
@@ -1809,14 +1833,6 @@ impl SystemState {
             _ => None,
         }
     }
-
-    pub fn set_on_low_wasm_memory_hook_status(&mut self, status: OnLowWasmMemoryHookStatus) {
-        self.task_queue.set_on_low_wasm_memory_hook_status(status);
-    }
-
-    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
-        self.task_queue.get_on_low_wasm_memory_hook_status()
-    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister
@@ -1916,5 +1932,42 @@ pub mod testing {
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::canister_state::system_state::OnLowWasmMemoryHookStatus;
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
+        let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+        status.update(false);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
+
+        let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
+        status.update(true);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::Ready);
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_ready() {
+        let mut status = OnLowWasmMemoryHookStatus::Ready;
+        status.update(false);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
+
+        let mut status = OnLowWasmMemoryHookStatus::Ready;
+        status.update(true);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::Ready);
+    }
+
+    #[test]
+    fn test_on_low_wasm_memory_hook_start_status_executed() {
+        let mut status = OnLowWasmMemoryHookStatus::Executed;
+        status.update(false);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::ConditionNotSatisfied);
+
+        let mut status = OnLowWasmMemoryHookStatus::Executed;
+        status.update(true);
+        assert_eq!(status, OnLowWasmMemoryHookStatus::Executed);
     }
 }
