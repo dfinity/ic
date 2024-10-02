@@ -506,9 +506,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper": crate.spec(
                 version = "^1.4.1",
-                features = [
-                    "full",
-                ],
+                features = [ "full" ],
             ),
             "hyper-socks2": crate.spec(
                 version = "^0.9.1",
@@ -520,7 +518,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
