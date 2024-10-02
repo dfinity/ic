@@ -2,7 +2,6 @@
 pub mod v2 {
     include!("../gen/registry/registry.node_rewards.v2.rs");
     use std::collections::BTreeMap;
-    use std::fmt;
     use std::iter::Extend;
 
     impl UpdateNodeRewardsTableProposalPayload {
@@ -66,14 +65,6 @@ pub mod v2 {
             }
 
             None
-        }
-    }
-
-    impl fmt::Display for NodeRewardsTable {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let json = serde_json::to_string_pretty(&self)
-                .unwrap_or_else(|e| format!("Error when serializing: {}", e));
-            writeln!(f, "{}", json)
         }
     }
 

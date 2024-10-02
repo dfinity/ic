@@ -145,6 +145,13 @@ impl From<Infallible> for ProxyDecodeError {
     }
 }
 
+// TODO: remove when we have protobufs all the way down.
+impl From<bincode::Error> for ProxyDecodeError {
+    fn from(e: bincode::Error) -> ProxyDecodeError {
+        Self::Other(e.to_string())
+    }
+}
+
 impl std::fmt::Display for ProxyDecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

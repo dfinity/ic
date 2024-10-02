@@ -1,7 +1,6 @@
 #[allow(clippy::all)]
 pub mod v1 {
     include!("../gen/registry/registry.dc.v1.rs");
-    use std::fmt;
 
     pub const MAX_DC_ID_LENGTH: usize = 255;
     pub const MAX_DC_REGION_LENGTH: usize = 255;
@@ -37,22 +36,6 @@ pub mod v1 {
             }
 
             Ok(())
-        }
-    }
-
-    impl fmt::Display for DataCenterRecord {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let json = serde_json::to_string_pretty(&self)
-                .unwrap_or_else(|e| format!("Error when serializing: {}", e));
-            writeln!(f, "{}", json)
-        }
-    }
-
-    impl fmt::Display for AddOrRemoveDataCentersProposalPayload {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let json = serde_json::to_string_pretty(&self)
-                .unwrap_or_else(|e| format!("Error when serializing: {}", e));
-            writeln!(f, "{}", json)
         }
     }
 }
