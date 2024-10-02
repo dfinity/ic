@@ -778,9 +778,9 @@ impl StateMachineNode {
             ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
         let mut http_ip_addr_bytes = rng.gen::<[u8; 16]>();
         http_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
+        let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
         let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
-        let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
         Self {
             node_id: PrincipalId::new_self_authenticating(
