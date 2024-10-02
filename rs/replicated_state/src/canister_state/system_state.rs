@@ -1444,15 +1444,18 @@ impl SystemState {
 
     /// Enqueues "deadline expired" references for all expired best-effort callbacks
     /// without a response.
+    ///
+    /// Returns `Err` if a `SystemState` internal inconsistency prevented  one or
+    /// more "deadline expired" references from being enqueued.
     pub fn time_out_callbacks(
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) {
+    ) -> Result<(), StateError> {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
-            return;
+            return Ok(());
         }
 
         let aborted_or_paused_callback_id = self
@@ -1462,6 +1465,7 @@ impl SystemState {
         // Safe to unwrap because we just checked that the status is not `Stopped`.
         let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
 
+        let mut return_value = Ok(());
         let expired_callbacks = call_context_manager
             .expire_callbacks(current_time)
             .collect::<Vec<_>>();
@@ -1481,8 +1485,17 @@ impl SystemState {
                     own_canister_id,
                     local_canisters,
                 )
-                .unwrap();
+                .unwrap_or_else(|err_str| {
+                    return_value = Err(StateError::NonMatchingResponse {
+                        err_str,
+                        originator: callback.originator,
+                        callback_id,
+                        respondent: callback.respondent,
+                        deadline: callback.deadline,
+                    })
+                });
         }
+        return_value
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`

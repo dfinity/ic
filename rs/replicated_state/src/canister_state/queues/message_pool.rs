@@ -154,12 +154,12 @@ impl<T> Reference<T> {
         Id::from(self).kind()
     }
 
-    pub(super) fn context(&self) -> Context {
+    fn context(&self) -> Context {
         Id::from(self).context()
     }
 
     #[allow(dead_code)]
-    pub(super) fn class(&self) -> Class {
+    fn class(&self) -> Class {
         Id::from(self).class()
     }
 

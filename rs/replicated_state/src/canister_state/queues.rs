@@ -26,6 +26,7 @@ use ic_types::messages::{
 use ic_types::{CanisterId, CountBytes, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use message_pool::ToContext;
 use prost::Message;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{From, TryFrom};
@@ -433,12 +434,13 @@ impl MessageStoreImpl {
     ) -> Result<(), String>
     where
         MessageStoreImpl: MessageStore<T>,
+        T: ToContext,
     {
         if let Some(reference) = queue.peek() {
             if self.is_stale(reference) {
                 return Err(format!(
                     "Stale reference at the front of {:?} queue to/from {}",
-                    reference.context(),
+                    T::context(),
                     canister_id
                 ));
             }
@@ -472,8 +474,6 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     type TRef<'a> = CanisterInput;
 
     fn get(&self, reference: InboundReference) -> CanisterInput {
-        debug_assert_eq!(Context::Inbound, reference.context());
-
         if let Some(msg) = self.pool.get(reference) {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
@@ -491,8 +491,6 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     }
 
     fn take(&mut self, reference: InboundReference) -> CanisterInput {
-        debug_assert_eq!(Context::Inbound, reference.context());
-
         if let Some(msg) = self.pool.take(reference) {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
@@ -510,8 +508,6 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
     }
 
     fn is_stale(&self, reference: InboundReference) -> bool {
-        debug_assert_eq!(Context::Inbound, reference.context());
-
         self.pool.get(reference).is_none()
             && !(reference.is_inbound_best_effort_response()
                 && (self.expired_callbacks.contains_key(&reference)
@@ -523,23 +519,18 @@ impl MessageStore<RequestOrResponse> for MessageStoreImpl {
     type TRef<'a> = &'a RequestOrResponse;
 
     fn get(&self, reference: OutboundReference) -> &RequestOrResponse {
-        debug_assert_eq!(Context::Outbound, reference.context());
-
         self.pool
             .get(reference)
             .expect("stale reference at the front of output queue")
     }
 
     fn take(&mut self, reference: OutboundReference) -> RequestOrResponse {
-        debug_assert_eq!(Context::Outbound, reference.context());
-
         self.pool
             .take(reference)
             .expect("stale reference at the front of output queue")
     }
 
     fn is_stale(&self, reference: OutboundReference) -> bool {
-        debug_assert_eq!(Context::Outbound, reference.context());
         self.pool.get(reference).is_none()
     }
 }
@@ -1446,8 +1437,6 @@ impl CanisterQueues {
     /// Releases the outbound slot reservation of a shed or expired inbound request.
     /// Updates the stats for the dropped message.
     fn on_inbound_message_dropped(&mut self, reference: InboundReference, msg: RequestOrResponse) {
-        debug_assert_eq!(Context::Inbound, reference.context());
-
         match msg {
             RequestOrResponse::Response(response) => {
                 // This is an inbound response, remember its `originator_reply_callback`, so
@@ -1493,8 +1482,6 @@ impl CanisterQueues {
         msg: RequestOrResponse,
         input_queue_type_fn: impl Fn(&CanisterId) -> InputQueueType,
     ) {
-        debug_assert_eq!(Context::Outbound, reference.context());
-
         let remote = msg.receiver();
         let (input_queue, output_queue) = self
             .canister_queues

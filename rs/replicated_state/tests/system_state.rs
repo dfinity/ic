@@ -162,12 +162,13 @@ impl SystemStateFixture {
         );
     }
 
-    /// Times out all callbacks with deadlines before `curernt_time`. Returns the
+    /// Times out all callbacks with deadlines before `current_time`. Returns the
     /// number of expired callbacks.
     fn time_out_callbacks(&mut self, current_time: CoarseTime) -> usize {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
         self.system_state
-            .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
+            .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new())
+            .unwrap();
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
         input_responses_after - input_responses_before
