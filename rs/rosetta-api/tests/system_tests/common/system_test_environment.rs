@@ -181,15 +181,6 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
-    #[allow(dead_code)]
-    pub fn with_initial_balances(
-        mut self,
-        initial_balances: HashMap<AccountIdentifier, icp_ledger::Tokens>,
-    ) -> Self {
-        self.initial_balances = Some(initial_balances);
-        self
-    }
-
     pub fn with_persistent_storage(mut self, enable_persistent_storage: bool) -> Self {
         self.persistent_storage = enable_persistent_storage;
         self

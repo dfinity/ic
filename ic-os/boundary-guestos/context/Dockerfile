@@ -25,8 +25,8 @@ WORKDIR /tmp
 
 # Download and verify ic-gateway
 RUN \
-    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.53/ic-gateway_0.1.53_amd64.deb && \
-    echo "a08db301f91301649973367cc10fd3b117b45dfe  ic-gateway_0.1.53_amd64.deb" | shasum -c
+    curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.55/ic-gateway_0.1.55_amd64.deb && \
+    echo "57ef6ed420bca99cc2e5857a862d630d6c1f5ab3  ic-gateway_0.1.55_amd64.deb" | shasum -c
 
 #
 # Second build stage:
@@ -56,9 +56,9 @@ FROM image-${BUILD_TYPE}
 
 USER root:root
 
-COPY --from=download /tmp/ic-gateway_0.1.53_amd64.deb /tmp/ic-gateway_0.1.53_amd64.deb
-RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.53_amd64.deb && \
-    rm /tmp/ic-gateway_0.1.53_amd64.deb
+COPY --from=download /tmp/ic-gateway_0.1.55_amd64.deb /tmp/ic-gateway_0.1.55_amd64.deb
+RUN dpkg -i --force-confold /tmp/ic-gateway_0.1.55_amd64.deb && \
+    rm /tmp/ic-gateway_0.1.55_amd64.deb
 
 RUN mkdir -p /boot/config \
              /boot/efi \
@@ -124,9 +124,6 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-networkd-wait-online \
     systemd-resolved \
     systemd-journal-gatewayd
-
-# TODO remove when nginx is removed from base image
-RUN systemctl disable nginx
 
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
 # E.g., systemd-timesync/coredump

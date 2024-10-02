@@ -479,10 +479,19 @@ impl SchedulerImpl {
         csprng: &mut Csprng,
         round_limits: &mut RoundLimits,
         measurement_scope: &MeasurementScope,
-        ongoing_long_install_code: bool,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     ) -> ReplicatedState {
+        let ongoing_long_install_code =
+            state
+                .canister_states
+                .iter()
+                .any(|(_canister_id, canister)| match canister.next_execution() {
+                    NextExecution::None | NextExecution::StartNew | NextExecution::ContinueLong => {
+                        false
+                    }
+                    NextExecution::ContinueInstallCode => true,
+                });
         loop {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
@@ -654,7 +663,7 @@ impl SchedulerImpl {
         let mut state = loop {
             // Execute subnet messages.
             // If new messages are inducted into the subnet input queues,
-            // they are processed until the subbnet messages' instruction limit is reached.
+            // they are processed until the subnet messages' instruction limit is reached.
             {
                 let subnet_measurement_scope = MeasurementScope::nested(
                     &self.metrics.round_subnet_queue,
@@ -662,17 +671,6 @@ impl SchedulerImpl {
                 );
 
                 // TODO(EXC-1517): Improve inner loop preparation.
-                let ongoing_long_install_code =
-                    state
-                        .canister_states
-                        .iter()
-                        .any(|(_canister_id, canister)| match canister.next_execution() {
-                            NextExecution::None
-                            | NextExecution::StartNew
-                            | NextExecution::ContinueLong => false,
-                            NextExecution::ContinueInstallCode => true,
-                        });
-
                 let mut subnet_round_limits = scheduler_round_limits.subnet_round_limits();
                 if !subnet_round_limits.reached() {
                     state = self.drain_subnet_queues(
@@ -680,7 +678,6 @@ impl SchedulerImpl {
                         csprng,
                         &mut subnet_round_limits,
                         &subnet_measurement_scope,
-                        ongoing_long_install_code,
                         registry_settings,
                         idkg_subnet_public_keys,
                     );
@@ -738,6 +735,7 @@ impl SchedulerImpl {
                 &measurement_scope,
                 &mut round_limits,
                 registry_settings.subnet_size,
+                is_first_iteration,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
@@ -877,6 +875,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        is_first_iteration: bool,
     ) -> (
         Vec<CanisterState>,
         BTreeSet<CanisterId>,
@@ -946,6 +945,7 @@ impl SchedulerImpl {
                         deterministic_time_slicing,
                         round_limits,
                         subnet_size,
+                        is_first_iteration,
                     );
                 });
             }
@@ -1970,6 +1970,7 @@ fn execute_canisters_on_thread(
     deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
     subnet_size: usize,
+    is_first_iteration: bool,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -2091,7 +2092,14 @@ fn execute_canisters_on_thread(
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
         }
-        if !canister.has_input() || rank == 0 {
+        let full_message_execution = match canister.next_execution() {
+            NextExecution::None => true,
+            NextExecution::StartNew => false,
+            // We just finished a full slice of executions.
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
+        };
+        let scheduled_first = is_first_iteration && rank == 0;
+        if full_message_execution || scheduled_first {
             // The very first canister is considered to have a full execution round for
             // scheduling purposes even if it did not complete within the round.
             canister.scheduler_state.last_full_execution_round = round_id;
