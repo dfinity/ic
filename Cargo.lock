@@ -1188,6 +1188,22 @@ dependencies = [
  "bech32 0.8.1",
  "bitcoin_hashes 0.10.0",
  "secp256k1 0.22.2",
+<<<<<<< HEAD
+=======
+]
+
+[[package]]
+name = "bitcoin"
+version = "0.30.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1945a5048598e4189e239d3f809b19bdad4845c4b2ba400d304d2dcf26d2c462"
+dependencies = [
+ "bech32 0.9.1",
+ "bitcoin-private",
+ "bitcoin_hashes 0.12.0",
+ "hex_lit",
+ "secp256k1 0.27.0",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
 ]
 
 [[package]]
@@ -1238,6 +1254,18 @@ name = "bitcoin_hashes"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
+<<<<<<< HEAD
+=======
+
+[[package]]
+name = "bitcoin_hashes"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
+dependencies = [
+ "bitcoin-private",
+]
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1269,7 +1297,11 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
 dependencies = [
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.32.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "serde",
  "serde_json",
 ]
@@ -5436,7 +5468,11 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "candid",
  "candid_parser",
  "hex",
@@ -5597,7 +5633,11 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "bitcoincore-rpc",
  "bitcoind",
  "clap 3.2.25",
@@ -5663,7 +5703,11 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "flate2",
  "hex",
  "rand 0.8.5",
@@ -5720,7 +5764,11 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "candid",
  "candid_parser",
  "ciborium",
@@ -5771,7 +5819,11 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.1.0"
 dependencies = [
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "csv",
 ]
 
@@ -6260,7 +6312,11 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bech32 0.9.1",
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "bs58",
  "candid",
  "candid_parser",
@@ -16377,7 +16433,11 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
+<<<<<<< HEAD
  "bitcoin 0.32.3",
+=======
+ "bitcoin 0.30.2",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "bitcoincore-rpc",
  "bytes",
  "candid",
@@ -18307,6 +18367,10 @@ version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f"
 dependencies = [
+<<<<<<< HEAD
+=======
+ "bitcoin_hashes 0.12.0",
+>>>>>>> c9d19b472616be6ea0c30af406d2d78c44acb956
  "secp256k1-sys 0.8.1",
 ]
 
