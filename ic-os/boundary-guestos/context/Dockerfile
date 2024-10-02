@@ -192,10 +192,7 @@ RUN apt-get clean && \
         /var/log/dpkg.log \
         /var/lib/apt/lists/* \
         /var/lib/dbus/machine-id && \
-    find /usr/local/share/fonts -name .uuid -delete && \
-    find /usr/share/fonts -name .uuid -delete && \
-    find /usr/lib -name "*.pyc" -delete && \
-    find /usr/share -name "*.pyc" -delete && \
+    find /usr -name "*.pyc" -delete && \
     truncate --size 0 /etc/machine-id
 
 # Update POSIX permissions in /opt
