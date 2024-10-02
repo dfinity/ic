@@ -1609,7 +1609,7 @@ fn can_execute_messages_with_just_enough_instructions() {
 }
 
 #[test]
-fn execute_only_canisters_with_messages() {
+fn execute_idle_and_canisters_with_messages() {
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -1637,7 +1637,7 @@ fn execute_only_canisters_with_messages() {
     let idle = test.canister_state(idle);
     assert_eq!(
         idle.scheduler_state.last_full_execution_round,
-        ExecutionRound::from(0)
+        test.last_round()
     );
     assert_eq!(
         idle.system_state
@@ -6013,4 +6013,65 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+}
+
+#[test]
+fn charge_idle_canisters_for_full_execution_round() {
+    let scheduler_cores = 2;
+    let num_rounds = 100;
+    let slice = 20;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: slice.into(),
+            max_instructions_per_message: slice.into(),
+            max_instructions_per_message_without_dts: slice.into(),
+            max_instructions_per_slice: slice.into(),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump up the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Create many idle canisters.
+    for _ in 0..scheduler_cores * 2 {
+        test.create_canister();
+    }
+
+    // Create many busy canisters.
+    for _ in 0..scheduler_cores * 2 {
+        let canister_id = test.create_canister();
+        for _ in 0..num_rounds {
+            test.send_ingress(canister_id, ingress(slice));
+        }
+    }
+
+    let multiplier = scheduler_cores * test.state().canister_states.len();
+    for round in 0..num_rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let mut total_accumulated_priority = 0;
+        let mut total_priority_credit = 0;
+        for canister in test.state().canisters_iter() {
+            let scheduler_state = &canister.scheduler_state;
+            // Assert that we punished all idle canisters, not just top `scheduler_cores`.
+            if round == 0 && !canister.has_input() {
+                assert_ne!(test.last_round(), 0.into());
+                assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
+            }
+            // Assert there is no divergency in accumulated priorities.
+            let priority = scheduler_state.accumulated_priority - scheduler_state.priority_credit;
+            assert!(priority.get() <= 100 * multiplier as i64);
+            assert!(priority.get() >= -100 * multiplier as i64);
+
+            total_accumulated_priority += scheduler_state.accumulated_priority.get();
+            total_priority_credit += scheduler_state.priority_credit.get();
+        }
+        // The accumulated priority invariant should be respected.
+        assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+    }
 }
