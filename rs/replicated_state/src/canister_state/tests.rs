@@ -482,7 +482,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         Memory::new_for_testing(),
         vec![Global::I64(14)],
         WasmMetadata::default(),
-        None,
     ));
     assert!(canister_state.memory_usage().get() > 0);
     let initial_memory_usage = canister_state.execution_memory_usage()
@@ -857,7 +856,6 @@ fn execution_state_test_partial_eq() {
         Memory::new_for_testing(),
         vec![Global::I64(14)],
         WasmMetadata::default(),
-        None,
     );
 
     assert_eq!(state_1, state_1.clone());

@@ -7,7 +7,7 @@ use ic_management_canister_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{NextScheduledMethod, WasmBinary, WasmMetadata},
+    canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::ReplicatedStateTesting,
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
@@ -26,7 +26,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
-    CanisterId, Cycles, ExecutionRound, Height,
+    CanisterId, Cycles, Height,
 };
 use ic_wasm_types::CanisterModule;
 use std::{collections::BTreeSet, fs::OpenOptions};
@@ -239,18 +239,15 @@ fn can_recover_from_a_checkpoint() {
         );
         let page_map = PageMap::from(&[1, 2, 3, 4][..]);
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
-        let execution_state = ExecutionState {
-            canister_root: "NOT_USED".into(),
-            wasm_binary: WasmBinary::new(wasm.clone()),
-            wasm_memory: wasm_memory.clone(),
+        let execution_state = ExecutionState::new(
+            "NOT_USED".into(),
+            WasmBinary::new(wasm.clone()),
+            ExportedFunctions::new(BTreeSet::new()),
+            wasm_memory.clone(),
             stable_memory,
-            exported_globals: vec![],
-            exports: ExportedFunctions::new(BTreeSet::new()),
-            metadata: WasmMetadata::default(),
-            last_executed_round: ExecutionRound::from(0),
-            next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: None,
-        };
+            vec![],
+            WasmMetadata::default(),
+        );
 
         canister_state.execution_state = Some(execution_state);
 

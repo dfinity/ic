@@ -156,7 +156,6 @@ fn setup_execution_state(
         Memory::new_for_testing(),
         persisted_globals,
         WasmMetadata::default(),
-        None,
     )
 }
 

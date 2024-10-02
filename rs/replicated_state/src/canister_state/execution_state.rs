@@ -482,7 +482,8 @@ pub struct ExecutionState {
     /// Checks if execution is in Wasm64 mode. This field is used as a cache to avoid
     /// parsing the wasm module to determine if it is a Wasm64 module.
     /// Should not be accessed directly, use `is_wasm64()` method instead.
-    /// Also this field does not need to be saved in the checkpoint/state.
+    /// Also this field does not need to be saved in the checkpoint/state
+    /// as it can always be recomputed from the wasm module.
     #[validate_eq(Ignore)]
     pub is_wasm64: Option<bool>,
 }
@@ -541,7 +542,6 @@ impl ExecutionState {
         stable_memory: Memory,
         exported_globals: Vec<Global>,
         wasm_metadata: WasmMetadata,
-        is_wasm64: Option<bool>,
     ) -> Self {
         Self {
             canister_root,
@@ -553,7 +553,33 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64,
+            is_wasm64: None,
+        }
+    }
+
+    /// New method that includes the last executed round and next scheduled method.
+    pub fn new_with_round_and_method(
+        canister_root: PathBuf,
+        wasm_binary: Arc<WasmBinary>,
+        exports: ExportedFunctions,
+        wasm_memory: Memory,
+        stable_memory: Memory,
+        exported_globals: Vec<Global>,
+        wasm_metadata: WasmMetadata,
+        last_executed_round: ExecutionRound,
+        next_scheduled_method: NextScheduledMethod,
+    ) -> Self {
+        Self {
+            canister_root,
+            wasm_binary,
+            exports,
+            wasm_memory,
+            stable_memory,
+            exported_globals,
+            metadata: wasm_metadata,
+            last_executed_round,
+            next_scheduled_method,
+            is_wasm64: None,
         }
     }
 
@@ -611,6 +637,11 @@ impl ExecutionState {
         // Cache the result.
         self.is_wasm64 = Some(is_wasm64);
         is_wasm64
+    }
+
+    /// Sets the execution mode of the canister.
+    pub fn set_execution_mode(&mut self, is_wasm64: bool) {
+        self.is_wasm64 = Some(is_wasm64);
     }
 }
 

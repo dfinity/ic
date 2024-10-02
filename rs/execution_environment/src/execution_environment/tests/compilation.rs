@@ -311,7 +311,6 @@ mod execution_tests {
             Memory::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
-            None,
         ));
 
         // Call the same method on the canister twice.
@@ -366,7 +365,6 @@ mod execution_tests {
             Memory::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
-            None,
         ));
         let canister_id2 = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id2);
@@ -383,7 +381,6 @@ mod execution_tests {
             Memory::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
-            None,
         ));
 
         // Execute an update on each canister.
@@ -435,7 +432,6 @@ mod execution_tests {
             Memory::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
-            None,
         ));
         // Install a canister with the same invalid wasm.
         assert_eq!(
@@ -494,7 +490,6 @@ mod execution_tests {
             Memory::new_for_testing(),
             Vec::new(),
             WasmMetadata::default(),
-            None,
         ));
         // Install a canister with the same invalid wasm.
         assert_eq!(

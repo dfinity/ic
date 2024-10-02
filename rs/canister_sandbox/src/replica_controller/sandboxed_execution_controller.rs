@@ -1000,7 +1000,7 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory_page_map,
             ic_replicated_state::NumWasmPages::from(0),
         );
-        let execution_state = ExecutionState::new(
+        let mut execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
             ExportedFunctions::new(serialized_module.exported_functions.clone()),
@@ -1008,8 +1008,8 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory,
             exported_globals,
             serialized_module.wasm_metadata.clone(),
-            Some(is_wasm64),
         );
+        execution_state.set_execution_mode(is_wasm64);
 
         Ok((
             execution_state,
