@@ -78,6 +78,7 @@ RUN \
         systemd \
         systemd-sysv \
         systemd-journal-remote \
+        systemd-resolved \
         tcpdump \
         traceroute \
         mtr-tiny \
