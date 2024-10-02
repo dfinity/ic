@@ -880,9 +880,9 @@ impl WasmExecutor for SandboxedExecutionController {
                                 .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
 
                             sandbox_process.history.record(format!(
-                            "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
-                            wasm_id, next_wasm_memory_id
-                        ));
+                                "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                                wasm_id, next_wasm_memory_id
+                            ));
                             let sandbox_result = sandbox_process
                                 .sandbox_service
                                 .create_execution_state_serialized(
@@ -899,8 +899,8 @@ impl WasmExecutor for SandboxedExecutionController {
                                 .unwrap()
                                 .0?;
                             self.metrics
-                            .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
-                            .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                                .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                                .observe(sandbox_result.total_sandbox_time.as_secs_f64());
                             self.metrics
                                 .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
                                 .observe(sandbox_result.deserialization_time.as_secs_f64());
