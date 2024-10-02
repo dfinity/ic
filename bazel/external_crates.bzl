@@ -1203,9 +1203,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "strum": crate.spec(
                 version = "^0.26.2",
-                features = [
-                    "derive",
-                ],
             ),
             "strum_macros": crate.spec(
                 version = "^0.26.2",
