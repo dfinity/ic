@@ -126,57 +126,53 @@ where
             );
             return false;
         }
-        for (account_id, balance) in &self.balances {
-            if !self.balances.iter().all(|(key, value)| {
-                other.balances.get(key).map_or_else(
-                    || {
+        if !self.balances.iter().all(|(account_id, balance)| {
+            other.balances.get(account_id).map_or_else(
+                || {
+                    println!(
+                        "Mismatch in balance for account {:?}: {:?} vs None",
+                        account_id, balance
+                    );
+                    false
+                },
+                |other_balance| {
+                    if *balance != *other_balance {
                         println!(
-                            "Mismatch in balance for account {:?}: {:?} vs None",
-                            account_id, balance
+                            "Mismatch in balance for account {:?}: {:?} vs {:?}",
+                            account_id, balance, other_balance
                         );
                         false
-                    },
-                    |v| {
-                        if *value != *v {
-                            println!(
-                                "Mismatch in balance for account {:?}: {:?} vs {:?}",
-                                account_id, balance, v
-                            );
-                            false
-                        } else {
-                            true
-                        }
-                    },
-                )
-            }) {
-                return false;
-            }
+                    } else {
+                        true
+                    }
+                },
+            )
+        }) {
+            return false;
         }
-        for (account_id, allowance) in &self.allowances {
-            if !self.allowances.iter().all(|(key, value)| {
-                other.allowances.get(key).map_or_else(
-                    || {
+        if !self.allowances.iter().all(|(account_id_pair, allowance)| {
+            other.allowances.get(account_id_pair).map_or_else(
+                || {
+                    println!(
+                        "Mismatch in allowance for account pair {:?}: {:?} vs None",
+                        account_id_pair, allowance
+                    );
+                    false
+                },
+                |other_allowance| {
+                    if *allowance != *other_allowance {
                         println!(
-                            "Mismatch in allowance for account {:?}: {:?} vs None",
-                            account_id, allowance
+                            "Mismatch in allowance for account pair {:?}: {:?} vs {:?}",
+                            account_id_pair, allowance, other_allowance
                         );
                         false
-                    },
-                    |v| {
-                        if *value != *v {
-                            println!(
-                                "Mismatch in allowance for account {:?}: {:?} vs {:?}",
-                                account_id, allowance, v
-                            );
-                            false
-                        } else {
-                            true
-                        }
-                    },
-                )
-            }) {
-                return false;
-            }
+                    } else {
+                        true
+                    }
+                },
+            )
+        }) {
+            return false;
         }
         true
     }
