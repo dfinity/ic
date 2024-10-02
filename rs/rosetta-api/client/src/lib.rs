@@ -2,10 +2,14 @@ use anyhow::bail;
 use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
-use ic_rosetta_api::convert::to_model_account_identifier;
+use ic_base_types::PrincipalId;
+use ic_rosetta_api::models::AccountType;
+use ic_rosetta_api::models::BlockIdentifier;
+use ic_rosetta_api::models::ConstructionDeriveRequestMetadata;
 use ic_rosetta_api::models::ConstructionMetadataRequestOptions;
 use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
+use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
 use ic_rosetta_api::request_types::RequestType;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
@@ -14,6 +18,7 @@ use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
 use rosetta_core::identifiers::PartialBlockIdentifier;
+use rosetta_core::identifiers::TransactionIdentifier;
 use rosetta_core::models::CurveType;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::Amount;
@@ -23,6 +28,7 @@ use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use url::ParseError;
 pub struct RosettaClient {
     pub url: Url,
@@ -48,7 +54,7 @@ impl RosettaClient {
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
     }
 
-    async fn call_endpoint<T: Serialize + ?Sized, R: for<'a> Deserialize<'a>>(
+    async fn call_endpoint<T: Serialize + ?Sized + Debug, R: for<'a> Deserialize<'a>>(
         &self,
         path: &str,
         arg: &T,
@@ -67,8 +73,7 @@ impl RosettaClient {
                 .json::<rosetta_core::miscellaneous::Error>()
                 .await
                 .unwrap();
-            println!("Failed to call endpoint: {:?}", error);
-            bail!("Failed to call endpoint: {:?}", error);
+            bail!("Failed to call endpoint: {:?}, Request: {:?}", error, arg);
         } else {
             Ok(response
                 .json()
@@ -81,16 +86,21 @@ impl RosettaClient {
         &self,
         signer_principal: Principal,
         from_subaccount: Option<Subaccount>,
-        to_account: Account,
+        to_account: AccountIdentifier,
         amount: Nat,
         network_identifier: NetworkIdentifier,
     ) -> anyhow::Result<Vec<Operation>> {
         let suggested_fee = self
             .construction_metadata(
-                ConstructionMetadataRequestOptions {
-                    request_types: vec![RequestType::Send],
-                },
-                network_identifier.clone(),
+                ConstructionMetadataRequest::builder(network_identifier.clone())
+                    .with_options(
+                        ConstructionMetadataRequestOptions {
+                            request_types: vec![RequestType::Send],
+                        }
+                        .try_into()
+                        .map_err(|e| anyhow::anyhow!("Failed to convert options: {:?}", e))?,
+                    )
+                    .build(),
             )
             .await?
             .suggested_fee
@@ -106,12 +116,13 @@ impl RosettaClient {
             related_operations: None,
             type_: "TRANSACTION".to_string(),
             status: None,
-            account: Some(to_model_account_identifier(&AccountIdentifier::from(
-                Account {
-                    owner: signer_principal,
-                    subaccount: from_subaccount,
-                },
-            ))),
+            account: Some(
+                AccountIdentifier::new(
+                    PrincipalId(signer_principal),
+                    from_subaccount.map(icp_ledger::Subaccount),
+                )
+                .into(),
+            ),
             amount: Some(Amount::new(
                 BigInt::from_biguint(num_bigint::Sign::Minus, amount.0.clone()),
                 currency.clone(),
@@ -128,9 +139,7 @@ impl RosettaClient {
             related_operations: None,
             type_: "TRANSACTION".to_string(),
             status: None,
-            account: Some(to_model_account_identifier(&AccountIdentifier::from(
-                to_account,
-            ))),
+            account: Some(to_account.into()),
             amount: Some(Amount::new(BigInt::from(amount), currency.clone())),
             coin_change: None,
             metadata: None,
@@ -144,20 +153,22 @@ impl RosettaClient {
             related_operations: None,
             type_: "FEE".to_string(),
             status: None,
-            account: Some(to_model_account_identifier(&AccountIdentifier::from(
-                Account {
-                    owner: signer_principal,
-                    subaccount: from_subaccount,
-                },
-            ))),
+            account: Some(
+                AccountIdentifier::new(
+                    PrincipalId(signer_principal),
+                    from_subaccount.map(icp_ledger::Subaccount),
+                )
+                .into(),
+            ),
             amount: Some(Amount::new(
                 BigInt::from_biguint(
                     num_bigint::Sign::Minus,
                     Nat::try_from(suggested_fee)
                         .map_err(|e| anyhow::anyhow!("Failed to convert fee: {:?}", e))?
-                        .0,
+                        .0
+                        .clone(),
                 ),
-                currency,
+                currency.clone(),
             )),
             coin_change: None,
             metadata: None,
@@ -170,9 +181,47 @@ impl RosettaClient {
         ])
     }
 
+    pub async fn build_stake_neuron_operations(
+        signer_principal: Principal,
+        // The index of the neuron relativ to the signer of the transaction
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "STAKE".to_string(),
+            status: None,
+            account: Some(AccountIdentifier::new(PrincipalId(signer_principal), None).into()),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
+    }
+
+    pub async fn network_options(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<NetworkOptionsResponse> {
+        self.call_endpoint(
+            "/network/options",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
     }
 
     pub async fn network_status(
@@ -187,6 +236,42 @@ impl RosettaClient {
             },
         )
         .await
+    }
+
+    pub async fn mempool(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> anyhow::Result<MempoolResponse> {
+        self.call_endpoint(
+            "/mempool",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
+    pub async fn mempool_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+    ) -> anyhow::Result<MempoolTransactionResponse> {
+        self.call_endpoint(
+            "/mempool/transaction",
+            &MempoolTransactionRequest {
+                network_identifier,
+                transaction_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn account_balance(
+        &self,
+        request: AccountBalanceRequest,
+    ) -> anyhow::Result<AccountBalanceResponse> {
+        self.call_endpoint("/account/balance", &request).await
     }
 
     pub async fn search_transactions(
@@ -205,6 +290,23 @@ impl RosettaClient {
             "/block",
             &BlockRequest {
                 network_identifier,
+                block_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn block_transaction(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: TransactionIdentifier,
+        block_identifier: BlockIdentifier,
+    ) -> anyhow::Result<BlockTransactionResponse> {
+        self.call_endpoint(
+            "/block/transaction",
+            &BlockTransactionRequest {
+                network_identifier,
+                transaction_identifier,
                 block_identifier,
             },
         )
@@ -289,8 +391,6 @@ impl RosettaClient {
         memo: Option<u64>,
         created_at_time: Option<u64>,
     ) -> anyhow::Result<ConstructionSubmitResponse> {
-        println!("Making payloads request");
-        println!("Operations: {:?}", operations);
         let payloads_response = self
             .construction_payloads(
                 network_identifier.clone(),
@@ -304,9 +404,7 @@ impl RosettaClient {
                 }),
             )
             .await?;
-        println!("Signing transaction");
         let signatures = Self::sign_transaction(signer_keypair, payloads_response.clone())?;
-        println!("Combining transaction");
         let combine_response = self
             .construction_combine(
                 network_identifier.clone(),
@@ -314,7 +412,6 @@ impl RosettaClient {
                 signatures,
             )
             .await?;
-        println!("Submitting transaction");
         let submit_response = self
             .construction_submit(
                 network_identifier.clone(),
@@ -322,25 +419,7 @@ impl RosettaClient {
             )
             .await?;
 
-        // We need to wait for the transaction to be added to the blockchain
-        let mut tries = 0;
-        let request = SearchTransactionsRequest::builder(network_identifier.clone())
-            .with_transaction_identifier(submit_response.transaction_identifier.clone())
-            .build();
-        while tries < 10 {
-            let transaction = self.search_transactions(&request).await?;
-            if !transaction.transactions.is_empty() {
-                return Ok(submit_response);
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tries += 1;
-        }
-
-        bail!(
-            "Transaction was not added to the blockchain after {} retries",
-            tries
-        )
+        Ok(submit_response)
     }
 
     pub async fn construction_derive(
@@ -369,22 +448,9 @@ impl RosettaClient {
 
     pub async fn construction_metadata(
         &self,
-        construction_metadata_options: ConstructionMetadataRequestOptions,
-        network_identifier: NetworkIdentifier,
+        request: ConstructionMetadataRequest,
     ) -> anyhow::Result<ConstructionMetadataResponse> {
-        self.call_endpoint(
-            "/construction/metadata",
-            &ConstructionMetadataRequest {
-                options: Some(
-                    construction_metadata_options
-                        .try_into()
-                        .map_err(|e| anyhow::anyhow!("Failed to convert options: {:?}", e))?,
-                ),
-                network_identifier,
-                public_keys: None,
-            },
-        )
-        .await
+        self.call_endpoint("/construction/metadata", &request).await
     }
 
     pub async fn construction_submit(
@@ -473,5 +539,237 @@ impl RosettaClient {
             },
         )
         .await
+    }
+
+    pub async fn transfer<T>(
+        &self,
+        transfer_args: RosettaTransferArgs,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: T,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let transfer_operations = self
+            .build_transfer_operations(
+                signer_keypair.generate_principal_id()?.0,
+                transfer_args.from_subaccount,
+                transfer_args.to.into(),
+                transfer_args.amount,
+                network_identifier.clone(),
+            )
+            .await?;
+
+        // This submit wrapper will also wait for the transaction to be finalized
+        self.make_submit_and_wait_for_transaction(
+            &signer_keypair,
+            network_identifier,
+            transfer_operations,
+            // We don't care about the specific memo, only that there exists a memo
+            transfer_args.memo,
+            transfer_args.created_at_time,
+        )
+        .await
+    }
+
+    pub async fn create_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: T,
+        create_neuron_args: RosettaCreateNeuronArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        // Derive the AccountIdentifier that corresponds to the neuron that should be created
+        let neuron_account_id = self
+            .construction_derive(ConstructionDeriveRequest {
+                network_identifier: network_identifier.clone(),
+                public_key: (&signer_keypair).into(),
+                metadata: Some(
+                    ConstructionDeriveRequestMetadata {
+                        account_type: AccountType::Neuron {
+                            neuron_index: create_neuron_args.neuron_index.unwrap_or(0),
+                        },
+                    }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+                ),
+            })
+            .await?
+            .account_identifier
+            .ok_or_else(|| anyhow::anyhow!("Failed to derive account identifier"))?;
+
+        // Transfer the staked amount to the neuron account
+        let transfer_operations = self
+            .build_transfer_operations(
+                signer_keypair.generate_principal_id()?.0,
+                create_neuron_args.from_subaccount,
+                neuron_account_id.try_into().map_err(|e| {
+                    anyhow::anyhow!("Failed to convert account identifier: {:?}", e)
+                })?,
+                create_neuron_args.staked_amount,
+                network_identifier.clone(),
+            )
+            .await?;
+
+        // This submit wrapper will also wait for the transaction to be finalized
+        self.make_submit_and_wait_for_transaction(
+            &signer_keypair,
+            network_identifier.clone(),
+            transfer_operations,
+            // We don't care about the specific memo, only that there exists a memo
+            None,
+            None,
+        )
+        .await?;
+
+        let stake_operations = RosettaClient::build_stake_neuron_operations(
+            signer_keypair.generate_principal_id()?.0,
+            create_neuron_args.neuron_index.unwrap_or(0),
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            &signer_keypair,
+            network_identifier,
+            stake_operations,
+            None,
+            None,
+        )
+        .await
+    }
+}
+
+pub struct RosettaTransferArgs {
+    pub from_subaccount: Option<[u8; 32]>,
+    pub to: Account,
+    pub amount: Nat,
+    pub memo: Option<u64>,
+    pub fee: Option<Nat>,
+    pub created_at_time: Option<u64>,
+}
+
+impl RosettaTransferArgs {
+    pub fn new(to: Account, amount: Nat) -> Self {
+        Self {
+            from_subaccount: None,
+            to,
+            amount,
+            memo: None,
+            fee: None,
+            created_at_time: None,
+        }
+    }
+
+    pub fn builder(to: Account, amount: Nat) -> RosettaTransferArgsBuilder {
+        RosettaTransferArgsBuilder::new(to, amount)
+    }
+}
+
+pub struct RosettaTransferArgsBuilder {
+    from_subaccount: Option<[u8; 32]>,
+    to: Account,
+    amount: Nat,
+    memo: Option<u64>,
+    fee: Option<Nat>,
+    created_at_time: Option<u64>,
+}
+
+impl RosettaTransferArgsBuilder {
+    pub fn new(to: Account, amount: Nat) -> Self {
+        Self {
+            from_subaccount: None,
+            to,
+            amount,
+            memo: None,
+            fee: None,
+            created_at_time: None,
+        }
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn with_memo(mut self, memo: u64) -> Self {
+        self.memo = Some(memo);
+        self
+    }
+
+    pub fn with_created_at_time(mut self, created_at_time: u64) -> Self {
+        self.created_at_time = Some(created_at_time);
+        self
+    }
+
+    pub fn with_fee(mut self, fee: Nat) -> Self {
+        self.fee = Some(fee);
+        self
+    }
+
+    pub fn build(self) -> RosettaTransferArgs {
+        RosettaTransferArgs {
+            from_subaccount: self.from_subaccount,
+            to: self.to,
+            amount: self.amount,
+            memo: self.memo,
+            fee: self.fee,
+            created_at_time: self.created_at_time,
+        }
+    }
+}
+
+pub struct RosettaCreateNeuronArgs {
+    // The index of the neuron relative to the signer_keypair
+    // If set the user specifies which index the neuron should have
+    // This is especially usuful if the user wants to create multiple neurons on the same signer keypair
+    // If the user for example already has a neuron at index 0, they may want to specify the the new nueral should be at index 1
+    // The default value will be set to 0
+    pub neuron_index: Option<u64>,
+    // The amount the user wants to stake
+    // The user needs to make sure they have enough ICP to stake
+    pub staked_amount: Nat,
+    // If the ICP that is supposed to be used to fund the neuron should be transferred from a subaccount
+    pub from_subaccount: Option<Subaccount>,
+}
+
+impl RosettaCreateNeuronArgs {
+    pub fn builder(staked_amount: Nat) -> RosettaCreateNeuronArgsBuilder {
+        RosettaCreateNeuronArgsBuilder::new(staked_amount)
+    }
+}
+
+pub struct RosettaCreateNeuronArgsBuilder {
+    staked_amount: Nat,
+    from_subaccount: Option<[u8; 32]>,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaCreateNeuronArgsBuilder {
+    pub fn new(staked_amount: Nat) -> Self {
+        Self {
+            staked_amount,
+            from_subaccount: None,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaCreateNeuronArgs {
+        RosettaCreateNeuronArgs {
+            staked_amount: self.staked_amount,
+            from_subaccount: self.from_subaccount,
+            neuron_index: self.neuron_index,
+        }
     }
 }

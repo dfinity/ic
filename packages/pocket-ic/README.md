@@ -41,8 +41,8 @@ fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) 
 * Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
 
 ### Examples
-For a simple but complete example with the counter canister, see [here](tests/tests.rs#L25).
-For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L63).
+For a simple but complete example with the counter canister, see [here](tests/tests.rs#L27).
+For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L65).
 
 To see a minimalistic setup of PocketIC in a Rust project, check out the [ICP Hello World Rust](https://github.com/dfinity/icp-hello-world-rust/blob/main/README.md#testing-your-project) repository.
 

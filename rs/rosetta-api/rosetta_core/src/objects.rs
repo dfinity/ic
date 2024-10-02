@@ -22,7 +22,7 @@ pub type ObjectMap = serde_json::map::Map<String, Object>;
 
 /// Currency is composed of a canonical Symbol and Decimals. This Decimals value is used to convert an Amount.
 /// Value from atomic units (Satoshis) to standard units (Bitcoins).
-#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize, Hash)]
 pub struct Currency {
     /// Canonical symbol associated with a currency.
     pub symbol: String,
@@ -90,7 +90,7 @@ impl Block {
 /// Operations contain all balance-changing information within a transaction.
 /// They are always one-sided (only affect 1 AccountIdentifier) and can succeed
 /// or fail independently from a Transaction.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct Operation {
     /// The operation_identifier uniquely identifies an operation within a transaction.
     pub operation_identifier: OperationIdentifier,
@@ -161,7 +161,7 @@ impl Operation {
 /// UTXOs allows for supporting both account-based transfers and UTXO-based
 /// transfers on the same blockchain (when a transfer is account-based, don't
 /// populate this model).
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct CoinChange {
     /// CoinIdentifier uniquely identifies a Coin.
     pub coin_identifier: CoinIdentifier,
@@ -187,7 +187,7 @@ impl CoinChange {
 /// as `#[repr(C)]` which helps with FFI.
 #[allow(non_camel_case_types)]
 #[repr(C)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, Hash)]
 pub enum CoinAction {
     /// CoinAction indicating a Coin was created.
     #[serde(rename = "coin_created")]
@@ -264,7 +264,7 @@ impl ::std::str::FromStr for Direction {
 
 /// Transactions contain an array of Operations that are attributable to the
 /// same TransactionIdentifier.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct Transaction {
     /// The transaction_identifier uniquely identifies a transaction in a particular network and block or in the mempool.
     pub transaction_identifier: TransactionIdentifier,
@@ -291,7 +291,7 @@ impl Transaction {
 
 // Amount is some Value of a Currency. It is considered invalid to specify a
 /// Value without a Currency.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct Amount {
     /// Value of the transaction in atomic units represented as an
     /// arbitrary-sized signed integer.  For example, 1 BTC would be represented
@@ -692,7 +692,7 @@ pub struct Signature {
 }
 
 /// BlockTransaction contains a populated Transaction and the BlockIdentifier that contains it.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Hash)]
 pub struct BlockTransaction {
     /// The block_identifier uniquely identifies a block in a particular network.
     pub block_identifier: BlockIdentifier,

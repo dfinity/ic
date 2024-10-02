@@ -135,7 +135,7 @@ impl<'a> AgentWithDelegation<'a> {
     ) -> Response {
         let client = Client::new();
         client
-            .post(&format!(
+            .post(format!(
                 "{}api/v2/canister/{}/{}",
                 self.node_url.as_str(),
                 canister_id,

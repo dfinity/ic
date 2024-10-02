@@ -208,22 +208,22 @@ fn should_block_deposit_from_blocked_address() {
 #[test]
 fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
-    let (pokt_logs, public_node_logs) = {
-        let pokt_log_entry = deposit_params.eth_log_entry();
-        let mut llama_nodes_log_entry = pokt_log_entry.clone();
+    let (block_pi_logs, public_node_logs) = {
+        let block_pi_log_entry = deposit_params.eth_log_entry();
+        let mut llama_nodes_log_entry = block_pi_log_entry.clone();
         llama_nodes_log_entry.amount += 1;
         (
-            vec![ethers_core::types::Log::from(pokt_log_entry)],
+            vec![ethers_core::types::Log::from(block_pi_log_entry)],
             vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
         )
     };
-    assert_ne!(pokt_logs, public_node_logs);
+    assert_ne!(block_pi_logs, public_node_logs);
 
     CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-            mock.respond_with(JsonRpcProvider::Pokt, pokt_logs.clone())
+            mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::LlamaNodes, pokt_logs.clone())
+                .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -354,7 +354,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .start_processing_withdrawals()
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Pokt,
+                JsonRpcProvider::BlockPi,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740742_u64.into()
                 },

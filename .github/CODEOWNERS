@@ -47,6 +47,8 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
 /packages/pocket-ic/                 @dfinity/pocket-ic
+/packages/ic-ethereum-types/         @dfinity/cross-chain-team
+/packages/ic-sha3/                   @dfinity/crypto-team
 /packages/ic-signature-verification/ @dfinity/crypto-team
 /packages/ic-vetkd-utils/            @dfinity/crypto-team
 
@@ -64,7 +66,7 @@ go_deps.bzl               @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
@@ -143,6 +145,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/p2p.rs                               @dfinity/networking
 /rs/interfaces/src/p2p/                                 @dfinity/networking
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
+/rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
@@ -193,6 +196,7 @@ go_deps.bzl               @dfinity/idx
 /rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/nns-team
+/rs/rust_canisters/backtrace_canister                   @dfinity/execution
 /rs/rust_canisters/memory_test/                         @dfinity/execution
 /rs/rust_canisters/call_tree_test/                      @dfinity/execution
 /rs/rust_canisters/proxy_canister/                      @dfinity/networking
@@ -201,6 +205,8 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/stable_memory_integrity              @dfinity/execution
 /rs/rust_canisters/canister_creator                     @dfinity/execution
 /rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
+/rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
+/rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/scenario_tests/                                     @dfinity/idx
 /rs/sns/                                                @dfinity/nns-team
 /rs/starter/                                            @dfinity/networking
@@ -257,7 +263,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
 /rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
-/rs/tla_instrumentation/                                @dfinity/research
+/rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
 /rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners

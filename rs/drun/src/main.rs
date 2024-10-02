@@ -7,6 +7,7 @@ use ic_canister_sandbox_backend_lib::{
 use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
 use ic_registry_subnet_type::SubnetType;
+use ic_types::NumBytes;
 use std::path::PathBuf;
 
 const DEFAULT_CONFIG_FILE: &str = "ic.json5";
@@ -17,6 +18,9 @@ const ARG_MESSAGES: &str = "messages";
 const ARG_EXTRA_BATCHES: &str = "extra-batches";
 const ARG_INSTRUCTION_LIMIT: &str = "instruction-limit";
 const ARG_SUBNET_TYPE: &str = "subnet-type";
+
+const GB: u64 = 1024 * 1024 * 1024;
+const MAIN_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 * GB);
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
@@ -45,17 +49,26 @@ async fn drun_main() -> Result<(), String> {
             .value_of(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
             .unwrap_or(ConfigSource::Default);
+        let hypervisor_config = &mut default_config.hypervisor;
+
         // Enable composite queries in drun by default to allow local
         // development and testing.
-        default_config.hypervisor.composite_queries = FlagStatus::Enabled;
-        default_config
-            .hypervisor
+        hypervisor_config.composite_queries = FlagStatus::Enabled;
+        hypervisor_config
             .embedders_config
             .feature_flags
             .rate_limiting_of_debug_prints = FlagStatus::Disabled;
-        default_config.hypervisor.rate_limiting_of_heap_delta = FlagStatus::Disabled;
-        default_config.hypervisor.rate_limiting_of_instructions = FlagStatus::Disabled;
-        default_config.hypervisor.canister_snapshots = FlagStatus::Enabled;
+        hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+        hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        hypervisor_config.canister_snapshots = FlagStatus::Enabled;
+        // For testing enhanced orthogonal persistence in Motoko,
+        // enable Wasm Memory64 and re-configure the main memory capacity.
+        hypervisor_config.embedders_config.feature_flags.wasm64 = FlagStatus::Enabled;
+        hypervisor_config.embedders_config.max_wasm_memory_size = MAIN_MEMORY_CAPACITY;
+        hypervisor_config.max_canister_memory_size =
+            hypervisor_config.embedders_config.max_wasm_memory_size
+                + hypervisor_config.embedders_config.max_stable_memory_size;
+
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
             eprintln!("Failed to load config:\n  {}", err);
             std::process::exit(1);

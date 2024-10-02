@@ -27,7 +27,7 @@ rust_library(
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 generated_files_check(

@@ -12,15 +12,15 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = { workspace = true }
+candid = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-runtime = { path = "../runtime" }
 ic-nervous-system-tla = { path = "../tla" }
 ic-nns-constants = { path = "../../nns/constants" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
 local_key = { path = "../../tla_instrumentation/local_key", optional = true }

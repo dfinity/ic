@@ -35,6 +35,7 @@ DEPENDENCIES = [
     "@crate_index//:maplit",
     "@crate_index//:nix",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
     "@crate_index//:rayon",
@@ -66,7 +67,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:proptest",
-    "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
 ]

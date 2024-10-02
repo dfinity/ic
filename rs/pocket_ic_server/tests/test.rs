@@ -3,6 +3,8 @@ mod common;
 use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
+use ic_cdk::api::management_canister::main::CanisterIdRecord;
+use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_interfaces_registry::{
     RegistryDataProvider, RegistryVersionedRecord, ZERO_REGISTRY_VERSION,
 };
@@ -16,7 +18,7 @@ use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet,
 };
-use pocket_ic::{PocketIc, PocketIcBuilder, WasmResult};
+use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
 use registry_canister::init::RegistryCanisterInitPayload;
 use reqwest::blocking::Client;
@@ -103,6 +105,7 @@ fn test_creation_of_instance_extended() {
         state_dir: None,
         nonmainnet_features: false,
         log_level: None,
+        bitcoind_addr: None,
     };
     let response = client
         .post(url.join("instances").unwrap())
@@ -227,8 +230,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     // define two domains for canister ID resolution
     let localhost = "localhost";
     let sub_localhost = &format!("{}.{}", effective_canister_id, localhost);
+    let sub_raw_localhost = &format!("{}.raw.{}", effective_canister_id, localhost);
     let alt_domain = "example.com";
     let sub_alt_domain = &format!("{}.{}", effective_canister_id, alt_domain);
+    let sub_raw_alt_domain = &format!("{}.raw.{}", effective_canister_id, alt_domain);
 
     // generate root TLS certificate (only used if `https` is set to `true`,
     // but defining it here unconditionally simplifies the test)
@@ -236,8 +241,10 @@ async fn test_gateway(server_url: Url, https: bool) {
     let root_cert = CertificateParams::new(vec![
         localhost.to_string(),
         sub_localhost.to_string(),
+        sub_raw_localhost.to_string(),
         alt_domain.to_string(),
         sub_alt_domain.to_string(),
+        sub_raw_alt_domain.to_string(),
     ])
     .unwrap()
     .self_signed(&root_key_pair)
@@ -287,24 +294,21 @@ async fn test_gateway(server_url: Url, https: bool) {
     assert_eq!(http_gateway_details.domains, domains);
     assert_eq!(http_gateway_details.https_config, https_config);
 
-    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.localhost/example.com to [::1]
-    let mut builder = NonblockingClient::builder()
-        .resolve(
-            localhost,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
-        )
-        .resolve(
-            sub_localhost,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
-        )
-        .resolve(
-            alt_domain,
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
-        )
-        .resolve(
-            sub_alt_domain,
+    // create a non-blocking reqwest client resolving localhost/example.com and <canister-id>.(raw.)localhost/example.com to 127.0.0.1
+    let mut builder = NonblockingClient::builder();
+    for domain in [
+        localhost,
+        sub_localhost,
+        sub_raw_localhost,
+        alt_domain,
+        sub_alt_domain,
+        sub_raw_alt_domain,
+    ] {
+        builder = builder.resolve(
+            domain,
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
         );
+    }
     // add a custom root certificate
     if https {
         builder = builder.add_root_certificate(
@@ -346,16 +350,14 @@ async fn test_gateway(server_url: Url, https: bool) {
         .unwrap();
 
     // perform frontend asset request for the title page at http://127.0.0.1:<port>/?canisterId=<canister-id>
+    let mut test_urls = vec![];
     if !https {
         assert_eq!(proto, "http");
         let canister_url = format!(
             "{}://{}:{}/?canisterId={}",
             "http", "127.0.0.1", port, canister_id
         );
-        let res = client.get(canister_url).send().await.unwrap();
-        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-        println!("page: {}", page);
-        assert!(page.contains("<title>Internet Identity</title>"));
+        test_urls.push(canister_url);
     }
 
     // perform frontend asset request for the title page at http(s)://localhost:<port>/?canisterId=<canister-id>
@@ -363,15 +365,29 @@ async fn test_gateway(server_url: Url, https: bool) {
         "{}://{}:{}/?canisterId={}",
         proto, localhost, port, canister_id
     );
-    let res = client.get(canister_url).send().await.unwrap();
-    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
+    test_urls.push(canister_url);
+
+    // perform frontend asset request for the title page at http(s)://<canister-id>.localhost:<port>
+    let canister_url = format!("{}://{}.{}:{}", proto, canister_id, localhost, port);
+    test_urls.push(canister_url);
+
+    // perform frontend asset request for the title page at http(s)://<canister-id>.raw.localhost:<port>
+    let canister_url = format!("{}://{}.raw.{}:{}", proto, canister_id, localhost, port);
+    test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.example.com:<port>
     let canister_url = format!("{}://{}.{}:{}", proto, canister_id, alt_domain, port);
-    let res = client.get(canister_url.clone()).send().await.unwrap();
-    let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
-    assert!(page.contains("<title>Internet Identity</title>"));
+    test_urls.push(canister_url);
+
+    // perform frontend asset request for the title page at http(s)://<canister-id>.raw.example.com:<port>
+    let canister_url = format!("{}://{}.raw.{}:{}", proto, canister_id, alt_domain, port);
+    test_urls.push(canister_url.clone());
+
+    for url in test_urls {
+        let res = client.get(url).send().await.unwrap();
+        let page = String::from_utf8(res.bytes().await.unwrap().to_vec()).unwrap();
+        assert!(page.contains("<title>Internet Identity</title>"));
+    }
 
     // stop HTTP gateway and disable auto progress
     pic.stop_live().await;
@@ -443,12 +459,11 @@ fn test_specified_id() {
 #[test]
 fn test_dashboard() {
     let (server_url, _) = start_server_helper(None, false, false);
-    let subnet_config_set = SubnetConfigSet {
-        nns: true,
-        application: 1,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url.clone());
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_server_url(server_url.clone())
+        .build();
 
     // retrieve the NNS and application subnets
     let topology = pic.topology();
@@ -460,14 +475,20 @@ fn test_dashboard() {
     let canister_2 = pic.create_canister_on_subnet(None, None, app_subnet);
     assert_eq!(pic.get_subnet(canister_2).unwrap(), app_subnet);
 
+    let gateway = pic.make_live(None);
+
     let client = Client::new();
-    let dashboard_url = format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
-    let dashboard = client.get(dashboard_url).send().unwrap();
-    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
-    assert!(page.contains(&canister_1.to_string()));
-    assert!(page.contains(&canister_2.to_string()));
-    assert!(page.contains(&nns_subnet.to_string()));
-    assert!(page.contains(&app_subnet.to_string()));
+    let instance_dashboard_url =
+        format!("{}instances/{}/_/dashboard", server_url, pic.instance_id());
+    let gateway_dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
+    for dashboard_url in [instance_dashboard_url, gateway_dashboard_url] {
+        let dashboard = client.get(dashboard_url).send().unwrap();
+        let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+        assert!(page.contains(&canister_1.to_string()));
+        assert!(page.contains(&canister_2.to_string()));
+        assert!(page.contains(&nns_subnet.to_string()));
+        assert!(page.contains(&app_subnet.to_string()));
+    }
 }
 
 #[test]
@@ -1190,4 +1211,87 @@ fn registry_canister() {
         Encode!(&registry_init_payload).unwrap(),
         None,
     );
+}
+
+#[test]
+fn provisional_create_canister_with_cycles() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    let arg = ProvisionalCreateCanisterWithCyclesArgument::default();
+    let res: (CanisterIdRecord,) = update_candid(
+        &pic,
+        Principal::management_canister(),
+        "provisional_create_canister_with_cycles",
+        (arg,),
+    )
+    .unwrap();
+    let canister_id = res.0.canister_id;
+
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), app_subnet);
+}
+
+#[test]
+fn http_gateway_route_underscore() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway = pic.make_live(None);
+
+    let client = Client::new();
+
+    // If a canister ID can be found,
+    // then the HTTP gateway tries to handle the request
+    // (which fails because the canister does not exist).
+
+    let invalid_url = gateway
+        .join("_/dashboard?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    let invalid_url = gateway
+        .join("_/foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    let invalid_url = gateway
+        .join("foo?canisterId=rwlgt-iiaaa-aaaaa-aaaaa-cai")
+        .unwrap()
+        .to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("Canister rwlgt-iiaaa-aaaaa-aaaaa-cai not found"));
+
+    // If no canister ID can be found,
+    // then requests to paths starting with `/_/` are routed directly to the PocketIC instance/replica.
+
+    let dashboard_url = gateway.join("_/dashboard").unwrap().to_string();
+    let dashboard = client.get(dashboard_url).send().unwrap();
+    let page = String::from_utf8(dashboard.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("<h1>PocketIC Dashboard</h1>"));
+
+    let invalid_url = gateway.join("_/foo").unwrap().to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    assert_eq!(error_page.status(), StatusCode::NOT_FOUND);
+    assert!(error_page.bytes().unwrap().is_empty());
+
+    // If no canister ID can be found and the request's path does not start with `/_/`,
+    // then the HTTP gateway complains that it could not find a canister ID.
+
+    let invalid_url = gateway.join("foo").unwrap().to_string();
+    let error_page = client.get(invalid_url).send().unwrap();
+    assert_eq!(error_page.status(), StatusCode::BAD_REQUEST);
+    let page = String::from_utf8(error_page.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("canister_id_not_found"));
 }

@@ -21,8 +21,9 @@ use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
-use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
-use ic_nervous_system_clients::ledger_client::LedgerCanister;
+use ic_nervous_system_clients::{
+    canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
+};
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics,
@@ -132,15 +133,8 @@ impl Environment for CanisterEnv {
     }
 
     // Returns a random u64.
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.rng.next_u64()
-    }
-
-    // Returns a random byte array.
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.rng.fill_bytes(&mut bytes);
-        bytes
     }
 
     // Calls an external method (i.e., on a canister outside the nervous system) to execute a
@@ -218,13 +212,19 @@ fn canister_init_(init_payload: GovernanceProto) {
             "{}Trying to initialize an already-initialized governance canister!",
             log_prefix()
         );
-        GOVERNANCE = Some(Governance::new(
+        let governance = Governance::new(
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
-            Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
+            Box::new(IcpLedgerCanister::<DfnRuntime>::new(NNS_LEDGER_CANISTER_ID)),
             Box::new(CMCCanister::<DfnRuntime>::new()),
-        ));
+        );
+        let governance = if cfg!(feature = "test") {
+            governance.enable_test_features()
+        } else {
+            governance
+        };
+        GOVERNANCE = Some(governance);
     }
 }
 

@@ -16,16 +16,16 @@ CANISTERS = {
     "ic-ckbtc-minter_debug.wasm.gz": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
     "ic-ckbtc-kyt.wasm.gz": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-cketh-minter.wasm.gz": "//rs/ethereum/cketh/minter:cketh_minter",
-    "ic-icrc1-index.wasm.gz": "//rs/rosetta-api/icrc1/index:index_canister",
-    "ic-icrc1-index-ng.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
-    "ic-icrc1-index-ng-u256.wasm.gz": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
-    "ic-icrc1-ledger.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "ic-icrc1-ledger-u256.wasm.gz": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
-    "ic-icp-index-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
+    "ic-icrc1-index.wasm.gz": "//rs/ledger_suite/icrc1/index:index_canister",
+    "ic-icrc1-index-ng.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
+    "ic-icrc1-index-ng-u256.wasm.gz": "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
+    "ic-icrc1-ledger.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "ic-icrc1-ledger-u256.wasm.gz": "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256",
+    "ic-icp-index-canister.wasm.gz": "//rs/ledger_suite/icp/index:ic-icp-index-canister",
     "ic-ledger-suite-orchestrator-canister.wasm.gz": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
     "identity-canister.wasm.gz": "//rs/nns/identity:identity-canister",
-    "ledger-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
-    "ledger-canister_notify-method.wasm.gz": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    "ledger-canister.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    "ledger-canister_notify-method.wasm.gz": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
     "lifeline_canister.wasm.gz": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
@@ -44,9 +44,9 @@ CANISTERS = {
 
 COMPRESSED_CANISTERS = {
     "ic-btc-canister.wasm.gz": "@btc_canister//file",
-    "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
-    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
-    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm.wasm.gz",
+    "ic-icrc1-archive.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister.wasm.gz",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+    "ledger-archive-node-canister.wasm.gz": "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz",
 }
 
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
@@ -87,13 +87,13 @@ NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     "genesis-token-canister.wasm.gz": "3",
     "governance-canister.wasm.gz": "14",
     "governance-canister_test.wasm.gz": "14",
-    "registry-canister.wasm.gz": "13",
+    "registry-canister.wasm.gz": "14",
     "root-canister.wasm.gz": "4",
 }
 
 SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "sns-governance-canister.wasm.gz": "10",
-    "sns-governance-canister_test.wasm.gz": "10",
+    "sns-governance-canister.wasm.gz": "13",
+    "sns-governance-canister_test.wasm.gz": "13",
     "sns-root-canister.wasm.gz": "4",
     "sns-swap-canister.wasm.gz": "7",
 }
