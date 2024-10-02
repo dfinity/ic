@@ -72,7 +72,7 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
             assert neuron_id \notin locks;
             locks := locks \union {neuron_id};
             neuron_id_by_account := account_id :> neuron_id @@ neuron_id_by_account;
-            neuron := neuron_id :> [ cached_stake |-> 0, account |-> account_id, fees |-> 0, maturity |-> 0 ] @@ neuron;
+            neuron := neuron_id :> [ cached_stake |-> 0, account_id |-> account_id, fees |-> 0, maturity |-> 0 ] @@ neuron;
             \* send_request(self, OP_QUERY_BALANCE, balance_query(account_id));
             governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(account_id)));
         };
