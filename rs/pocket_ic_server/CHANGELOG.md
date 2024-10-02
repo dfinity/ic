@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Renamed `dfx_test_key1` tECDSA and tSchnorr keys to `dfx_test_key`.
+- Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+  are created on an arbitrary subnet.
+
+### Changed
+- The PocketIC HTTP gateway routes requests whose paths start with `/_/` and for which no canister ID can be found
+  directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
+  of whether a canister ID could be found).
 
 
 

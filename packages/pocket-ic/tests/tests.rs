@@ -12,10 +12,11 @@ use icp_ledger::{
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        SubnetConfigSet, SubnetKind,
+        SubnetKind,
     },
     update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, io::Read, time::SystemTime};
@@ -209,12 +210,10 @@ where
 
 #[test]
 fn test_create_canister_with_id() {
-    let config = SubnetConfigSet {
-        nns: true,
-        ii: true,
-        ..Default::default()
-    };
-    let pic = PocketIc::from_config(config);
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_ii_subnet()
+        .build();
     // goes on NNS
     let canister_id = Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
     let actual_canister_id = pic
@@ -608,7 +607,7 @@ fn test_root_key() {
 #[test]
 #[should_panic(expected = "SubnetConfigSet must contain at least one subnet")]
 fn test_new_pocket_ic_without_subnets_panics() {
-    let _pic: PocketIc = PocketIc::from_config(SubnetConfigSet::default());
+    let _pic: PocketIc = PocketIcBuilder::new().build();
 }
 
 #[test]
@@ -1558,4 +1557,50 @@ fn subnet_metrics() {
     let metrics = pic.get_subnet_metrics(app_subnet).unwrap();
     assert_eq!(metrics.num_canisters, 1);
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
+}
+
+#[test]
+fn test_raw_gateway() {
+    // We create a PocketIC instance consisting of the NNS and one application subnet.
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    // We retrieve the app subnet ID from the topology.
+    let topology = pic.topology();
+    let app_subnet = topology.get_app_subnets()[0];
+
+    // We create a canister on the app subnet.
+    let canister = pic.create_canister_on_subnet(None, None, app_subnet);
+    assert_eq!(pic.get_subnet(canister), Some(app_subnet));
+
+    // We top up the canister with cycles and install the test canister WASM to them.
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    // We start the HTTP gateway
+    let endpoint = pic.make_live(None);
+
+    // We make two requests: the non-raw request fails because the test canister does not certify its response,
+    // the raw request succeeds.
+    let client = Client::new();
+    let gateway_host = endpoint.host().unwrap();
+    for (host, expected) in [
+        (
+            format!("{}.{}", canister, gateway_host),
+            "Response verification failed: Certification values not found",
+        ),
+        (
+            format!("{}.raw.{}", canister, gateway_host),
+            "My sample asset.",
+        ),
+    ] {
+        let mut url = endpoint.clone();
+        url.set_host(Some(&host)).unwrap();
+        url.set_path("/asset.txt");
+        let res = client.get(url).send().unwrap();
+        let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
+        assert!(page.contains(expected));
+    }
 }

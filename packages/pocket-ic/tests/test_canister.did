@@ -1,3 +1,32 @@
+type HeaderField = record {
+    text;
+    text;
+};
+type HttpGatewayRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+  certificate_version: opt nat16;
+};
+type HttpGatewayResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+  upgrade : opt bool;
+  streaming_strategy: opt StreamingStrategy;
+};
+type StreamingCallbackHttpResponse = record {
+  body: blob;
+  token: opt Token;
+};
+type Token = record {};
+type StreamingStrategy = variant {
+  Callback: record {
+    callback: func (Token) -> (StreamingCallbackHttpResponse) query;
+    token: Token;
+  };
+};
 type SchnorrAlgorithm = variant {
   bip340secp256k1;
   ed25519;
@@ -57,6 +86,7 @@ type TransformArgs = record {
   context : blob;
 };
 service : {
+  http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
   schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
   sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);

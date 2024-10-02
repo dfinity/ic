@@ -1,8 +1,3 @@
-// False positive clippy lint.
-// Issue: https://github.com/rust-lang/rust-clippy/issues/12856
-// Fixed in: https://github.com/rust-lang/rust-clippy/pull/12892
-#![allow(clippy::needless_borrows_for_generic_args)]
-
 pub mod host_memory;
 mod signal_stack;
 mod system_api;
@@ -424,6 +419,7 @@ impl WasmtimeEmbedder {
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
+                canister_backtrace: self.config.feature_flags.canister_backtrace,
             },
         );
         store.limiter(|state| &mut state.limits);
@@ -733,6 +729,7 @@ pub struct StoreData {
     /// Tracks the number of dirty pages in stable memory in non-native stable mode
     pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
+    pub canister_backtrace: FlagStatus,
 }
 
 impl StoreData {

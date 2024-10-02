@@ -547,10 +547,10 @@ fn calling_function_by_index() {
     let err = instance
         .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
         .unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::CalledTrap(std::str::from_utf8(&[0; 6]).unwrap().to_string())
-    );
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, std::str::from_utf8(&[0; 6]).unwrap().to_string());
 }
 
 #[test]
@@ -568,10 +568,10 @@ fn zero_size_memory() {
     let err = instance
         .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
         .unwrap_err();
-    assert_eq!(
-        err,
-        HypervisorError::CalledTrap(std::str::from_utf8(&[0; 0]).unwrap().to_string())
-    );
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, std::str::from_utf8(&[0; 0]).unwrap().to_string());
 }
 
 #[cfg(target_os = "linux")]
@@ -670,7 +670,10 @@ fn stable_write_and_read() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]
@@ -711,7 +714,10 @@ fn stable64_write_and_read() {
     let err = instance
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]
@@ -1050,53 +1056,38 @@ fn stable_read_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     // native stable memory
     let mut config = Config::default();
@@ -1107,65 +1098,50 @@ fn stable_read_out_of_bounds() {
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1225,63 +1201,45 @@ fn stable64_read_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     // Native stable memory
     let mut config = Config::default();
@@ -1292,78 +1250,60 @@ fn stable64_read_out_of_bounds() {
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1416,53 +1356,38 @@ fn stable_write_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     // native stable memory
     let mut config = Config::default();
@@ -1473,65 +1398,50 @@ fn stable_write_out_of_bounds() {
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 #[test]
@@ -1591,63 +1501,45 @@ fn stable64_write_out_of_bounds() {
     // Host stable memory
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     // native stable memory
     let mut config = Config::default();
@@ -1657,78 +1549,60 @@ fn stable64_write_out_of_bounds() {
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_src")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_dst")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_heap")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: HeapOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, HeapOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config.clone())
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_stable")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
         .build();
     let err = instance.run(func_ref("test_len_both")).unwrap_err();
-    assert_eq!(
-        err,
-        Trapped {
-            trap_code: StableMemoryOutOfBounds,
-            backtrace: None
-        }
-    );
+    let Trapped { trap_code, .. } = err else {
+        panic!("Expected Trapped, but got {}", err);
+    };
+    assert_eq!(trap_code, StableMemoryOutOfBounds);
 }
 
 /// Test that stable memory access past the normal 32-bit range (including
@@ -2852,7 +2726,10 @@ fn wasm64_trap() {
         .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
         .unwrap_err();
 
-    assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    let HypervisorError::CalledTrap { message, .. } = err else {
+        panic!("Expected CalledTrap error, but got {}.", err);
+    };
+    assert_eq!(message, "Hello".to_string());
 }
 
 #[test]

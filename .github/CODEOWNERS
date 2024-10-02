@@ -47,6 +47,8 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-types/         @dfinity/finint
 /packages/ic-ledger-hash-of/         @dfinity/finint
 /packages/pocket-ic/                 @dfinity/pocket-ic
+/packages/ic-ethereum-types/         @dfinity/cross-chain-team
+/packages/ic-sha3/                   @dfinity/crypto-team
 /packages/ic-signature-verification/ @dfinity/crypto-team
 /packages/ic-vetkd-utils/            @dfinity/crypto-team
 
@@ -64,7 +66,7 @@ go_deps.bzl               @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
-/.github/workflows/rosetta-release.yml                                   @dfinity/finint
+/.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 /ci/                                                                     @dfinity/idx
 /ci/src/dependencies/                                                    @dfinity/product-security
@@ -94,6 +96,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
+/rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/execution
@@ -121,6 +124,7 @@ go_deps.bzl               @dfinity/idx
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/networking
 /rs/http_endpoints/fuzz/                                @dfinity/product-security
+/rs/http_endpoints/xnet/                                @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/http_utils/                                         @dfinity/consensus
 /rs/https_outcalls/                                     @dfinity/networking
 /rs/https_outcalls/consensus/                           @dfinity/consensus
@@ -143,6 +147,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/src/p2p.rs                               @dfinity/networking
 /rs/interfaces/src/p2p/                                 @dfinity/networking
 /rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
+/rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners

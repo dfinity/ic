@@ -63,7 +63,7 @@ def test_events_for_add():
     info_by_project = {
         "proj11": SlackProjectInfo("proj11", {"c1"}, {}),
         "proj12": SlackProjectInfo("proj12", {"c1"}, {}),
-        "proj2": SlackProjectInfo("proj2", {"c2"}, {})
+        "proj2": SlackProjectInfo("proj2", {"c2"}, {}),
     }
     svi = SlackVulnerabilityInfo(v, {sf1.id(): sf1, sf2.id(): sf2})
     da1 = SlackVulnerabilityEvent.dep_added(v.id, "c1", sf1.id(), sf1.projects)
@@ -89,9 +89,11 @@ def test_events_for_remove():
         "proj11": SlackProjectInfo("proj11", {"c1"}, {}),
         "proj12": SlackProjectInfo("proj12", {"c1"}, {}),
         "proj2": SlackProjectInfo("proj2", {"c2"}, {}),
-        "proj3": SlackProjectInfo("proj3", {"c2"}, {})
+        "proj3": SlackProjectInfo("proj3", {"c2"}, {}),
     }
-    svi = SlackVulnerabilityInfo(v, {sf1.id(): sf1, sf2.id(): sf2, sf_keep.id(): sf_keep}, {"c1": "msgid1", "c2": "msgid2"})
+    svi = SlackVulnerabilityInfo(
+        v, {sf1.id(): sf1, sf2.id(): sf2, sf_keep.id(): sf_keep}, {"c1": "msgid1", "c2": "msgid2"}
+    )
     dr1 = SlackVulnerabilityEvent.dep_removed(v.id, "c1", sf1.id(), sf1.projects)
     dr2 = SlackVulnerabilityEvent.dep_removed(v.id, "c2", sf2.id(), sf2.projects)
 
@@ -117,7 +119,7 @@ def test_update_with():
     info_by_project = {
         "proj1": SlackProjectInfo("proj1", {"c1"}, {}),
         "proj2": SlackProjectInfo("proj2", {"c2"}, {}),
-        "proj3": SlackProjectInfo("proj3", {"c3"}, {})
+        "proj3": SlackProjectInfo("proj3", {"c3"}, {}),
     }
 
     svi = SlackVulnerabilityInfo(v, {sf1.id(): sf1, sf_fixed.id(): sf_fixed}, {"c1": "msgid1", "c2": "msgid2"})

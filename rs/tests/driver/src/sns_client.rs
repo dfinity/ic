@@ -546,7 +546,7 @@ fn open_sns_token_swap_payload(
 /// Send open sns token swap proposal to governance and wait until it is executed.
 async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
     // Sanity check that params is valid
-    let params = payload.params.as_ref().unwrap().clone();
+    let params = *payload.params.as_ref().unwrap();
     let () = params
         .validate(&Init {
             should_auto_finalize: Some(true),
