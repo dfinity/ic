@@ -22,7 +22,6 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "@crate_index//:bincode",
         "@crate_index//:candid",
         "@crate_index//:erased-serde",
         "@crate_index//:hex",
