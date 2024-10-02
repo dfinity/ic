@@ -3109,7 +3109,7 @@ dependencies = [
  "humantime",
  "humantime-serde",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-socks2",
  "hyper-util",
  "ic-agent",
@@ -3250,7 +3250,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-demangle",
  "rustc-hash 1.1.0",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
  "rustversion",
@@ -4126,7 +4126,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f2f12607f92c69b12ed746fabf9ca4f5c482cba46679c1a75b874ed7c26adb"
 dependencies = [
  "futures-io",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-pki-types",
 ]
 
@@ -4783,7 +4783,7 @@ dependencies = [
  "headers 0.4.0",
  "http 1.1.0",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-util",
  "pin-project-lite",
  "rustls-native-certs 0.7.0",
@@ -4810,17 +4810,17 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.27.2"
+version = "0.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+checksum = "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
 dependencies = [
  "futures-util",
  "http 1.1.0",
  "hyper 1.4.1",
  "hyper-util",
  "log",
- "rustls 0.23.12",
- "rustls-native-certs 0.7.0",
+ "rustls 0.23.13",
+ "rustls-native-certs 0.8.0",
  "rustls-pki-types",
  "tokio",
  "tokio-rustls 0.26.0",
@@ -4928,7 +4928,7 @@ dependencies = [
  "http-body-to-bytes",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-util",
  "ic-certification",
  "ic-transport-types",
@@ -4942,7 +4942,7 @@ dependencies = [
  "rangemap",
  "reqwest 0.12.8",
  "ring 0.17.7",
- "rustls-webpki 0.102.6",
+ "rustls-webpki 0.102.8",
  "sec1",
  "serde",
  "serde_bytes",
@@ -4990,7 +4990,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "reqwest 0.12.8",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-acme",
  "rustls-pemfile 2.1.2",
  "serde_json",
@@ -5839,7 +5839,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-util",
  "ring 0.17.7",
  "rustls-pki-types",
@@ -6084,14 +6084,14 @@ dependencies = [
  "http-body-util",
  "hyper 1.4.1",
  "hyper-http-proxy",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-timeout 0.5.1",
  "hyper-util",
  "jsonpath-rust",
  "k8s-openapi",
  "kube-core",
  "pem 3.0.4",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-pemfile 2.1.2",
  "secrecy",
  "serde",
@@ -8621,7 +8621,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash 2.0.0",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "socket2 0.5.7",
  "thiserror",
  "tokio",
@@ -8638,7 +8638,7 @@ dependencies = [
  "rand 0.8.5",
  "ring 0.17.7",
  "rustc-hash 2.0.0",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "slab",
  "thiserror",
  "tinyvec",
@@ -9097,7 +9097,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "hyper 1.4.1",
- "hyper-rustls 0.27.2",
+ "hyper-rustls 0.27.3",
  "hyper-util",
  "ipnet",
  "js-sys",
@@ -9108,7 +9108,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-native-certs 0.8.0",
  "rustls-pemfile 2.1.2",
  "rustls-pki-types",
@@ -9450,16 +9450,16 @@ dependencies = [
  "log",
  "ring 0.17.7",
  "rustls-pki-types",
- "rustls-webpki 0.102.6",
+ "rustls-webpki 0.102.8",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
 name = "rustls"
-version = "0.23.12"
+version = "0.23.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
+checksum = "f2dabaac7466917e566adb06783a81ca48944c6898a1b08b9374106dd671f4c8"
 dependencies = [
  "brotli 6.0.0",
  "brotli-decompressor 4.0.1",
@@ -9467,7 +9467,7 @@ dependencies = [
  "once_cell",
  "ring 0.17.7",
  "rustls-pki-types",
- "rustls-webpki 0.102.6",
+ "rustls-webpki 0.102.8",
  "subtle",
  "zeroize",
 ]
@@ -9573,9 +9573,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.102.6"
+version = "0.102.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
+checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
 dependencies = [
  "ring 0.17.7",
  "rustls-pki-types",
@@ -11220,7 +11220,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.12",
+ "rustls 0.23.13",
  "rustls-pki-types",
  "tokio",
 ]

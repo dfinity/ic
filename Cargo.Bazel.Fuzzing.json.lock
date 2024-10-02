@@ -1,5 +1,5 @@
 {
-  "checksum": "8b6c4eb386df26f80e4a5b4d81aece1bf982e4f789d15d100c1505ec10b484fd",
+  "checksum": "123402f2d21338d52c8bf2514e3ed412acbedade28194d1f4f2f920128c49245",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17977,7 +17977,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -18520,7 +18520,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -23644,7 +23644,7 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -27437,7 +27437,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -27567,14 +27567,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-rustls 0.27.2": {
+    "hyper-rustls 0.27.3": {
       "name": "hyper-rustls",
-      "version": "0.27.2",
+      "version": "0.27.3",
       "package_url": "https://github.com/rustls/hyper-rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-rustls/0.27.2/download",
-          "sha256": "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.3/download",
+          "sha256": "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
         }
       },
       "targets": [
@@ -27761,11 +27761,11 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.7.0",
+              "id": "rustls-native-certs 0.8.0",
               "target": "rustls_native_certs"
             },
             {
@@ -27793,7 +27793,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.2"
+        "version": "0.27.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -28437,7 +28437,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -28445,7 +28445,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "rustls-webpki 0.102.6",
+                "id": "rustls-webpki 0.102.8",
                 "target": "webpki"
               },
               {
@@ -28615,7 +28615,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -33166,7 +33166,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -34655,7 +34655,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -34683,7 +34683,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -50315,7 +50315,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -50403,7 +50403,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -53253,7 +53253,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -53285,7 +53285,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.23.12",
+                "id": "rustls 0.23.13",
                 "target": "rustls"
               },
               {
@@ -55573,7 +55573,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.6",
+              "id": "rustls-webpki 0.102.8",
               "target": "webpki"
             },
             {
@@ -55612,14 +55612,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.12": {
+    "rustls 0.23.13": {
       "name": "rustls",
-      "version": "0.23.12",
+      "version": "0.23.13",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.12/download",
-          "sha256": "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
+          "url": "https://static.crates.io/crates/rustls/0.23.13/download",
+          "sha256": "f2dabaac7466917e566adb06783a81ca48944c6898a1b08b9374106dd671f4c8"
         }
       },
       "targets": [
@@ -55687,7 +55687,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "build_script_build"
             },
             {
@@ -55696,7 +55696,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.6",
+              "id": "rustls-webpki 0.102.8",
               "target": "webpki"
             },
             {
@@ -55711,7 +55711,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.12"
+        "version": "0.23.13"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -56293,14 +56293,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-webpki 0.102.6": {
+    "rustls-webpki 0.102.8": {
       "name": "rustls-webpki",
-      "version": "0.102.6",
+      "version": "0.102.8",
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-webpki/0.102.6/download",
-          "sha256": "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
+          "url": "https://static.crates.io/crates/rustls-webpki/0.102.8/download",
+          "sha256": "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
         }
       },
       "targets": [
@@ -56446,7 +56446,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.102.6"
+        "version": "0.102.8"
       },
       "license": "ISC",
       "license_ids": [
@@ -66465,7 +66465,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.13",
               "target": "rustls"
             },
             {
@@ -79307,7 +79307,7 @@
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
     "hyper 1.4.1",
-    "hyper-rustls 0.27.2",
+    "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.9",
     "ic-agent 0.37.1",
@@ -79448,7 +79448,7 @@
     "rust_decimal_macros 1.32.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.12",
+    "rustls 0.23.13",
     "rustls-pemfile 2.1.2",
     "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
