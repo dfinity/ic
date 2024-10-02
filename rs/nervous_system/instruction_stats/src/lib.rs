@@ -15,7 +15,8 @@
 //!    &BasicRequest { method_name: "your_method_name" }
 //!    instead of &request.
 //!
-//! 2. Call encode_instruction_metrics.
+//! 2. Call encode_instruction_metrics. This writes a data for a metric named
+//!    `candid_call_instructions`.
 
 use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_histogram::{Histogram, STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS};
