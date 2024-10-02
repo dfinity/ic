@@ -125,7 +125,7 @@ jobs:
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          RUN_ON_DIFF_ONLY: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
