@@ -1,5 +1,5 @@
 [package]
-name = "ic-xnet-endpoint"
+name = "ic-http-endpoints-xnet"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
