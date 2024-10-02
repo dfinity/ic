@@ -106,6 +106,56 @@ impl CanisterConfig {
             )
         }
     }
+
+    fn perform_upgrade_downgrade_testing(&self) {
+        println!(
+            "Processing {} ledger, id {}",
+            self.canister_id, self.canister_name
+        );
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.canister_id).unwrap());
+        let mut previous_ledger_state = None;
+        if self.extended_testing {
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
+                self.state_machine,
+                canister_id,
+                self.burns_without_spender.clone(),
+                None,
+            ));
+        }
+        self.upgrade_canister(self.master_wasm.clone());
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        self.upgrade_canister(bump_gzip_timestamp(self.master_wasm));
+        if self.extended_testing {
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
+                self.state_machine,
+                canister_id,
+                self.burns_without_spender.clone(),
+                previous_ledger_state,
+            ));
+        }
+        // Downgrade back to the mainnet ledger version
+        self.upgrade_canister(self.mainnet_wasm.clone());
+        if self.extended_testing {
+            let _ = LedgerState::verify_state_and_generate_transactions(
+                self.state_machine,
+                canister_id,
+                self.burns_without_spender.clone(),
+                previous_ledger_state,
+            );
+        }
+    }
+
+    fn upgrade_canister(&self, wasm: Wasm) {
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.canister_id).unwrap());
+        let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
+        let args = Encode!(&args).unwrap();
+        self.state_machine
+            .upgrade_canister(canister_id, wasm.bytes(), args)
+            .expect("should successfully upgrade ledger canister");
+        println!("Upgraded {} '{}'", self.canister_name, self.canister_id);
+    }
 }
 
 struct LedgerState {
@@ -229,14 +279,15 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         ],
     };
 
-    perform_upgrade_downgrade_testing(vec![CanisterConfig::new_with_params(
+    CanisterConfig::new_with_params(
         (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
         &STATE_MACHINE,
         &MAINNET_WASM,
         &MASTER_WASM,
         Some(burns_without_spender),
         true,
-    )]);
+    )
+    .perform_upgrade_downgrade_testing();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -307,7 +358,9 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         ));
     }
 
-    perform_upgrade_downgrade_testing(canister_configs);
+    for canister_config in canister_configs {
+        canister_config.perform_upgrade_downgrade_testing();
+    }
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -391,7 +444,9 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ));
     }
 
-    perform_upgrade_downgrade_testing(canister_configs);
+    for canister_config in canister_configs {
+        canister_config.perform_upgrade_downgrade_testing();
+    }
 }
 
 fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) {
@@ -588,85 +643,4 @@ fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) 
         NUM_TRANSACTIONS_PER_TYPE * 5,
         start.elapsed()
     );
-}
-
-fn perform_upgrade_downgrade_testing(canister_configs: Vec<CanisterConfig>) {
-    for canister_config in canister_configs {
-        let CanisterConfig {
-            canister_id: canister_id_str,
-            canister_name,
-            burns_without_spender,
-            extended_testing,
-            state_machine,
-            mainnet_wasm,
-            master_wasm,
-        } = canister_config;
-        println!(
-            "Processing {} ledger, id {}",
-            canister_id_str, canister_name
-        );
-        let canister_id =
-            CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-        let mut previous_ledger_state = None;
-        if extended_testing {
-            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                None,
-            ));
-        }
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            master_wasm.clone(),
-        );
-        // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            bump_gzip_timestamp(&master_wasm),
-        );
-        if extended_testing {
-            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                previous_ledger_state,
-            ));
-        }
-        // Downgrade back to the mainnet ledger version
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            mainnet_wasm.clone(),
-        );
-        if extended_testing {
-            let _ = LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                previous_ledger_state,
-            );
-        }
-    }
-}
-
-fn upgrade_canister(
-    state_machine: &StateMachine,
-    (canister_id_str, canister_name): (&str, &str),
-    ledger_wasm: Wasm,
-) {
-    let canister_id =
-        CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-    upgrade_ledger(state_machine, ledger_wasm, canister_id);
-    println!("Upgraded {} '{}'", canister_name, canister_id_str);
-}
-
-fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: CanisterId) {
-    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
-    let args = Encode!(&args).unwrap();
-    state_machine
-        .upgrade_canister(canister_id, wasm.bytes(), args)
-        .expect("should successfully upgrade ledger canister");
 }
