@@ -68,7 +68,6 @@ function process_bootstrap() {
         ic_boundary.conf
         canister-ratelimit.yml
         network.conf
-        remuneration.conf
         nns_public_key.pem
         nns.conf
         pre_isolation_canisters.txt
