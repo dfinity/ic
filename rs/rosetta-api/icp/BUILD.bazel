@@ -84,6 +84,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/types/base_types",
+    "//rs/rosetta-api/icp:rosetta-api",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
@@ -116,7 +117,7 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = ROSETTA_VERSION,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":rosetta-api"],
 )
 
 rust_binary(
@@ -126,7 +127,7 @@ rust_binary(
     crate_features = ["rosetta-blocks"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = ROSETTA_VERSION,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":rosetta-api"],
 )
 
 rust_test(

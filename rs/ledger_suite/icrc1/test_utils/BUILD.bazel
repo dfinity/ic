@@ -12,7 +12,6 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_canister_core",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/test_utils",
     "//rs/limits",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/types/types",

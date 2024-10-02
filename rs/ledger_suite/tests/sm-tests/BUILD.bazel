@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/ledger_suite/icrc1/test_utils",
-    "//rs/ledger_suite/tests/sm-tests",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/rust_canisters/http_types",
     "//rs/state_machine_tests",

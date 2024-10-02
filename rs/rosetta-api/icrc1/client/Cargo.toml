@@ -18,18 +18,18 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../../crypto/secp256k1" }
-ic-crypto-ed25519 = { path = "../../../../crypto/ed25519" }
+ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
+ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
 ic-icrc-rosetta = { path = ".." }
-ic-rosetta-api = { path = "../../../../rosetta-api" }
-icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+ic-rosetta-api = { path = "../../icp" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
 reqwest = { workspace = true }
-rosetta-core = { path = "../../../../rosetta-api/rosetta_core" }
+rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
 ic-icrc-rosetta-runner = { path = "../runner" }
-pocket-ic = { path = "../../../../../packages/pocket-ic" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
