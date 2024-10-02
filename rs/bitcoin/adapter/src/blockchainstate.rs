@@ -7,8 +7,6 @@ use ic_metrics::MetricsRegistry;
 use std::collections::HashMap;
 use thiserror::Error;
 
-/// This field contains the datatype used to store "work" of a Bitcoin blockchain
-pub type Work = bitcoin::util::uint::Uint256;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]

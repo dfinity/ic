@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use bitcoin::{hashes::hex::FromHex, util::uint::Uint256, BlockHash, Network};
+use bitcoin::{hashes::hex::FromHex, BlockHash, Network, Work};
+use std::str::FromStr;
 
 use crate::BlockHeight;
 
@@ -57,54 +58,12 @@ const TESTNET: &[(BlockHeight, &str)] = &[
     (546, "000000002a936ca763904c3c35fce2f3556c559c0214345d31b1bcebf76acb70")
 ];
 
-/// Bitcoin mainnet maximum target value
-const BITCOIN_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x00000000ffff0000,
-]);
-
-/// Bitcoin testnet maximum target value
-const TESTNET_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x00000000ffff0000,
-]);
-
-/// Bitcoin regtest maximum target value
-const REGTEST_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000,
-    0x0000000000000000,
-    0x0000000000000000,
-    0x7fffff0000000000,
-]);
-
-/// Bitcoin signet maximum target value
-const SIGNET_MAX_TARGET: Uint256 = Uint256([
-    0x0000000000000000u64,
-    0x0000000000000000u64,
-    0x0000000000000000u64,
-    0x00000377ae000000u64,
-]);
-
-/// Returns the maximum difficulty target depending on the network
-pub fn max_target(network: &Network) -> Uint256 {
-    match network {
-        Network::Bitcoin => BITCOIN_MAX_TARGET,
-        Network::Testnet => TESTNET_MAX_TARGET,
-        Network::Regtest => REGTEST_MAX_TARGET,
-        Network::Signet => SIGNET_MAX_TARGET,
-    }
-}
-
 /// Returns false iff PoW difficulty level of blocks can be
 /// readjusted in the network after a fixed time interval.
 pub fn no_pow_retargeting(network: &Network) -> bool {
     match network {
         Network::Bitcoin | Network::Testnet | Network::Signet => false,
-        Network::Regtest => true,
+        _ => true,
     }
 }
 
@@ -115,6 +74,7 @@ pub fn pow_limit_bits(network: &Network) -> u32 {
         Network::Testnet => 0x1d00ffff,
         Network::Regtest => 0x207fffff,
         Network::Signet => 0x1e0377ae,
+        &_ => todo!(),
     }
 }
 
@@ -123,14 +83,13 @@ pub fn checkpoints(network: &Network) -> HashMap<BlockHeight, BlockHash> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Signet => &[],
-        Network::Regtest => &[],
+        _ => &[],
     };
     points
         .iter()
         .cloned()
         .map(|(height, hash)| {
-            let hash = BlockHash::from_hex(hash).expect("Programmer error: invalid hash");
+            let hash = BlockHash::from_str(hash).expect("Programmer error: invalid hash");
             (height, hash)
         })
         .collect()
@@ -140,8 +99,7 @@ pub fn latest_checkpoint_height(network: &Network, current_height: BlockHeight) 
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Signet => &[],
-        Network::Regtest => &[],
+        _ => &[],
     };
 
     points
@@ -155,8 +113,7 @@ pub fn last_checkpoint(network: &Network) -> Option<BlockHeight> {
     let points = match network {
         Network::Bitcoin => BITCOIN,
         Network::Testnet => TESTNET,
-        Network::Signet => &[],
-        Network::Regtest => &[],
+        _ => &[],
     };
 
     points.last().map(|(height, _)| *height)

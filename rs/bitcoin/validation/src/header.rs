@@ -1,9 +1,9 @@
-use bitcoin::{util::uint::Uint256, BlockHash, BlockHeader, Network};
+use bitcoin::{block::Header as BlockHeader, BlockHash, CompactTarget, Network, Work};
 
 use crate::{
     constants::{
-        checkpoints, last_checkpoint, latest_checkpoint_height, max_target, no_pow_retargeting,
-        pow_limit_bits, BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
+        checkpoints, last_checkpoint, latest_checkpoint_height, no_pow_retargeting, pow_limit_bits,
+        BLOCKS_IN_ONE_YEAR, DIFFICULTY_ADJUSTMENT_INTERVAL, TEN_MINUTES,
     },
     BlockHeight,
 };
@@ -73,16 +73,15 @@ pub fn validate_header(
         return Err(ValidateHeaderError::TargetDifficultyAboveMax);
     }
 
-    if header.validate_pow(&header_target).is_err() {
+    if header.validate_pow(header_target).is_err() {
         return Err(ValidateHeaderError::InvalidPoWForHeaderTarget);
     }
 
     let target = get_next_target(network, store, &prev_header, prev_height, header);
     if let Err(err) = header.validate_pow(&target) {
         match err {
-            bitcoin::Error::BlockBadProofOfWork => println!("bad proof of work"),
-            bitcoin::Error::BlockBadTarget => println!("bad target"),
-            _ => {}
+            bitcoin::block::ValidationError::BadProofOfWork => println!("bad proof of work"),
+            bitcoin::block::ValidationError::BadTarget => println!("bad target"),
         };
         return Err(ValidateHeaderError::InvalidPoWForComputedTarget);
     }
@@ -166,7 +165,7 @@ fn get_next_target(
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
     header: &BlockHeader,
-) -> Uint256 {
+) -> CompactTarget {
     match network {
         Network::Testnet | Network::Regtest => {
             if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
@@ -182,7 +181,7 @@ fn get_next_target(
                 } else {
                     //If the block has been found within 20 minutes, then use the previous
                     // difficulty target that is not equal to the maximum difficulty target
-                    BlockHeader::u256_from_compact_target(find_next_difficulty_in_chain(
+                    CompactTarget::from_consensus(find_next_difficulty_in_chain(
                         network,
                         store,
                         prev_header,
@@ -190,7 +189,7 @@ fn get_next_target(
                     ))
                 }
             } else {
-                BlockHeader::u256_from_compact_target(compute_next_difficulty(
+                CompactTarget::from_consensus(compute_next_difficulty(
                     network,
                     store,
                     prev_header,
@@ -198,7 +197,7 @@ fn get_next_target(
                 ))
             }
         }
-        Network::Bitcoin | Network::Signet => BlockHeader::u256_from_compact_target(
+        Network::Bitcoin | Network::Signet => CompactTarget::from_consensus(
             compute_next_difficulty(network, store, prev_header, prev_height),
         ),
     }
@@ -256,7 +255,7 @@ fn compute_next_difficulty(
     store: &impl HeaderStore,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
-) -> u32 {
+) -> CompactTarget {
     // Difficulty is adjusted only once in every interval of 2 weeks (2016 blocks)
     // If an interval boundary is not reached, then previous difficulty target is
     // returned Regtest network doesn't adjust PoW difficult levels. For
