@@ -20,7 +20,7 @@ mod tests;
 ///
 /// Enumerates the curves supported by this library, currently K256 (aka
 /// secp256k1) and P256 (aka secp256r1)
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum EccCurveType {
     K256,
     P256,
@@ -459,7 +459,7 @@ impl<'de> Deserialize<'de> for EccScalar {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
     P256(Box<[u8; 32]>),

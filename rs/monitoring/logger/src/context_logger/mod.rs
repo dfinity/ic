@@ -1,7 +1,7 @@
 pub mod macros;
 
 /// Metadata about the log entry
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LogMetadata {
     pub level: slog::Level,
     pub module_path: &'static str,
@@ -104,27 +104,27 @@ mod tests {
     use crate::*;
 
     /// A context type used for testing purposes
-    #[derive(Clone, Debug, Default, PartialEq)]
+    #[derive(Clone, PartialEq, Debug, Default)]
     struct TestContext {
         sub_context1: Option<TestSubContext1>,
         sub_context2: Option<TestSubContext2>,
     }
 
-    #[derive(Clone, Debug, Default, PartialEq)]
+    #[derive(Clone, PartialEq, Debug, Default)]
     struct TestSubContext1 {
         pub field_u64: u64,
         pub field_opt_i32: Option<i32>,
         pub field_string: String,
     }
 
-    #[derive(Clone, Debug, Default, PartialEq)]
+    #[derive(Clone, PartialEq, Debug, Default)]
     struct TestSubContext2 {
         pub field_bool: bool,
     }
 
     /// A Logger that, instead of logging, checks expectations of what
     /// would be logged
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Clone, PartialEq, Debug)]
     struct ExpectationLogger {
         context: TestContext,
         expected_context: TestContext,

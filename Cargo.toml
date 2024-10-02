@@ -5,6 +5,8 @@ members = [
     "packages/icrc-ledger-client",
     "packages/icrc-ledger-client-cdk",
     "packages/icrc-ledger-types",
+    "packages/ic-ethereum-types",
+    "packages/ic-sha3",
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
@@ -22,15 +24,13 @@ members = [
     "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
+    "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
-    "rs/boundary_node/certificate_issuance/certificate_syncer",
-    "rs/boundary_node/denylist_updater",
     "rs/boundary_node/discower_bowndary",
     "rs/boundary_node/ic_balance_exporter",
     "rs/boundary_node/ic_boundary",
-    "rs/boundary_node/icx_proxy",
     "rs/boundary_node/prober",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
@@ -54,7 +54,6 @@ members = [
     "rs/consensus",
     "rs/consensus/mocks",
     "rs/consensus/utils",
-    "rs/constants",
     "rs/criterion_time",
     "rs/crypto",
     "rs/crypto/ecdsa_secp256r1",
@@ -119,25 +118,26 @@ members = [
     "rs/execution_environment",
     "rs/execution_environment/benches/lib",
     "rs/execution_environment/tools",
-    "rs/http_endpoints/public",
     "rs/http_endpoints/metrics",
+    "rs/http_endpoints/public",
+    "rs/http_endpoints/xnet",
     "rs/http_utils",
-    "rs/ic_os/deterministic_ips",
-    "rs/ic_os/dflate",
-    "rs/ic_os/diroid",
+    "rs/ic_os/dev_test_tools/deterministic_ips",
+    "rs/ic_os/build_tools/dflate",
+    "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
     "rs/ic_os/fstrim_tool",
-    "rs/ic_os/guestos_tool",
-    "rs/ic_os/hostos_tool",
-    "rs/ic_os/inject_files",
-    "rs/ic_os/launch-single-vm",
+    "rs/ic_os/os_tools/guestos_tool",
+    "rs/ic_os/os_tools/hostos_tool",
+    "rs/ic_os/build_tools/inject_files",
+    "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/network",
     "rs/ic_os/nft_exporter",
     "rs/ic_os/nss_icos",
-    "rs/ic_os/setupos-inject-configuration",
-    "rs/ic_os/partition_tools",
-    "rs/ic_os/setupos-disable-checks",
-    "rs/ic_os/setupos_tool",
+    "rs/ic_os/dev_test_tools/setupos-inject-configuration",
+    "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/dev_test_tools/setupos-disable-checks",
+    "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
@@ -152,6 +152,7 @@ members = [
     "rs/interfaces/registry/mocks",
     "rs/interfaces/state_manager",
     "rs/interfaces/state_manager/mocks",
+    "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
     "rs/monitoring/adapter_metrics/client",
@@ -168,7 +169,9 @@ members = [
     "rs/nervous_system/common/test_canister",
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
+    "rs/nervous_system/common/validation",
     "rs/nervous_system/humanize",
+    "rs/nervous_system/initial_supply",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -242,6 +245,7 @@ members = [
     "rs/registry/proto_data_provider",
     "rs/registry/provisional_whitelist",
     "rs/registry/regedit",
+    "rs/registry/node_provider_rewards",
     "rs/registry/nns_data_provider",
     "rs/registry/nns_data_provider_wrappers",
     "rs/registry/routing_table",
@@ -256,32 +260,31 @@ members = [
     "rs/rosetta-api/rosetta_core",
     "rs/rosetta-api/runner",
     "rs/rosetta-api/client",
-    "rs/rosetta-api/icp_ledger",
-    "rs/rosetta-api/icp_ledger/archive",
-    "rs/rosetta-api/icp_ledger/ledger",
-    "rs/rosetta-api/icp_ledger/protobuf_generator",
-    "rs/rosetta-api/icp_ledger/index",
-    "rs/rosetta-api/icp_ledger/rosetta-integration-tests",
-    "rs/rosetta-api/icp_ledger/test_utils",
-    "rs/rosetta-api/ledger_core",
-    "rs/rosetta-api/ledger_canister_core",
+    "rs/ledger_suite/icp",
+    "rs/ledger_suite/icp/archive",
+    "rs/ledger_suite/icp/ledger",
+    "rs/ledger_suite/icp/protobuf_generator",
+    "rs/ledger_suite/icp/index",
+    "rs/ledger_suite/icp/rosetta-integration-tests",
+    "rs/ledger_suite/icp/test_utils",
+    "rs/ledger_suite/common/ledger_core",
+    "rs/ledger_suite/common/ledger_canister_core",
     "rs/rosetta-api/ledger_canister_blocks_synchronizer",
     "rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
-    "rs/rosetta-api/icrc1",
-    "rs/rosetta-api/icrc1/benchmark/generator",
-    "rs/rosetta-api/icrc1/benchmark/worker",
-    "rs/rosetta-api/icrc1/index",
-    "rs/rosetta-api/icrc1/index-ng",
-    "rs/rosetta-api/icrc1/ledger",
-    "rs/rosetta-api/icrc1/rosetta",
-    "rs/rosetta-api/icrc1/rosetta/client",
-    "rs/rosetta-api/icrc1/rosetta/runner",
-    "rs/rosetta-api/icrc1/ledger/sm-tests",
-    "rs/rosetta-api/icrc1/archive",
-    "rs/rosetta-api/icrc1/test_utils",
-    "rs/rosetta-api/icrc1/tokens_u64",
-    "rs/rosetta-api/icrc1/tokens_u256",
-    "rs/rosetta-api/hardware_wallet_tests",
+    "rs/ledger_suite/icrc1",
+    "rs/ledger_suite/icrc1/benchmark/generator",
+    "rs/ledger_suite/icrc1/benchmark/worker",
+    "rs/ledger_suite/icrc1/index",
+    "rs/ledger_suite/icrc1/index-ng",
+    "rs/ledger_suite/icrc1/ledger",
+    "rs/ledger_suite/icrc1/rosetta",
+    "rs/ledger_suite/icrc1/rosetta/client",
+    "rs/ledger_suite/icrc1/rosetta/runner",
+    "rs/ledger_suite/tests/sm-tests",
+    "rs/ledger_suite/icrc1/archive",
+    "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/tokens_u64",
+    "rs/ledger_suite/icrc1/tokens_u256",
     "rs/rosetta-api/test_utils",
     "rs/rosetta-api/test_utils/sender_canister",
     "rs/rosetta-api/tvl",
@@ -350,7 +353,9 @@ members = [
     "rs/tests",
     "rs/tests/consensus",
     "rs/tests/consensus/orchestrator",
+    "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
+    "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/httpbin-rs",
@@ -368,6 +373,9 @@ members = [
     "rs/tests/testing_verification/wabt-tests",
     "rs/tests/testing_verification/spec_compliance",
     "rs/tests/testing_verification/testnets",
+    "rs/tla_instrumentation/local_key",
+    "rs/tla_instrumentation/tla_instrumentation",
+    "rs/tla_instrumentation/tla_instrumentation_proc_macros",
     "rs/tree_deserializer",
     "rs/types/types",
     "rs/types/types_test_utils",
@@ -386,11 +394,9 @@ members = [
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
     "rs/workload_generator",
-    "rs/xnet/endpoint",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
-    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
@@ -451,16 +457,19 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 anyhow = "^1"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
+actix-web = "4.9.0"
+actix-rt = "2.10.0"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
 async-stream = "0.3.5"
 async-trait = "0.1.81"
-axum = "0.7.5"
+axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
+bitcoin = { version = "0.28.2", features = ["default", "use-serde", "rand"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
@@ -473,7 +482,7 @@ chrono = { version = "0.4.38", default-features = false, features = [
     "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "4.4.6", features = ["derive", "string"] }
+clap = { version = "4.5.18", features = ["derive", "string"] }
 # cloudflare v0.12 is broken, master is partly fixed but unreleased yet.
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
@@ -500,6 +509,7 @@ ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
 futures = "0.3.30"
 futures-util = "0.3.30"
+ic-sha3 = "1.0.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -524,14 +534,16 @@ ic-agent = { version = "0.37.1", features = [
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-btc-validation = "0.1.0"
-ic-cbor = "2.3.0"
+ic-cbor = "2.6.0"
 ic-cdk = "0.13.5"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
-ic-certification = "2.3.0"
-ic-http-certification = "2.3.0"
+ic-certificate-verification = "2.6.0"
+ic-certification = "2.6.0"
+ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
 ic-stable-structures = "0.6.5"
+ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
 ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
     "groups",
@@ -552,8 +564,10 @@ k256 = { version = "0.13.3", default-features = false, features = [
     "schnorr",
     "std",
 ] }
+# kube is used by our test driver
+kube = { version = "0.93.1" }
 lazy_static = "1.4.0"
-libc = "0.2.155"
+libc = "0.2.158"
 libflate = "2.1.0"
 libnss = "0.5.0"
 local-ip-address = "0.5.6"
@@ -588,22 +602,22 @@ prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
 proptest-derive = "0.5.0"
-prost = "^0.12"
-prost-build = "^0.12"
+prost = "0.13.3"
+prost-build = "0.13.3"
 protobuf = "2.28.0"
-quinn = { version = "0.11.3", default-features = false, features = [
+quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
     "rustls",
 ] }
-quinn-udp = "0.5.4"
+quinn-udp = "0.5.5"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
-regex = "1.10.6"
-reqwest = { version = "0.12.5", default-features = false, features = [
+regex = "1.11.0"
+reqwest = { version = "0.12.7", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -613,10 +627,13 @@ reqwest = { version = "0.12.5", default-features = false, features = [
     "socks",
     "stream",
 ] }
+rolling-file = "0.2.0"
 rstest = "0.19.0"
+rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.12", default-features = false, features = [
     "ring",
     "std",
+    "brotli",
 ] }
 serde = { version = "1.0.203", features = ["derive"] }
 serde_bytes = "0.11.15"
@@ -631,13 +648,13 @@ simple_asn1 = "0.6.2"
 slog = { version = "2.7.0", features = [
     "max_level_trace",
     "nested-values",
-    "release_max_level_debug",
     "release_max_level_trace",
 ] }
 slog-async = { version = "2.8.0", features = ["nested-values"] }
 slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
+static_assertions = "1.1.0"
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
@@ -647,14 +664,14 @@ tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
 time = { version = "0.3.36", features = ["formatting"] }
-tokio = { version = "1.39.3", features = ["full"] }
+tokio = { version = "1.40.0", features = ["full"] }
 tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
-tokio-util = { version = "0.7.11", features = ["full"] }
-tonic = "0.11.0"
-tonic-build = "0.11.0"
+tokio-util = { version = "0.7.12", features = ["full"] }
+tonic = "0.12.3"
+tonic-build = "0.12.3"
 tower = { version = "0.4.13", features = ["full"] }
 tower-http = { version = "0.5.2", features = [
     "cors",
@@ -678,9 +695,9 @@ url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version = "0.212.0", features = ["wasmparser"] }
-wasmparser = "0.212.0"
-wasmprinter = "0.212.0"
+wasm-encoder = { version = "0.215.0", features = ["wasmparser"] }
+wasmparser = "0.215.0"
+wasmprinter = "0.215.0"
 wast = "212.0.0"
 wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

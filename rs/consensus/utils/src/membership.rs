@@ -15,7 +15,7 @@ use ic_types::{
 use rand::seq::SliceRandom;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum MembershipError {
     NodeNotFound(NodeId),
     RegistryClientError(RegistryClientError),

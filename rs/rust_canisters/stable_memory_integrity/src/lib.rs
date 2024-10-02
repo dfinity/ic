@@ -4,7 +4,7 @@ use ic_cdk::api::stable::{
 };
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize, CandidType, PartialEq)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum StableOperationResult {
     Size(u64),
     Grow {

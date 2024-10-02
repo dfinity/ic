@@ -225,7 +225,7 @@ pub fn encode_partial_slice_test(
                 &same_payload_slice,
             )
             .unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
-        let msg_count = decoded_slice.messages().map(|m| m.len()).unwrap_or(0);
+        let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
         let same_witness_slice = state_manager
@@ -380,7 +380,7 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
         .wasm_binary = WasmBinary::new(wasm);
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateSyncErrorCode {
     MetaManifestVerificationFailed,
     ManifestVerificationFailed,

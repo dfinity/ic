@@ -15,7 +15,7 @@ const BTC_MAINNET_P2SH_PREFIX: u8 = 5;
 const BTC_TESTNET_PREFIX: u8 = 111;
 const BTC_TESTNET_P2SH_PREFIX: u8 = 196;
 
-#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum BitcoinAddress {
     /// Pay to witness public key hash address.
     /// See BIP-173.
@@ -37,7 +37,7 @@ pub enum BitcoinAddress {
     P2sh([u8; 20]),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 enum WitnessVersion {
     V0 = 0,
     V1 = 1,
@@ -201,7 +201,7 @@ pub fn hrp(network: Network) -> &'static str {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum ParseAddressError {
     InvalidBech32Variant { expected: Variant, found: Variant },
     UnsupportedAddressType,

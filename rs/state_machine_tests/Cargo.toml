@@ -14,10 +14,12 @@ ciborium = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-btc-adapter-client = { path = "../bitcoin/client" }
+ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-crypto-secp256k1 = { path = "../crypto/secp256k1" }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }

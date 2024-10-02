@@ -1,7 +1,3 @@
-use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
-};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
@@ -23,11 +19,16 @@ use ic_state_layout::{
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
-use ic_utils::thread::parallel_map;
+use ic_utils::thread::maybe_parallel_map;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use crate::{
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+};
 
 #[cfg(test)]
 mod tests;
@@ -103,7 +104,7 @@ pub(crate) fn make_checkpoint(
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 })
                 .unwrap();
@@ -250,39 +251,20 @@ pub fn load_checkpoint(
 
         let mut canister_states = BTreeMap::new();
         let canister_ids = checkpoint_layout.canister_ids()?;
-        match thread_pool {
-            Some(ref mut thread_pool) => {
-                let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
-                    load_canister_state_from_checkpoint(
-                        checkpoint_layout,
-                        canister_id,
-                        Arc::clone(&fd_factory),
-                        metrics,
-                    )
-                });
+        let results = maybe_parallel_map(&mut thread_pool, canister_ids.iter(), |canister_id| {
+            load_canister_state_from_checkpoint(
+                checkpoint_layout,
+                canister_id,
+                Arc::clone(&fd_factory),
+                metrics,
+            )
+        });
 
-                for canister_state in results.into_iter() {
-                    let (canister_state, durations) = canister_state?;
-                    canister_states
-                        .insert(canister_state.system_state.canister_id(), canister_state);
+        for canister_state in results.into_iter() {
+            let (canister_state, durations) = canister_state?;
+            canister_states.insert(canister_state.system_state.canister_id(), canister_state);
 
-                    durations.apply(metrics);
-                }
-            }
-            None => {
-                for canister_id in canister_ids.iter() {
-                    let (canister_state, durations) = load_canister_state_from_checkpoint(
-                        checkpoint_layout,
-                        canister_id,
-                        Arc::clone(&fd_factory),
-                        metrics,
-                    )?;
-                    canister_states
-                        .insert(canister_state.system_state.canister_id(), canister_state);
-
-                    durations.apply(metrics);
-                }
-            }
+            durations.apply(metrics);
         }
 
         canister_states
@@ -296,38 +278,22 @@ pub fn load_checkpoint(
 
         let mut canister_snapshots = BTreeMap::new();
         let snapshot_ids = checkpoint_layout.snapshot_ids()?;
-        match thread_pool {
-            Some(thread_pool) => {
-                let results = parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
-                    (
-                        **snapshot_id,
-                        load_snapshot_from_checkpoint(
-                            checkpoint_layout,
-                            snapshot_id,
-                            Arc::clone(&fd_factory),
-                        ),
-                    )
-                });
+        let results = maybe_parallel_map(&mut thread_pool, snapshot_ids.iter(), |snapshot_id| {
+            (
+                **snapshot_id,
+                load_snapshot_from_checkpoint(
+                    checkpoint_layout,
+                    snapshot_id,
+                    Arc::clone(&fd_factory),
+                ),
+            )
+        });
 
-                for (snapshot_id, canister_snapshot) in results.into_iter() {
-                    let (canister_snapshot, durations) = canister_snapshot?;
-                    canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
+        for (snapshot_id, canister_snapshot) in results.into_iter() {
+            let (canister_snapshot, durations) = canister_snapshot?;
+            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
 
-                    durations.apply(metrics);
-                }
-            }
-            None => {
-                for snapshot_id in snapshot_ids.iter() {
-                    let (canister_snapshot, durations) = load_snapshot_from_checkpoint(
-                        checkpoint_layout,
-                        snapshot_id,
-                        Arc::clone(&fd_factory),
-                    )?;
-                    canister_snapshots.insert(*snapshot_id, Arc::new(canister_snapshot));
-
-                    durations.apply(metrics);
-                }
-            }
+            durations.apply(metrics);
         }
 
         CanisterSnapshots::new(canister_snapshots)
@@ -386,8 +352,6 @@ pub fn load_canister_state(
         })?;
     durations.insert("canister_state_bits", starting_time.elapsed());
 
-    let session_nonce = None;
-
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
@@ -420,7 +384,6 @@ pub fn load_canister_state(
                     .raw_path();
             Some(ExecutionState {
                 canister_root,
-                session_nonce,
                 wasm_binary,
                 wasm_memory,
                 stable_memory,
@@ -488,6 +451,7 @@ pub fn load_canister_state(
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,
         metrics,
+        canister_state_bits.on_low_wasm_memory_hook_status,
     );
 
     let canister_state = CanisterState {
@@ -579,8 +543,11 @@ pub fn load_snapshot<P: ReadPolicy>(
             .deserialize(canister_snapshot_bits.binary_hash)?;
         durations.insert("snapshot_canister_module", starting_time.elapsed());
 
+        let exported_globals = canister_snapshot_bits.exported_globals.clone();
+
         ExecutionStateSnapshot {
             wasm_binary,
+            exported_globals,
             stable_memory,
             wasm_memory,
         }

@@ -14,7 +14,7 @@ const PAGE_SIZE: usize = 4096;
 /// Datastructure representing a call tree.
 /// It's comprised of a canister_id representing where the canister originates
 /// and a recurisve list of subtrees, which in turn are also of type CallTree.
-#[derive(CandidType, Deserialize, Serialize, Clone)]
+#[derive(Clone, CandidType, Deserialize, Serialize)]
 struct CallTree {
     canister_id: String,
     subtrees: Vec<CallTree>,
@@ -23,7 +23,7 @@ struct CallTree {
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Default, Deserialize, Debug)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Metrics {
     /// Number of requests rejected by the remote subnet (e,g, due to a full
     /// canister input queue).
@@ -40,7 +40,7 @@ thread_local! {
     static MEMORY: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
 }
 
-#[derive(CandidType, Serialize, Deserialize)]
+#[derive(CandidType, Deserialize, Serialize)]
 struct Arguments {
     /// List of calltrees, each representing a call to another canister triggering running a call tree.
     calltrees: Vec<CallTree>,
@@ -50,7 +50,7 @@ struct Arguments {
     num_pages: usize,
 }
 
-#[derive(CandidType, Serialize, Deserialize)]
+#[derive(CandidType, Deserialize, Serialize)]
 struct Message {
     sender: String,
     receiver: String,

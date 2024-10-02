@@ -237,7 +237,7 @@ commands:
 
 ```
 # Clone the DFINITY Git repository
-git clone git@gitlab.com:dfinity-lab/core/ic.git
+git clone git@github.com:dfinity/ic.git
 cd ic/
 
 
@@ -247,7 +247,7 @@ cd ic/
 
 You can get the latest git sha with disk image for a branch (e.g. master) by running:
 ```
-./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
+./ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
 ```
 
 ### List-Inventory
@@ -358,7 +358,7 @@ Alternatively, to avoid changing the `hosts.ini` file, temporary testnet configu
 For instance, a testnet with larger disks (300 GB in this case) can be deployed this way:
 ```
 ./testnet/tools/icos_deploy.sh <testnet> \
-  --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master) \
+  --git-revision $(./ci/src/artifacts/newest_sha_with_disk_image.sh origin/master) \
   --ansible-args '-e ic_disk_gb=300'
 ```
 

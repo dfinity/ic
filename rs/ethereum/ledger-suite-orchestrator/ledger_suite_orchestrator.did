@@ -44,6 +44,11 @@ type UpgradeArg = record {
 
    // Update the cycles management of the canisters managed by the orchestrator.
    cycles_management: opt UpdateCyclesManagement;
+
+   // Add already installed ledger suites to the canisters managed by the orchestrator.
+   // Those ledger suites are *NOT* necessarily ckERC20 tokens.
+   // This assumes that the orchestrator is a controller of all the canisters in the list.
+   manage_ledger_suites: opt vec InstalledLedgerSuite;
 };
 
 type AddErc20Arg = record {
@@ -96,12 +101,46 @@ type ManagedCanisterStatus = variant {
     Installed : record { canister_id : principal; installed_wasm_hash : text };
 };
 
+type InstalledCanister = record {
+    canister_id : principal;
+    installed_wasm_hash : text
+};
+
+type InstalledLedgerSuite = record {
+    // Token symbol on the ledger
+    token_symbol : text;
+
+    // Ledger canister
+    ledger : InstalledCanister;
+
+    // Index canister
+    index : InstalledCanister;
+
+    // List of archive canister ids
+    archives : opt vec principal;
+};
+
+
 type ManagedCanisters = record {
     // Corresponding ERC20 contract
     erc20_contract: Erc20Contract;
 
     // ckERC20 Token symbol
     ckerc20_token_symbol : text;
+
+    // Status of the ledger canister
+    ledger : opt ManagedCanisterStatus;
+
+    // Status of the index canister
+    index : opt ManagedCanisterStatus;
+
+    // List of archive canister ids
+    archives : vec principal;
+};
+
+type ManagedLedgerSuite = record {
+    // Token symbol
+    token_symbol : text;
 
     // Status of the ledger canister
     ledger : opt ManagedCanisterStatus;
@@ -128,6 +167,10 @@ type OrchestratorInfo = record {
 
    // Ledger suite version that will be used to spawn off a new ledger suite (ledger and index canisters) when an ERC-20 token is added.
    ledger_suite_version: opt LedgerSuiteVersion;
+
+   // List of managed ledger suites that were not initially installed by the orchestrator.
+   // Those ledger suites are *NOT* necessarily ckERC20 tokens.
+   managed_pre_existing_ledger_suites: opt vec ManagedLedgerSuite;
 };
 
 type LedgerSuiteVersion = record {

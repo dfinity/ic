@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "subnet_type",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_subnet_type",
     proc_macro_deps = [
         # Keep sorted.

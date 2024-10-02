@@ -21,7 +21,6 @@ pub mod overhead {
     pub const ACCEPT_MESSAGE: NumInstructions = NumInstructions::new(500);
     pub const CALL_CYCLES_ADD: NumInstructions = NumInstructions::new(500);
     pub const CALL_CYCLES_ADD128: NumInstructions = NumInstructions::new(500);
-    pub const CALL_CYCLES_ADD128_UP_TO: NumInstructions = NumInstructions::new(500);
     pub const CALL_DATA_APPEND: NumInstructions = NumInstructions::new(500);
     pub const CALL_NEW: NumInstructions = NumInstructions::new(1_500);
     pub const CALL_ON_CLEANUP: NumInstructions = NumInstructions::new(500);

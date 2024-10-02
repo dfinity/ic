@@ -1,5 +1,6 @@
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
@@ -18,7 +19,8 @@ impl<'a> Arbitrary<'a> for MaybeInvalidModule {
 
 #[inline(always)]
 pub fn run_fuzzer(module: MaybeInvalidModule) {
-    let config = EmbeddersConfig::default();
+    let mut config = EmbeddersConfig::default();
+    config.feature_flags.wasm64 = FlagStatus::Enabled;
     let wasm = module.0.to_bytes();
     let binary_wasm = BinaryEncodedWasm::new(wasm);
     let embedder = WasmtimeEmbedder::new(config, no_op_logger());

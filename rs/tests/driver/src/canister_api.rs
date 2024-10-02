@@ -136,10 +136,10 @@ impl Request<()> for GenericRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpHeader(String, String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 struct SimpleHttpRequest {
     url: String,
     method: String,
@@ -187,7 +187,7 @@ impl CanisterHttpRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct CanisterHttpRequestProvider {
     http_canister: Principal,
 }
@@ -242,7 +242,7 @@ impl GetAccountRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct NnsDappRequestProvider {
     nns_dapp_canister: Principal,
 }
@@ -627,7 +627,7 @@ impl Icrc1BalanceOfRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct Icrc1RequestProvider {
     icrc1_canister: Principal,
 }
@@ -957,7 +957,7 @@ impl GetModeRequest {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct SnsRequestProvider {
     pub sns_canisters: SnsCanisterIds,
     pub sns_wasm_canister_id: PrincipalId,
@@ -1138,7 +1138,7 @@ impl SnsRequestProvider {
     }
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Copy, Clone, Default)]
 pub struct NnsRequestProvider {}
 
 impl NnsRequestProvider {

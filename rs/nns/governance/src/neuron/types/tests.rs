@@ -3,6 +3,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
 };
+use ic_cdk::println;
 
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_stable_structures::Storable;

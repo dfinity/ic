@@ -26,7 +26,7 @@ pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
 pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
 pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct QuicTransportMetrics {
     // Connection manager
     pub active_connections: IntGauge,

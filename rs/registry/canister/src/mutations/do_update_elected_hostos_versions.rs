@@ -87,7 +87,7 @@ impl Registry {
 }
 
 /// Deprecated; pelase use `ReviseElectedHostosVersionsPayload`.
-#[derive(CandidType, Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpdateElectedHostosVersionsPayload {
     /// The ID to be used to identify this HostOS version. This is often the
     /// same as the release_package_sha256_hex, but does not have to be.
@@ -114,7 +114,7 @@ pub struct UpdateElectedHostosVersionsPayload {
 /// HostosVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/hostos_version/v1/hostos_version.proto
-#[derive(CandidType, Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct ReviseElectedHostosVersionsPayload {
     /// The ID to be used to identify this HostOS version. This is often the
     /// same as the release_package_sha256_hex, but does not have to be.

@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::println;
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
@@ -29,10 +29,11 @@ use ic_sns_root::{
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
-use std::cell::RefCell;
+use std::{cell::RefCell, time::Duration};
 
 type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
+const POLL_FOR_NEW_ARCHIVES_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24); // one day
 
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
@@ -91,10 +92,10 @@ fn create_ledger_client() -> RealLedgerCanisterClient {
 #[candid_method(init)]
 #[init]
 fn init(args: SnsRootCanister) {
-    canister_init_(args);
+    canister_init(args);
 }
 
-fn canister_init_(init_payload: SnsRootCanister) {
+fn canister_init(init_payload: SnsRootCanister) {
     log!(INFO, "canister_init: Begin...");
 
     assert_state_is_valid(&init_payload);
@@ -103,6 +104,8 @@ fn canister_init_(init_payload: SnsRootCanister) {
         let mut state = state.borrow_mut();
         *state = init_payload;
     });
+
+    init_timers();
 
     log!(INFO, "canister_init: Done!");
 }
@@ -133,7 +136,7 @@ fn canister_post_upgrade() {
         "Couldn't upgrade canister, due to state deserialization \
          failure during post-upgrade.",
     );
-    canister_init_(state);
+    canister_init(state);
 
     log!(INFO, "canister_post_upgrade: Done!");
 }
@@ -356,16 +359,6 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
     });
 }
 
-#[heartbeat]
-async fn heartbeat() {
-    // Asynchronous method called for the canister_heartbeat that injects
-    // dependencies to run_periodic_tasks.
-    let now = CanisterEnvironment {}.now();
-    let ledger_client = create_ledger_client();
-
-    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
-}
-
 // Resources to serve for a given http_request
 #[query(hidden = true, decoding_quota = 10000)]
 fn http_request(request: HttpRequest) -> HttpResponse {
@@ -379,6 +372,17 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+fn init_timers() {
+    ic_cdk_timers::set_timer_interval(POLL_FOR_NEW_ARCHIVES_INTERVAL, || {
+        ic_cdk::spawn(poll_for_new_archive_canisters())
+    });
+}
+
+async fn poll_for_new_archive_canisters() {
+    let ledger_client = create_ledger_client();
+    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client).await
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.

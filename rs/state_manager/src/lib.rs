@@ -18,7 +18,7 @@ use crate::{
     },
     tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{bounded, unbounded, Sender};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
@@ -32,9 +32,9 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled,
-    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
-    StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationScope, CertifiedStateSnapshot, Labeled, PermanentStateHashError::*,
+    StateHashError, StateManager, StateManagerError, StateManagerResult, StateReader,
+    TransientStateHashError::*,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -634,14 +634,14 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
     meta_manifest: Arc<MetaManifest>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Clone, Debug, Default)]
 struct StateMetadata {
     /// We don't persist the checkpoint layout because we re-create it every
     /// time we discover a checkpoint on disk.
@@ -779,6 +779,16 @@ impl SharedState {
 // the cost of deallocation over a longer period of time, and avoid long pauses.
 type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 
+struct NotifyWhenDeallocated {
+    channel: Sender<()>,
+}
+
+impl Drop for NotifyWhenDeallocated {
+    fn drop(&mut self) {
+        self.channel.send(()).expect("Failed to notify dellocation");
+    }
+}
+
 // We will not use the deallocation thread when the number of pending
 // deallocation objects goes above the threshold.
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
@@ -910,21 +920,11 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
-            pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+            pagemaptypes: PageMapType::list_all_including_snapshots(&snapshot.state),
             is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
-}
-
-fn pagemaptypes_with_num_pages(state: &ReplicatedState) -> Vec<(PageMapType, usize)> {
-    let mut result = Vec::new();
-    for entry in PageMapType::list_all_including_snapshots(state) {
-        if let Some(page_map) = entry.get(state) {
-            result.push((entry, page_map.num_host_pages()));
-        }
-    }
-    result
 }
 
 /// Return duration since path creation (or modification, if no creation)
@@ -1076,7 +1076,7 @@ struct PopulatedMetadata {
 /// When adding additional PageMaps, add an appropriate entry here
 /// to enable all relevant state manager features, e.g. incremental
 /// manifest computations
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
@@ -1163,7 +1163,7 @@ impl PageMapType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub struct DirtyPageMap {
     pub height: Height,
     pub page_type: PageMapType,
@@ -1683,7 +1683,7 @@ impl StateManagerImpl {
             .zip(snapshots.iter().skip(1))
             .all(|(s0, s1)| s0.height < s1.height));
 
-        let last_snapshot_height = snapshots.back().map(|s| s.height.get() as i64).unwrap_or(0);
+        let last_snapshot_height = snapshots.back().map_or(0, |s| s.height.get() as i64);
 
         metrics.resident_state_count.set(snapshots.len() as i64);
 
@@ -2171,6 +2171,16 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
+    /// Wait till deallocation queue is empty.
+    pub fn flush_deallocation_channel(&self) {
+        let (send, recv) = bounded(1);
+        self.deallocation_sender
+            .send(Box::new(NotifyWhenDeallocated { channel: send }))
+            .expect("Failed to send deallocation request");
+        recv.recv()
+            .expect("Failed to receive deallocation notification");
+    }
+
     /// Remove any inmemory state at height h with h < last_height_to_keep, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
@@ -2248,8 +2258,7 @@ impl StateManagerImpl {
         let latest_height = states
             .snapshots
             .back()
-            .map(|s| s.height)
-            .unwrap_or(Self::INITIAL_STATE_HEIGHT);
+            .map_or(Self::INITIAL_STATE_HEIGHT, |s| s.height);
 
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
@@ -2381,6 +2390,62 @@ impl StateManagerImpl {
             .set(result.len() as i64);
 
         result
+    }
+
+    /// Returns the list of heights corresponding to snapshots matching
+    /// the mask. E.g. `list_state_heights(CERT_ANY)` will return all snapshots.
+    ///
+    /// Note that the initial state at height 0 is considered uncertified from
+    /// the State Manager point of view.  This is because the protocol requires
+    /// each replica to individually obtain the initial state using some
+    /// out-of-band mechanism (i.e., not state sync).  Also note that the
+    /// authenticity of this initial state will be verified by some protocol
+    /// external to this component.
+    ///
+    /// The list of heights is guaranteed to be
+    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
+    ///   0 even if no states were committed yet.
+    /// * Sorted in ascending order.
+    #[allow(dead_code)]
+    pub fn list_state_heights(
+        &self,
+        cert_mask: ic_interfaces_state_manager::CertificationMask,
+    ) -> Vec<Height> {
+        let _timer = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["list_state_heights"])
+            .start_timer();
+
+        fn matches(
+            cert: Option<&Certification>,
+            mask: ic_interfaces_state_manager::CertificationMask,
+        ) -> bool {
+            match cert {
+                Some(_) => mask.is_set(ic_interfaces_state_manager::CERT_CERTIFIED),
+                None => mask.is_set(ic_interfaces_state_manager::CERT_UNCERTIFIED),
+            }
+        }
+
+        let states = self.states.read();
+
+        let heights: BTreeSet<_> = states
+            .snapshots
+            .iter()
+            .map(|snapshot| snapshot.height)
+            .filter(|h| {
+                matches(
+                    states
+                        .certifications_metadata
+                        .get(h)
+                        .and_then(|metadata| metadata.certification.as_ref()),
+                    cert_mask,
+                )
+            })
+            .collect();
+
+        // convert the b-tree into a vector
+        heights.into_iter().collect()
     }
 
     // Creates a checkpoint and switches state to it.
@@ -2526,6 +2591,18 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
+                .with_label_values(&["defrag_canisters_map"])
+                .start_timer();
+
+            // This step is a functional no-op, but results in a cleaner memory layout that is ultimately faster to iterate over.
+            let canisters = std::mem::take(&mut state.canister_states);
+            state.canister_states = canisters.into_iter().collect();
+        }
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
                 .with_label_values(&["validate_eq"])
                 .start_timer();
             if let Err(err) = checkpointed_state.validate_eq(state) {
@@ -2603,7 +2680,7 @@ impl StateManagerImpl {
             let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp_layout.clone(),
-                    pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    pagemaptypes: PageMapType::list_all_including_snapshots(state),
                     is_initializing_tip: false,
                 }]
             } else {
@@ -3136,45 +3213,6 @@ impl StateManager for StateManagerImpl {
                 }
             }
         }
-    }
-
-    /// # Panics
-    ///
-    /// This method panics if checkpoint labels can not be retrieved
-    /// from the disk.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height> {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["list_state_heights"])
-            .start_timer();
-
-        fn matches(cert: Option<&Certification>, mask: CertificationMask) -> bool {
-            match cert {
-                Some(_) => mask.is_set(CERT_CERTIFIED),
-                None => mask.is_set(CERT_UNCERTIFIED),
-            }
-        }
-
-        let states = self.states.read();
-
-        let heights: BTreeSet<_> = self
-            .checkpoint_heights()
-            .into_iter()
-            .chain(states.snapshots.iter().map(|snapshot| snapshot.height))
-            .filter(|h| {
-                matches(
-                    states
-                        .certifications_metadata
-                        .get(h)
-                        .and_then(|metadata| metadata.certification.as_ref()),
-                    cert_mask,
-                )
-            })
-            .collect();
-
-        // convert the b-tree into a vector
-        heights.into_iter().collect()
     }
 
     /// This method instructs the state manager that Consensus doesn't need
@@ -3819,7 +3857,7 @@ fn maliciously_alter_certified_hash(
     certification
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum CheckpointError {
     /// Wraps a stringified `std::io::Error`, a message and the path of the
     /// affected file/directory.

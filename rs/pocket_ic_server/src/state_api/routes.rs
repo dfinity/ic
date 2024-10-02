@@ -293,7 +293,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct OpConversionError;
 
 #[async_trait]
@@ -1127,6 +1127,7 @@ pub async fn create_instance(
             instance_config.state_dir,
             instance_config.nonmainnet_features,
             log_level,
+            instance_config.bitcoind_addr,
         )
     })
     .await

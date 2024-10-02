@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Groups all available malicious flags.
-#[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct MaliciousFlags {
     pub maliciously_propose_equivocating_blocks: bool,
     pub maliciously_propose_empty_blocks: bool,
@@ -37,7 +37,7 @@ pub struct MaliciousFlags {
     pub maliciously_alter_state_sync_chunk_receiving_side: Option<InvalidChunksAllowance>,
 }
 
-#[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default, Deserialize, Serialize)]
 pub struct InvalidChunksAllowance {
     pub meta_manifest_chunk_error_allowance: u32,
     pub manifest_chunk_error_allowance: u32,

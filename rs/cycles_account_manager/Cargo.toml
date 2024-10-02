@@ -22,7 +22,7 @@ slog = { workspace = true }
 
 [dev-dependencies]
 candid = { workspace = true }
-ic-constants = { path = "../constants" }
+ic-limits = { path = "../limits" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-state = { path = "../test_utilities/state" }

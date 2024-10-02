@@ -414,29 +414,29 @@ async fn metrics_handler(
         .unwrap()
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct Wallets {
     subnet: HashMap<String, String>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct NodeRoute {
     node_id: String,
     socket_addr: String,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct SubnetRoute {
     subnet_id: String,
     nodes: Vec<NodeRoute>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 struct Routes {
     subnets: Vec<SubnetRoute>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct TestContext {
     wallet_id: String,
     subnet_id: String,
@@ -575,7 +575,7 @@ impl Install for Installer {
             0,
         );
 
-        install_call
+        () = install_call
             .call_and_wait()
             .await
             .context("failed to install canister")?;
@@ -674,7 +674,7 @@ impl Stop for Stopper {
             0,
         );
 
-        stop_call
+        () = stop_call
             .call_and_wait()
             .await
             .context("failed to stop canister")?;
@@ -724,7 +724,7 @@ impl Delete for Deleter {
             0,
         );
 
-        delete_call
+        () = delete_call
             .call_and_wait()
             .await
             .context("failed to delete canister")?;

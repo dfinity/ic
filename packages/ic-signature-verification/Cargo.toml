@@ -14,7 +14,7 @@ documentation = "https://docs.rs/ic-signature-verification"
 
 [dependencies]
 ic-canister-sig-creation = "1.0"
-ic-certification = "2.5"
+ic-certification = { workspace = true }
 ic-verify-bls-signature = { version = "0.6", default-features = false, features = [
     "alloc",
 ] }

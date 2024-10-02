@@ -15,7 +15,7 @@ use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_swap_sns_wasm,
     create_modified_sns_wasm,
 };
-use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
+use ic_sns_wasm::pb::v1::SnsCanisterType;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::{
     icrc1::{account::Account, transfer::TransferArg},
@@ -93,25 +93,17 @@ fn test_deploy_fresh_sns() {
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
     );
-    let DeployedSns {
-        governance_canister_id: Some(sns_governance_canister_id),
-        ledger_canister_id: Some(sns_ledger_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
-    };
 
     // Testing the Archive canister requires that it can be spawned.
     sns::ensure_archive_canister_is_spawned_or_panic(
         &pocket_ic,
-        sns_governance_canister_id,
-        sns_ledger_canister_id,
+        sns.governance.canister_id,
+        sns.ledger.canister_id,
     );
     // TODO eventually we need to test a swap
 }
@@ -178,32 +170,20 @@ fn test_upgrade_existing_sns() {
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
     );
-    let DeployedSns {
-        governance_canister_id: Some(sns_governance_canister_id),
-        root_canister_id: Some(sns_root_canister_id),
-        index_canister_id: Some(index_canister_id),
-        ledger_canister_id: Some(sns_ledger_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
-    };
 
     // Testing the Archive canister requires that it can be spawned.
     sns::ensure_archive_canister_is_spawned_or_panic(
         &pocket_ic,
-        sns_governance_canister_id,
-        sns_ledger_canister_id,
+        sns.governance.canister_id,
+        sns.ledger.canister_id,
     );
 
-    // Step 3. Upgrade SNS to the tip of master
-
-    // Step 4. Upgrade NNS Governance and SNS-W to the latest version.
+    // Step 3. Upgrade NNS Governance and SNS-W to the latest version.
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID);
     upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID);
 
@@ -238,7 +218,7 @@ fn test_upgrade_existing_sns() {
     // Upgrade Swap - should be non-event
     sns::upgrade_sns_to_next_version_and_assert_change(
         &pocket_ic,
-        sns_root_canister_id,
+        sns.root.canister_id,
         SnsCanisterType::Swap,
     );
 
@@ -246,58 +226,58 @@ fn test_upgrade_existing_sns() {
     {
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_root_canister_id,
+            sns.root.canister_id,
             SnsCanisterType::Index,
         );
 
         // Index-Ng check 1: The Index canister still recognised our Ledger canitser.
         assert_eq!(
-            sns::index_ng::ledger_id(&pocket_ic, index_canister_id),
-            sns_ledger_canister_id
+            sns::index_ng::ledger_id(&pocket_ic, sns.index.canister_id),
+            sns.ledger.canister_id
         );
 
         // Index-Ng check 2: Index and Ledger sync.
         sns::wait_until_ledger_and_index_sync_is_completed(
             &pocket_ic,
-            sns_ledger_canister_id,
-            index_canister_id,
+            sns.ledger.canister_id,
+            sns.index.canister_id,
         );
 
         // Index-Ng check 3: The same blocks can be observed via Index and Ledger.
-        sns::assert_ledger_index_parity(&pocket_ic, sns_ledger_canister_id, index_canister_id);
+        sns::assert_ledger_index_parity(&pocket_ic, sns.ledger.canister_id, sns.index.canister_id);
     }
 
     // Upgrade SNS Ledger
     {
         let original_total_supply_sns_e8s =
-            sns::ledger::icrc1_total_supply(&pocket_ic, sns_ledger_canister_id)
+            sns::ledger::icrc1_total_supply(&pocket_ic, sns.ledger.canister_id)
                 .0
                 .to_u64()
                 .unwrap();
 
         let pre_upgrade_chain_length =
-            sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0_u64, 1_u64).chain_length;
+            sns::ledger::get_blocks(&pocket_ic, sns.ledger.canister_id, 0_u64, 1_u64).chain_length;
 
-        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id);
 
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_root_canister_id,
+            sns.root.canister_id,
             SnsCanisterType::Ledger,
         );
 
         // Ledger check 1: We get the expected state in the archive(s).
-        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id);
 
         // Ledger check 2: We get the same number of blocks that we had before the upgrade (because
         // no transactions have happened after the upgrade).
         let post_upgrade_chain_length =
-            sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0_u64, 1_u64).chain_length;
+            sns::ledger::get_blocks(&pocket_ic, sns.ledger.canister_id, 0_u64, 1_u64).chain_length;
         assert_eq!(post_upgrade_chain_length, pre_upgrade_chain_length);
 
         // Ledger check 3: Total supply remains unchanged.
         let total_supply_sns_e8s =
-            sns::ledger::icrc1_total_supply(&pocket_ic, sns_ledger_canister_id)
+            sns::ledger::icrc1_total_supply(&pocket_ic, sns.ledger.canister_id)
                 .0
                 .to_u64()
                 .unwrap();
@@ -315,8 +295,8 @@ fn test_upgrade_existing_sns() {
             // Mint some tokens for the wealthy user.
             let _block_height = sns::ledger::icrc1_transfer(
                 &pocket_ic,
-                sns_ledger_canister_id,
-                sns_governance_canister_id,
+                sns.ledger.canister_id,
+                sns.governance.canister_id,
                 TransferArg {
                     from_subaccount: None,
                     to: wealthy_user_account,
@@ -341,7 +321,7 @@ fn test_upgrade_existing_sns() {
         };
         sns::ledger::icrc2_approve(
             &pocket_ic,
-            sns_ledger_canister_id,
+            sns.ledger.canister_id,
             wealthy_user_principal_id,
             ApproveArgs {
                 from_subaccount: wealthy_user_account.subaccount,
@@ -357,7 +337,7 @@ fn test_upgrade_existing_sns() {
         .unwrap();
         let allowance = sns::ledger::icrc2_allowance(
             &pocket_ic,
-            sns_ledger_canister_id,
+            sns.ledger.canister_id,
             PrincipalId::new_anonymous(),
             AllowanceArgs {
                 account: wealthy_user_account,
@@ -367,7 +347,7 @@ fn test_upgrade_existing_sns() {
         assert_eq!(allowance.allowance, Nat::from(100_000_u64));
         sns::ledger::icrc2_transfer_from(
             &pocket_ic,
-            sns_ledger_canister_id,
+            sns.ledger.canister_id,
             spender_principal_id,
             TransferFromArgs {
                 spender_subaccount: None,
@@ -384,16 +364,16 @@ fn test_upgrade_existing_sns() {
 
     // Upgrade SNS Archive
     {
-        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id);
 
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_root_canister_id,
+            sns.root.canister_id,
             SnsCanisterType::Archive,
         );
 
         // Archive check 1: We get the expected state in the archive(s).
-        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id);
     }
 
     // Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test)
@@ -426,7 +406,7 @@ fn test_upgrade_existing_sns() {
     ] {
         sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_root_canister_id,
+            sns.root.canister_id,
             sns_canister_type,
         );
     }

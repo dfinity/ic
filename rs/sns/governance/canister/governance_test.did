@@ -84,7 +84,6 @@ type ClaimOrRefreshResponse = record {
 
 type ClaimSwapNeuronsRequest = record {
   neuron_recipes : opt NeuronRecipes;
-  neuron_parameters : vec NeuronParameters;
 };
 
 type ClaimSwapNeuronsResponse = record {

@@ -514,7 +514,6 @@ impl Swap {
     /// The maximum direct participation amount (in ICP e8s).
     pub fn max_direct_participation_e8s(&self) -> u64 {
         self.params
-            .clone()
             .expect("Expected params to be set")
             .max_direct_participation_icp_e8s
             .expect("Expected params.max_direct_participation_icp_e8s to be set")
@@ -1723,11 +1722,9 @@ impl Swap {
                 batch_count,
             );
 
-            #[allow(deprecated)] // TODO(NNS1-3198): Remove once `neuron_parameters` is removed
             let reply = sns_governance_client
                 .claim_swap_neurons(ClaimSwapNeuronsRequest {
                     neuron_recipes: Some(NeuronRecipes::from(batch)),
-                    neuron_parameters: vec![],
                 })
                 .await;
 
@@ -2441,7 +2438,7 @@ impl Swap {
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
                 // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: nf_neuron_nns_controller.to_string(),
+                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{}`.", nf_neuron_nns_controller),
                 cf_neurons,
             })
             .collect();
@@ -3082,7 +3079,7 @@ impl Swap {
         &self,
         _request: &GetSaleParametersRequest,
     ) -> GetSaleParametersResponse {
-        let params = self.params.clone();
+        let params = self.params;
         GetSaleParametersResponse { params }
     }
 
@@ -3372,7 +3369,10 @@ fn create_sns_neuron_basket_for_neurons_fund_participant(
                 hotkeys: Some(Principals::from(hotkeys.clone())),
                 nns_neuron_id,
                 // TODO(NNS1-3198): Remove
-                hotkey_principal: controller.to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
             })),
             neuron_attributes: Some(NeuronAttributes {
                 memo,
@@ -4092,22 +4092,34 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(1, 698047, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(2, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(3, 305256, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(657894)),
-                hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(4, 339747, Vec::new()).unwrap()],
             },
         ];
@@ -4906,7 +4918,10 @@ mod tests {
         let cf_participants = vec![
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(992899)),
-                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(1, 698047, Vec::new()).unwrap(),
                     CfNeuron::try_new(2, 303030, Vec::new()).unwrap(),
@@ -4914,12 +4929,18 @@ mod tests {
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(800257)),
-                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![CfNeuron::try_new(3, 678574, Vec::new()).unwrap()],
             },
             CfParticipant {
                 controller: Some(PrincipalId::new_user_test_id(818371)),
-                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                hotkey_principal: ic_nervous_system_common::obsolete_string_field(
+                    "hotkey_principal",
+                    Some("controller"),
+                ),
                 cf_neurons: vec![
                     CfNeuron::try_new(4, 305256, Vec::new()).unwrap(),
                     CfNeuron::try_new(5, 100000, Vec::new()).unwrap(),

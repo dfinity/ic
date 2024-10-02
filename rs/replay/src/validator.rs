@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{mocks::MockPayloadBuilder, player::ReplayError};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct InvalidArtifact {
     pub id: ConsensusMessageId,
     pub block_hash: Option<CryptoHashOf<Block>>,
@@ -328,7 +328,7 @@ impl ReplayValidator {
             if changes.is_empty() {
                 break;
             } else {
-                pool.apply_changes(changes);
+                pool.apply(changes);
             }
         }
 

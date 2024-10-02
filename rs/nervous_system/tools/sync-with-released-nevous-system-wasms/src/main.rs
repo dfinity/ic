@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
         .into_iter()
         .collect::<Result<Vec<CanisterUpdate>>>()?;
 
-    let sns_upgrade_steps = sns_wasm::query_sns_upgrade_steps(&agent).await?;
+    let sns_upgrade_steps = sns_wasm::query_mainline_sns_upgrade_steps(&agent).await?;
     let latest_sns_version = &sns_upgrade_steps
         .steps
         .last()
@@ -165,7 +165,7 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
         .map_err(|e| anyhow!(e))
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 struct CanisterUpdate {
     canister_name: String,
     new_git_hash: String,

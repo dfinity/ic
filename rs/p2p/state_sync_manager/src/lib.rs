@@ -142,7 +142,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
         }
         while advertise_task.join_next().await.is_some() {}
         if let Some(ongoing_state_sync) = self.ongoing_state_sync.take() {
-            ongoing_state_sync.shutdown.shutdown().await;
+            let _ = ongoing_state_sync.shutdown.shutdown().await;
         }
     }
 

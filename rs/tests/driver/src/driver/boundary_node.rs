@@ -78,11 +78,10 @@ pub struct BoundaryNodeCustomDomainsConfig {
     pub task_delay_sec: Option<u64>,
     pub task_error_delay_sec: Option<u64>,
     pub peek_sleep_sec: Option<u64>,
-    pub polling_interval_sec: Option<u64>,
 }
 
 /// A builder for the initial configuration of an IC boundary node.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize)]
 pub struct BoundaryNode {
     pub name: String,
     pub vm_resources: VmResources,
@@ -647,11 +646,6 @@ fn create_config_disk_image(
             cmd.arg("--certificate_issuer_peek_sleep_sec")
                 .arg(peek_sleep_sec.to_string());
         }
-
-        if let Some(polling_interval_sec) = cfg.polling_interval_sec {
-            cmd.arg("--certificate_syncer_polling_interval_sec")
-                .arg(polling_interval_sec.to_string());
-        }
     }
 
     let key = "PATH";
@@ -905,7 +899,7 @@ impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct Playnet {
     playnet_cert: PlaynetCertificate,
     aaaa_records: Vec<String>,
@@ -913,7 +907,7 @@ struct Playnet {
 }
 
 pub fn emit_bn_aaaa_records_event(log: &slog::Logger, bn_fqdn: &str, aaaa_records: Vec<String>) {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize, Serialize)]
     pub struct BoundaryNodeAAAARecords {
         url: String,
         aaaa_records: Vec<String>,

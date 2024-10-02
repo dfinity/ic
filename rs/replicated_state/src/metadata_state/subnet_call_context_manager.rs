@@ -72,7 +72,7 @@ pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 ///
 /// During a subnet split, these messages will be automatically rejected if
 /// the targeted canister has moved to a new subnet.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct InstallCodeCallManager {
     next_call_id: u64,
     install_code_calls: BTreeMap<InstallCodeCallId, InstallCodeCall>,
@@ -117,7 +117,7 @@ impl InstallCodeCallManager {
 ///
 /// During a subnet split, these messages will be automatically rejected if
 /// the target canister has moved to a new subnet.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct StopCanisterCallManager {
     next_call_id: u64,
     stop_canister_calls: BTreeMap<StopCanisterCallId, StopCanisterCall>,
@@ -164,7 +164,7 @@ impl StopCanisterCallManager {
 /// It is responsible for keeping track of all subnet messages that
 /// do not require work to be done by another IC layer and
 /// cannot finalize the execution in a single round.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 struct CanisterManagementCalls {
     install_code_call_manager: InstallCodeCallManager,
     stop_canister_call_manager: StopCanisterCallManager,
@@ -203,7 +203,7 @@ impl CanisterManagementCalls {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetCallContextManager {
     /// Should increase monotonically. This property is used to determine if a request
     /// corresponds to a future state.
@@ -672,7 +672,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SetupInitialDkgContext {
     pub request: Request,
     pub nodes_in_target_subnet: BTreeSet<NodeId>,
@@ -752,7 +752,7 @@ fn try_into_array_nonce(bytes: Vec<u8>) -> Result<[u8; NONCE_SIZE], ProxyDecodeE
     try_into_array::<NONCE_SIZE>(bytes, "nonce")
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EcdsaArguments {
     pub key_id: EcdsaKeyId,
     pub message_hash: [u8; MESSAGE_HASH_SIZE],
@@ -777,7 +777,7 @@ impl TryFrom<pb_metadata::EcdsaArguments> for EcdsaArguments {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SchnorrArguments {
     pub key_id: SchnorrKeyId,
     pub message: Arc<Vec<u8>>,
@@ -802,7 +802,7 @@ impl TryFrom<pb_metadata::SchnorrArguments> for SchnorrArguments {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ThresholdArguments {
     Ecdsa(EcdsaArguments),
     Schnorr(SchnorrArguments),
@@ -852,7 +852,7 @@ impl TryFrom<pb_metadata::ThresholdArguments> for ThresholdArguments {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct SignWithThresholdContext {
     pub request: Request,
     pub args: ThresholdArguments,
@@ -941,7 +941,7 @@ impl TryFrom<pb_metadata::SignWithThresholdContext> for SignWithThresholdContext
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct IDkgDealingsContext {
     pub request: Request,
     pub key_id: MasterPublicKeyId,
@@ -989,7 +989,7 @@ impl TryFrom<(Time, pb_metadata::IDkgDealingsContext)> for IDkgDealingsContext {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinGetSuccessorsContext {
     pub request: Request,
     pub payload: GetSuccessorsRequestInitial,
@@ -1027,7 +1027,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct BitcoinSendTransactionInternalContext {
     pub request: Request,
     pub payload: SendTransactionRequest,
@@ -1069,7 +1069,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct InstallCodeCall {
     pub call: CanisterCall,
     pub time: Time,
@@ -1152,7 +1152,7 @@ impl TryFrom<(Time, pb_metadata::InstallCodeCall)> for InstallCodeCall {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct StopCanisterCall {
     pub call: CanisterCall,
     pub effective_canister_id: CanisterId,
@@ -1211,7 +1211,7 @@ impl TryFrom<(Time, pb_metadata::StopCanisterCall)> for StopCanisterCall {
 }
 
 /// Struct for tracking the required information needed for creating a response.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct RawRandContext {
     pub request: Request,
     pub time: Time,

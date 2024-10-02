@@ -23,7 +23,7 @@ echo "STABLE_WORKSPACE_ROOT ${WORKSPACE_ROOT}"
 
 echo "HOME ${HOME}"
 
-test -n "${CI_JOB_ID:-}" && echo "CI_JOB_ID ${CI_JOB_ID}"
+test -n "${CI_RUN_ID:-}" && echo "CI_RUN_ID ${CI_RUN_ID}"
 test -n "${CI_JOB_NAME:-}" && echo "CI_JOB_NAME ${CI_JOB_NAME}"
 test -n "${CI_RUNNER_TAGS:-}" && echo "CI_RUNNER_TAGS ${CI_RUNNER_TAGS}"
 
@@ -34,8 +34,8 @@ elif [[ -n "${HOSTUSER:-}" ]]; then
 fi
 
 # Used to pass volatile status over a side channel to not affect the cache.
-# Try user-independent path firss, fall back to user-specific to for on shared machines.
-for s in /var/tmp/bazel-volatile-status.txt "$HOME/.bazel-volatitel-status.txt"; do
+# Try user-independent path first, fall back to user-specific to for on shared machines.
+for s in /var/tmp/bazel-volatile-status.txt "$HOME/.bazel-volatile-status.txt"; do
     if ln -fs "${WORKSPACE_ROOT}/bazel-out/volatile-status.txt" "$s"; then
         echo "VERSION_FILE_PATH $s"
         break

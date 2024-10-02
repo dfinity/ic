@@ -926,7 +926,6 @@ fn can_validate_module_cycles_u128_related_imports() {
     let wasm = wat2wasm(
         r#"(module
         (import "ic0" "call_cycles_add128" (func $ic0_call_cycles_add128 (param i64 i64)))
-        (import "ic0" "call_cycles_add128_up_to" (func $ic0_call_cycles_add128_up_to (param i64 i64 i32)))
         (import "ic0" "canister_cycle_balance128" (func $ic0_canister_cycle_balance128 (param i32)))
         (import "ic0" "msg_cycles_available128" (func $ic0_msg_cycles_available128 (param i32)))
         (import "ic0" "msg_cycles_refunded128" (func $ic0_msg_cycles_refunded128 (param i32)))
@@ -1132,4 +1131,37 @@ fn wasm_with_multiple_code_sections_is_invalid() {
             WasmValidationError::WasmtimeValidation(_),
         ))
     )
+}
+
+#[test]
+fn test_wasm64_initial_wasm_memory_size_validation() {
+    use crate::WasmValidationError::InitialWasm64MemoryTooLarge;
+    use ic_config::embedders::FeatureFlags;
+    use ic_config::flag_status::FlagStatus;
+
+    let embedders_config = EmbeddersConfig {
+        feature_flags: FeatureFlags {
+            wasm64: FlagStatus::Enabled,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let allowed_wasm_memory_size_in_pages =
+        embedders_config.max_wasm_memory_size.get() / WASM_PAGE_SIZE as u64;
+    let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
+    let wasm = wat2wasm(&format!(
+        r#"(module
+            (memory i64 {} {})
+        )"#,
+        declared_wasm_memory_size_in_pages, declared_wasm_memory_size_in_pages
+    ))
+    .unwrap();
+
+    assert_eq!(
+        validate_wasm_binary(&wasm, &embedders_config),
+        Err(InitialWasm64MemoryTooLarge {
+            declared_size: declared_wasm_memory_size_in_pages,
+            allowed_size: allowed_wasm_memory_size_in_pages
+        })
+    );
 }

@@ -33,7 +33,7 @@ def run_example_did_git_test(test_bin = "TEST_BIN"):
         env={
             "BUILD_WORKSPACE_DIRECTORY": workspace_dir,
             "TEST_TMPDIR": os.environ["TEST_TMPDIR"],
-            "CI_MERGE_REQUEST_TITLE": os.environ.get("CI_MERGE_REQUEST_TITLE", ""),
+            "OVERRIDE_DIDC_CHECK": os.environ.get("OVERRIDE_DIDC_CHECK", ""),
         },
         capture_output=True,
     )
@@ -168,11 +168,11 @@ def test_override_didc_checks_failing_check_succeeds():
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 
-    with mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"}):
+    with mock.patch.dict(os.environ, {"OVERRIDE_DIDC_CHECK": "true"}):
         res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
         assert res.returncode == 0
         assert (
-            "Found [override-didc-check] in merge request title. Skipping didc_check."
+            "Override didc check requested. Skipping didc_check."
             in res.stdout.decode("utf-8")
         )
 

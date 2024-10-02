@@ -60,7 +60,7 @@ mock! {
 
     impl<A: IdentifiableArtifact> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
         fn get(&self, id: &A::Id) -> Option<A>;
-        fn get_all_validated(
+        fn get_all_for_broadcast(
             &self,
         ) -> Box<dyn Iterator<Item = A>>;
     }
@@ -69,13 +69,18 @@ mock! {
 mock! {
     pub BouncerFactory<A: IdentifiableArtifact> {}
 
-    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A, MockValidatedPoolReader<A>> for BouncerFactory<A> {
+    impl<A: IdentifiableArtifact + Sync> BouncerFactory<A::Id, MockValidatedPoolReader<A>> for BouncerFactory<A> {
         fn new_bouncer(&self, pool: &MockValidatedPoolReader<A>) -> Bouncer<A::Id>;
+        fn refresh_period(&self) -> std::time::Duration;
     }
 }
 
 mock! {
     pub Peers {}
+
+    impl Clone for Peers {
+        fn clone(&self) -> Self;
+    }
 
     impl Peers for Peers {
         fn peers(&self) -> Vec<NodeId>;

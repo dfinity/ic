@@ -129,16 +129,16 @@ get_nns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
-    LEDGER_COMMON="$RUST_DIR/rosetta-api/icp_ledger/src "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
-    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON="$RUST_DIR/ledger_suite/icp/src "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/ledger_suite/common/ledger_canister_core "
     LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
     SNS_INIT="$RUST_DIR/sns/init"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance $SNS_INIT"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
-    code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
+    code_location__icp_ledger_archive="$RUST_DIR/ledger_suite/icp/archive $LEDGER_COMMON"
     code_location__root="$RUST_DIR/nns/handlers/root/impl"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
@@ -160,10 +160,10 @@ get_sns_canister_code_location() {
     # Map of locations
     code_location__root="$RUST_DIR/sns/root"
     code_location__governance="$RUST_DIR/sns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/icrc1 $RUST_DIR/rosetta-api/ledger_core $RUST_DIR/rosetta-api/ledger_canister_core"
+    code_location__ledger="$RUST_DIR/ledger_suite/icrc1 $RUST_DIR/ledger_suite/common/ledger_core $RUST_DIR/ledger_suite/common/ledger_canister_core"
     code_location__swap="$RUST_DIR/sns/swap"
-    code_location__archive="$RUST_DIR/rosetta-api/icrc1"
-    code_location__index="$RUST_DIR/rosetta-api/icrc1"
+    code_location__archive="$RUST_DIR/ledger_suite/icrc1"
+    code_location__index="$RUST_DIR/ledger_suite/icrc1"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}
@@ -634,7 +634,7 @@ set_testnet_env_variables() {
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
-        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './gitlab-ci/container/container-run.sh', and that you created it by following the instructions in README.md."
+        echo >&2 "The directory ${TEST_TMPDIR} does not exist. Check that you're running from within './ci/container/container-run.sh', and that you created it by following the instructions in README.md."
         exit 1
     fi
 

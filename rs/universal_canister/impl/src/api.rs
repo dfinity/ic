@@ -51,7 +51,6 @@ mod ic0 {
         pub fn msg_deadline() -> u64;
         pub fn call_cycles_add(amount: u64) -> ();
         pub fn call_cycles_add128(amount_high: u64, amount_low: u64) -> ();
-        pub fn call_cycles_add128_up_to(amount_high: u64, amount_low: u64, dst: u32) -> ();
         pub fn call_perform() -> u32;
         pub fn stable_size() -> u32;
         pub fn stable_grow(additional_pages: u32) -> u32;
@@ -143,12 +142,6 @@ pub fn call_cycles_add128(amount_high: u64, amount_low: u64) {
     unsafe {
         ic0::call_cycles_add128(amount_high, amount_low);
     }
-}
-
-pub fn call_cycles_add128_up_to(amount_high: u64, amount_low: u64) -> Vec<u8> {
-    let mut bytes = vec![0u8; CYCLES_SIZE];
-    unsafe { ic0::call_cycles_add128_up_to(amount_high, amount_low, bytes.as_mut_ptr() as u32) }
-    bytes
 }
 
 pub fn call_perform() -> u32 {

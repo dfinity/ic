@@ -12,7 +12,7 @@ use axum::http::Request;
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactMutation, ArtifactWithOpt};
+use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
@@ -62,7 +62,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArt
     metrics: ConsensusManagerMetrics,
     rt_handle: Handle,
     transport: Arc<dyn Transport>,
-    adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
+    adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
     active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
@@ -82,7 +82,7 @@ impl<
         metrics: ConsensusManagerMetrics,
         rt_handle: Handle,
         transport: Arc<dyn Transport>,
-        adverts_to_send: Receiver<ArtifactMutation<Artifact>>,
+        adverts_to_send: Receiver<ArtifactTransmit<Artifact>>,
         assembler: Assembler,
     ) -> Shutdown {
         let slot_manager = AvailableSlotSet::new(log.clone(), metrics.clone(), WireArtifact::NAME);
@@ -120,8 +120,8 @@ impl<
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     match advert {
-                        ArtifactMutation::Insert(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
-                        ArtifactMutation::Remove(id) => self.handle_purge_advert(&id),
+                        ArtifactTransmit::Deliver(new_artifact) => self.handle_send_advert(new_artifact, cancellation_token.clone()),
+                        ArtifactTransmit::Abort(id) => self.handle_purge_advert(&id),
                     }
 
                     self.current_commit_id.inc_assign();
@@ -456,7 +456,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -478,6 +478,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that increasing connection id causes advert to be resent.
@@ -515,7 +516,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -536,6 +537,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify failed send is retried.
@@ -571,7 +573,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -585,6 +587,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify commit id increases with new adverts/purge events.
@@ -614,7 +617,7 @@ mod tests {
                 IdentityAssembler,
             );
             // Send advert and verify commit it.
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -623,7 +626,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send second advert and observe commit id bump.
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -631,8 +634,8 @@ mod tests {
             .unwrap();
             assert_eq!(commit_id_rx.recv().await.unwrap(), 1);
             // Send purge and new advert and observe commit id increase by 2.
-            tx.send(ArtifactMutation::Remove(2)).await.unwrap();
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Abort(2)).await.unwrap();
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(3, 1024),
                 is_latency_sensitive: false,
             }))
@@ -645,6 +648,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that duplicate Advert event does not cause sending twice.
@@ -675,7 +679,7 @@ mod tests {
             );
 
             // Send advert and verify commit id.
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -684,7 +688,7 @@ mod tests {
             assert_eq!(commit_id_rx.recv().await.unwrap(), 0);
 
             // Send same advert again. This should be noop.
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(1, 1024),
                 is_latency_sensitive: false,
             }))
@@ -692,7 +696,7 @@ mod tests {
             .unwrap();
 
             // Check that new advert is advertised with correct commit id.
-            tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+            tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
                 artifact: U64Artifact::id_to_msg(2, 1024),
                 is_latency_sensitive: false,
             }))
@@ -706,6 +710,7 @@ mod tests {
                 .expect("ConsensusManagerSender did not terminate in time.")
         })
         .await
+        .unwrap();
     }
 
     /// Verify that a panic happening in one of the tasks spawned by the ConsensusManagerSender
@@ -741,7 +746,7 @@ mod tests {
                 IdentityAssembler,
             );
 
-        tx.send(ArtifactMutation::Insert(ArtifactWithOpt {
+        tx.send(ArtifactTransmit::Deliver(ArtifactWithOpt {
             artifact: U64Artifact::id_to_msg(1, 1024),
             is_latency_sensitive: false,
         }))
@@ -750,7 +755,8 @@ mod tests {
 
         timeout(Duration::from_secs(5), shutdown.shutdown())
             .await
-            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.");
+            .expect("ConsensusManagerSender should terminate since the downstream service `transport` panicked.")
+            .unwrap();
 
         //assert!(join_error.is_panic(), "The join error should be a panic.");
     }).await

@@ -1,14 +1,17 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
+use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
+    adapters::AdaptersConfig,
+    bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
-use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
@@ -21,6 +24,7 @@ use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, Ingr
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
+use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
     batch_payload::{IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
@@ -37,16 +41,18 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
+use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
-    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, InstallChunkedCodeArgs,
-    LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply, SignWithSchnorrReply,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterSettingsArgsBuilder, CanisterSnapshotResponse, CanisterStatusResultV2,
+    CanisterStatusType, ClearChunkStoreArgs, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, SchnorrAlgorithm, SignWithECDSAReply,
+    SignWithSchnorrReply, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs,
+    UploadChunkReply,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
@@ -107,7 +113,7 @@ use ic_types::{
     artifact::IngressMessageId,
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -184,7 +190,7 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
 pub enum SubmitIngressError {
     HttpError(String),
     UserError(UserError),
@@ -524,8 +530,13 @@ impl IngressPool for PocketIngressPool {
     fn validated(&self) -> &dyn PoolSection<ValidatedIngressArtifact> {
         self
     }
+
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact> {
         unimplemented!("PocketIngressPool has no unvalidated pool")
+    }
+
+    fn exceeds_limit(&self, _peer_id: &NodeId) -> bool {
+        false
     }
 }
 
@@ -566,12 +577,13 @@ impl PocketIngressPool {
             validated: btreemap![],
         }
     }
+
     /// Pushes a received ingress message into the pool.
-    fn push(&mut self, m: SignedIngress, timestamp: Time) {
+    fn push(&mut self, m: SignedIngress, timestamp: Time, peer_id: NodeId) {
         self.validated.insert(
             IngressMessageId::new(m.expiry_time(), m.id()),
             ValidatedIngressArtifact {
-                msg: m.into(),
+                msg: IngressPoolObject::new(peer_id, m),
                 timestamp,
             },
         );
@@ -904,6 +916,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
     log_level: Option<Level>,
+    bitcoin_testnet_uds_path: Option<PathBuf>,
 }
 
 impl StateMachineBuilder {
@@ -937,6 +950,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             dts: true,
             log_level: None,
+            bitcoin_testnet_uds_path: None,
         }
     }
 
@@ -1122,6 +1136,13 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
+    pub fn with_bitcoin_testnet_uds_path(self, bitcoin_testnet_uds_path: Option<PathBuf>) -> Self {
+        Self {
+            bitcoin_testnet_uds_path,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1193,6 +1214,8 @@ impl StateMachineBuilder {
         self,
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
+        let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
+
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
         let subnet_id = sm.get_subnet_id();
@@ -1212,7 +1235,7 @@ impl StateMachineBuilder {
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let xnet_slice_pool_impl = Box::new(PocketXNetSlicePoolImpl::new(subnets, subnet_id));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
+        let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
             sm.state_manager.clone(),
             sm.state_manager.clone(),
             sm.registry_client.clone(),
@@ -1221,16 +1244,42 @@ impl StateMachineBuilder {
             refill_task_handle,
             metrics,
             sm.replica_logger.clone(),
+        ));
+
+        let adapters_config = AdaptersConfig {
+            bitcoin_mainnet_uds_path: None,
+            bitcoin_mainnet_uds_metrics_path: None,
+            bitcoin_testnet_uds_path,
+            bitcoin_testnet_uds_metrics_path: None,
+            https_outcalls_uds_path: None,
+            https_outcalls_uds_metrics_path: None,
+        };
+        let bitcoin_clients = setup_bitcoin_adapter_clients(
+            sm.replica_logger.clone(),
+            &sm.metrics_registry,
+            sm.runtime.handle().clone(),
+            adapters_config,
         );
+        let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
+            sm.state_manager.clone(),
+            &sm.metrics_registry,
+            bitcoin_clients.btc_mainnet_client,
+            bitcoin_clients.btc_testnet_client,
+            sm.subnet_id,
+            sm.registry_client.clone(),
+            BitcoinPayloadBuilderConfig::default(),
+            sm.replica_logger.clone(),
+        ));
 
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
-        *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
+        *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new(
             subnet_id,
             sm.nodes[0].node_id,
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
-            Arc::new(xnet_payload_builder),
+            xnet_payload_builder,
+            self_validating_payload_builder,
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.metrics_registry.clone(),
@@ -1344,19 +1393,18 @@ impl StateMachine {
                 }
             })
             .collect();
-        self.canister_http_pool
-            .write()
-            .unwrap()
-            .apply_changes(changeset);
+        self.canister_http_pool.write().unwrap().apply(changeset);
         let query_stats = QueryStatsPayload::deserialize(&batch_payload.query_stats).unwrap();
         if let Some(ref query_stats) = query_stats {
             self.query_stats_payload_builder.purge(query_stats);
         }
+        let self_validating = Some(batch_payload.self_validating);
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
-            .with_query_stats(query_stats);
+            .with_query_stats(query_stats)
+            .with_self_validating(self_validating);
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -2020,7 +2068,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
         Ok(message_id)
     }
 
@@ -2031,7 +2079,7 @@ impl StateMachine {
         self.ingress_pool
             .write()
             .unwrap()
-            .push(msg, self.get_time());
+            .push(msg, self.get_time(), self.nodes[0].node_id);
     }
 
     pub fn mock_canister_http_response(
@@ -2039,9 +2087,10 @@ impl StateMachine {
         request_id: u64,
         timeout: Time,
         canister_id: CanisterId,
-        content: CanisterHttpResponseContent,
+        contents: Vec<CanisterHttpResponseContent>,
     ) {
-        for node in &self.nodes {
+        assert_eq!(contents.len(), self.nodes.len());
+        for (node, content) in std::iter::zip(self.nodes.iter(), contents.into_iter()) {
             let registry_version = self.registry_client.get_latest_version();
             let response = CanisterHttpResponse {
                 id: CanisterHttpRequestId::from(request_id),
@@ -2062,7 +2111,7 @@ impl StateMachine {
                 content: response_metadata,
                 signature,
             };
-            self.canister_http_pool.write().unwrap().apply_changes(vec![
+            self.canister_http_pool.write().unwrap().apply(vec![
                 CanisterHttpChangeAction::AddToValidated(share.clone(), response.clone()),
             ]);
         }
@@ -2270,7 +2319,10 @@ impl StateMachine {
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
-                bitcoin_adapter_responses: vec![],
+                bitcoin_adapter_responses: payload
+                    .self_validating
+                    .map(|p| p.get().to_vec())
+                    .unwrap_or_default(),
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
@@ -3635,6 +3687,7 @@ pub struct PayloadBuilder {
     xnet_payload: XNetPayload,
     consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
+    self_validating: Option<SelfValidatingPayload>,
 }
 
 impl Default for PayloadBuilder {
@@ -3646,6 +3699,7 @@ impl Default for PayloadBuilder {
             xnet_payload: Default::default(),
             consensus_responses: Default::default(),
             query_stats: Default::default(),
+            self_validating: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -3696,6 +3750,13 @@ impl PayloadBuilder {
     pub fn with_query_stats(self, query_stats: Option<QueryStatsPayload>) -> Self {
         Self {
             query_stats,
+            ..self
+        }
+    }
+
+    pub fn with_self_validating(self, self_validating: Option<SelfValidatingPayload>) -> Self {
+        Self {
+            self_validating,
             ..self
         }
     }

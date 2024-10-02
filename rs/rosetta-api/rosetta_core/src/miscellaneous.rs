@@ -6,7 +6,7 @@ use std::fmt::Display;
 /// sync status. It is often used to indicate that an implementation is healthy
 /// when it cannot be queried  until some sync phase occurs.  If an
 /// implementation is immediately queryable, this model is often not populated.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct SyncStatus {
     /// CurrentIndex is the index of the last synced block in the current stage. This is a separate field from current_block_identifier in NetworkStatusResponse because blocks with indices up to and including the current_index may not yet be queryable by the caller. To reiterate, all indices up to and including current_block_identifier in NetworkStatusResponse must be queryable via the /block endpoint (excluding indices less than oldest_block_identifier).
     pub current_index: i64,
@@ -37,7 +37,7 @@ impl SyncStatus {
 }
 
 /// A Peer is a representation of a node's peer.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Peer {
     pub peer_id: String,
 
@@ -55,7 +55,7 @@ impl Peer {
 }
 
 /// OperationStatus is utilized to indicate which Operation status are considered successful.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct OperationStatus {
     /// The status is the network-specific status of the operation.
     pub status: String,
@@ -75,7 +75,7 @@ impl OperationStatus {
 }
 
 /// The Version object is utilized to inform the client of the versions of different components of the Rosetta implementation.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Version {
     /// The rosetta_version is the version of the Rosetta interface
     /// the implementation adheres to. This can be useful for clients looking to reliably parse responses.
@@ -114,7 +114,7 @@ impl Version {
 /// do not have a good analog), rich errors are returned using this object.
 /// Both the code and message fields can be individually used to correctly
 /// identify an error. Implementations MUST use unique values for both fields.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Error {
     /// Code is a network-specific error code. If desired, this code can be
     /// equivalent to an HTTP status code.

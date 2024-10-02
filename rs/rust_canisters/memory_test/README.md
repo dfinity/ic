@@ -20,7 +20,7 @@ Run
 Create a new `single_large_node` testnet:
 
 ```bash
-ic$ gitlab-ci/container/container-run.sh
+ic$ ci/container/container-run.sh
 container:/ic$ ict testnet single_large_node
 ```
 

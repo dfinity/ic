@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use ic_base_types::CanisterId;
-use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
+use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 
 use ic_embedders::wasm_executor::{
@@ -451,12 +451,6 @@ impl ResponseHelper {
                 round.log,
                 round.counters.charging_from_balance_error,
             );
-
-        if let Some(state_changes) = &canister_state_changes {
-            let requested = state_changes.system_state_changes.removed_cycles();
-            // A cleanup callback cannot accept and send cycles.
-            assert_eq!(requested.get(), 0);
-        }
 
         apply_canister_state_changes(
             canister_state_changes,
