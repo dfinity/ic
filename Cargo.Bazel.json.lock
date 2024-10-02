@@ -1,5 +1,5 @@
 {
-  "checksum": "e85bc8bdc5e8c132abaa3d64bfa9f41fc4360acd15ca521b684ac8e17be0de16",
+  "checksum": "955b2405fb4ca6c50f33d4b20acf8f16638fd08fd634ed62b2acf286431b0df8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36553,56 +36553,112 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
-            "if_ether",
             "ioctl",
-            "net",
-            "netlink",
-            "no_std",
-            "prctl",
-            "xdp"
+            "no_std"
           ],
           "selects": {
+            "aarch64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
+            ],
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "armv7-linux-androideabi": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "i686-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "powerpc-unknown-linux-gnu": [
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "s390x-unknown-linux-gnu": [
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "x86_64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ]
           }
         },
