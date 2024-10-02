@@ -10,6 +10,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/nervous_system/instruction_stats",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
 ]
@@ -28,7 +29,7 @@ rust_proc_macro(
 )
 
 rust_test(
-    name = "instruction_stats_test",
+    name = "instruction_stats_attribute_test",
     srcs = glob(["tests/*.rs"]),
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
     proc_macro_deps = [

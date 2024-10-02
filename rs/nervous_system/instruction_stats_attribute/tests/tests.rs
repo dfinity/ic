@@ -8,6 +8,9 @@ thread_local! {
 
 mod ic_nervous_system_instruction_stats {
     use super::*;
+    use ::ic_nervous_system_instruction_stats::Request;
+
+    pub use ::ic_nervous_system_instruction_stats::BasicRequest;
 
     pub struct UpdateInstructionStatsOnDrop {
     }
@@ -16,13 +19,9 @@ mod ic_nervous_system_instruction_stats {
         pub fn new(request: &BasicRequest) {
             NAME.with(|name| {
                 let mut name = name.borrow_mut();
-                *name = request.name.to_string();
+                *name = request.method_name();
             })
         }
-    }
-
-    pub struct BasicRequest {
-        pub name: &'static str,
     }
 }
 

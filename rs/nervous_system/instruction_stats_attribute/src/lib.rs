@@ -23,7 +23,7 @@ pub fn update(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Create statement that we'll insert into the function.
     let new_stmt = quote! {
         let _on_drop = ic_nervous_system_instruction_stats::UpdateInstructionStatsOnDrop::new(
-            &ic_nervous_system_instruction_stats::BasicRequest{ name: #function_name}
+            &ic_nervous_system_instruction_stats::BasicRequest::new(#function_name)
         );
     };
     let new_stmt = TokenStream::from(new_stmt);

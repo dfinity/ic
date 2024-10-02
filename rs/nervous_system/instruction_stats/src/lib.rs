@@ -104,6 +104,12 @@ pub struct BasicRequest {
     method_name: &'static str,
 }
 
+impl BasicRequest {
+    pub fn new(method_name: &'static str) -> Self {
+        Self { method_name }
+    }
+}
+
 impl Request for BasicRequest {
     fn method_name(&self) -> String {
         self.method_name.to_string()
