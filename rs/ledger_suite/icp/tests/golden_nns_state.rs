@@ -1,4 +1,5 @@
 use candid::{Decode, Encode};
+use canister_test::Wasm;
 use ic_base_types::CanisterId;
 use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
@@ -19,74 +20,113 @@ const INDEX_CANISTER_ID: CanisterId =
 /// ledger canister suite.
 #[test]
 fn should_create_state_machine_with_golden_nns_state() {
-    let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+    let setup = Setup::new();
 
     // Upgrade all the canisters to the latest version
-    upgrade_index(&state_machine, build_ledger_index_wasm().bytes());
-    upgrade_ledger(&state_machine, build_ledger_wasm().bytes());
-    upgrade_archive_canisters(&state_machine, build_ledger_archive_wasm().bytes());
+    setup.upgrade_to_master();
+    // Upgrade again to test the pre-upgrade
+    setup.upgrade_to_master();
 
     // Downgrade all the canisters to the mainnet version
-    upgrade_archive_canisters(&state_machine, build_mainnet_ledger_archive_wasm().bytes());
-    upgrade_ledger(&state_machine, build_mainnet_ledger_wasm().bytes());
-    upgrade_index(&state_machine, build_mainnet_ledger_index_wasm().bytes());
+    setup.downgrade_to_mainnet();
 }
 
-fn list_archives(state_machine: &StateMachine) -> Archives {
-    Decode!(
-        &state_machine
-            .query(LEDGER_CANISTER_ID, "archives", Encode!().unwrap())
-            .expect("failed to query archives")
-            .bytes(),
-        Archives
-    )
-    .expect("failed to decode archives response")
+struct Wasms {
+    ledger: Wasm,
+    index: Wasm,
+    archive: Wasm,
 }
 
-fn upgrade_archive(
-    state_machine: &StateMachine,
-    archive_canister_id: CanisterId,
-    wasm_bytes: Vec<u8>,
-) {
-    state_machine
-        .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
-        .unwrap_or_else(|e| {
-            panic!(
-                "should successfully upgrade archive '{}' to new local version: {}",
-                archive_canister_id, e
-            )
-        });
+struct Setup {
+    state_machine: StateMachine,
+    master_wasms: Wasms,
+    mainnet_wasms: Wasms,
 }
 
-fn upgrade_archive_canisters(state_machine: &StateMachine, archive_wasm_bytes: Vec<u8>) {
-    let archives = list_archives(state_machine).archives;
-    for archive_info in &archives {
-        upgrade_archive(
+impl Setup {
+    pub fn new() -> Self {
+        let state_machine = new_state_machine_with_golden_nns_state_or_panic();
+
+        let master_wasms = Wasms {
+            ledger: build_ledger_wasm(),
+            index: build_ledger_index_wasm(),
+            archive: build_ledger_archive_wasm(),
+        };
+
+        let mainnet_wasms = Wasms {
+            ledger: build_mainnet_ledger_wasm(),
+            index: build_mainnet_ledger_index_wasm(),
+            archive: build_mainnet_ledger_archive_wasm(),
+        };
+
+        Self {
             state_machine,
-            archive_info.canister_id,
-            archive_wasm_bytes.clone(),
-        );
+            master_wasms,
+            mainnet_wasms,
+        }
     }
-}
 
-fn upgrade_index(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
-    state_machine
-        .upgrade_canister(INDEX_CANISTER_ID, wasm_bytes, vec![])
-        .expect("should successfully upgrade index to new local version");
-}
+    pub fn upgrade_to_master(&self) {
+        self.upgrade_index(&self.master_wasms.index);
+        self.upgrade_ledger(&self.master_wasms.ledger);
+        self.upgrade_archive_canisters(&self.master_wasms.archive);
+    }
 
-fn upgrade_ledger(state_machine: &StateMachine, wasm_bytes: Vec<u8>) {
-    let ledger_upgrade_args: LedgerCanisterPayload =
-        LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
-            icrc1_minting_account: None,
-            feature_flags: Some(FeatureFlags { icrc2: true }),
-        }));
+    pub fn downgrade_to_mainnet(&self) {
+        self.upgrade_index(&self.mainnet_wasms.index);
+        self.upgrade_ledger(&self.mainnet_wasms.ledger);
+        self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+    }
 
-    state_machine
-        .upgrade_canister(
-            LEDGER_CANISTER_ID,
-            wasm_bytes,
-            Encode!(&ledger_upgrade_args).unwrap(),
+    fn list_archives(&self) -> Archives {
+        Decode!(
+            &self
+                .state_machine
+                .query(LEDGER_CANISTER_ID, "archives", Encode!().unwrap())
+                .expect("failed to query archives")
+                .bytes(),
+            Archives
         )
-        .expect("should successfully upgrade ledger to new local version");
+        .expect("failed to decode archives response")
+    }
+
+    fn upgrade_archive(&self, archive_canister_id: CanisterId, wasm_bytes: Vec<u8>) {
+        self.state_machine
+            .upgrade_canister(archive_canister_id, wasm_bytes, vec![])
+            .unwrap_or_else(|e| {
+                panic!(
+                    "should successfully upgrade archive '{}' to new local version: {}",
+                    archive_canister_id, e
+                )
+            });
+    }
+
+    fn upgrade_archive_canisters(&self, wasm: &Wasm) {
+        let archives = self.list_archives().archives;
+        for archive_info in &archives {
+            self.upgrade_archive(archive_info.canister_id, wasm.clone().bytes());
+        }
+    }
+
+    fn upgrade_index(&self, wasm: &Wasm) {
+        self.state_machine
+            .upgrade_canister(INDEX_CANISTER_ID, wasm.clone().bytes(), vec![])
+            .expect("should successfully upgrade index to new local version");
+    }
+
+    fn upgrade_ledger(&self, wasm: &Wasm) {
+        let ledger_upgrade_args: LedgerCanisterPayload =
+            LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+                icrc1_minting_account: None,
+                feature_flags: Some(FeatureFlags { icrc2: true }),
+            }));
+
+        self.state_machine
+            .upgrade_canister(
+                LEDGER_CANISTER_ID,
+                wasm.clone().bytes(),
+                Encode!(&ledger_upgrade_args).unwrap(),
+            )
+            .expect("should successfully upgrade ledger to new local version");
+    }
 }

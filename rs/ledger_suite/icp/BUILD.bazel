@@ -211,6 +211,7 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
         "//rs/nns/test_utils/golden_nns_state",
+        "//rs/rust_canisters/canister_test",
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",
