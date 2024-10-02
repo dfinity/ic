@@ -5,8 +5,6 @@ use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
-use super::SchedulerImpl;
-
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
 pub(super) struct CanisterRoundState {
@@ -265,12 +263,10 @@ impl RoundSchedule {
         fully_executed_canister_ids: BTreeSet<CanisterId>,
     ) {
         let scheduler_cores = self.scheduler_cores;
-        let compute_capacity_percent =
-            SchedulerImpl::compute_capacity_percent(scheduler_cores) as i64;
         let number_of_canisters = canister_states.len();
         let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
 
-        // Charge canisters for executions in the previous round.
+        // Charge canisters for full executions in the previous round.
         let mut total_charged_priority = 0;
         for canister_id in fully_executed_canister_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
@@ -279,13 +275,11 @@ impl RoundSchedule {
             }
         }
 
-        // Scale the charged priority to compute capacity.
-        let charged_priority_multiplier = total_charged_priority / compute_capacity_percent;
         // Distribute the charged priority across canisters according to their allocations.
         let mut total_allocated = 0;
         for (_canister_id, canister) in canister_states.iter_mut() {
-            let allocated = canister.scheduler_state.compute_allocation.as_percent() as i64
-                * charged_priority_multiplier;
+            let allocated =
+                canister.scheduler_state.compute_allocation.as_percent() as i64 * multiplier;
             total_allocated += allocated;
             canister.scheduler_state.accumulated_priority += allocated.into();
         }
