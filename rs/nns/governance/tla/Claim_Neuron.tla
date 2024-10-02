@@ -85,7 +85,7 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
                 neuron := Remove_Arguments(neuron, {neuron_id});
                 neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account_id});
             } else {
-                with (b = answer.value) {
+                with (b = VariantGetOrElse("BalanceQueryOk", answer.response, 0)) {
                     if(b >= MIN_STAKE) {
                         neuron := [neuron EXCEPT ![neuron_id] = [@ EXCEPT !.cached_stake = b] ]
                     } else {
