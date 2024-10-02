@@ -1,6 +1,5 @@
 use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
-use super::queue::{OldInputQueue, OldOutputQueue};
 use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 use super::*;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
@@ -13,7 +12,7 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_types::messages::{CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE};
 use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
 use ic_types::{Cycles, UserId};
-use maplit::{btreemap, btreeset};
+use maplit::btreemap;
 use proptest::prelude::*;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -1773,147 +1772,6 @@ fn encode_non_default_pool() {
         .try_into()
         .unwrap();
     assert_eq!(queues, decoded);
-}
-
-/// Tests decoding `CanisterQueues` from `input_queues` + `output_queues`
-/// (instead of `canister_queues` + `pool`).
-#[test]
-fn decode_backward_compatibility() {
-    let local_canister = canister_test_id(13);
-    let remote_canister = canister_test_id(14);
-
-    let mut queues_proto = pb_queues::CanisterQueues::default();
-    let mut expected_queues = CanisterQueues::default();
-
-    let response_callback = CallbackId::from(42);
-    let req = RequestBuilder::default()
-        .sender(local_canister)
-        .receiver(local_canister)
-        .sender_reply_callback(response_callback)
-        .build();
-    let rep = ResponseBuilder::default()
-        .originator(local_canister)
-        .respondent(local_canister)
-        .originator_reply_callback(response_callback)
-        .build();
-    let t1 = Time::from_secs_since_unix_epoch(12345).unwrap();
-    let t2 = t1 + Duration::from_secs(1);
-    let d1 = t1 + REQUEST_LIFETIME;
-    let d2 = t2 + REQUEST_LIFETIME;
-
-    //
-    // `local_canister`'s queues.
-    //
-
-    // An `InputQueue` with a request, a response and a reserved slot.
-    let mut iq1 = OldInputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    iq1.push(req.clone().into()).unwrap();
-    iq1.reserve_slot().unwrap();
-    iq1.push(rep.clone().into()).unwrap();
-    iq1.reserve_slot().unwrap();
-
-    // Expected input queue.
-    let mut expected_iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    // Enqueue a request and a response.
-    expected_iq1.push_request(expected_queues.store.insert_inbound(req.clone().into()));
-    expected_iq1.try_reserve_response_slot().unwrap();
-    expected_iq1.push_response(expected_queues.store.insert_inbound(rep.clone().into()));
-    // Make an extra response reservation.
-    expected_iq1.try_reserve_response_slot().unwrap();
-
-    // An output queue with a response, a timed out request, a non-timed out request
-    // and a reserved slot.
-    let mut oq1 = OldOutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    oq1.reserve_slot().unwrap();
-    oq1.push_response(rep.clone().into());
-    oq1.push_request(req.clone().into(), d1).unwrap();
-    oq1.time_out_requests(d2).count();
-    oq1.push_request(req.clone().into(), d2).unwrap();
-    oq1.reserve_slot().unwrap();
-
-    // Expected output queue. The timed out request is gone.
-    let mut expected_oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    expected_oq1.try_reserve_response_slot().unwrap();
-    expected_oq1.push_response(
-        expected_queues
-            .store
-            .pool
-            .insert_outbound_response(rep.clone().into()),
-    );
-    expected_oq1.push_request(
-        expected_queues
-            .store
-            .pool
-            .insert_outbound_request(req.clone().into(), t2),
-    );
-    expected_oq1.try_reserve_response_slot().unwrap();
-
-    queues_proto.input_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(local_canister.into()),
-        queue: Some((&iq1).into()),
-    });
-    queues_proto.output_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(local_canister.into()),
-        queue: Some((&oq1).into()),
-    });
-    queues_proto
-        .local_sender_schedule
-        .push(local_canister.into());
-    queues_proto.guaranteed_response_memory_reservations += 2;
-    expected_queues
-        .canister_queues
-        .insert(local_canister, (expected_iq1, expected_oq1));
-    expected_queues
-        .input_schedule
-        .schedule(local_canister, LocalSubnet);
-
-    //
-    // `remote_canister`'s queues.
-    //
-
-    // Input queue with a reserved slot.
-    let mut iq2 = OldInputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    iq2.reserve_slot().unwrap();
-
-    // Expected input queue.
-    let mut expected_iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    expected_iq2.try_reserve_response_slot().unwrap();
-
-    // Empty output queue.
-    let oq2 = OldOutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-
-    queues_proto.input_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(remote_canister.into()),
-        queue: Some((&iq2).into()),
-    });
-    queues_proto.output_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(remote_canister.into()),
-        queue: Some((&oq2).into()),
-    });
-    queues_proto.guaranteed_response_memory_reservations += 1;
-    expected_queues.canister_queues.insert(
-        remote_canister,
-        (expected_iq2, CanisterQueue::new(DEFAULT_QUEUE_CAPACITY)),
-    );
-
-    //
-    // Adjust stats.
-    //
-
-    expected_queues.queue_stats = CanisterQueues::calculate_queue_stats(
-        &expected_queues.canister_queues,
-        queues_proto.guaranteed_response_memory_reservations as usize,
-        0,
-    );
-    expected_queues.callbacks_with_enqueued_response = btreeset! {CallbackId::from(42)};
-
-    let queues = (
-        queues_proto,
-        &StrictMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-    assert_eq!(expected_queues, queues);
 }
 
 /// Constructs an encoded `CanisterQueues` with 2 inbound responses (callbacks 1

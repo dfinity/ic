@@ -26,7 +26,7 @@ WORKDIR /tmp
 # Download and verify ic-gateway
 RUN \
     curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.55/ic-gateway_0.1.55_amd64.deb && \
-    echo "57ef6ed420bca99cc2e5857a862d630d6c1f5ab3  ic-gateway_0.1.55_amd64.deb" | shasum -c
+    echo "b360fa670fef8d097fc814b718ea5333a7de5c52d654c8f850a55bb014b006e1  ic-gateway_0.1.55_amd64.deb" | sha256sum -c
 
 #
 # Second build stage:
@@ -176,15 +176,6 @@ RUN addgroup node_exporter && \
     addgroup socks && \
     adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
-
-# Setup prober
-RUN \
-    addgroup prober && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home prober && \
-    adduser prober prober && \
-    mkdir -p /var/log/prober && \
-    chown prober:prober /var/log/prober && \
-    chmod 755 /var/log/prober
 
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \
