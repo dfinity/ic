@@ -2,10 +2,39 @@ use crate::state_machine_helpers::ledger::icp_ledger_tip;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_icp_index::Status;
+use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use std::time::Duration;
 
 const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
+
+pub fn call_index_get_blocks(
+    query_or_update: &dyn Fn(Vec<u8>) -> Vec<u8>,
+) -> Vec<icp_ledger::Block> {
+    let req = GetBlocksRequest {
+        start: 0u8.into(),
+        length: u64::MAX.into(),
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+    let res = query_or_update(req);
+    Decode!(&res, ic_icp_index::GetBlocksResponse)
+        .expect("Failed to decode ic_icp_index::GetBlocksResponse")
+        .blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap()
+}
+
+pub fn index_get_blocks(env: &StateMachine, index_id: CanisterId) -> Vec<icp_ledger::Block> {
+    let query = |req: Vec<u8>| {
+        env.query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes()
+    };
+    call_index_get_blocks(&query)
+}
 
 /// Helper function that calls tick on env until either
 /// the index canister has synced all the blocks up to the
