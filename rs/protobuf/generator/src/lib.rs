@@ -185,6 +185,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.crypto.v1.X509PublicKeyCert",
         "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
+    config.type_attribute(".registry.crypto.v1.EcdsaKeyId", "#[derive(Eq)]");
     config.type_attribute(
         ".registry.node_operator",
         "#[derive(serde::Serialize, Eq, Hash)]",
