@@ -60,13 +60,13 @@ Enter the dev container
 Use Bazel to build the image locally:
 
 ```
-$ bazel build //rs/rosetta-api:rosetta_image.tar
+$ bazel build //rs/rosetta-api/icp:rosetta_image.tar
 ```
 
 Query Bazel for the produced image
 
 ```
-$ bazel cquery //rs/rosetta-api:rosetta_image.tar --output=files
+$ bazel cquery //rs/rosetta-api/icp:rosetta_image.tar --output=files
 <path to image>
 ```
 
