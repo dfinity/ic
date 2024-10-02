@@ -1,10 +1,10 @@
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use crate::mac_address::UnformattedMacAddress;
 use crate::systemd::generate_systemd_config_files;
-use config::types::NetworkSettings;
+use config::types::{Ipv6Config, NetworkSettings};
 use ipv6::generate_ipv6_address;
 use mac_address::FormattedMacAddress;
 
@@ -22,14 +22,23 @@ pub fn generate_network_config(
     output_directory: &Path,
 ) -> Result<()> {
     eprintln!("Generating ipv6 address");
-    let ipv6_address = generate_ipv6_address(&network_settings.ipv6_prefix, &generated_mac)?;
-    eprintln!("Using ipv6 address: {}", ipv6_address);
 
-    let formatted_mac = FormattedMacAddress::from(&generated_mac);
-    generate_systemd_config_files(
-        output_directory,
-        network_settings,
-        Some(&formatted_mac),
-        &ipv6_address,
-    )
+    match &network_settings.ipv6_config {
+        Ipv6Config::RouterAdvertisement => {
+            Err(anyhow!("IC-OS router advertisement is not yet supported"))
+        }
+        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
+        Ipv6Config::Deterministic(ipv6_config) => {
+            let ipv6_address = generate_ipv6_address(&ipv6_config.prefix, &generated_mac)?;
+            eprintln!("Using ipv6 address: {}", ipv6_address);
+
+            let formatted_mac = FormattedMacAddress::from(&generated_mac);
+            generate_systemd_config_files(
+                output_directory,
+                ipv6_config,
+                Some(&formatted_mac),
+                &ipv6_address,
+            )
+        }
+    }
 }

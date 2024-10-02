@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
-use config::types::SetupOSConfig;
+use config::types::{Ipv6Config, SetupOSConfig};
 use config::{
     deserialize_config, DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
     DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
@@ -60,7 +60,12 @@ pub fn main() -> Result<()> {
                 &setup_config.network_settings
             );
 
-            let mgmt_mac = match setup_config.network_settings.mgmt_mac.as_ref() {
+            let mgmt_mac = match setup_config
+                .icos_settings
+                .icos_dev_settings
+                .mgmt_mac
+                .as_ref()
+            {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
@@ -94,7 +99,7 @@ pub fn main() -> Result<()> {
             );
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = match setup_config.network_settings.mgmt_mac {
+            let mgmt_mac = match setup_config.icos_settings.icos_dev_settings.mgmt_mac {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
@@ -109,15 +114,16 @@ pub fn main() -> Result<()> {
                 generate_mac_address(&mgmt_mac, &setup_config.icos_settings.hostname, &node_type)?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
-            let ipv6_address =
-                generate_ipv6_address(&setup_config.network_settings.ipv6_prefix, &generated_mac)?;
-            println!(
-                "{}",
-                to_cidr(
-                    ipv6_address,
-                    setup_config.network_settings.ipv6_prefix_length
-                )
-            );
+            let ipv6_config = if let Ipv6Config::Deterministic(ipv6_config) =
+                &setup_config.network_settings.ipv6_config
+            {
+                ipv6_config
+            } else {
+                return Err(anyhow!("Ipv6Config is not of type Deterministic"));
+            };
+
+            let ipv6_address = generate_ipv6_address(&ipv6_config.prefix, &generated_mac)?;
+            println!("{}", to_cidr(ipv6_address, ipv6_config.prefix_length));
 
             Ok(())
         }

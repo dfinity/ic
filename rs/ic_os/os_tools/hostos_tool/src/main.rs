@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 
 use config::config_ini::get_config_ini_settings;
 use config::deployment_json::get_deployment_settings;
-use config::types::NetworkSettings;
+use config::types::{DeterministicIpv6Config, Ipv4Config, Ipv6Config, NetworkSettings};
 use config::{DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH};
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
@@ -66,18 +66,26 @@ pub fn main() -> Result<()> {
             // Once HostOS is using the config struct, all config will be contained there
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
-                ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
-                ipv6_gateway: config_ini_settings.ipv6_gateway,
-                ipv4_address: config_ini_settings.ipv4_address,
-                ipv4_gateway: config_ini_settings.ipv4_gateway,
-                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
-                domain: config_ini_settings.domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+                ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
+                    prefix: config_ini_settings.ipv6_prefix,
+                    prefix_length: config_ini_settings.ipv6_prefix_length,
+                    gateway: config_ini_settings.ipv6_gateway,
+                }),
+                ipv4_config: config_ini_settings
+                    .ipv4_address
+                    .zip(config_ini_settings.ipv4_gateway)
+                    .zip(config_ini_settings.ipv4_prefix_length)
+                    .zip(config_ini_settings.domain)
+                    .map(|(((address, gateway), prefix_length), domain)| Ipv4Config {
+                        address,
+                        gateway,
+                        prefix_length,
+                        domain,
+                    }),
             };
             eprintln!("Network settings config: {:?}", &network_settings);
 
-            let mgmt_mac = match network_settings.mgmt_mac.as_ref() {
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
@@ -112,19 +120,27 @@ pub fn main() -> Result<()> {
             // Once HostOS is using the config struct, all config will be contained there
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
-                ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
-                ipv6_gateway: config_ini_settings.ipv6_gateway,
-                ipv4_address: config_ini_settings.ipv4_address,
-                ipv4_gateway: config_ini_settings.ipv4_gateway,
-                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
-                domain: config_ini_settings.domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+                ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
+                    prefix: config_ini_settings.ipv6_prefix,
+                    prefix_length: config_ini_settings.ipv6_prefix_length,
+                    gateway: config_ini_settings.ipv6_gateway,
+                }),
+                ipv4_config: config_ini_settings
+                    .ipv4_address
+                    .zip(config_ini_settings.ipv4_gateway)
+                    .zip(config_ini_settings.ipv4_prefix_length)
+                    .zip(config_ini_settings.domain)
+                    .map(|(((address, gateway), prefix_length), domain)| Ipv4Config {
+                        address,
+                        gateway,
+                        prefix_length,
+                        domain,
+                    }),
             };
             eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = match network_settings.mgmt_mac.as_ref() {
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
@@ -141,12 +157,17 @@ pub fn main() -> Result<()> {
                 &node_type,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
-            let ipv6_address =
-                generate_ipv6_address(&network_settings.ipv6_prefix, &generated_mac)?;
-            println!(
-                "{}",
-                to_cidr(ipv6_address, network_settings.ipv6_prefix_length)
-            );
+
+            let ipv6_config =
+                if let Ipv6Config::Deterministic(ipv6_config) = &network_settings.ipv6_config {
+                    ipv6_config
+                } else {
+                    return Err(anyhow!("Ipv6Config is not of type Deterministic"));
+                };
+
+            let ipv6_address = generate_ipv6_address(&ipv6_config.prefix, &generated_mac)?;
+            println!("{}", to_cidr(ipv6_address, ipv6_config.prefix_length));
+
             Ok(())
         }
         Some(Commands::GenerateMacAddress { node_type }) => {
@@ -160,19 +181,27 @@ pub fn main() -> Result<()> {
             // Once HostOS is using the config struct, all config will be contained there
             // and we won't need to read config.ini and deployment.json directly.
             let network_settings = NetworkSettings {
-                ipv6_prefix: config_ini_settings.ipv6_prefix,
-                ipv6_prefix_length: config_ini_settings.ipv6_prefix_length,
-                ipv6_gateway: config_ini_settings.ipv6_gateway,
-                ipv4_address: config_ini_settings.ipv4_address,
-                ipv4_gateway: config_ini_settings.ipv4_gateway,
-                ipv4_prefix_length: config_ini_settings.ipv4_prefix_length,
-                domain: config_ini_settings.domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+                ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
+                    prefix: config_ini_settings.ipv6_prefix,
+                    prefix_length: config_ini_settings.ipv6_prefix_length,
+                    gateway: config_ini_settings.ipv6_gateway,
+                }),
+                ipv4_config: config_ini_settings
+                    .ipv4_address
+                    .zip(config_ini_settings.ipv4_gateway)
+                    .zip(config_ini_settings.ipv4_prefix_length)
+                    .zip(config_ini_settings.domain)
+                    .map(|(((address, gateway), prefix_length), domain)| Ipv4Config {
+                        address,
+                        gateway,
+                        prefix_length,
+                        domain,
+                    }),
             };
             eprintln!("Network settings config: {:?}", &network_settings);
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = match network_settings.mgmt_mac.as_ref() {
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac.as_ref() {
                 Some(config_mac) => {
                     let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
                     eprintln!(
