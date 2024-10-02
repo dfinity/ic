@@ -23,7 +23,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:bincode",
-        "@crate_index//:candid",
         "@crate_index//:erased-serde",
         "@crate_index//:prost",
         "@crate_index//:serde",

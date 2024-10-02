@@ -54,9 +54,7 @@ pub struct X509PublicKeyCert {
     #[prost(bytes = "vec", tag = "1")]
     pub certificate_der: ::prost::alloc::vec::Vec<u8>,
 }
-#[derive(
-    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyId {
     #[prost(enumeration = "EcdsaCurve", tag = "1")]
     pub curve: i32,
@@ -182,7 +180,6 @@ impl AlgorithmId {
 #[derive(
     serde::Serialize,
     serde::Deserialize,
-    candid::CandidType,
     Clone,
     Copy,
     Debug,
