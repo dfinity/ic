@@ -20,7 +20,10 @@ use ic_interfaces::{
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
-use ic_limits::MAX_INGRESS_TTL;
+use ic_limits::{
+    MAX_BLOCK_PAYLOAD_SIZE, MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+    MAX_INGRESS_MESSAGES_PER_BLOCK, MAX_INGRESS_TTL,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
@@ -43,7 +46,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,
     RegistryVersion, SubnetId, Time,
 };
-use rand::{Rng, RngCore};
+use rand::RngCore;
 use std::{
     collections::HashSet,
     sync::{Arc, RwLock},
@@ -135,28 +138,26 @@ fn prepare(
     time_source: &dyn TimeSource,
     pool: Arc<RwLock<IngressPoolImpl>>,
     now: Time,
-    num: usize,
+    number_of_ingress_messages: usize,
+    ingress_message_size: usize,
     canisters: &[CanisterId],
 ) -> Time {
     let mut changeset = Mutations::new();
-    let ingress_size = 1024;
     let mut rng = rand::thread_rng();
     let mut pool = pool.write().unwrap();
 
     let mut canisters = canisters.iter().cycle();
 
-    for i in 0..num {
-        // Only 10% of them will be considered valid
-        let expiry = std::time::Duration::from_millis(
-            rng.gen::<u64>() % (10 * (MAX_INGRESS_TTL.as_millis() as u64)),
-        );
+    for i in 0..number_of_ingress_messages {
+        let expiry = 5 * MAX_INGRESS_TTL;
         let ingress = SignedIngressBuilder::new()
             .method_name("provisional_create_canister_with_cycles")
-            .method_payload(vec![0; ingress_size])
+            .method_payload(vec![0; ingress_message_size - 200])
             .nonce(i as u64)
             .expiry_time(now + expiry)
             .canister_id(*canisters.next().unwrap())
             .build();
+
         let message_id = IngressMessageId::from(&ingress);
         let peer_id = (i % 10) as u64;
         pool.insert(UnvalidatedArtifact {
@@ -168,7 +169,7 @@ fn prepare(
     }
     pool.apply(changeset);
     assert_eq!(pool.unvalidated().size(), 0);
-    assert_eq!(pool.validated().size(), num);
+    assert_eq!(pool.validated().size(), number_of_ingress_messages);
     now + 5 * MAX_INGRESS_TTL
 }
 
@@ -187,13 +188,22 @@ fn get_ingress_payload(now: Time, manager: &IngressManager, byte_limit: NumBytes
 /// Speed test for building ingress payloads.
 fn build_payload(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("build_payload");
-    group.sample_size(30);
-    group.measurement_time(std::time::Duration::from_secs(10));
-    for i in 1..=10 {
-        let size = 5000 + 10000 * i;
-        // canister ids iterator
-        let mut rng = rand::thread_rng();
-        let canisters: Vec<CanisterId> = (0..(size / 10))
+    group.measurement_time(std::time::Duration::from_secs(60));
+    let cases = [
+        (
+            100 * MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+            MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK,
+        ),
+        (
+            MAX_INGRESS_MESSAGES_PER_BLOCK as usize,
+            MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_MESSAGES_PER_BLOCK,
+        ),
+        (2, MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET),
+        (100, MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET),
+    ];
+
+    for (ingress_pool_size, ingress_message_size) in cases {
+        let canisters: Vec<CanisterId> = (0..100)
             .map(|_| {
                 CanisterId::unchecked_from_principal(PrincipalId::new_user_test_id(rng.next_u64()))
             })
@@ -208,20 +218,37 @@ fn build_payload(criterion: &mut Criterion) {
              registry,
              canisters| {
                 let now = time_source.get_relative_time();
-                let then = prepare(time_source.as_ref(), pool, now, size, canisters);
+                let then = prepare(
+                    time_source.as_ref(),
+                    pool,
+                    now,
+                    ingress_pool_size,
+                    ingress_message_size as usize,
+                    canisters,
+                );
                 time_source.set_time(then).unwrap();
-                let name = format!("get_ingress_payload({})", size);
-                let byte_limit = registry
-                    .get_subnet_record(subnet_test_id(0), RegistryVersion::new(1))
-                    .unwrap()
-                    .unwrap()
-                    .max_block_payload_size;
+                let name = format!(
+                    "get_ingress_payload(ingress pool size: {}, ingress message size: {})",
+                    ingress_pool_size, ingress_message_size
+                );
 
                 group.bench_function(&name, |bench| {
                     bench.iter(|| {
-                        let n = get_ingress_payload(then, manager, NumBytes::new(byte_limit));
-                        assert!(n > 800, "Insufficient number of ingress in payload: {}", n);
-                        assert!(n < 1020, "Too many ingress in payload: {}", n);
+                        let n = get_ingress_payload(
+                            then,
+                            manager,
+                            NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
+                        );
+
+                        if ![
+                            MAX_INGRESS_MESSAGES_PER_BLOCK,
+                            MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+                        ]
+                        .contains(&(n as u64))
+                        {
+                            dbg!(n);
+                            panic!("???");
+                        }
                     })
                 });
             },
