@@ -220,7 +220,7 @@ impl IcpLedger for IcpLedgerCanister {
         tla_log_request!(
             "WaitForBalanceQuery",
             Destination::new("ledger"),
-            "BalanceQuery",
+            "AccountBalance",
             tla::TlaValue::Record(BTreeMap::from([
                 ("account_id".to_string(), account_to_tla(account))
             ]))

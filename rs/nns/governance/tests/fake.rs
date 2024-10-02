@@ -319,7 +319,7 @@ impl IcpLedger for FakeDriver {
         tla_log_request!(
             "WaitForBalanceQuery",
             Destination::new("ledger"),
-            "BalanceQuery",
+            "AccountBalance",
             tla::TlaValue::Record(BTreeMap::from([
                 ("account_id".to_string(), account_to_tla(account))
             ]))
@@ -329,7 +329,7 @@ impl IcpLedger for FakeDriver {
         tla_log_response!(
             Destination::new("ledger"),
                 tla::TlaValue::Variant {
-                    tag: "TransferOk".to_string(),
+                    tag: "BalanceQueryOk".to_string(),
                     value: Box::new(account_e8s.to_tla_value()),
                 }
         );
