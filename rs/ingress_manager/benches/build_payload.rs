@@ -27,7 +27,6 @@ use ic_limits::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
@@ -46,7 +45,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,
     RegistryVersion, SubnetId, Time,
 };
-use rand::RngCore;
 use std::{
     collections::HashSet,
     sync::{Arc, RwLock},
@@ -143,7 +141,6 @@ fn prepare(
     canisters: &[CanisterId],
 ) -> Time {
     let mut changeset = Mutations::new();
-    let mut rng = rand::thread_rng();
     let mut pool = pool.write().unwrap();
 
     let mut canisters = canisters.iter().cycle();
@@ -204,9 +201,7 @@ fn build_payload(criterion: &mut Criterion) {
 
     for (ingress_pool_size, ingress_message_size) in cases {
         let canisters: Vec<CanisterId> = (0..100)
-            .map(|_| {
-                CanisterId::unchecked_from_principal(PrincipalId::new_user_test_id(rng.next_u64()))
-            })
+            .map(|i| CanisterId::unchecked_from_principal(PrincipalId::new_user_test_id(i)))
             .collect();
 
         run_test(
@@ -215,7 +210,7 @@ fn build_payload(criterion: &mut Criterion) {
             |time_source: Arc<FastForwardTimeSource>,
              pool,
              manager: &mut IngressManager,
-             registry,
+             _registry,
              canisters| {
                 let now = time_source.get_relative_time();
                 let then = prepare(
@@ -234,21 +229,7 @@ fn build_payload(criterion: &mut Criterion) {
 
                 group.bench_function(&name, |bench| {
                     bench.iter(|| {
-                        let n = get_ingress_payload(
-                            then,
-                            manager,
-                            NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
-                        );
-
-                        if ![
-                            MAX_INGRESS_MESSAGES_PER_BLOCK,
-                            MAX_BLOCK_PAYLOAD_SIZE / MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
-                        ]
-                        .contains(&(n as u64))
-                        {
-                            dbg!(n);
-                            panic!("???");
-                        }
+                        get_ingress_payload(then, manager, NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE));
                     })
                 });
             },
