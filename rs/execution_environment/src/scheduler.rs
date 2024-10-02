@@ -2014,6 +2014,7 @@ fn execute_canisters_on_thread(
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
+        let mut total_instructions_used = 0.into();
         loop {
             match canister.next_execution() {
                 NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -2063,6 +2064,7 @@ fn execute_canisters_on_thread(
             let messages = NumMessages::from(instructions_used.map(|_| 1).unwrap_or(0));
             measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
             if let Some(instructions_used) = instructions_used {
+                total_instructions_used += instructions_used;
                 total_messages_executed.inc_assign();
                 observe_instructions_consumed_per_message(
                     &logger,
@@ -2102,9 +2104,14 @@ fn execute_canisters_on_thread(
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
         }
+        let executed_priority = RoundSchedule::normalize_instructions(
+            total_instructions_used,
+            config.max_instructions_per_slice,
+        );
         RoundSchedule::finish_canister_execution_on_thread(
             &mut canister,
             &mut executed_priority_ids,
+            executed_priority,
             round_id,
             is_first_iteration,
             rank,

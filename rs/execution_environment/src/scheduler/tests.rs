@@ -4761,6 +4761,9 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
     for _round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
+    // Because of the accumulated priority jitter which depends on canister load,
+    // in some cases we need an extra round to complete short executions.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     // As all the canisters have the same compute allocation (0), they all
     // should be scheduled the same number of times.
@@ -6028,4 +6031,67 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
         total_priority_credit += canister.scheduler_state.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+}
+
+#[test_strategy::proptest(ProptestConfig { cases: 10, ..ProptestConfig::default() })]
+fn charge_canisters_based_on_their_actual_load(
+    #[strategy(2..10_usize)] scheduler_cores: usize,
+    #[strategy(2..10_usize)] num_canisters: usize,
+) {
+    let num_rounds = scheduler_cores * num_canisters;
+    let num_messages = num_rounds * 10;
+    let min_slice = 10;
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores,
+            max_instructions_per_round: (min_slice * num_canisters as u64).into(),
+            max_instructions_per_message: (min_slice * num_canisters as u64).into(),
+            max_instructions_per_message_without_dts: (min_slice * num_canisters as u64).into(),
+            max_instructions_per_slice: (min_slice * num_canisters as u64).into(),
+            instruction_overhead_per_execution: 0.into(),
+            instruction_overhead_per_canister: 0.into(),
+            instruction_overhead_per_canister_for_finalization: 0.into(),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    // Bump up the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Create canisters with many messages.
+    let mut canister_ids = vec![];
+    for i in 1..=num_canisters {
+        let canister_id = test.create_canister();
+        for _ in 0..num_messages {
+            test.send_ingress(canister_id, ingress(min_slice * i as u64));
+        }
+        canister_ids.push(canister_id);
+    }
+
+    // Execute many rounds.
+    for _ in 0..num_rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+    }
+
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
+    for canister in test.state().canisters_iter() {
+        // All canisters should be executed at least once.
+        prop_assert!(canister.system_state.canister_metrics.executed > 0);
+        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
+        total_priority_credit += canister.scheduler_state.priority_credit.get();
+    }
+    // The accumulated priority invariant should be respected.
+    prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
+
+    // Taking into account the actual load, canisters with shorter messages
+    // should be executed more often than the canisters with longer ones.
+    if num_canisters > scheduler_cores {
+        let mut i = test.state().canisters_iter();
+        let f = i.next().unwrap();
+        let l = i.last().unwrap();
+        prop_assert!(
+            f.system_state.canister_metrics.executed > l.system_state.canister_metrics.executed
+        );
+    }
 }

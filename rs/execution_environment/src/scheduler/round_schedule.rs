@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
+use ic_types::{
+    AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode, NumInstructions,
+};
 
 use super::SchedulerImpl;
 
@@ -236,6 +238,7 @@ impl RoundSchedule {
     pub fn finish_canister_execution_on_thread(
         canister: &mut CanisterState,
         executed_priority_ids: &mut BTreeMap<CanisterId, AccumulatedPriority>,
+        priority: AccumulatedPriority,
         round_id: ExecutionRound,
         is_first_iteration: bool,
         rank: usize,
@@ -252,11 +255,10 @@ impl RoundSchedule {
             // The very first canister is considered to have a full execution round for
             // scheduling purposes even if it did not complete within the round.
             canister.scheduler_state.last_full_execution_round = round_id;
-
-            // For now the priority for full execution is always 100.
-            // In future we might use a proportion to the actual load.
-            executed_priority_ids.insert(canister.canister_id(), 100.into());
         }
+        // Any load should be penalized, regardless if it was a full execution.
+        // FOr smaller loads the penalty will be smaller.
+        executed_priority_ids.insert(canister.canister_id(), priority);
     }
 
     /// Finishes inner round execution.
@@ -275,13 +277,15 @@ impl RoundSchedule {
         let mut total_executed_priority = 0;
         for (canister_id, executed_priority) in executed_priority_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
-                total_executed_priority += executed_priority.get() * multiplier;
-                // If priority credit is non-zero, use it instead of accumulated priority.
-                if canister.scheduler_state.priority_credit != 0.into() {
-                    canister.scheduler_state.priority_credit += executed_priority * multiplier;
-                } else {
-                    canister.scheduler_state.accumulated_priority -= executed_priority * multiplier;
-                }
+                // let executed_priority = executed_priority.get() * multiplier;
+                let executed_priority = executed_priority.get() * multiplier;
+                total_executed_priority += executed_priority;
+                // Note that, because we still charge top canisters, the executed
+                // priority effect is reduced by that charge. Thie means that canisters
+                // are charged more evenly than executed priority would suggested.
+                // We cannot completely switch to executed priority yet, as idle
+                // canisters are not scheduled currently.
+                canister.scheduler_state.priority_credit += executed_priority.into();
             }
         }
 
@@ -303,5 +307,15 @@ impl RoundSchedule {
             to_distribute -= distributed;
             canister.scheduler_state.accumulated_priority += distributed.into();
         }
+    }
+
+    /// Normalizes used instructions (0 - max_instructions) to priority (1-100),
+    /// where 100 corresponds to max_instructions used or more.
+    pub(crate) fn normalize_instructions(
+        instructions: NumInstructions,
+        max_instructions: NumInstructions,
+    ) -> AccumulatedPriority {
+        let priority = instructions.min(max_instructions) * 99 / max_instructions + 1;
+        (priority as i64).into()
     }
 }
