@@ -30,7 +30,10 @@ CONSTANTS
 CONSTANTS 
     \* Minimum stake a neuron can have
     \* @type: Int;
-    MIN_STAKE
+    MIN_STAKE,
+    \* The transfer fee charged by the ledger canister
+    \* @type: Int;
+    TRANSACTION_FEE
 *)
 
 VARIABLES

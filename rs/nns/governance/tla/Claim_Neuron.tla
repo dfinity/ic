@@ -14,7 +14,9 @@ CONSTANTS
 
 CONSTANTS 
     \* Minimum stake a neuron can have
-    MIN_STAKE
+    MIN_STAKE,
+    \* The transfer fee charged by the ledger canister
+    TRANSACTION_FEE
 
 OP_ACCOUNT_BALANCE == "account_balance"
 ACCOUNT_BALANCE_FAIL == "Err"

@@ -45,6 +45,18 @@ fn extract_claim_neuron_constants(pid: &str, trace: &[ResolvedStatePair]) -> Tla
                 .unwrap_or(0_u64.to_tla_value()),
         ),
         (
+            "TRANSACTION_FEE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("transaction_fee")
+                        .expect("transaction_fee not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        (
             "Claim_Neuron_Process_Ids".to_string(),
             BTreeSet::from([pid]).to_tla_value(),
         ),
