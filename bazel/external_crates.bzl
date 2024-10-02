@@ -1205,7 +1205,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.26.3",
             ),
             "strum_macros": crate.spec(
-                version = "^0.26.3",
+                version = "^0.26.4",
             ),
             "stubborn-io": crate.spec(
                 version = "^0.3.2",
