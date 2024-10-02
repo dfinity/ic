@@ -10,11 +10,13 @@ use ic_icrc1_ledger_sm_tests::{
     send_transfer_from,
 };
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use lazy_static::lazy_static;
 use std::str::FromStr;
 use std::time::{Instant, UNIX_EPOCH};
 
@@ -33,6 +35,29 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
+#[cfg(not(feature = "u256-tokens"))]
+lazy_static! {
+    pub static ref MAINNET_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+    pub static ref STATE_MACHINE: StateMachine =
+        new_state_machine_with_golden_fiduciary_state_or_panic();
+}
+
+#[cfg(feature = "u256-tokens")]
+lazy_static! {
+    pub static ref MAINNET_U256_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MAINNET_U64_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+    pub static ref STATE_MACHINE: StateMachine =
+        new_state_machine_with_golden_fiduciary_state_or_panic();
+}
+
 struct CanisterConfig {
     canister_id: &'static str,
     canister_name: &'static str,
@@ -44,12 +69,11 @@ struct CanisterConfig {
 }
 
 impl CanisterConfig {
-    #[cfg(feature = "u256-tokens")]
     fn new(
         canister_id_and_name: (&'static str, &'static str),
-        state_machine: &StateMachine,
-        mainnet_wasm: &Wasm,
-        master_wasm: &Wasm,
+        state_machine: &'static StateMachine,
+        mainnet_wasm: &'static Wasm,
+        master_wasm: &'static Wasm,
     ) -> Self {
         let (canister_id, canister_name) = canister_id_and_name;
         Self {
@@ -65,9 +89,9 @@ impl CanisterConfig {
 
     fn new_with_params(
         canister_id_and_name: (&'static str, &'static str),
-        state_machine: &StateMachine,
-        mainnet_wasm: &Wasm,
-        master_wasm: &Wasm,
+        state_machine: &'static StateMachine,
+        mainnet_wasm: &'static Wasm,
+        master_wasm: &'static Wasm,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         extended_testing: bool,
     ) -> Self {
@@ -192,15 +216,6 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
     const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
 
-    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
-    let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
-        );
-
     let ck_btc_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("mqygn-kiaaa-aaaar-qaadq-cai")
             .unwrap()
@@ -214,19 +229,14 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         ],
     };
 
-    perform_upgrade_downgrade_testing(
-        &state_machine,
-        vec![CanisterConfig::new_with_params(
-            (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-            &state_machine,
-            &mainnet_ledger_wasm,
-            &ledger_wasm,
-            Some(burns_without_spender),
-            true,
-        )],
-        ledger_wasm,
-        mainnet_ledger_wasm,
-    );
+    perform_upgrade_downgrade_testing(vec![CanisterConfig::new_with_params(
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
+        &STATE_MACHINE,
+        &MAINNET_WASM,
+        &MASTER_WASM,
+        Some(burns_without_spender),
+        true,
+    )]);
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -250,9 +260,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     const CK_WSTETH_LEDGER: (&str, &str) = ("j2tuh-yqaaa-aaaar-qahcq-cai", "ckWSTETH");
     const CK_XAUT_LEDGER: (&str, &str) = ("nza5v-qaaaa-aaaar-qahzq-cai", "ckXAUT");
 
-    let mainnet_ledger_wasm_u256 = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
             .unwrap()
@@ -267,16 +274,11 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         ],
     };
 
-    let ledger_wasm_u256 = Wasm::from_bytes(ledger_wasm());
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
-        );
-
     let mut canister_configs = vec![CanisterConfig::new_with_params(
         CK_ETH_LEDGER,
-        &state_machine,
-        &mainnet_ledger_wasm_u256,
-        &ledger_wasm_u256,
+        &STATE_MACHINE,
+        &MAINNET_U256_WASM,
+        &MASTER_WASM,
         Some(ck_eth_burns_without_spender),
         true,
     )];
@@ -299,9 +301,9 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     ] {
         canister_configs.push(CanisterConfig::new(
             canister_id_and_name,
-            &state_machine,
-            &mainnet_ledger_wasm_u256,
-            &ledger_wasm_u256,
+            &STATE_MACHINE,
+            &MAINNET_U256_WASM,
+            &MASTER_WASM,
         ));
     }
 
@@ -343,18 +345,11 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     const YRAL: (&str, &str) = ("6rdgd-kyaaa-aaaaq-aaavq-cai", "YRAL");
     const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku DAO");
 
-    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
-    let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
-
     let mut canister_configs = vec![CanisterConfig::new_with_params(
         OPENCHAT,
-        &state_machine,
-        &mainnet_ledger_wasm,
-        &ledger_wasm,
+        &STATE_MACHINE,
+        &MAINNET_U64_WASM,
+        &MASTER_WASM,
         None,
         true,
     )];
@@ -390,9 +385,9 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     ] {
         canister_configs.push(CanisterConfig::new(
             canister_id_and_name,
-            &state_machine,
-            &mainnet_ledger_wasm,
-            &ledger_wasm,
+            &STATE_MACHINE,
+            &MAINNET_U64_WASM,
+            &MASTER_WASM,
         ));
     }
 
