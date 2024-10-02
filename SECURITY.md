@@ -109,7 +109,6 @@ Source code:
 * [https://github.com/dfinity/agent-rs](https://github.com/dfinity/agent-rs)
 * [https://github.com/dfinity/candid](https://github.com/dfinity/candid)
 * [https://github.com/dfinity/quill](https://github.com/dfinity/quill)
-* [https://github.com/dfinity/icx-proxy](https://github.com/dfinity/icx-proxy)
 
 #### Infrastructure
 
@@ -122,10 +121,9 @@ The node software runs on the virtual machine termed ‘GuestOS’ that in turn 
 One of the major components of the Internet Computer infrastructure are the boundary nodes. The boundary nodes sit on the perimeter and act as a gateway into the Internet Computer platform. Here is the list of boundary node domains:
 
     1. [https://github.com/dfinity/ic/tree/master/rs/boundary_node](https://github.com/dfinity/ic/tree/master/rs/boundary_node)
-    2. [https://github.com/dfinity/icx-proxy](https://github.com/dfinity/icx-proxy)
-    3. boundary.icp0.io
-    4. boundary.ic0.app
-    5. boundary.dfinity.network
+    2. boundary.icp0.io
+    3. boundary.ic0.app
+    4. boundary.dfinity.network
 
 ##### Other Infrastructure
 

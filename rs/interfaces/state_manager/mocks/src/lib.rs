@@ -1,7 +1,7 @@
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError,
-    StateManager, StateManagerResult, StateReader,
+    CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager,
+    StateManagerResult, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -45,11 +45,6 @@ mock! {
         fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
 
         fn deliver_state_certification(&self, certification: Certification);
-
-        fn list_state_heights(
-            &self,
-            cert_mask: CertificationMask,
-        ) -> Vec<Height>;
 
         fn remove_states_below(&self, height: Height);
 

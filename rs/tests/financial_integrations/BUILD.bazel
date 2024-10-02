@@ -11,7 +11,7 @@ BTC_RUNTIME_DEPS = [
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
 system_test_nns(
@@ -32,7 +32,7 @@ system_test_nns(
 system_test(
     name = "icrc1_agent_test",
     env = {
-        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,

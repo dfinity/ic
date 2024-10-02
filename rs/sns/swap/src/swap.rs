@@ -514,7 +514,6 @@ impl Swap {
     /// The maximum direct participation amount (in ICP e8s).
     pub fn max_direct_participation_e8s(&self) -> u64 {
         self.params
-            .clone()
             .expect("Expected params to be set")
             .max_direct_participation_icp_e8s
             .expect("Expected params.max_direct_participation_icp_e8s to be set")
@@ -3080,7 +3079,7 @@ impl Swap {
         &self,
         _request: &GetSaleParametersRequest,
     ) -> GetSaleParametersResponse {
-        let params = self.params.clone();
+        let params = self.params;
         GetSaleParametersResponse { params }
     }
 

@@ -7,9 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{
-    CallError, PocketIcBuilder, SubnetMetrics, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS,
-};
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -20,6 +18,7 @@ use ic_cdk::api::management_canister::main::{
     ChunkHash, ClearChunkStoreArgument, InstallChunkedCodeArgument, InstallCodeArgument,
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
+use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::Url;
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
@@ -78,60 +77,6 @@ impl PocketIc {
             .with_application_subnet()
             .build_async()
             .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config.
-    /// The server is started if it's not already running.
-    pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-            None,
-        )
-        .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
-    /// (`None` means that there is no timeout).
-    /// The server is started if it's not already running.
-    pub async fn from_config_and_max_request_time(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        max_request_time_ms: Option<u64>,
-    ) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            max_request_time_ms,
-            None,
-            false,
-            None,
-            None,
-        )
-        .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and server url.
-    /// This function is intended for advanced users who start the server manually.
-    pub async fn from_config_and_server_url(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
-    ) -> Self {
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-            None,
-        )
-        .await
     }
 
     pub(crate) async fn from_components(
@@ -1041,12 +986,6 @@ impl PocketIc {
     /// Returns subnet metrics for a given subnet.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
     pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
-        #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, Eq)]
-        struct ReadStateResponse {
-            #[serde(with = "serde_bytes")]
-            pub certificate: Vec<u8>,
-        }
-
         let path = vec![
             "subnet".into(),
             ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
