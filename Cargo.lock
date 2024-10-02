@@ -9583,6 +9583,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-histogram"
+version = "0.0.1"
+dependencies = [
+ "ic-metrics-encoder",
+ "itertools 0.12.1",
+ "lazy_static",
+ "pretty_assertions",
+ "prometheus-parse",
+]
+
+[[package]]
 name = "ic-nervous-system-humanize"
 version = "0.9.0"
 dependencies = [
