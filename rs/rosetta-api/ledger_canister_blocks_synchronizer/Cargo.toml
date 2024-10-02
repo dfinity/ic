@@ -15,11 +15,11 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ledger-canister-core = { path = "../ledger_canister_core" }
-ic-ledger-core = { path = "../ledger_core" }
+ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-types = { path = "../../types/types" }
-icp-ledger = { path = "../icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 leb128 = "0.2.5"
 on_wire = { path = "../../rust_canisters/on_wire" }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
