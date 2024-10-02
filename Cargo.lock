@@ -1188,14 +1188,13 @@ dependencies = [
  "bech32 0.8.1",
  "bitcoin_hashes 0.10.0",
  "secp256k1 0.22.2",
- "serde",
 ]
 
 [[package]]
 name = "bitcoin"
-version = "0.32.2"
+version = "0.32.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea507acc1cd80fc084ace38544bbcf7ced7c2aa65b653b102de0ce718df668f6"
+checksum = "0032b0e8ead7074cda7fc4f034409607e3f03a6f71d66ade8a307f79b4d99e73"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
@@ -1239,9 +1238,6 @@ name = "bitcoin_hashes"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "006cc91e1a1d99819bc5b8214be3555c1f0611b169f527a1fdc54ed1f2b745b0"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bitcoin_hashes"
@@ -1273,7 +1269,7 @@ version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
 dependencies = [
- "bitcoin 0.32.2",
+ "bitcoin 0.32.3",
  "serde",
  "serde_json",
 ]
@@ -5440,7 +5436,7 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "candid",
  "candid_parser",
  "hex",
@@ -5601,7 +5597,7 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "bitcoincore-rpc",
  "bitcoind",
  "clap 3.2.25",
@@ -5667,7 +5663,7 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "flate2",
  "hex",
  "rand 0.8.5",
@@ -5724,7 +5720,7 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.2",
+ "bitcoin 0.32.3",
  "candid",
  "candid_parser",
  "ciborium",
@@ -5775,7 +5771,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.1.0"
 dependencies = [
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "csv",
 ]
 
@@ -6264,7 +6260,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bech32 0.9.1",
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "bs58",
  "candid",
  "candid_parser",
@@ -16381,7 +16377,7 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
- "bitcoin 0.28.2",
+ "bitcoin 0.32.3",
  "bitcoincore-rpc",
  "bytes",
  "candid",
@@ -18303,7 +18299,6 @@ checksum = "295642060261c80709ac034f52fca8e5a9fa2c7d341ded5cdb164b7c33768b2a"
 dependencies = [
  "rand 0.6.5",
  "secp256k1-sys 0.5.2",
- "serde",
 ]
 
 [[package]]

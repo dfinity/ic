@@ -230,18 +230,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bit-vec": crate.spec(
                 version = "^0.6.3",
             ),
-            "bitcoin-0-32": crate.spec(
-                package = "bitcoin",
-                version = "^0.32.2",
-                default_features = False,
-            ),
             "bitcoin": crate.spec(
                 version = "^0.32.3",
-                features = [
-                    "default",
-                    "rand",
-                    "use-serde",
-                ],
             ),
             "bitcoincore-rpc": crate.spec(
                 version = "^0.19.0",
