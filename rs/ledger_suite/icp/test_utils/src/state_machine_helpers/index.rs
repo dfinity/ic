@@ -3,12 +3,11 @@ use candid::{Decode, Encode, Nat};
 use canister_test::WasmResult;
 use ic_base_types::CanisterId;
 use ic_icp_index::{GetBlocksResponse, Status};
-use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use std::time::Duration;
 
-const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
+const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
 
 pub fn get_all_blocks(
     state_machine: &StateMachine,
