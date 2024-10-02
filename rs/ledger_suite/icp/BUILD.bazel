@@ -207,6 +207,7 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_ledger",
+        "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp/index:ic-icp-index",
         "//rs/ledger_suite/icp/test_utils",
         "//rs/nns/constants",
