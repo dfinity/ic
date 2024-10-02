@@ -1,5 +1,5 @@
 {
-  "checksum": "148b70f5281812a2fdac6e329493cf5342fbea70ccecacec45d50329e67fcc92",
+  "checksum": "316bb0e581c968f5d7f0254c07a0e6f88f4e1209ae4abce9e9a8a813d7c0c49e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17778,7 +17778,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -27262,7 +27262,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -27392,14 +27392,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-rustls 0.27.3": {
+    "hyper-rustls 0.27.2": {
       "name": "hyper-rustls",
-      "version": "0.27.3",
+      "version": "0.27.2",
       "package_url": "https://github.com/rustls/hyper-rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-rustls/0.27.3/download",
-          "sha256": "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.2/download",
+          "sha256": "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
         }
       },
       "targets": [
@@ -27590,7 +27590,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.8.0",
+              "id": "rustls-native-certs 0.7.0",
               "target": "rustls_native_certs"
             },
             {
@@ -27618,7 +27618,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.3"
+        "version": "0.27.2"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -28262,7 +28262,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper-rustls 0.27.3",
+                "id": "hyper-rustls 0.27.2",
                 "target": "hyper_rustls"
               },
               {
@@ -32969,7 +32969,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -34551,7 +34551,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -53233,7 +53233,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.27.3",
+                "id": "hyper-rustls 0.27.2",
                 "target": "hyper_rustls"
               },
               {
@@ -79483,7 +79483,7 @@
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
     "hyper 1.4.1",
-    "hyper-rustls 0.27.3",
+    "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.9",
     "ic-agent 0.37.1",
