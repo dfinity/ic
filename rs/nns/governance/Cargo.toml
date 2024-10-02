@@ -92,7 +92,7 @@ strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { version = "0.1.4", optional = true }
 
-local_key = { path = "../tla_instrumentation/local_key", optional = true }
+local_key = { path = "../../tla_instrumentation/local_key", optional = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
 tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
 
@@ -114,7 +114,7 @@ ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-local_key = { path = "../tla_instrumentation/local_key" }
+local_key = { path = "../../tla_instrumentation/local_key" }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
