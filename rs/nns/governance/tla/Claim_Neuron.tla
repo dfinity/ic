@@ -6,7 +6,6 @@ CONSTANT
 
 CONSTANTS 
     Governance_Account_Ids, 
-    Minting_Account_Id,
     Neuron_Ids
 
 CONSTANTS 
