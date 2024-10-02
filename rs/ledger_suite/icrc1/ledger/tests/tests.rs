@@ -204,6 +204,17 @@ fn test_tx_deduplication() {
 fn test_mint_burn() {
     ic_icrc1_ledger_sm_tests::test_mint_burn(ledger_wasm(), encode_init_args);
 }
+
+#[test]
+fn test_anonymous_transfers() {
+    ic_icrc1_ledger_sm_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_anonymous_approval() {
+    ic_icrc1_ledger_sm_tests::test_anonymous_approval(ledger_wasm(), encode_init_args);
+}
+
 #[test]
 fn test_single_transfer() {
     ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
