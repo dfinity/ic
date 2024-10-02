@@ -42,6 +42,8 @@ pub struct RoundSchedule {
     pub scheduler_cores: usize,
     /// Number of cores dedicated for long executions.
     pub long_execution_cores: usize,
+    // Sum of all canisters compute allocation in percent.
+    pub total_compute_allocation_percent: i64,
     /// Ordered Canister IDs with new executions.
     pub ordered_new_execution_canister_ids: Vec<CanisterId>,
     /// Ordered Canister IDs with long executions.
@@ -52,6 +54,7 @@ impl RoundSchedule {
     pub fn new(
         scheduler_cores: usize,
         long_execution_cores: usize,
+        total_compute_allocation_percent: i64,
         ordered_new_execution_canister_ids: Vec<CanisterId>,
         ordered_long_execution_canister_ids: Vec<CanisterId>,
     ) -> Self {
@@ -59,6 +62,7 @@ impl RoundSchedule {
             scheduler_cores,
             long_execution_cores: long_execution_cores
                 .min(ordered_long_execution_canister_ids.len()),
+            total_compute_allocation_percent,
             ordered_new_execution_canister_ids,
             ordered_long_execution_canister_ids,
         }
@@ -174,6 +178,7 @@ impl RoundSchedule {
             RoundSchedule::new(
                 self.scheduler_cores,
                 self.long_execution_cores,
+                self.total_compute_allocation_percent,
                 ordered_new_execution_canister_ids,
                 ordered_long_execution_canister_ids,
             ),
@@ -266,7 +271,7 @@ impl RoundSchedule {
         let number_of_canisters = canister_states.len();
         let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
 
-        // Charge canisters for full executions in the previous round.
+        // Charge canisters for full executions in this round.
         let mut total_charged_priority = 0;
         for canister_id in fully_executed_canister_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
@@ -275,21 +280,18 @@ impl RoundSchedule {
             }
         }
 
-        // Distribute the charged priority across canisters according to their allocations.
-        let mut total_allocated = 0;
-        for (_canister_id, canister) in canister_states.iter_mut() {
-            let allocated =
-                canister.scheduler_state.compute_allocation.as_percent() as i64 * multiplier;
-            total_allocated += allocated;
-            canister.scheduler_state.accumulated_priority += allocated.into();
-        }
-        // Fully distribute the rest across all canisters.
-        let mut to_distribute = total_charged_priority - total_allocated;
-        let n = canister_states.len();
-        for (i, (_canister_id, canister)) in canister_states.iter_mut().enumerate() {
-            let distributed = to_distribute / (n - i) as i64;
-            to_distribute -= distributed;
-            canister.scheduler_state.accumulated_priority += distributed.into();
+        let total_allocated = self.total_compute_allocation_percent * multiplier;
+        // Free capacity per canister in multiplied percent.
+        let free_capacity_per_canister =
+            total_charged_priority.saturating_sub(total_allocated) / number_of_canisters as i64;
+        // Fully divide the free allocation across all canisters.
+        for canister in canister_states.values_mut() {
+            // De-facto compute allocation includes bonus allocation
+            let factual = canister.scheduler_state.compute_allocation.as_percent() as i64
+                * multiplier
+                + free_capacity_per_canister;
+            // Increase accumulated priority by de-facto compute allocation.
+            canister.scheduler_state.accumulated_priority += factual.into();
         }
     }
 }

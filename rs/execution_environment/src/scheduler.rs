@@ -344,6 +344,7 @@ impl SchedulerImpl {
         let round_schedule = RoundSchedule::new(
             scheduler_cores,
             long_execution_cores,
+            total_compute_allocation_percent,
             round_states
                 .iter()
                 .skip(number_of_long_executions)
