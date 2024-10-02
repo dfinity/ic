@@ -6116,7 +6116,7 @@ impl Governance {
 
         // Get the balance of the neuron's subaccount from ledger canister.
         let account = neuron_subaccount(subaccount);
-        tla_log_locals! { account_id: tla::account_to_tla(account), neuron_id: nid.id };
+        tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {

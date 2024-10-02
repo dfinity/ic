@@ -52,7 +52,7 @@ VARIABLES
     \* @type: $proc -> Int;
     neuron_id,
     \* @type: $proc -> $account;
-    account_id
+    account
 
 \* @type: Set($neuronId) => $neuronId;
 FRESH_NEURON_ID(existing_neurons) == CHOOSE nid \in (Neuron_Ids \ existing_neurons): TRUE

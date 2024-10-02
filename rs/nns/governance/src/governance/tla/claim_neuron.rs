@@ -8,7 +8,7 @@ use super::common::{default_account, function_domain_union, governance_account_i
 pub fn claim_neuron_desc() -> Update {
     const PID: &str = "Claim_Neuron";
     let default_locals = VarAssignment::new()
-        .add("account_id", default_account())
+        .add("account", default_account())
         .add("neuron_id", 0_u64.to_tla_value());
 
     Update {

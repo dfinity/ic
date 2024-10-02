@@ -42,7 +42,7 @@ variables
     ledger_to_governance = {};
 
 macro cn_reset_local_vars() {
-    account_id := DUMMY_ACCOUNT;
+    account := DUMMY_ACCOUNT;
     neuron_id := 0;
 }
 
@@ -50,9 +50,9 @@ macro cn_reset_local_vars() {
 \* Copied directly from formal-models/tla/governance-ledger
 \* A Claim_Neuron process simulates a call to claim_neuron
 process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
-    variable 
-        \* The account_id is an argument to the canister call; we let it be chosen non-deteministically 
-        account_id = DUMMY_ACCOUNT;
+    variable
+        \* The account is an argument to the canister call; we let it be chosen non-deteministically
+        account = DUMMY_ACCOUNT;
         \* The neuron_id will be set later on to a fresh value
         neuron_id = 0;
     { 
@@ -63,7 +63,7 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
             goto Done;
         } or {
         with(aid \in  Governance_Account_Ids \ DOMAIN(neuron_id_by_account)) {
-            account_id := aid;
+            account := aid;
             \* Get a fresh neuron ID
             neuron_id := FRESH_NEURON_ID(DOMAIN(neuron));
             \* The Rust code tries to obtain a lock; this should always succeed, as the 
@@ -71,10 +71,10 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
             \* instead of await here, to check that
             assert neuron_id \notin locks;
             locks := locks \union {neuron_id};
-            neuron_id_by_account := account_id :> neuron_id @@ neuron_id_by_account;
-            neuron := neuron_id :> [ cached_stake |-> 0, account_id |-> account_id, fees |-> 0, maturity |-> 0 ] @@ neuron;
-            \* send_request(self, OP_QUERY_BALANCE, balance_query(account_id));
-            governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(account_id)));
+            neuron_id_by_account := account :> neuron_id @@ neuron_id_by_account;
+            neuron := neuron_id :> [ cached_stake |-> 0, account |-> account, fees |-> 0, maturity |-> 0 ] @@ neuron;
+            \* send_request(self, OP_QUERY_BALANCE, balance_query(account));
+            governance_to_ledger := Append(governance_to_ledger, request(self, account_balance(account)));
         };
         };
     WaitForBalanceQuery:
@@ -83,14 +83,14 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
             ledger_to_governance := ledger_to_governance \ {answer};
             if(answer.response = Variant("Fail", UNIT)) {
                 neuron := Remove_Arguments(neuron, {neuron_id});
-                neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account_id});
+                neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account});
             } else {
                 with (b = VariantGetOrElse("BalanceQueryOk", answer.response, 0)) {
                     if(b >= MIN_STAKE) {
                         neuron := [neuron EXCEPT ![neuron_id] = [@ EXCEPT !.cached_stake = b] ]
                     } else {
                         neuron := Remove_Arguments(neuron, {neuron_id});
-                        neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account_id});
+                        neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account});
                     };
                     locks := locks \ {neuron_id};
                 };
