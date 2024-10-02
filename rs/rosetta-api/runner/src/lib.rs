@@ -141,7 +141,7 @@ pub async fn start_rosetta(
         cmd.arg("--offline");
     }
 
-    let _proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
+    let proc = KillOnDrop(cmd.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-rosetta-api (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
@@ -178,7 +178,7 @@ pub async fn start_rosetta(
     }
 
     RosettaContext {
-        proc: _proc,
+        proc,
         state_directory,
         port,
     }

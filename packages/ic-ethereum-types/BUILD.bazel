@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:hex",
+    "@crate_index//:ic-sha3",
+    "@crate_index//:minicbor",
+    "@crate_index//:serde",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:assert_matches",
+    "@crate_index//:proptest",
+    "@crate_index//:serde_json",
+]
+
+rust_library(
+    name = "ic-ethereum-types",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":ic-ethereum-types",
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "doc",
+    crate = ":ic-ethereum-types",
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-ethereum-types",
+    deps = [":ic-ethereum-types"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

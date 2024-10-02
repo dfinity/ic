@@ -60,7 +60,7 @@ def main():
         notify_on_scan_job_failed=notify_on_scan_job_failed,
         merge_request_base_url=get_ic_repo_merge_request_base_url(),
         ci_pipeline_base_url=get_ic_repo_ci_pipeline_base_url(),
-        notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()]
+        notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()],
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [notifier]
@@ -69,7 +69,7 @@ def main():
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
         JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
         scanner_subscribers,
-        SlackFindingsFailoverDataStore(projects=REPOS_TO_SCAN[0].projects)
+        SlackFindingsFailoverDataStore(projects=REPOS_TO_SCAN[0].projects),
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 

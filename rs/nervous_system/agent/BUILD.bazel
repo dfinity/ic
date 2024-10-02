@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
+    "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",

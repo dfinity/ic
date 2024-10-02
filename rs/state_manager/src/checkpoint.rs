@@ -1,7 +1,3 @@
-use crate::{
-    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
-    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
-};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
 use ic_config::flag_status::FlagStatus;
@@ -28,6 +24,11 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use crate::{
+    CheckpointError, CheckpointMetrics, HasDowngrade, PageMapType, TipRequest,
+    CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
+};
 
 #[cfg(test)]
 mod tests;
@@ -450,6 +451,7 @@ pub fn load_canister_state(
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,
         metrics,
+        canister_state_bits.on_low_wasm_memory_hook_status,
     );
 
     let canister_state = CanisterState {

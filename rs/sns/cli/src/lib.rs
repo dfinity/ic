@@ -1,5 +1,5 @@
 use crate::{
-    deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
+    deploy::DirectSnsDeployerForTests, health::HealthArgs, init_config_file::InitConfigFileArgs,
     neuron_id_to_candid_subaccount::NeuronIdToCandidSubaccountArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
@@ -30,6 +30,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 pub mod deploy;
+pub mod health;
 pub mod init_config_file;
 pub mod list;
 pub mod neuron_id_to_candid_subaccount;
@@ -77,6 +78,8 @@ pub enum SubCommand {
     NeuronIdToCandidSubaccount(NeuronIdToCandidSubaccountArgs),
     /// List SNSes
     List(list::ListArgs),
+    /// Check SNSes for warnings and errors.
+    Health(HealthArgs),
 }
 
 impl CliArgs {

@@ -248,8 +248,12 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.80.0",
-        "nightly/2024-06-06",
+        "1.81.0",
+        # Use the nightly version from the day before the branch.
+        # -
+        # NB! Due to a regression in the compiler https://github.com/rust-lang/rust/issues/128895, that's
+        # only back-ported to stable, we use a more recent version.
+        "nightly/2024-09-23",
     ],
 )
 
@@ -997,4 +1001,10 @@ http_file(
     downloaded_file_path = "basic_bitcoin.wasm.gz",
     sha256 = "2a428e8d35518ce22002e498f7d618a9eeeddf57371f965e92cf480dd3cbd046",
     url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-24-09-16/basic_bitcoin.wasm.gz",
+)
+
+http_file(
+    name = "pocket-ic-mainnet-gz",
+    sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
+    url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
 )

@@ -538,10 +538,7 @@ impl SchedulerTest {
         }
     }
 
-    pub fn drain_subnet_messages(
-        &mut self,
-        long_running_canister_ids: BTreeSet<CanisterId>,
-    ) -> ReplicatedState {
+    pub fn drain_subnet_messages(&mut self) -> ReplicatedState {
         let state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let mut csprng = Csprng::from_seed_and_purpose(
@@ -561,8 +558,6 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
-            false,
-            long_running_canister_ids,
             self.registry_settings(),
             &BTreeMap::new(),
         )
