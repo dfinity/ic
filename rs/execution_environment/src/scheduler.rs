@@ -643,7 +643,7 @@ impl SchedulerImpl {
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    ) -> (ReplicatedState, BTreeSet<CanisterId>) {
+    ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
         let mut ingress_execution_results = Vec::new();
@@ -654,6 +654,7 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut round_executed_canister_ids = BTreeSet::new();
+        let mut round_fully_executed_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -743,6 +744,7 @@ impl SchedulerImpl {
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
             round_executed_canister_ids.extend(executed_canister_ids);
+            round_fully_executed_canister_ids.extend(fully_executed_canister_ids);
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
 
@@ -756,11 +758,6 @@ impl SchedulerImpl {
                     .map(|canister| (canister.canister_id(), canister)),
             );
             state.put_canister_states(canisters);
-
-            round_schedule.finish_inner_round_iteration(
-                &mut state.canister_states,
-                fully_executed_canister_ids,
-            );
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
@@ -858,7 +855,11 @@ impl SchedulerImpl {
             .heap_delta_rate_limited_canisters_per_round
             .observe(round_filtered_canisters.rate_limited_canister_ids.len() as f64);
 
-        (state, round_filtered_canisters.active_canister_ids)
+        (
+            state,
+            round_filtered_canisters.active_canister_ids,
+            round_fully_executed_canister_ids,
+        )
     }
 
     /// Executes canisters in parallel using the thread pool.
@@ -885,7 +886,7 @@ impl SchedulerImpl {
     ) -> (
         Vec<CanisterState>,
         BTreeSet<CanisterId>,
-        Vec<(CanisterId, AccumulatedPriority)>,
+        Vec<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
         NumBytes,
     ) {
@@ -1718,7 +1719,7 @@ impl Scheduler for SchedulerImpl {
         };
 
         // Inner round.
-        let (mut state, active_canister_ids) = self.inner_round(
+        let (mut state, active_canister_ids, fully_executed_canister_ids) = self.inner_round(
             state,
             &mut csprng,
             &round_schedule,
@@ -1879,6 +1880,10 @@ impl Scheduler for SchedulerImpl {
                     .num_canister_snapshots
                     .set(final_state.canister_snapshots.count() as i64);
             }
+            round_schedule.finish_round(
+                &mut final_state.canister_states,
+                fully_executed_canister_ids,
+            );
             self.finish_round(&mut final_state, current_round_type);
             final_state
                 .metadata
@@ -1954,7 +1959,7 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     executed_canister_ids: BTreeSet<CanisterId>,
-    fully_executed_canister_ids: Vec<(CanisterId, AccumulatedPriority)>,
+    fully_executed_canister_ids: Vec<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,

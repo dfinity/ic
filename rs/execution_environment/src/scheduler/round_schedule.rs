@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
@@ -234,7 +234,7 @@ impl RoundSchedule {
 
     pub fn finish_canister_execution(
         canister: &mut CanisterState,
-        fully_executed_canister_ids: &mut Vec<(CanisterId, AccumulatedPriority)>,
+        fully_executed_canister_ids: &mut Vec<CanisterId>,
         round_id: ExecutionRound,
         is_first_iteration: bool,
         rank: usize,
@@ -255,14 +255,14 @@ impl RoundSchedule {
 
             // We schedule canisters (as opposed to individual messages),
             // and we charge for every full execution round.
-            fully_executed_canister_ids.push((canister.canister_id(), 100.into()));
+            fully_executed_canister_ids.push(canister.canister_id());
         }
     }
 
-    pub(crate) fn finish_inner_round_iteration(
+    pub(crate) fn finish_round(
         &self,
         canister_states: &mut BTreeMap<CanisterId, CanisterState>,
-        fully_executed_canister_ids: Vec<(CanisterId, AccumulatedPriority)>,
+        fully_executed_canister_ids: BTreeSet<CanisterId>,
     ) {
         let scheduler_cores = self.scheduler_cores;
         let compute_capacity_percent =
@@ -272,10 +272,10 @@ impl RoundSchedule {
 
         // Charge canisters for executions in the previous round.
         let mut total_charged_priority = 0;
-        for (canister_id, charged_priority) in fully_executed_canister_ids {
+        for canister_id in fully_executed_canister_ids {
             if let Some(canister) = canister_states.get_mut(&canister_id) {
-                total_charged_priority += charged_priority.get() * multiplier;
-                canister.scheduler_state.priority_credit += charged_priority * multiplier;
+                total_charged_priority += 100 * multiplier;
+                canister.scheduler_state.priority_credit += (100 * multiplier).into();
             }
         }
 
