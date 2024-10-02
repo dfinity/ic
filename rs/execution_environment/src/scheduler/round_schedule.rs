@@ -282,8 +282,8 @@ impl RoundSchedule {
 
         let total_allocated = self.total_compute_allocation_percent * multiplier;
         // Free capacity per canister in multiplied percent.
-        let free_capacity_per_canister =
-            total_charged_priority.saturating_sub(total_allocated) / number_of_canisters as i64;
+        let free_capacity_per_canister = total_charged_priority.saturating_sub(total_allocated)
+            / number_of_canisters.max(1) as i64;
         // Fully divide the free allocation across all canisters.
         for canister in canister_states.values_mut() {
             // De-facto compute allocation includes bonus allocation
