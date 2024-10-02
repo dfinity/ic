@@ -44,12 +44,12 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reprod
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
-ic-icrc1 = { path = "../../rosetta-api/icrc1" }
-ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
-ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -95,7 +95,7 @@ ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-utils = { workspace = true }
 ic-wasm-types = { path = "../../types/wasm_types" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 json5 = "0.4.1"

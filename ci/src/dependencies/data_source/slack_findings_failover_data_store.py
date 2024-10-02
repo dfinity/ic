@@ -29,7 +29,11 @@ SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't use slack failover store")
 
-FAILOVER_FINDING_IDS = {("ic", "BAZEL_TRIVY_CS", "linux-libc-dev"), ("ic", "BAZEL_TRIVY_CS", "linux-modules-5.15.0")}
+FAILOVER_FINDING_IDS = {
+    ("ic", "BAZEL_TRIVY_CS", "linux-libc-dev"),
+    ("ic", "BAZEL_TRIVY_CS", "linux-modules-5.15.0"),
+    ("ic", "BAZEL_TRIVY_CS", "linux-modules-6.8.0"),
+}
 
 
 class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):

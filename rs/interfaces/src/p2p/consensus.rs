@@ -83,16 +83,15 @@ pub trait ValidatedPoolReader<T: IdentifiableArtifact> {
     /// - `None`: Artifact does not exist in the validated pool.
     fn get(&self, id: &T::Id) -> Option<T>;
 
-    /// Get all validated artifacts.
-    ///
-    /// #Returns:
-    /// A iterator over all the validated artifacts.
-    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T> + '_>;
+    /// Returns all artifacts that need to be broadcasted.
+    /// This is used only during the boostrapping/recovery phase.
+    fn get_all_for_broadcast(&self) -> Box<dyn Iterator<Item = T> + '_> {
+        Box::new(std::iter::empty())
+    }
 }
 
 #[derive(Eq, PartialEq, Debug)]
 pub struct Aborted;
-
 pub trait Peers {
     fn peers(&self) -> Vec<NodeId>;
 }
@@ -114,7 +113,7 @@ pub trait ArtifactAssembler<A1: IdentifiableArtifact, A2: PbArtifact>:
 }
 
 /// Idempotent and non-blocking function which returns a BouncerValue for any artifact ID.
-/// Think of this closure as guarding access to the unvalidated pool (similar to a bouncer in a night club).
+/// Think of this closure as guarding access to the pool (similar to a bouncer in a night club).
 pub type Bouncer<Id> = Box<dyn Fn(&Id) -> BouncerValue + Send + Sync + 'static>;
 
 /// The Bouncer function returns a value that defines 3 possible handling logics when an artifact or ID is received.

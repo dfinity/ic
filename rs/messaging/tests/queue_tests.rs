@@ -178,7 +178,7 @@ impl SubnetPairProxy {
             &self.local_canister_id,
             &self.remote_canister_id,
         )
-        .map(|iter| iter.collect::<Vec<_>>())
+        .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
 
     /// Generates a snapshot of the output queue on the remote canister and
@@ -189,7 +189,7 @@ impl SubnetPairProxy {
             &self.remote_canister_id,
             &self.local_canister_id,
         )
-        .map(|iter| iter.collect::<Vec<_>>())
+        .map(|iter| iter.cloned().collect::<Vec<_>>())
     }
 
     /// Build backpressure on `local_env` until a minimum number of requests are found in the
@@ -272,7 +272,7 @@ fn get_output_queue_iter<'a>(
     state: &'a ReplicatedState,
     local_canister_id: &CanisterId,
     remote_canister_id: &'a CanisterId,
-) -> Option<impl Iterator<Item = RequestOrResponse> + 'a> {
+) -> Option<impl Iterator<Item = &'a RequestOrResponse>> {
     state
         .canister_states
         .get(local_canister_id)

@@ -249,6 +249,14 @@ fn test_load_from_storage() {
                         .await;
                     env.generate_blocks(first_block_batch.to_owned()).await;
 
+                    wait_for_rosetta_to_sync_up_to_block(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        first_block_batch.len() as u64,
+                    )
+                    .await
+                    .unwrap();
+
                     let replica_url = env.pocket_ic.url();
                     // We restart rosetta in offline mode to make sure it has to load the blocks from storage
                     env = env
