@@ -72,6 +72,8 @@ fn extract_claim_neuron_constants(pid: &str, trace: &[ResolvedStatePair]) -> Tla
 fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     for ResolvedStatePair {ref mut start, ref mut end} in trace {
         for state in &mut [start, end] {
+            state.0.0.remove("transaction_fee")
+                .expect("Didn't record the transaction fee");
             state.0.0.remove("min_stake").expect("Didn't record min stake.");
             if !state.0 .0.contains_key("governance_to_ledger") {
                 state.0 .0.insert(
