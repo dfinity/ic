@@ -238,16 +238,11 @@ fn compile_inner(
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
 
-    let is_wasm64 = match module.get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME) {
-        Some(export) => {
-            if let Some(mem) = export.memory() {
-                mem.is_64()
-            } else {
-                false
-            }
-        }
-        None => false,
-    };
+    let is_wasm64 = module
+        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
+        .map_or(false, |export| {
+            export.memory().map_or(false, |mem| mem.is_64())
+        });
 
     let serialized_module = SerializedModule::new(
         &module,
