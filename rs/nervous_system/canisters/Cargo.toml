@@ -18,12 +18,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-runtime = { path = "../runtime" }
-ic-nervous-system-tla = { path = "../tla" }
 ic-nns-constants = { path = "../../nns/constants" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
-local_key = { path = "../../tla_instrumentation/local_key", optional = true }
-
-[features]
-tla = ["tla_instrumentation", "local_key"]

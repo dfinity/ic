@@ -94,7 +94,6 @@ canbench-rs = { version = "0.1.4", optional = true }
 
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
 tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
-ic-nervous-system-tla = { path = "../../nervous_system/tla" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
@@ -116,6 +115,7 @@ ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 proptest = { workspace = true }
 tempfile = { workspace = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 

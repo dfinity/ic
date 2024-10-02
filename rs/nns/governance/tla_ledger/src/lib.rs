@@ -3,19 +3,22 @@ use dfn_core::CanisterId;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
 
-use ic_nervous_system_tla::{
-    self as tla, account_to_tla, opt_subaccount_to_tla, store::TLA_INSTRUMENTATION_STATE,
-    tla_log_request, tla_log_response, Destination, ToTla,
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{
+    self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
+    TLA_INSTRUMENTATION_STATE,
 };
+use ic_nns_governance::{tla_log_request, tla_log_response};
 use std::collections::BTreeMap;
 
-pub struct LoggingIcpLedgerCanister {
-    ledger: IcpLedgerCanister,
+pub struct LoggingIcpLedgerCanister<Rt: Runtime> {
+    ledger: IcpLedgerCanister<Rt>,
 }
 
-impl LoggingIcpLedgerCanister {
+impl<Rt: Runtime + Send + Sync> LoggingIcpLedgerCanister<Rt> {
     pub fn new(id: CanisterId) -> Self {
         LoggingIcpLedgerCanister {
             ledger: IcpLedgerCanister::new(id),
@@ -24,7 +27,7 @@ impl LoggingIcpLedgerCanister {
 }
 
 #[async_trait]
-impl IcpLedger for LoggingIcpLedgerCanister {
+impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
     async fn transfer_funds(
         &self,
         amount_e8s: u64,

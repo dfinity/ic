@@ -1,5 +1,5 @@
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use icp_ledger::AccountIdentifier;
+use icp_ledger::{AccountIdentifier, Subaccount};
 
 use std::collections::BTreeSet;
 pub use tla_instrumentation::{ResolvedStatePair, TlaValue, ToTla};
@@ -16,6 +16,22 @@ pub(super) fn governance_account_id() -> TlaValue {
     .to_string()
     .as_str()
     .to_tla_value()
+}
+
+pub fn subaccount_to_tla(subaccount: &Subaccount) -> TlaValue {
+    opt_subaccount_to_tla(&Some(*subaccount))
+}
+
+pub fn opt_subaccount_to_tla(subaccount: &Option<Subaccount>) -> TlaValue {
+    let account = AccountIdentifier::new(
+        ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
+        *subaccount,
+    );
+    TlaValue::Literal(account.to_string())
+}
+
+pub fn account_to_tla(account: AccountIdentifier) -> TlaValue {
+    account.to_string().as_str().to_tla_value()
 }
 
 /// Compute the union of the domain of the function field `field_name` in the

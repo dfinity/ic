@@ -4,11 +4,22 @@ load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
-load("//rs/nervous_system/tla:feature_flags.bzl", "test_with_tla")
+load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files(["canister/governance.did"])
+
+# Allows temporarily disabling TLA checks from the command line;
+# just pass `--define tla_disabled=true` to your Bazel command
+# See feature_flags.bzl for how to disable TLA checks permanently
+# (in the CI)
+config_setting(
+    name = "tla_disabled",
+    values = {
+        "define": "tla_disabled=true",
+    },
+)
 
 filegroup(
     name = "protos",
@@ -86,6 +97,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
+    "//rs/tla_instrumentation:proc_macros",
     "@crate_index//:async-trait",
     "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
@@ -105,6 +117,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "//rs/tla_instrumentation",
+    "//rs/tla_instrumentation:local_key",
     "@crate_index//:candid_parser",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
@@ -118,7 +131,7 @@ DEV_DEPENDENCIES = [
     ],
 })
 
-MACRO_DEV_DEPENDENCIES = ["//rs/tla_instrumentation:proc_macros"]
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -148,7 +161,6 @@ rust_library(
     version = "0.9.0",
     deps = DEPENDENCIES + [
         ":build_script",
-        "//rs/nervous_system/tla:tla-noop,
     ],
 )
 
@@ -158,15 +170,12 @@ rust_library(
     aliases = ALIASES,
     crate_features = test_with_tla(),
     crate_name = "ic_nns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES + [
-        "//rs/tla_instrumentation:proc_macros",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES + [
         ":build_script",
-        "//rs/nervous_system/tla:tla-enabled,
         "//rs/tla_instrumentation",
-
+        "//rs/tla_instrumentation:local_key",
     ],
 )
 
@@ -360,7 +369,7 @@ rust_test_suite_with_extra_srcs(
 rust_library(
     name = "tla_instrummented_ledger",
     srcs = glob(["tla_ledger/src/**/*.rs"]),
-    crate_features = ["tla"],
+    crate_features = test_with_tla(),
     crate_name = "ic_nns_tla_instrumented_ledger",
     proc_macro_deps = [
         "@crate_index//:async-trait",
@@ -368,10 +377,11 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        ":governance--test_feature",
+        "//rs/ledger_suite/icp:icp_ledger",
         "//rs/nervous_system/canisters",
         "//rs/nervous_system/common",
-        "//rs/nervous_system/tla:tla-enabled",
-        "//rs/rosetta-api/icp_ledger",
+        "//rs/nervous_system/runtime",
         "//rs/rust_canisters/dfn_core",
         "//rs/tla_instrumentation",
     ],

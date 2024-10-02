@@ -13,30 +13,25 @@ pub use tla_instrumentation_proc_macros::tla_update_method;
 
 pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
 
-pub use ic_nervous_system_tla::{
-    account_to_tla, opt_subaccount_to_tla,
-    store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES},
-    subaccount_to_tla,
-};
-pub use ic_nervous_system_tla::{tla_log_locals, tla_log_request, tla_log_response};
-
 use std::path::PathBuf;
 
 use icp_ledger::Subaccount;
-
 mod common;
+mod store;
+
+pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
+pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
-pub mod ledger;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = gov
         .neuron_store
-        .heap_neurons()
-        .iter()
-        .map(|(neuron_id, neuron)| {
+        .active_neurons_iter()
+        .map(|neuron| {
             (
-                *neuron_id,
+                neuron.id().id,
                 TlaValue::Record(BTreeMap::from([
                     (
                         "cached_stake".to_string(),
@@ -100,13 +95,6 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     );
     state.add("transaction_fee", gov.transaction_fee().to_tla_value());
     state
-}
-
-#[macro_export]
-macro_rules! tla_get_globals {
-    ($self:expr) => {
-        tla::get_tla_globals($self)
-    };
 }
 
 // Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts

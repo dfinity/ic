@@ -21,3 +21,10 @@ macro_rules! tla_log_locals {
         tla_instrumentation::tla_log_locals!($($args)*);
     }
 }
+
+#[macro_export]
+macro_rules! tla_get_globals {
+    ($self:expr) => {
+        tla::get_tla_globals($self)
+    };
+}

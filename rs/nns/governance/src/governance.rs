@@ -128,16 +128,15 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
-#[cfg(feature = "tla")]
 #[macro_use]
+pub mod tla_macros;
+#[cfg(feature = "tla")]
 pub mod tla;
 #[cfg(feature = "tla")]
-use tla::{
+pub use tla::{
     split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
     TLA_TRACES,
 };
-
-use ic_nervous_system_tla::tla_log_locals;
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
