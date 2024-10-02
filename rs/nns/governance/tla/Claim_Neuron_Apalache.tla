@@ -51,8 +51,6 @@ VARIABLES
     pc,
     \* @type: $proc -> Int;
     neuron_id,
-    \* @type: $proc -> Int;
-    amount,
     \* @type: $proc -> $account;
     account_id
 
