@@ -268,10 +268,14 @@ impl CanisterHistory {
     }
 }
 
+/// `TaskQueue` represents the implementation of queue structure for tasks satisfying  conditions:
+///
+/// 1. If there is a `Paused` or `Aborted` task it will be returned first.
+/// 2. If an `OnLowWasmMemoryHook` is ready to be executed, it will be returned next.
+/// 3. All other tasks will be returned based on the order in which they are added to the queue.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
-    /// Tasks to execute before processing input messages.
-    /// Currently the task queue is empty outside of execution rounds.
+    /// Queue of tasks.
     queue: VecDeque<ExecutionTask>,
 
     /// Status of low_on_wasm_memory hook execution.
@@ -332,6 +336,9 @@ impl TaskQueue {
         self.on_low_wasm_memory_hook_status
     }
 
+    /// `check_dts_invariants` should only be called after round execution.
+    ///
+    /// It checks that the following properties are satisfied:
     /// 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
     /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
     /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
@@ -342,6 +349,14 @@ impl TaskQueue {
         current_round_type: ExecutionRoundType,
         id: &CanisterId,
     ) {
+        // There should be at most one paused or aborted task left in the task queue.
+        assert!(
+            self.queue.len() <= 1,
+            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+            id,
+            self.queue
+        );
+
         for task in self.queue.iter() {
             match task {
                 ExecutionTask::AbortedExecution { .. }
@@ -382,14 +397,6 @@ impl TaskQueue {
                 }
             }
         }
-
-        // There should be at most one paused or aborted task left in the task queue.
-        assert!(
-            self.queue.len() <= 1,
-            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
-            id,
-            self.queue
-        );
     }
 
     /// Removes aborted install code task.
@@ -535,8 +542,7 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
-    /// Tasks to execute before processing input messages.
-    /// Currently the task queue is empty outside of execution rounds.
+    /// Queue of the tasks to be executed next.
     pub task_queue: TaskQueue,
 
     /// Canister global timer.
