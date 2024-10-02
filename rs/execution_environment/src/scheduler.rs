@@ -655,6 +655,8 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut round_executed_canister_ids = BTreeSet::new();
+        // The set of canisters marked as fully executed: have no messages to execute
+        // or were scheduled first on a core.
         let mut round_fully_executed_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
