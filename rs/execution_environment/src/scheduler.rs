@@ -735,6 +735,7 @@ impl SchedulerImpl {
                 &measurement_scope,
                 &mut round_limits,
                 registry_settings.subnet_size,
+                is_first_iteration,
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
@@ -874,6 +875,7 @@ impl SchedulerImpl {
         measurement_scope: &MeasurementScope,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        is_first_iteration: bool,
     ) -> (
         Vec<CanisterState>,
         BTreeSet<CanisterId>,
@@ -943,6 +945,7 @@ impl SchedulerImpl {
                         deterministic_time_slicing,
                         round_limits,
                         subnet_size,
+                        is_first_iteration,
                     );
                 });
             }
@@ -1967,6 +1970,7 @@ fn execute_canisters_on_thread(
     deterministic_time_slicing: FlagStatus,
     mut round_limits: RoundLimits,
     subnet_size: usize,
+    is_first_iteration: bool,
 ) -> ExecutionThreadResult {
     // Since this function runs on a helper thread, we cannot use a nested scope
     // here. Instead, we propagate metrics to the outer scope manually via
@@ -2088,7 +2092,14 @@ fn execute_canisters_on_thread(
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
         }
-        if !canister.has_input() || rank == 0 {
+        let full_message_execution = match canister.next_execution() {
+            NextExecution::None => true,
+            NextExecution::StartNew => false,
+            // We just finished a full slice of executions.
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
+        };
+        let scheduled_first = is_first_iteration && rank == 0;
+        if full_message_execution || scheduled_first {
             // The very first canister is considered to have a full execution round for
             // scheduling purposes even if it did not complete within the round.
             canister.scheduler_state.last_full_execution_round = round_id;
