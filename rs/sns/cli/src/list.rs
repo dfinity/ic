@@ -1,23 +1,15 @@
 use crate::table::{as_table, TableRow};
+use crate::utils::{get_snses_with_metadata, SnsWithMetadata};
 use anyhow::Result;
 use clap::Parser;
-use futures::{stream, StreamExt};
 use ic_agent::Agent;
-use ic_nervous_system_agent::{nns::sns_wasm, sns::Sns};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use ic_nervous_system_agent::nns::sns_wasm;
 
 #[derive(Debug, Parser)]
 pub struct ListArgs {
     /// Output the SNS information as JSON (instead of a human-friendly table).
     #[clap(long)]
     json: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SnsWithMetadata {
-    name: String,
-    sns: Sns,
 }
 
 impl TableRow for SnsWithMetadata {
@@ -38,24 +30,10 @@ impl TableRow for SnsWithMetadata {
 }
 
 pub async fn exec(args: ListArgs, agent: &Agent) -> Result<()> {
+    eprintln!("Listing SNSes...");
+
     let snses = sns_wasm::list_deployed_snses(agent).await?;
-    let snses_with_metadata = stream::iter(snses)
-        .map(|sns| async move {
-            let metadata = sns.governance.metadata(agent).await?;
-            Ok((sns, metadata))
-        })
-        .buffer_unordered(10) // Do up to 10 requests at a time in parallel
-        .collect::<Vec<anyhow::Result<_>>>()
-        .await;
-    let snses_with_metadata = snses_with_metadata
-        .into_iter()
-        .filter_map(Result::ok)
-        .map(|(sns, metadata)| {
-            let name = metadata.name.unwrap_or_else(|| "Unknown".to_string());
-            SnsWithMetadata { name, sns }
-        })
-        .sorted_by(|a, b| a.name.cmp(&b.name))
-        .collect::<Vec<_>>();
+    let snses_with_metadata = get_snses_with_metadata(agent, snses).await;
 
     let output = if args.json {
         serde_json::to_string(&snses_with_metadata).unwrap()

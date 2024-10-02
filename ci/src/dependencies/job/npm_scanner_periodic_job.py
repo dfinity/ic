@@ -49,7 +49,7 @@ REPOS_TO_SCAN = [
                 owner=Team.GIX_TEAM,
             )
         ],
-        DEFAULT_NODE_VERSION
+        DEFAULT_NODE_VERSION,
     ),
     Repository(
         "agent-js",
@@ -101,7 +101,6 @@ REPOS_TO_SCAN = [
     ),
     # Removing ic-docutrack temporarily since it supports
     # only pnpm and not npm
-
     # Repository(
     #     "ic-docutrack",
     #     "https://github.com/dfinity/ic-docutrack",
@@ -146,7 +145,9 @@ def main():
     finding_data_source_subscribers = [notifier]
     scanner_subscribers = [notifier]
     scanner_job = DependencyScanner(
-        NPMDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier), scanner_subscribers
+        NPMDependencyManager(),
+        JiraFindingDataSource(finding_data_source_subscribers, app_owner_msg_subscriber=notifier),
+        scanner_subscribers,
     )
     scanner_job.do_periodic_scan(REPOS_TO_SCAN)
 

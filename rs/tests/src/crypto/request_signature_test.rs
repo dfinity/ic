@@ -255,7 +255,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/query", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/query", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -288,7 +288,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/call", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/call", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -332,7 +332,7 @@ async fn test_request_signed_by_another_identity_fails<
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/query", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/query", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -366,7 +366,7 @@ async fn test_request_signed_by_another_identity_fails<
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/call", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/call", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -409,7 +409,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/query", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/query", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -442,7 +442,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
     let res = client
-        .post(&format!("{}api/v2/canister/{}/call", url, canister_id))
+        .post(format!("{}api/v2/canister/{}/call", url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
