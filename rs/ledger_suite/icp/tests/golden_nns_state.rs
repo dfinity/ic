@@ -1,6 +1,11 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
+use ic_ledger_core::block::BlockType;
+use ic_ledger_test_utils::state_machine_helpers::index::{
+    get_all_blocks, wait_until_sync_is_completed,
+};
+use ic_ledger_test_utils::state_machine_helpers::ledger::icp_get_blocks;
 use ic_ledger_test_utils::{
     build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
     build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
@@ -92,15 +97,21 @@ impl Setup {
     pub fn verify_ledger_archive_index_block_parity(&self) {
         println!("Verifying ledger, archive, and index block parity");
         println!("Retrieving blocks from the ledger and archives");
-        let ledger_blocks = ic_ledger_test_utils::state_machine_helpers::ledger::icp_get_blocks(
-            &self.state_machine,
-            LEDGER_CANISTER_ID,
-        );
+        let ledger_blocks = icp_get_blocks(&self.state_machine, LEDGER_CANISTER_ID);
+        // Wait for the index to sync with the ledger and archives
+        wait_until_sync_is_completed(&self.state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
         println!("Retrieving blocks from the index");
-        let index_blocks = ic_ledger_test_utils::state_machine_helpers::index::index_get_blocks(
+        let index_blocks = get_all_blocks(
             &self.state_machine,
             INDEX_CANISTER_ID,
-        );
+            0,
+            ledger_blocks.len() as u64,
+        )
+        .blocks
+        .into_iter()
+        .map(icp_ledger::Block::decode)
+        .collect::<Result<Vec<icp_ledger::Block>, String>>()
+        .unwrap();
         assert_eq!(ledger_blocks.len(), index_blocks.len());
         assert_eq!(ledger_blocks, index_blocks);
         println!("Ledger, archive, and index block parity verified");
