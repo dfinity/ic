@@ -3284,8 +3284,8 @@ dependencies = [
  "socket2 0.5.7",
  "ssh2",
  "static_assertions",
- "strum 0.26.2",
- "strum_macros 0.26.2",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "stubborn-io",
  "substring",
  "subtle",
@@ -4997,8 +4997,8 @@ dependencies = [
  "rustls-pemfile 2.1.2",
  "serde_json",
  "sha1",
- "strum 0.26.2",
- "strum_macros 0.26.2",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "sync_wrapper 1.0.1",
  "thiserror",
  "tokio",
@@ -5369,8 +5369,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.10.8",
- "strum 0.26.2",
- "strum_macros 0.26.2",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
  "time",
  "tokio",
@@ -6960,8 +6960,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
- "strum 0.26.2",
- "strum_macros 0.26.2",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "thiserror",
 ]
 
@@ -10613,11 +10613,11 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.26.2"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
 dependencies = [
- "strum_macros 0.26.2",
+ "strum_macros 0.26.4",
 ]
 
 [[package]]
@@ -10635,11 +10635,11 @@ dependencies = [
 
 [[package]]
 name = "strum_macros"
-version = "0.26.2"
+version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
+checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "rustversion",
