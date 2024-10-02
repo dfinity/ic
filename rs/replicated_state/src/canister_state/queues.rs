@@ -7,7 +7,7 @@ mod tests;
 pub use self::input_schedule::CanisterQueuesLoopDetector;
 use self::input_schedule::InputSchedule;
 use self::message_pool::{
-    Class, Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
+    Context, InboundReference, Kind, MessagePool, OutboundReference, SomeReference,
 };
 use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -478,7 +478,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.clone().into();
-        } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
+        } else if reference.is_inbound_best_effort_response() {
             if let Some(callback_id) = self.expired_callbacks.get(&reference) {
                 debug_assert!(!self.shed_responses.contains_key(&reference));
                 return CanisterInput::DeadlineExpired(*callback_id);
@@ -497,7 +497,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
             debug_assert!(!self.expired_callbacks.contains_key(&reference));
             debug_assert!(!self.shed_responses.contains_key(&reference));
             return msg.into();
-        } else if reference.class() == Class::BestEffort && reference.kind() == Kind::Response {
+        } else if reference.is_inbound_best_effort_response() {
             if let Some(callback_id) = self.expired_callbacks.remove(&reference) {
                 debug_assert!(!self.shed_responses.contains_key(&reference));
                 return CanisterInput::DeadlineExpired(callback_id);
@@ -513,8 +513,7 @@ impl MessageStore<CanisterInput> for MessageStoreImpl {
         debug_assert_eq!(Context::Inbound, reference.context());
 
         self.pool.get(reference).is_none()
-            && !(reference.class() == Class::BestEffort
-                && reference.kind() == Kind::Response
+            && !(reference.is_inbound_best_effort_response()
                 && (self.expired_callbacks.contains_key(&reference)
                     || self.shed_responses.contains_key(&reference)))
     }
@@ -564,7 +563,7 @@ trait InboundMessageStore: MessageStore<CanisterInput> {
 
 impl InboundMessageStore for MessageStoreImpl {
     fn push_inbound_timeout_response(&mut self, callback_id: CallbackId) -> InboundReference {
-        let reference = self.pool.reserve_inbound_timeout_response();
+        let reference = self.pool.make_inbound_timeout_response_reference();
         self.expired_callbacks.insert(reference, callback_id);
         reference
     }
