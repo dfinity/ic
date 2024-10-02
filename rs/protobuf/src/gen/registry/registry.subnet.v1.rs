@@ -281,16 +281,7 @@ pub struct ExtendedDerivationPath {
     #[prost(bytes = "vec", repeated, tag = "2")]
     pub derivation_path: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
 }
-#[derive(
-    serde::Serialize,
-    serde::Deserialize,
-    candid::CandidType,
-    Eq,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Clone, Copy, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
@@ -307,9 +298,7 @@ pub struct SubnetFeatures {
 /// Per subnet ECDSA configuration
 ///
 /// Deprecated; please use ChainKeyConfig instead.
-#[derive(
-    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
-)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaConfig {
     /// Number of quadruples to create in advance.
     #[prost(uint32, tag = "1")]

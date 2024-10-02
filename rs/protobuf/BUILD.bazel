@@ -23,9 +23,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:bincode",
-        "@crate_index//:candid",
         "@crate_index//:erased-serde",
-        "@crate_index//:hex",
         "@crate_index//:prost",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
@@ -38,6 +36,7 @@ rust_test(
     crate = ":protobuf",
     deps = [
         # Keep sorted.
+        "@crate_index//:hex",
         "@crate_index//:maplit",
     ],
 )

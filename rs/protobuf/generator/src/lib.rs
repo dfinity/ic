@@ -185,17 +185,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.crypto.v1.X509PublicKeyCert",
         "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
-    config.type_attribute(
-        ".registry.crypto.v1.EcdsaCurve",
-        "#[derive(candid::CandidType)]",
-    );
-    config.type_attribute(
-        ".registry.crypto.v1.EcdsaKeyId",
-        "#[derive(candid::CandidType, Eq)]",
-    );
+    config.type_attribute(".registry.crypto.v1.EcdsaKeyId", "#[derive(Eq)]");
     config.type_attribute(
         ".registry.node_operator",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
     );
     config.type_attribute(
         ".registry.nns",
@@ -207,7 +200,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.firewall",
-        "#[derive(candid::CandidType, serde::Serialize, serde::Deserialize)]",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
         ".registry.routing_table",
@@ -221,14 +214,8 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.subnet",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-    config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(candid::CandidType, Eq)]",
-    );
-    config.type_attribute(
-        ".registry.subnet.v1.SubnetFeatures",
-        "#[derive(candid::CandidType, Eq)]",
-    );
+    config.type_attribute(".registry.subnet.v1.EcdsaConfig", "#[derive(Eq)]");
+    config.type_attribute(".registry.subnet.v1.SubnetFeatures", "#[derive(Eq)]");
     config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
@@ -239,11 +226,11 @@ fn build_registry_proto(def: &Path, out: &Path) {
     );
     config.type_attribute(
         ".registry.node_rewards.v2",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
         ".registry.dc",
-        "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
         ".registry.unassigned_nodes_config",
