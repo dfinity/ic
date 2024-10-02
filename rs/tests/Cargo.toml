@@ -34,7 +34,6 @@ ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-http = "0.2.12"
 humantime = "2.0"
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
