@@ -83,7 +83,7 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
-        "@crate_index//:ic-btc-validation",
+        "@crate_index//:hyper-util",
     ],
 )
 
