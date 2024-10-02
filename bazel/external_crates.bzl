@@ -231,7 +231,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.30.2",
+                version = "^0.32.3",
             ),
             "bitcoincore-rpc": crate.spec(
                 version = "^0.19.0",
