@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::thread;
 
 use super::Governance;
-use crate::storage::with_stable_neuron_indexes;
+use crate::storage::{with_stable_neuron_indexes, with_stable_neuron_store};
 
 pub use tla_instrumentation::{
     Destination, GlobalState, InstrumentationState, Label, ResolvedStatePair,
@@ -26,30 +26,33 @@ mod split_neuron;
 pub use split_neuron::split_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
-    let neuron_map: BTreeMap<u64, TlaValue> = gov
-        .neuron_store
-        .active_neurons_iter()
-        .map(|neuron| {
-            (
-                neuron.id().id,
-                TlaValue::Record(BTreeMap::from([
-                    (
-                        "cached_stake".to_string(),
-                        neuron.cached_neuron_stake_e8s.to_tla_value(),
-                    ),
-                    (
-                        "account".to_string(),
-                        subaccount_to_tla(&neuron.subaccount()),
-                    ),
-                    ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
-                    (
-                        "maturity".to_string(),
-                        neuron.maturity_e8s_equivalent.to_tla_value(),
-                    ),
-                ])),
-            )
-        })
-        .collect();
+    let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
+        gov.neuron_store
+            .active_neurons_iter()
+            .cloned()
+            .chain(store.range_neurons(std::ops::RangeFull))
+            .map(|neuron| {
+                (
+                    neuron.id().id,
+                    TlaValue::Record(BTreeMap::from([
+                        (
+                            "cached_stake".to_string(),
+                            neuron.cached_neuron_stake_e8s.to_tla_value(),
+                        ),
+                        (
+                            "account".to_string(),
+                            subaccount_to_tla(&neuron.subaccount()),
+                        ),
+                        ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
+                        (
+                            "maturity".to_string(),
+                            neuron.maturity_e8s_equivalent.to_tla_value(),
+                        ),
+                    ])),
+                )
+            })
+            .collect()
+    });
     neuron_map.to_tla_value()
 }
 
