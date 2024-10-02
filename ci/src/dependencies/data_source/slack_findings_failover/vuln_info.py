@@ -232,7 +232,9 @@ class SlackVulnerabilityInfo:
                     if not is_filtered:
                         filtered_findings.append(finding)
                         is_filtered = True
-                    risk_assessors.update(info_by_project[proj].risk_assessors_by_channel[channel_id])
+                    risk_assessors.update(
+                        map(lambda x: x.name, info_by_project[proj].risk_assessors_by_channel[channel_id])
+                    )
         if len(filtered_findings) == 0:
             return None
 

@@ -5,6 +5,7 @@ from data_source.slack_findings_failover.data import (
     VULNERABILITY_MSG_FIXED_REACTION,
     SlackFinding,
     SlackProjectInfo,
+    SlackRiskAssessor,
     SlackVulnerabilityEvent,
 )
 from data_source.slack_findings_failover.scan_result import SlackScanResult
@@ -58,7 +59,13 @@ def slack_vuln_info():
 
 @pytest.fixture()
 def info_by_project():
-    return {"p1": SlackProjectInfo("p1", {"c1", "c2"}, {"c1": ["risk_ass1"], "c2": ["risk_ass2"]})}
+    return {
+        "p1": SlackProjectInfo(
+            "p1",
+            {"c1", "c2"},
+            {"c1": [SlackRiskAssessor("risk_ass1", True)], "c2": [SlackRiskAssessor("risk_ass2", True)]},
+        )
+    }
 
 
 def test_handle_vuln_added_event(slack_store, slack_vuln_info, slack_api):

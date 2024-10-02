@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Dict, List, Set
 
 from data_source.findings_failover_data_store import FindingsFailoverDataStore
-from data_source.slack_findings_failover.data import VULNERABILITY_THRESHOLD_SCORE, SlackProjectInfo
+from data_source.slack_findings_failover.data import VULNERABILITY_THRESHOLD_SCORE, SlackProjectInfo, SlackRiskAssessor
 from data_source.slack_findings_failover.scan_result import SlackScanResult
 from data_source.slack_findings_failover.vuln_info import SlackVulnerabilityInfo, VulnerabilityInfo
 from data_source.slack_findings_failover.vuln_load import SlackVulnerabilityLoader
@@ -21,7 +21,10 @@ SLACK_CHANNEL_CONFIG_BY_TEAM = {
     Team.NODE_TEAM: SlackChannelConfig(channel_id="C05CYLM94KU", channel="#eng-node-psec"),
     Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C06KQKZ3EBW", channel="#eng-boundary-nodes-psec"),
 }
-SLACK_TEAM_GROUP_ID = {Team.NODE_TEAM: "<!subteam^S05FTRNRC5A>", Team.BOUNDARY_NODE_TEAM: "<!subteam^S0313LYB9FZ>"}
+SLACK_TEAM_RISK_ASSESSOR = {
+    Team.NODE_TEAM: SlackRiskAssessor(name="<!subteam^S05FTRNRC5A>", wants_assessment_reminder=True),
+    Team.BOUNDARY_NODE_TEAM: SlackRiskAssessor(name="<!subteam^S0313LYB9FZ>", wants_assessment_reminder=False),
+}
 
 SLACK_LOG_TO_CONSOLE = False
 
@@ -85,7 +88,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                     channels.add(cid)
                     if cid not in risk_assessors:
                         risk_assessors[cid] = set()
-                    risk_assessors[cid].add(SLACK_TEAM_GROUP_ID[proj.owner])
+                    risk_assessors[cid].add(SLACK_TEAM_RISK_ASSESSOR[proj.owner])
                 for sub_path, teams in proj.owner_by_path.items():
                     if not transformed_proj.startswith(sub_path):
                         continue
@@ -94,7 +97,7 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
                         channels.add(cid)
                         if cid not in risk_assessors:
                             risk_assessors[cid] = set()
-                        risk_assessors[cid].add(SLACK_TEAM_GROUP_ID[team])
+                        risk_assessors[cid].add(SLACK_TEAM_RISK_ASSESSOR[team])
             if len(channels) == 0 or len(risk_assessors) == 0:
                 raise RuntimeError(f"cannot determine channel for project: {finding_proj}")
             risk_assessors_sorted = {}

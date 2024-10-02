@@ -91,8 +91,14 @@ class SlackFinding:
         return self.repository, self.scanner, self.dependency_id, self.dependency_version
 
 
+@dataclass(frozen=True, order=True)
+class SlackRiskAssessor:
+    name: str
+    wants_assessment_reminder: bool
+
+
 @dataclass
 class SlackProjectInfo:
     project: str
     channels: Set[str]
-    risk_assessors_by_channel: Dict[str, List[str]]
+    risk_assessors_by_channel: Dict[str, List[SlackRiskAssessor]]

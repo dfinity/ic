@@ -136,14 +136,18 @@ class SlackVulnerabilityStore:
                         f"could not send risk assessment reminder for channel {event.channel_id} for vuln {slack_vuln_info.vulnerability.id}"
                     )
                 risk_assessors = set()
+                send_reminder = False
                 for finding in slack_vuln_info.finding_by_id.values():
                     for proj in finding.projects:
                         if event.channel_id in info_by_project[proj].channels:
-                            risk_assessors.update(info_by_project[proj].risk_assessors_by_channel[event.channel_id])
-                self.slack_api_by_channel[event.channel_id].send_message(
-                    message="This finding needs risk assessment from " + ", ".join(sorted(list(risk_assessors))),
-                    is_block_kit_message=False,
-                    thread_id=slack_vuln_info.msg_info_by_channel[event.channel_id].message_id,
-                )
+                            for ra in info_by_project[proj].risk_assessors_by_channel[event.channel_id]:
+                                send_reminder |= ra.wants_assessment_reminder
+                                risk_assessors.add(ra.name)
+                if send_reminder:
+                    self.slack_api_by_channel[event.channel_id].send_message(
+                        message="This finding needs risk assessment from " + ", ".join(sorted(list(risk_assessors))),
+                        is_block_kit_message=False,
+                        thread_id=slack_vuln_info.msg_info_by_channel[event.channel_id].message_id,
+                    )
             else:
                 raise RuntimeError(f"event has unknown type: {event}")
