@@ -1,16 +1,23 @@
-type GetApiBoundaryNodeIdsResponse = variant {
-    Ok : vec ApiBoundaryNodeIdRecord;
-    Err : text;
+type InputRule = record {
+  id: text;
+  rule_raw: text;
+  description: text;
 };
 
-type ApiBoundaryNodeIdRecord = record {
-  id : opt principal;
+type InputConfig = record {
+  rules: vec InputRule; 
 };
 
-type GetApiBoundaryNodeIdsRequest = record {
+type OverwriteConfigResponse = record {
+  result: bool;
+};
 
+type GetLatestConfigResponse = record {
+  config: InputConfig
 };
 
 service : (nat64) -> {
     get_api_boundary_nodes_count : () -> (nat64) query;
+    overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
+    get_latest_config: () -> (GetLatestConfigResponse);
 }
