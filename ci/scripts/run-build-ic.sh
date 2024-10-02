@@ -38,6 +38,10 @@ elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     fi
 
     if [ ${#ARGS[@]} -eq 1 ]; then
+        if [ "${IS_PROTECTED_BRANCH:-}" == "true" ]; then
+            echo "Error: No changes to build on protected branch. Aborting."
+            exit 1
+        fi
         echo "No changes that require building IC-OS, binaries or canisters."
         touch build-ic.tar
         exit 0
