@@ -7,27 +7,27 @@ EXTENDS TLC, Variants
 @typeAlias: proc = Str;
 @typeAlias: account = Str;
 @typeAlias: neuronId = Int;
-@typeAlias: accountBalanceMethodCall = AccountBalance({ account: $account });
-@typeAlias: accountBalanceMethodResponse = Fail(UNIT) | Balance(Int);
+@typeAlias: methodCall = Transfer({ from: $account, to: $account, amount: Int, fee: Int}) | AccountBalance({ account: $account });
+@typeAlias: methodResponse = Fail(UNIT) | TransferOk(UNIT) | BalanceQueryOk(Int);
 *)
 _type_alias_dummy == TRUE
 
 \* CODE_LINK_INSERT_CONSTANTS
 
 (*
-CONSTANTS 
+CONSTANTS
     \* @type: Set($account);
-    Account_Ids, 
+    Account_Ids,
     \* @type: Set($account);
-    Governance_Account_Ids, 
+    Governance_Account_Ids,
     \* @type: Set($neuronId);
     Neuron_Ids
 
-CONSTANTS 
+CONSTANTS
     \* @type: Set($proc);
     Claim_Neuron_Process_Ids
 
-CONSTANTS 
+CONSTANTS
     \* Minimum stake a neuron can have
     \* @type: Int;
     MIN_STAKE,
@@ -37,15 +37,15 @@ CONSTANTS
 *)
 
 VARIABLES
-    \* @type: $neuronId -> {cached_stake: Int, account : $account, maturity: Int, fees: Int};
+    \* @type: $neuronId -> {cached_stake: Int, account: $account, maturity: Int, fees: Int};
     neuron,
     \* @type: $account -> $neuronId;
     neuron_id_by_account,
     \* @type: Set($neuronId);
     locks,
-    \* @type: Seq({caller : $proc, method_and_args: $accountBalanceMethodCall });
+    \* @type: Seq({caller : $proc, method_and_args: $methodCall });
     governance_to_ledger,
-    \* @type: Set({caller: $proc, response: $accountBalanceMethodResponse });
+    \* @type: Set({caller: $proc, response: $methodResponse });
     ledger_to_governance,
     \* @type: $proc -> Str;
     pc,
