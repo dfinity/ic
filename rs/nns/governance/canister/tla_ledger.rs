@@ -14,15 +14,11 @@ use ic_nns_governance::governance::tla::{
 use ic_nns_governance::{tla_log_request, tla_log_response};
 use std::collections::BTreeMap;
 
-pub struct LoggingIcpLedgerCanister<Rt: Runtime> {
-    ledger: IcpLedgerCanister<Rt>,
-}
+pub struct LoggingIcpLedgerCanister<Rt: Runtime>(IcpLedgerCanister<Rt>);
 
 impl<Rt: Runtime + Send + Sync> LoggingIcpLedgerCanister<Rt> {
     pub fn new(id: CanisterId) -> Self {
-        LoggingIcpLedgerCanister {
-            ledger: IcpLedgerCanister::new(id),
-        }
+        LoggingIcpLedgerCanister(IcpLedgerCanister::new(id))
     }
 }
 
@@ -49,7 +45,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         );
 
         let result = self
-            .ledger
+            .0
             .transfer_funds(amount_e8s, fee_e8s, from_subaccount, to, memo)
             .await;
 
@@ -72,17 +68,17 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        self.ledger.total_supply().await
+        self.0.total_supply().await
     }
 
     async fn account_balance(
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        self.ledger.account_balance(account).await
+        self.0.account_balance(account).await
     }
 
     fn canister_id(&self) -> CanisterId {
-        self.ledger.canister_id()
+        self.0.canister_id()
     }
 }
