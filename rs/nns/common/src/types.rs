@@ -39,6 +39,12 @@ impl From<NeuronId> for NeuronIdProto {
 
 pub type NeuronIdParseError = ic_base_types::PrincipalIdParseError;
 
+impl NeuronIdProto {
+    pub fn from_u64(id: u64) -> Self {
+        Self { id }
+    }
+}
+
 impl FromStr for NeuronId {
     type Err = ParseIntError;
     fn from_str(src: &str) -> Result<Self, Self::Err> {
