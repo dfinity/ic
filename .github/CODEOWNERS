@@ -96,6 +96,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
+/rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/execution
