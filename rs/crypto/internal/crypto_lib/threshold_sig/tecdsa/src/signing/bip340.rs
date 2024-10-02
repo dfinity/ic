@@ -128,7 +128,6 @@ impl RerandomizedPresignature {
     }
 }
 
-
 fn compute_taproot_tweak(pk: &EccPoint, h: &[u8]) -> CanisterThresholdResult<EccScalar> {
     let tag = "TapTweak";
 
