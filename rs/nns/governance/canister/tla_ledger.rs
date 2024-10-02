@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use dfn_core::CanisterId;
+use ic_base_types::CanisterId;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;

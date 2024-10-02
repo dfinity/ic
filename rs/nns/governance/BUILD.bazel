@@ -227,17 +227,21 @@ rust_canister(
 
 rust_canister(
     name = "governance-canister-test",
-    srcs = ["canister/canister.rs"],
+    srcs = [
+        "canister/canister.rs",
+        "canister/tla_ledger.rs",
+    ],
     aliases = ALIASES,
     compile_data = ["canister/governance_test.did"],
     crate_features = test_with_tla(),
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        ":tla_instrummented_ledger",
         "//rs/nervous_system/canisters",
+        "//rs/tla_instrumentation",
     ],
 )
 
@@ -285,7 +289,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        ":tla_instrummented_ledger",
         "//rs/nervous_system/canisters",
     ],
 )
@@ -364,26 +367,5 @@ rust_test_suite_with_extra_srcs(
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-    ],
-)
-
-rust_library(
-    name = "tla_instrummented_ledger",
-    srcs = glob(["tla_ledger/src/**/*.rs"]),
-    crate_features = test_with_tla(),
-    crate_name = "ic_nns_tla_instrumented_ledger",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
-    version = "0.1.0",
-    deps = [
-        # Keep sorted.
-        ":governance--test_feature",
-        "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/nervous_system/canisters",
-        "//rs/nervous_system/common",
-        "//rs/nervous_system/runtime",
-        "//rs/rust_canisters/dfn_core",
-        "//rs/tla_instrumentation",
     ],
 )
