@@ -216,14 +216,22 @@ pub fn send_transfer(
     from: Principal,
     arg: &TransferArg,
 ) -> Result<BlockIndex, TransferError> {
+    let response = env.execute_ingress_as(
+        PrincipalId(from),
+        ledger,
+        "icrc1_transfer",
+        Encode!(arg).unwrap(),
+    );
+    match &response {
+        Ok(_) => {
+            println!("Transfer successful");
+        }
+        Err(err) => {
+            println!("User error: {:?}", err);
+        }
+    }
     Decode!(
-        &env.execute_ingress_as(
-            PrincipalId(from),
-            ledger,
-            "icrc1_transfer",
-            Encode!(arg)
-            .unwrap()
-        )
+        &response
         .expect("failed to transfer funds")
         .bytes(),
         Result<Nat, TransferError>
@@ -988,6 +996,91 @@ where
 {
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
     assert_eq!(Some(MINTER), minting_account(&env, canister_id));
+}
+
+pub fn test_anonymous_transfers<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const TRANSFER_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let anon = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), INITIAL_BALANCE),
+            (Account::from(anon.0), INITIAL_BALANCE),
+        ],
+    );
+
+    assert_eq!(INITIAL_BALANCE * 2, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
+
+    // Transfer to the account of the anonymous principal
+    println!("transferring to the account of the anonymous principal");
+    transfer(&env, canister_id, p1.0, anon.0, TRANSFER_AMOUNT).expect("transfer failed");
+
+    // Transfer from the account of the anonymous principal
+    println!("transferring from the account of the anonymous principal");
+    transfer(&env, canister_id, anon.0, p1.0, TRANSFER_AMOUNT).expect("transfer failed");
+
+    assert_eq!(
+        INITIAL_BALANCE * 2 - FEE * 2,
+        total_supply(&env, canister_id)
+    );
+    assert_eq!(INITIAL_BALANCE - FEE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(INITIAL_BALANCE - FEE, balance_of(&env, canister_id, anon.0));
+}
+
+pub fn test_anonymous_approval<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let anon = PrincipalId::new_anonymous();
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(anon.0), INITIAL_BALANCE),
+            (Account::from(p1.0), INITIAL_BALANCE),
+        ],
+    );
+
+    assert_eq!(INITIAL_BALANCE * 2, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, anon.0));
+
+    // Approve transfers for p1 from the account of the anonymous principal
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p1.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    send_approval(&env, canister_id, anon.0, &approve_args).expect("approve failed");
+
+    // Approve transfers for the anonymous principal from the account of p1
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: anon.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approve failed");
 }
 
 pub fn test_single_transfer<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
