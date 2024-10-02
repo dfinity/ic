@@ -22,13 +22,22 @@ const INDEX_CANISTER_ID: CanisterId =
 fn should_create_state_machine_with_golden_nns_state() {
     let setup = Setup::new();
 
+    // Verify ledger, archives, and index block parity
+    setup.verify_ledger_archive_index_block_parity();
+
     // Upgrade all the canisters to the latest version
     setup.upgrade_to_master();
     // Upgrade again to test the pre-upgrade
     setup.upgrade_to_master();
 
+    // Verify ledger, archives, and index block parity
+    setup.verify_ledger_archive_index_block_parity();
+
     // Downgrade all the canisters to the mainnet version
     setup.downgrade_to_mainnet();
+
+    // Verify ledger, archives, and index block parity
+    setup.verify_ledger_archive_index_block_parity();
 }
 
 struct Wasms {
@@ -67,15 +76,34 @@ impl Setup {
     }
 
     pub fn upgrade_to_master(&self) {
+        println!("Upgrading to master version");
         self.upgrade_index(&self.master_wasms.index);
         self.upgrade_ledger(&self.master_wasms.ledger);
         self.upgrade_archive_canisters(&self.master_wasms.archive);
     }
 
     pub fn downgrade_to_mainnet(&self) {
+        println!("Downgrading to mainnet version");
         self.upgrade_index(&self.mainnet_wasms.index);
         self.upgrade_ledger(&self.mainnet_wasms.ledger);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+    }
+
+    pub fn verify_ledger_archive_index_block_parity(&self) {
+        println!("Verifying ledger, archive, and index block parity");
+        println!("Retrieving blocks from the ledger and archives");
+        let ledger_blocks = ic_ledger_test_utils::state_machine_helpers::ledger::icp_get_blocks(
+            &self.state_machine,
+            LEDGER_CANISTER_ID,
+        );
+        println!("Retrieving blocks from the index");
+        let index_blocks = ic_ledger_test_utils::state_machine_helpers::index::index_get_blocks(
+            &self.state_machine,
+            INDEX_CANISTER_ID,
+        );
+        assert_eq!(ledger_blocks.len(), index_blocks.len());
+        assert_eq!(ledger_blocks, index_blocks);
+        println!("Ledger, archive, and index block parity verified");
     }
 
     fn list_archives(&self) -> Archives {
