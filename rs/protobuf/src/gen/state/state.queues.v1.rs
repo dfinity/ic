@@ -207,7 +207,7 @@ pub struct CanisterQueue {
     /// \[Deprecated\] FIFO queue of references into the pool and reject response
     /// markers.
     #[prost(message, repeated, tag = "1")]
-    pub queue_items: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
+    pub deprecated_queue: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
     /// FIFO queue of references into the pool or the compact reject response maps.
     #[prost(uint64, repeated, tag = "4")]
     pub queue: ::prost::alloc::vec::Vec<u64>,

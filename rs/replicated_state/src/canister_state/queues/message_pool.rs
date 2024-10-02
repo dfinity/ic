@@ -289,9 +289,9 @@ where
 {
     type Error = ProxyDecodeError;
     fn try_from(item: u64) -> Result<Self, Self::Error> {
-        let reference = Reference(item, PhantomData);
-        if reference.context() == T::context() {
-            Ok(reference)
+        let id = Id(item);
+        if id.context() == T::context() {
+            Ok(Reference(item, PhantomData))
         } else {
             Err(ProxyDecodeError::Other(format!(
                 "Mismatched reference context: {}",

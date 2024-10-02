@@ -298,7 +298,7 @@ impl<T> CanisterQueue<T> {
 impl<T> From<&CanisterQueue<T>> for pb_queues::CanisterQueue {
     fn from(item: &CanisterQueue<T>) -> Self {
         Self {
-            queue_items: item.queue.iter().map(Into::into).collect(),
+            deprecated_queue: item.queue.iter().map(Into::into).collect(),
             queue: item.queue.iter().map(Into::into).collect(),
             capacity: item.capacity as u64,
             response_slots: item.response_slots as u64,
@@ -314,13 +314,13 @@ where
     type Error = ProxyDecodeError;
 
     fn try_from(item: pb_queues::CanisterQueue) -> Result<Self, Self::Error> {
-        let queue: VecDeque<Reference<T>> = if item.queue_items.is_empty() {
+        let queue: VecDeque<Reference<T>> = if !item.queue.is_empty() {
             item.queue
                 .into_iter()
                 .map(Reference::<T>::try_from)
                 .collect::<Result<_, _>>()?
         } else {
-            item.queue_items
+            item.deprecated_queue
                 .into_iter()
                 .map(|queue_item| match queue_item.r {
                     Some(pb_queues::canister_queue::queue_item::R::Reference(_)) => {
