@@ -137,9 +137,11 @@ rust_test(
         ],
         deps = [
             # Keep sorted.
+            ":icrc1",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/nns/test_utils",
             "//rs/nns/test_utils/golden_nns_state",
+            "//rs/rosetta-api/icrc1/index-ng",
             "//rs/rosetta-api/icrc1/ledger",
             "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
             "//rs/rosetta-api/icrc1/test_utils",
