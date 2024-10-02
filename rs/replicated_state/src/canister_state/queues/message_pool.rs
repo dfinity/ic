@@ -650,16 +650,6 @@ impl MessagePool {
         self.messages.len()
     }
 
-    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
-    /// response requests.
-    pub(super) fn outbound_guaranteed_request_deadline<T>(
-        &self,
-        reference: Reference<T>,
-    ) -> Option<&CoarseTime> {
-        self.outbound_guaranteed_request_deadlines
-            .get(&reference.into())
-    }
-
     /// Returns a reference to the pool's message stats.
     pub(super) fn message_stats(&self) -> &MessageStats {
         &self.message_stats

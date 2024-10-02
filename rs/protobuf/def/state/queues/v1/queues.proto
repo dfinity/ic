@@ -112,25 +112,6 @@ message MessageDeadline {
   uint64 index = 2;
 }
 
-message InputOutputQueue {
-  repeated RequestOrResponse queue = 1;
-  uint64 begin = 2;
-  uint64 capacity = 3;
-  uint64 num_slots_reserved = 4;
-  // Ordered ranges of messages having the same request deadline. Each range
-  // is represented as a deadline and its end index (the `QueueIndex` just
-  // past the last request where the deadline applies). Both the deadlines and
-  // queue indices are strictly increasing.
-  repeated MessageDeadline deadline_range_ends = 5;
-  // Queue index from which request timing out will resume.
-  uint64 timeout_index = 6;
-}
-
-message QueueEntry {
-  types.v1.CanisterId canister_id = 1;
-  InputOutputQueue queue = 2;
-}
-
 // A pool holding all of a canister's incoming and outgoing canister messages.
 message MessagePool {
   // A pool entry: a message keyed by its ID.
@@ -178,13 +159,7 @@ message CanisterQueue {
 }
 
 message CanisterQueues {
-  reserved 1, 4;
-  reserved "canister_id", "input_schedule";
-
   repeated ingress.v1.Ingress ingress_queue = 2;
-
-  repeated QueueEntry input_queues = 3;
-  repeated QueueEntry output_queues = 5;
 
   // Input queue from and output queue to `canister_id`.
   message CanisterQueuePair {
@@ -216,4 +191,7 @@ message CanisterQueues {
   repeated types.v1.CanisterId remote_sender_schedule = 8;
 
   uint64 guaranteed_response_memory_reservations = 11;
+
+  reserved 1, 3, 4, 5;
+  reserved "canister_id", "input_queues", "input_schedule", "output_queues";
 }
