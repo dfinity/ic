@@ -7,7 +7,7 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use std::time::Duration;
 
-const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+pub const SYNC_STEP_SECONDS: Duration = Duration::from_secs(2);
 
 pub fn get_all_blocks(
     state_machine: &StateMachine,
