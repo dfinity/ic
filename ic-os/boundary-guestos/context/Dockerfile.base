@@ -17,11 +17,11 @@ ARG CROWDSEC_BOUNCER_SHA=c99919c6ecc69904249ff71b32ea791ce2eec32e5a9e8d4c9c65541
 
 # Vector version to install
 ARG VECTOR_VERSION=0.41.1
-ARG VECTOR_SHA=0726bd7321ab0292e9e420280666e345cde3d729
+ARG VECTOR_SHA=a4fe30ec0e9ef959bac8b6de013a28e22890f6e5a5afd00d42ef7affaf432442
 
 # Node exporter version to install
 ARG NODE_EXPORTER_VERSION=1.8.2
-ARG NODE_EXPORTER_SHA=9e3196288a19674f5c46c1d1c7c056f915c6bba7
+ARG NODE_EXPORTER_SHA=6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66
 
 #
 # - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
@@ -59,28 +59,28 @@ RUN \
         gettext-base \
         haveged \
         initramfs-tools \
-        inotify-tools \
         iproute2 \
         iputils-ping \
         less \
         logrotate \
         lshw \
         lvm2 \
+        nano \
         net-tools \
         netbase \
         nftables \
         openssh-client \
         openssh-server \
         parted \
-        pciutils \
-        policycoreutils \
-        python \
         rsync \
         ssl-cert \
         sudo \
         systemd \
         systemd-sysv \
         systemd-journal-remote \
+        tcpdump \
+        traceroute \
+        mtr-tiny \
         udev \
         usbutils \
         vim \
@@ -91,31 +91,28 @@ WORKDIR /tmp
 # Download and verify vector
 RUN \
     curl -L -O https://packages.timber.io/vector/${VECTOR_VERSION}/vector_${VECTOR_VERSION}-1_amd64.deb && \
-    echo "${VECTOR_SHA}  vector_${VECTOR_VERSION}-1_amd64.deb" | shasum -c
+    echo "${VECTOR_SHA}  vector_${VECTOR_VERSION}-1_amd64.deb" | sha256sum -c
 
 # Download and verify node_exporter
 RUN \
     curl -L -O https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz && \
-    echo "${NODE_EXPORTER_SHA}  node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" | shasum -c
+    echo "${NODE_EXPORTER_SHA}  node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz" | sha256sum -c
 
 # Download and verify crowdsec bouncer
 RUN \
     curl -L -O https://github.com/blind-oracle/cs-firewall-bouncer/releases/download/v${CROWDSEC_BOUNCER_VERSION}/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
-    echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | shasum -c
+    echo "${CROWDSEC_BOUNCER_SHA}  crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb" | sha256sum -c
 
 # Install vector
-COPY --from=download /tmp/vector_${VECTOR_VERSION}-1_amd64.deb /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
 RUN dpkg -i --force-confold /tmp/vector_${VECTOR_VERSION}-1_amd64.deb && \
     rm /tmp/vector_${VECTOR_VERSION}-1_amd64.deb
 
 # Install node_exporter
-COPY --from=download /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
 RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-amd64.tar.gz
 
 # Install crowdsec bouncer
-COPY --from=download /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb
 RUN dpkg -i --force-confold /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb && \
     rm /tmp/crowdsec-firewall-bouncer-nftables_${CROWDSEC_BOUNCER_VERSION}_amd64.deb
