@@ -101,8 +101,9 @@ fn run_apalache(
 ) -> Result<(), ApalacheError> {
     let mut cmd = Command::new(apalache_binary);
     // TODO: There's a race condition when running multiple instances of Apalache in parallel,
-    // as they all seem to try to write to the same file in /tmp. So we create
-    // Get the Bazel-provided temporary directory
+    // as they all seem to try to write to the same file in /tmp. So we create a new temporary
+    // directory for each run of Apalache based on the Bazel-provided temporary directory
+    // and then feed that to the JRE, using the Apalache-specific JVM_ARGS environment variable.
     let tmp_subdir_str = unique_tmp_dir();
     // Construct the JVM_ARGS value so that Apalache uses the new temporary subdirectory
     let jvm_args = format!("-Djava.io.tmpdir={}", tmp_subdir_str);
