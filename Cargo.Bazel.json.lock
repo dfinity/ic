@@ -1,5 +1,5 @@
 {
-  "checksum": "dd4578bc45a8c4fbb6924e7a822c478253732db8d988eee1abc73606975b77c3",
+  "checksum": "8d90c59b0d735d367cbe5097fc5d9ef7eb298634f23c8537f6f7c1bdff96435f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17806,10 +17806,6 @@
               "target": "ic_btc_test_utils"
             },
             {
-              "id": "ic-btc-validation 0.1.0",
-              "target": "ic_btc_validation"
-            },
-            {
               "id": "ic-canister-log 0.2.0",
               "target": "ic_canister_log"
             },
@@ -28626,53 +28622,6 @@
         }
       ],
       "library_target_name": "ic_btc_test_utils",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.28.2",
-              "target": "bitcoin"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.1.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
-    },
-    "ic-btc-validation 0.1.0": {
-      "name": "ic-btc-validation",
-      "version": "0.1.0",
-      "package_url": "https://github.com/dfinity/bitcoin-canister",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-btc-validation/0.1.0/download",
-          "sha256": "3e73b5f400b954d3ddb64706bd4392ef0b5829976606c2baa49e692181192761"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_btc_validation",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_btc_validation",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -79414,7 +79363,6 @@
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
     "ic-btc-test-utils 0.1.0",
-    "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",

@@ -237,7 +237,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "bitcoin": crate.spec(
-                version = "^0.28.1",
+                version = "^0.28.2",
                 features = [
                     "default",
                     "rand",
@@ -557,9 +557,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
-            ),
-            "ic-btc-validation": crate.spec(
-                version = "^0.1.0",
             ),
             "ic-btc-test-utils": crate.spec(
                 version = "^0.1.0",
