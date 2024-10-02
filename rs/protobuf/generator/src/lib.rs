@@ -185,10 +185,13 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.crypto.v1.X509PublicKeyCert",
         "#[derive(Eq, Hash, PartialOrd, Ord)]",
     );
-    config.type_attribute(".registry.crypto.v1.EcdsaKeyId", "#[derive(Eq)]");
+    config.type_attribute(
+        ".registry.crypto.v1.EcdsaKeyId",
+        "#[derive(Eq)]",
+    );
     config.type_attribute(
         ".registry.node_operator",
-        "#[derive(serde::Serialize, Eq, Hash)]",
+        "#[derive(serde::Serialize, serde::Deserialize, Eq, Hash)]",
     );
     config.type_attribute(
         ".registry.nns",
@@ -224,8 +227,8 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.hostos_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-    config.type_attribute(".registry.node_rewards.v2", "#[derive(serde::Serialize)]");
-    config.type_attribute(".registry.dc", "#[derive(serde::Serialize)]");
+    config.type_attribute(".registry.node_rewards.v2", "#[derive(serde::Serialize, serde::Deserialize)]");
+    config.type_attribute(".registry.dc", "#[derive(serde::Serialize, serde::Deserialize)]");
     config.type_attribute(
         ".registry.unassigned_nodes_config",
         "#[derive(serde::Serialize, serde::Deserialize)]",

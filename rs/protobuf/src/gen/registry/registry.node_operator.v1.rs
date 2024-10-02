@@ -4,7 +4,7 @@
 ///
 /// Note that while a node operator might host nodes for more than
 /// one funding partner, its principal ID must be unique.
-#[derive(serde::Serialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct NodeOperatorRecord {
     /// The principal id of the node operator. This principal is the entity that
     /// is able to add and remove nodes.
@@ -31,7 +31,7 @@ pub struct NodeOperatorRecord {
     pub ipv6: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// The payload of a request to remove Node Operator records from the Registry
-#[derive(serde::Serialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, Clone, PartialEq, ::prost::Message)]
 pub struct RemoveNodeOperatorsPayload {
     #[prost(bytes = "vec", repeated, tag = "1")]
     pub node_operators_to_remove: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
