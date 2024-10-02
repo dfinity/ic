@@ -62,6 +62,7 @@ RUN \
         iproute2 \
         iputils-ping \
         less \
+        linux-image-virtual-hwe-24.04 \
         logrotate \
         lshw \
         lvm2 \
