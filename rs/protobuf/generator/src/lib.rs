@@ -213,14 +213,8 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.subnet",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-    config.type_attribute(
-        ".registry.subnet.v1.EcdsaConfig",
-        "#[derive(Eq)]",
-    );
-    config.type_attribute(
-        ".registry.subnet.v1.SubnetFeatures",
-        "#[derive(Eq)]",
-    );
+    config.type_attribute(".registry.subnet.v1.EcdsaConfig", "#[derive(Eq)]");
+    config.type_attribute(".registry.subnet.v1.SubnetFeatures", "#[derive(Eq)]");
     config.type_attribute(
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
@@ -229,14 +223,8 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.hostos_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-    config.type_attribute(
-        ".registry.node_rewards.v2",
-        "#[derive(serde::Serialize)]",
-    );
-    config.type_attribute(
-        ".registry.dc",
-        "#[derive(serde::Serialize)]",
-    );
+    config.type_attribute(".registry.node_rewards.v2", "#[derive(serde::Serialize)]");
+    config.type_attribute(".registry.dc", "#[derive(serde::Serialize)]");
     config.type_attribute(
         ".registry.unassigned_nodes_config",
         "#[derive(serde::Serialize, serde::Deserialize)]",
