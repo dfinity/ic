@@ -104,6 +104,40 @@ impl RoundSchedule {
         }
     }
 
+    /// Marks idle canisters in front of the schedule as fully executed.
+    pub fn charge_idle_canisters(
+        &self,
+        canisters: &mut BTreeMap<CanisterId, CanisterState>,
+        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
+        round_id: ExecutionRound,
+        is_first_iteration: bool,
+    ) {
+        for canister_id in self.ordered_new_execution_canister_ids.iter() {
+            let canister = canisters.get_mut(canister_id);
+            if let Some(canister) = canister {
+                let next_execution = canister.next_execution();
+                match next_execution {
+                    NextExecution::None => {
+                        Self::finish_canister_execution(
+                            canister,
+                            fully_executed_canister_ids,
+                            round_id,
+                            is_first_iteration,
+                            0,
+                        );
+                    }
+                    // Skip install code canisters.
+                    NextExecution::ContinueInstallCode => {}
+
+                    NextExecution::StartNew | NextExecution::ContinueLong => {
+                        // Stop searching after the first non-idle canister.
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     /// Returns a round schedule covering active canisters only; and the set of
     /// rate limited canisters.
     pub fn filter_canisters(
@@ -237,7 +271,7 @@ impl RoundSchedule {
 
     pub fn finish_canister_execution(
         canister: &mut CanisterState,
-        fully_executed_canister_ids: &mut Vec<CanisterId>,
+        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
         round_id: ExecutionRound,
         is_first_iteration: bool,
         rank: usize,
@@ -258,7 +292,7 @@ impl RoundSchedule {
 
             // We schedule canisters (as opposed to individual messages),
             // and we charge for every full execution round.
-            fully_executed_canister_ids.push(canister.canister_id());
+            fully_executed_canister_ids.insert(canister.canister_id());
         }
     }
 
