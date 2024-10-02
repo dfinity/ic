@@ -1,3 +1,22 @@
+//! Important limitation: This only only works on update methods, not query.
+//! This is because canisters (in particular, their heap) are not changed by
+//! queries. This is a fundamental platform limitation, not just a limitation in
+//! the implementation of this library.
+//!
+//! Basic usage:
+//!
+//! 0. Optional. If you want to break out the request stream to a method using
+//!    labels (see https://prometheus.io/docs/concepts/data_model/) implement
+//!    the Request trait. Otherwise, just use BasicRequest.
+//!
+//! 1. At the beginning of a method implementation, add one line:
+//!    let _on_drop = UpdateInstructionStatsOnDrop::new(&request);
+//!    If you did not do step 0, pass
+//!    &BasicRequest { method_name: "your_method_name" }
+//!    instead of &request.
+//!
+//! 2. Call encode_instruction_metrics.
+
 use ic_metrics_encoder::MetricsEncoder;
 use ic_nervous_system_histogram::{Histogram, STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS};
 use itertools::Itertools;
@@ -36,6 +55,13 @@ thread_local! {
     static STATS: RefCell<HashMap<Vec<(String, String)>, Histogram>> = Default::default();
 }
 
+/// Adds statistics related to instructions used to service canister calls to `out`.
+///
+/// Despite the name being plural ("metrics"), currently, this only adds one
+/// metric: candid_call_instructions.
+///
+/// It is broken out by method_name (and possibly other custom labels, according
+/// to Request::request_labels).
 pub fn encode_instruction_metrics<MyWrite: std::io::Write>(out: &mut MetricsEncoder<MyWrite>) -> std::io::Result<()> {
     STATS.with(|stats| {
         let mut out = out.histogram_vec(
@@ -51,16 +77,47 @@ pub fn encode_instruction_metrics<MyWrite: std::io::Write>(out: &mut MetricsEnco
     })
 }
 
-/// (The design of this assumes that each request type is associated with a
-/// unique Candid method. If you follow the very good convention where a method
-/// named foo takes FooRequest and returns FooResponse, then you are golden.)
+/// The basic characteristics of a request (for the purposes of instruction
+/// stats gathering).
+///
+/// The resulting time series will have as its labels
+///
+/// { "method_name" => method_name } + request_labels.
+///
+/// If you do not need to break stats out beyond method_name, see BasicRequest.
 pub trait Request {
-    const METHOD_NAME: &'static str;
+    /// In general, the body of this would look like
+    /// "make_sandwhich".to_string(). This method could have instead been a
+    /// constant, but we wanted BasicRequest to be able to cover the common case
+    /// where people do not wish to further break out instruction stats for a
+    /// method.
+    fn method_name(&self) -> String;
 
     /// If you do not want to further break out requests, just return an empty map.
-    fn metric_labels(&self) -> HashMap<String, String>;
+    fn request_labels(&self) -> HashMap<String, String>;
 }
 
+/// An implementation of Request for people who do not want/need custom request
+/// labels.
+pub struct BasicRequest {
+    method_name: &'static str,
+}
+
+impl Request for BasicRequest {
+    fn method_name(&self) -> String {
+        self.method_name.to_string()
+    }
+
+    fn request_labels(&self) -> HashMap<String, String> {
+        Default::default()
+    }
+}
+
+/// Does what the name says.
+///
+/// For now (and possibly forever), "update" just consists of incrementing the right counter.
+///
+/// As statistics accumulate, they can be seen by calling encode_instruction_metrics.
 pub struct UpdateInstructionStatsOnDrop<MyRequest: Request> {
     metric_labels: Vec<(String, String)>,
 
@@ -68,10 +125,10 @@ pub struct UpdateInstructionStatsOnDrop<MyRequest: Request> {
 }
 
 impl<MyRequest: Request> UpdateInstructionStatsOnDrop<MyRequest> {
-    pub fn new(metric_labels: &MyRequest) -> Self {
-        let mut metric_labels = metric_labels.metric_labels();
+    pub fn new(request: &MyRequest) -> Self {
+        let mut metric_labels = request.request_labels();
 
-        metric_labels.insert("method_name".to_string(), MyRequest::METHOD_NAME.to_string());
+        metric_labels.insert("method_name".to_string(), request.method_name());
 
         let metric_labels = metric_labels
             .into_iter()
