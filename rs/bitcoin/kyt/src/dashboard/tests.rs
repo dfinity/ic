@@ -2,7 +2,9 @@ use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status};
 use crate::state::Timestamp;
 use crate::BtcNetwork;
+use bitcoin::Address;
 use ic_btc_interface::Txid;
+use std::str::FromStr;
 
 fn mock_txid(v: u8) -> Txid {
     Txid::from([v; 32])
@@ -24,6 +26,13 @@ fn should_display_metadata() {
         .has_no_status();
 }
 
+fn parse_address(addresses: &[&str]) -> Vec<Option<Address>> {
+    addresses
+        .iter()
+        .map(|s| Some(Address::from_str(s).unwrap().assume_checked()))
+        .collect()
+}
+
 #[test]
 fn should_display_statuses() {
     let txid_1 = mock_txid(1);
@@ -39,14 +48,14 @@ fn should_display_statuses() {
         input_addresses: vec![],
     });
     let status_5 = Status::Fetched(Fetched {
-        input_addresses: vec!["bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7".to_string()],
+        input_addresses: parse_address(&["bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7"]),
     });
 
     let status_6 = Status::Fetched(Fetched {
-        input_addresses: vec![
-            "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp".to_string(),
-            "bc1qz0z6xgaqa2qj87mwp093q8zj9l3sm53zeqa8ee".to_string(),
-        ],
+        input_addresses: parse_address(&[
+            "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp",
+            "bc1qz0z6xgaqa2qj87mwp093q8zj9l3sm53zeqa8ee",
+        ]),
     });
 
     let dashboard = DashboardTemplate {
@@ -126,15 +135,19 @@ mod assertions {
             if expected_status.is_error() {
                 expected_values.push(expected_status.as_error());
             }
-            let mut addresses;
+            let addresses;
             if expected_status.is_fetched() {
                 addresses = expected_status
                     .as_fetched()
                     .input_addresses
                     .iter()
-                    .map(|s| s.as_ref())
+                    .map(|s| {
+                        s.clone()
+                            .map(|s| s.to_string())
+                            .unwrap_or("N/A".to_string())
+                    })
                     .collect::<Vec<_>>();
-                expected_values.append(&mut addresses);
+                expected_values.append(&mut addresses.iter().map(|s| s.as_ref()).collect());
             }
             self.has_table_row_string_value(
                 &format!("#fetch-tx-status + table > tbody > tr:nth-child({row_index})"),

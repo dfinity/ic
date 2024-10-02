@@ -127,7 +127,7 @@ impl<T> FetchTxCache<T> {
         self.created.retain(|(id, _)| *id != txid);
     }
 
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (Txid, Timestamp, &T)> + '_ {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (Txid, Timestamp, &T)> + '_ {
         self.created
             .iter()
             .map(|(txid, timestamp)| (*txid, *timestamp, self.status.get(txid).unwrap()))

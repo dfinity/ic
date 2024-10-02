@@ -1,3 +1,25 @@
+{% macro btc_tx_link(txid) -%}
+    {% match btc_network %}
+        {%- when BtcNetwork::Mainnet -%}
+            <a href="https://live.blockcypher.com/btc/tx/{{txid}}"><code>{{txid}}</code></a>
+        {%- when BtcNetwork::Testnet -%}
+            <a href="https://live.blockcypher.com/btc-testnet/tx/{{txid}}"><code>{{txid}}</code></a>
+    {% endmatch %}
+{%- endmacro %}
+
+{% macro btc_address(addr) -%}
+    {% match addr %}
+        {%- when Some(addr) -%}
+            {% if crate::blocklist_contains(addr) %}
+                <code style="color: red">{{addr}}</code>
+            {% else %}
+                <code style="color: green">{{addr}}</code>
+            {% endif %}
+        {%- when None -%}
+        <code>N/A</code>
+    {% endmatch %}
+{%- endmacro %}
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -65,14 +87,14 @@
                 <tbody>
                     {% for (txid, timestamp, status) in fetch_tx_status %}
                     <tr>
-                        <td><code>{{ txid.to_string() }}</code></td>
+                        <td>{% call btc_tx_link(txid) %}</td>
                         <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
                         <td>
                             <table><thead><th>{{ status.to_str() }}</th></thead>
                                 {% if status.is_fetched() %}
                                 <tbody>
                                     {% for address in status.as_fetched().input_addresses %}
-                                    <tr><td><code>{{ address }}</code></td></tr>
+                                    <tr><td>{% call btc_address(address) %}</td></tr>
                                     {% endfor %}
                                 </tbody>
                                 {% endif %}

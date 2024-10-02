@@ -39,7 +39,7 @@ pub enum Status {
 
 #[derive(Debug, Clone)]
 pub struct Fetched {
-    input_addresses: Vec<String>,
+    input_addresses: Vec<Option<bitcoin::Address>>,
 }
 
 impl Status {
@@ -79,6 +79,7 @@ pub fn dashboard() -> DashboardTemplate {
             cache
                 .borrow()
                 .iter()
+                .rev()
                 .map(|(txid, timestamp, status)| {
                     (
                         txid,
@@ -93,15 +94,7 @@ pub fn dashboard() -> DashboardTemplate {
                                     if fetched.input_addresses.iter().all(|x| x.is_none()) {
                                         Vec::new()
                                     } else {
-                                        fetched
-                                            .input_addresses
-                                            .iter()
-                                            .map(|addr| {
-                                                addr.clone().map_or("N/A".to_string(), |addr| {
-                                                    format!("{}", addr)
-                                                })
-                                            })
-                                            .collect()
+                                        fetched.input_addresses.clone()
                                     };
                                 Status::Fetched(Fetched { input_addresses })
                             }
