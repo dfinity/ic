@@ -7868,8 +7868,8 @@ fn check_correct_execution_state(is_wasm64: bool) {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
-    let execution_state = test.execution_state_mut(canister_id);
-    assert_eq!(execution_state.is_wasm64(), is_wasm64);
+    let execution_state = test.execution_state(canister_id);
+    assert_eq!(execution_state.is_wasm64, is_wasm64);
 }
 
 #[test]

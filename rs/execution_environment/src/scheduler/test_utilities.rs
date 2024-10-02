@@ -1233,7 +1233,7 @@ impl TestWasmExecutorCore {
                 }
             }
         }
-        let execution_state = ExecutionState::new(
+        let execution_state = ExecutionState::new_for_testing(
             Default::default(),
             execution_state::WasmBinary::new(canister_module),
             ExportedFunctions::new(exported_functions.into_iter().collect()),

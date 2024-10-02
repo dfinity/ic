@@ -185,7 +185,7 @@ mod tests {
             let metadata = WasmMetadata::new(btreemap! {
                 String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
-            let execution_state = ExecutionState::new(
+            let execution_state = ExecutionState::new_for_testing(
                 "NOT_USED".into(),
                 wasm_binary,
                 ExportedFunctions::new(BTreeSet::new()),

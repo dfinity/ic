@@ -26,9 +26,11 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
 use ic_system_api::{ExecutionParameters, ModificationTracking, SystemApiImpl};
+use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
@@ -300,7 +302,7 @@ impl WasmExecutor for WasmExecutorImpl {
         )?;
 
         // Create the execution state.
-        let mut execution_state = ExecutionState::new(
+        let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
             ExportedFunctions::new(exported_functions),
@@ -311,8 +313,11 @@ impl WasmExecutor for WasmExecutorImpl {
             ),
             globals,
             wasm_metadata,
+            ExecutionRound::from(0),
+            NextScheduledMethod::default(),
+            serialized_module.is_wasm64,
         );
-        execution_state.set_execution_mode(serialized_module.is_wasm64);
+
         Ok((
             execution_state,
             serialized_module.compilation_cost,

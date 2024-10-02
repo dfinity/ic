@@ -382,7 +382,7 @@ pub fn load_canister_state(
                 CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
                     .canister(canister_id)?
                     .raw_path();
-            Some(ExecutionState::new_with_round_and_method(
+            Some(ExecutionState::new(
                 canister_root,
                 wasm_binary,
                 execution_state_bits.exports,
@@ -392,6 +392,7 @@ pub fn load_canister_state(
                 execution_state_bits.metadata,
                 execution_state_bits.last_executed_round,
                 execution_state_bits.next_scheduled_method,
+                execution_state_bits.is_wasm64,
             ))
         }
         None => None,

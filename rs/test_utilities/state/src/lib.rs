@@ -576,7 +576,7 @@ impl Default for ExecutionStateBuilder {
         let wasm_metadata = WasmMetadata::new(metadata);
 
         ExecutionStateBuilder {
-            execution_state: ExecutionState::new(
+            execution_state: ExecutionState::new_for_testing(
                 "NOT_USED".into(),
                 WasmBinary::new(CanisterModule::new(vec![])),
                 ExportedFunctions::new(BTreeSet::new()),

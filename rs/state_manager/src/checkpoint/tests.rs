@@ -239,7 +239,7 @@ fn can_recover_from_a_checkpoint() {
         );
         let page_map = PageMap::from(&[1, 2, 3, 4][..]);
         let stable_memory = Memory::new(page_map, NumWasmPages::new(1));
-        let execution_state = ExecutionState::new(
+        let execution_state = ExecutionState::new_for_testing(
             "NOT_USED".into(),
             WasmBinary::new(wasm.clone()),
             ExportedFunctions::new(BTreeSet::new()),

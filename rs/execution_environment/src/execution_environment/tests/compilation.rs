@@ -299,7 +299,7 @@ mod execution_tests {
         let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id);
         assert!(canister_state.execution_state.is_none());
-        canister_state.execution_state = Some(ExecutionState::new(
+        canister_state.execution_state = Some(ExecutionState::new_for_testing(
             PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
@@ -353,7 +353,7 @@ mod execution_tests {
         let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
-        canister_state.execution_state = Some(ExecutionState::new(
+        canister_state.execution_state = Some(ExecutionState::new_for_testing(
             PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
@@ -369,7 +369,7 @@ mod execution_tests {
         let canister_id2 = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id2);
         assert!(canister_state.execution_state.is_none());
-        canister_state.execution_state = Some(ExecutionState::new(
+        canister_state.execution_state = Some(ExecutionState::new_for_testing(
             PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
             ExportedFunctions::new(
@@ -420,7 +420,7 @@ mod execution_tests {
         let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
-        canister_state.execution_state = Some(ExecutionState::new(
+        canister_state.execution_state = Some(ExecutionState::new_for_testing(
             PathBuf::new(),
             WasmBinary::new(CanisterModule::new(b"\x00asm invalid wasm".to_vec())),
             ExportedFunctions::new(
@@ -477,7 +477,7 @@ mod execution_tests {
         let canister_id1 = test.create_canister(Cycles::new(1_000_000_000_000));
         let canister_state = test.canister_state_mut(canister_id1);
         assert!(canister_state.execution_state.is_none());
-        canister_state.execution_state = Some(ExecutionState::new(
+        canister_state.execution_state = Some(ExecutionState::new_for_testing(
             PathBuf::new(),
             // Without the '\x00asm' prefix, the check for wasm code length will fail.
             WasmBinary::new(CanisterModule::new(b"invalid wasm".to_vec())),
