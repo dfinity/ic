@@ -95,7 +95,7 @@ impl LedgerState {
     /// If `total_num_blocks` is `None`, fetch all blocks from the ledger canister, otherwise fetch
     /// `total_num_blocks - self.num_blocks` blocks (some amount of latest blocks that the in-memory
     /// ledger does not hold yet).
-    fn fetch_next_blocks(
+    fn fetch_next_blocks_and_verify_ledger_index_parity(
         &mut self,
         state_machine: &StateMachine,
         ledger_id: CanisterId,
@@ -178,7 +178,7 @@ impl LedgerState {
         // or new transactions triggered e.g., by timers running in other canisters on the subnet,
         // that get applied after the `StateMachine` is initialized, and are not part of the
         // transactions in `generate_transactions`.
-        ledger_state.fetch_next_blocks(state_machine, ledger_id, index_id, num_blocks_to_fetch);
+        ledger_state.fetch_next_blocks_and_verify_ledger_index_parity(state_machine, ledger_id, index_id, num_blocks_to_fetch);
         ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
@@ -187,7 +187,7 @@ impl LedgerState {
         generate_transactions(state_machine, ledger_id);
         // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
         // not fetched in the previous call to `fetch_next_blocks`.
-        ledger_state.fetch_next_blocks(state_machine, ledger_id, index_id, None);
+        ledger_state.fetch_next_blocks_and_verify_ledger_index_parity(state_machine, ledger_id, index_id, None);
         ledger_state
     }
 }
