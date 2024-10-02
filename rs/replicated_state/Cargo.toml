@@ -31,7 +31,6 @@ ic-validate-eq = { path = "../utils/validate_eq" }
 ic-validate-eq-derive = { path = "../utils/validate_eq_derive" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
-ic-wasm-transform = { path = "../wasm_transform" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 libc = { workspace = true }
