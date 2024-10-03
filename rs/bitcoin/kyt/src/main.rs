@@ -98,7 +98,7 @@ fn post_upgrade(arg: KytArg) {
 #[ic_cdk::query(hidden = true)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     if req.path() == "/metrics" {
-        // TODO: metrics
+        // TODO(XC-205): Add metrics
         unimplemented!()
     } else if req.path() == "/dashboard" {
         use askama::Template;

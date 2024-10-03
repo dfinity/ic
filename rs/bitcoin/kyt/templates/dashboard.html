@@ -81,7 +81,7 @@
             <table>
                 <thead>
                     <th>Txid</th>
-                    <th>Created</th>
+                    <th>Initiated At</th>
                     <th>Status</th>
                 </thead>
                 <tbody>
@@ -90,16 +90,16 @@
                         <td>{% call btc_tx_link(txid) %}</td>
                         <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
                         <td>
-                            <table><thead><th>{{ status.to_str() }}</th></thead>
-                                {% if status.is_fetched() %}
+                            <table><thead><th>{{ status }}</th></thead>
+                                {% if let Some(fetched) = status.fetched() %}
                                 <tbody>
-                                    {% for address in status.as_fetched().input_addresses %}
+                                    {% for address in fetched.input_addresses %}
                                     <tr><td>{% call btc_address(address) %}</td></tr>
                                     {% endfor %}
                                 </tbody>
                                 {% endif %}
-                                {% if status.is_error() %}
-                                <tbody><tr><td>{{ status.as_error() }}</td></tr></tbody>
+                                {% if let Some(error) = status.error() %}
+                                <tbody><tr><td>{{ error }}</td></tr></tbody>
                                 {% endif %}
                               </table>
                         </td>

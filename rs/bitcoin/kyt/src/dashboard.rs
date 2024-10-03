@@ -2,6 +2,7 @@ use crate::{state, BtcNetwork};
 use askama::Template;
 use ic_btc_interface::Txid;
 use state::{FetchTxStatus, Timestamp};
+use std::fmt;
 
 #[cfg(test)]
 mod tests;
@@ -42,31 +43,28 @@ pub struct Fetched {
     input_addresses: Vec<Option<bitcoin::Address>>,
 }
 
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Status::PendingOutcall => write!(f, "Pending outcall"),
+            Status::PendingRetry => write!(f, "Pending retry"),
+            Status::Error(_) => write!(f, "Error"),
+            Status::Fetched(_) => write!(f, "Fetched"),
+        }
+    }
+}
+
 impl Status {
-    pub fn to_str(&self) -> &str {
+    pub fn fetched(&self) -> Option<&Fetched> {
         match self {
-            Status::PendingOutcall => "Pending outcall",
-            Status::PendingRetry => "Pending retry",
-            Status::Error(_) => "Error",
-            Status::Fetched(_) => "Fetched",
+            Status::Fetched(fetched) => Some(fetched),
+            _ => None,
         }
     }
-    pub fn is_fetched(&self) -> bool {
-        matches!(self, Status::Fetched(_))
-    }
-    pub fn as_fetched(&self) -> &Fetched {
+    pub fn error(&self) -> Option<&String> {
         match self {
-            Status::Fetched(fetched) => fetched,
-            _ => panic!("Status is not Fetched"),
-        }
-    }
-    pub fn is_error(&self) -> bool {
-        matches!(self, Status::Error(_))
-    }
-    pub fn as_error(&self) -> &String {
-        match self {
-            Status::Error(err) => err,
-            _ => panic!("Status is not Error"),
+            Status::Error(err) => Some(err),
+            _ => None,
         }
     }
 }

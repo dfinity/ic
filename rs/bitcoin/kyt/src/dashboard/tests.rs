@@ -131,14 +131,14 @@ mod assertions {
         ) -> &Self {
             let txid_str = expected_txid.to_string();
             let time_str = filters::timestamp_to_datetime(expected_timestamp).unwrap();
-            let mut expected_values = vec![&txid_str, &time_str, expected_status.to_str()];
-            if expected_status.is_error() {
-                expected_values.push(expected_status.as_error());
+            let status_str = expected_status.to_string();
+            let mut expected_values: Vec<&str> = vec![&txid_str, &time_str, &status_str];
+            if let Some(error) = expected_status.error() {
+                expected_values.push(error);
             }
-            let addresses;
-            if expected_status.is_fetched() {
-                addresses = expected_status
-                    .as_fetched()
+            let addresses: Vec<String>;
+            if let Some(fetched) = expected_status.fetched() {
+                addresses = fetched
                     .input_addresses
                     .iter()
                     .map(|s| {
