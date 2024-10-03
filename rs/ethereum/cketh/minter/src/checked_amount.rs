@@ -201,6 +201,12 @@ impl<Unit> From<Nat256> for CheckedAmountOf<Unit> {
     }
 }
 
+impl<Unit> From<CheckedAmountOf<Unit>> for Nat256 {
+    fn from(value: CheckedAmountOf<Unit>) -> Self {
+        Nat256::from_be_bytes(value.to_be_bytes())
+    }
+}
+
 impl<Unit> From<CheckedAmountOf<Unit>> for candid::Nat {
     fn from(value: CheckedAmountOf<Unit>) -> Self {
         use num_bigint::BigUint;

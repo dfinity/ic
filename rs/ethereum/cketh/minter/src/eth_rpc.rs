@@ -10,8 +10,10 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::SendRawTransactionStatus as EvmSendRawTransactionStatus;
-use evm_rpc_client::HttpOutcallError as EvmHttpOutcallError;
+use evm_rpc_client::{
+    HttpOutcallError as EvmHttpOutcallError,
+    SendRawTransactionStatus as EvmSendRawTransactionStatus,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{

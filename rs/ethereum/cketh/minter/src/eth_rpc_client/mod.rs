@@ -12,16 +12,13 @@ use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
-use candid::Nat;
 use evm_rpc_client::{
-    types::candid::{
-        BlockTag as EvmBlockTag, FeeHistoryArgs as EvmFeeHistoryArgs,
-        GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
-    },
-    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, FeeHistory as EvmFeeHistory, IcRuntime,
-    LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
-    RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EvmRpcClient,
+    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
+    GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
+    Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
     TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
@@ -170,7 +167,11 @@ impl EthRpcClient {
                 .eth_get_logs(EvmGetLogsArgs {
                     from_block: Some(into_evm_block_tag(params.from_block)),
                     to_block: Some(into_evm_block_tag(params.to_block)),
-                    addresses: params.address.into_iter().map(|a| a.to_string()).collect(),
+                    addresses: params
+                        .address
+                        .into_iter()
+                        .map(|a| Hex20::from(a.into_bytes()))
+                        .collect(),
                     topics: Some(into_evm_topic(params.topics)),
                 })
                 .await
@@ -248,7 +249,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             return evm_rpc_client
                 .eth_fee_history(EvmFeeHistoryArgs {
-                    block_count: params.block_count.as_u128(),
+                    block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
                     newest_block: into_evm_block_tag(params.highest_block),
                     reward_percentiles: Some(params.reward_percentiles),
                 })
@@ -293,7 +294,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             let results = evm_rpc_client
                 .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: address.to_string(),
+                    address: Hex20::from(address.into_bytes()),
                     block: EvmBlockTag::Finalized,
                 })
                 .await;
@@ -315,7 +316,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             let results = evm_rpc_client
                 .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: address.to_string(),
+                    address: Hex20::from(address.into_bytes()),
                     block: EvmBlockTag::Latest,
                 })
                 .await;
@@ -733,8 +734,7 @@ impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
                         status: TransactionStatus::try_from(
                             evm_receipt
                                 .status
-                                .map(|s| s.as_ref().0.to_u8())
-                                .flatten()
+                                .and_then(|s| s.as_ref().0.to_u8())
                                 .ok_or("invalid transaction status")?,
                         )?,
                         transaction_hash: Hash(evm_receipt.transaction_hash.into()),
@@ -799,12 +799,14 @@ impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
     }
 }
 
-impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat> {
+impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            &|tx_count: Nat256| {
+                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
+            },
             MultiCallResults::reduce_with_equality,
         )
     }
@@ -819,12 +821,14 @@ impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
     }
 }
 
-impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat> {
+impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            &|tx_count: Nat256| {
+                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
+            },
             |results| results.reduce_with_min_by_key(|transaction_count| *transaction_count),
         )
     }
@@ -969,20 +973,21 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
 
 fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
     match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(n.into()),
+        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from_be_bytes(n.to_be_bytes())),
         BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
         BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
         BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
     }
 }
 
-fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<String>> {
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
+    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
     let mut result = Vec::with_capacity(topics.len());
     for topic in topics {
         result.push(match topic {
-            Topic::Single(single_topic) => vec![single_topic.to_string()],
+            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
             Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(|t| t.to_string()).collect()
+                multiple_topic.into_iter().map(into_hex_32).collect()
             }
         });
     }

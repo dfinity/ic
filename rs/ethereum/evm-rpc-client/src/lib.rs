@@ -1,23 +1,19 @@
 #[cfg(test)]
 mod tests;
 
-pub mod types;
-
-use crate::types::candid::{
-    BlockTag, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, SendRawTransactionStatus,
-};
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
-use candid::{CandidType, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_canister_log::{log, Sink};
 use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub use evm_rpc_types::{
-    Block, ConsensusStrategy, EthMainnetService, FeeHistory, HttpOutcallError, JsonRpcError,
+    Block, BlockTag, ConsensusStrategy, EthMainnetService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
+    GetTransactionCountArgs, Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError, JsonRpcError,
     LogEntry, MultiRpcResult, Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult,
-    RpcService, RpcServices, TransactionReceipt, ValidationError,
+    RpcService, RpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 
 #[async_trait]
@@ -111,7 +107,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
     pub async fn eth_get_transaction_count(
         &self,
         args: GetTransactionCountArgs,
-    ) -> MultiRpcResult<Nat> {
+    ) -> MultiRpcResult<Nat256> {
         self.call_internal(
             "eth_getTransactionCount",
             self.override_rpc_config.eth_get_transaction_count.clone(),
