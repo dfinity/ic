@@ -2,11 +2,12 @@ mod call_context_manager;
 pub mod wasm_chunk_store;
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
+use super::queues::{can_push, CanisterInput};
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
+use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
     CanisterQueues, CanisterState, CheckpointLoadingMetrics, InputQueueType, PageMap, StateError,
 };
@@ -14,6 +15,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
+use ic_error_types::RejectCode;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
@@ -22,10 +24,11 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-    Request, RequestOrResponse, Response, StopCanisterContext,
+    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
 use ic_types::nominal_cycles::NominalCycles;
+use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };
@@ -1204,6 +1207,15 @@ impl SystemState {
         self.ingress_induction_cycles_debit += charge;
     }
 
+    /// Removes a previously postponed charge for ingress messages from the balance
+    /// of the canister.
+    ///
+    /// Note that this will saturate the balance to zero if the charge to remove is
+    /// larger than the current debit.
+    pub fn remove_charge_from_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
+        self.ingress_induction_cycles_debit -= charge;
+    }
+
     /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
     /// Precondition:
@@ -1347,7 +1359,58 @@ impl SystemState {
 
     /// Extracts the next inter-canister or ingress message (round-robin).
     pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
-        self.queues.pop_input()
+        Some(match self.queues.pop_input()? {
+            CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
+            CanisterInput::Request(msg) => CanisterMessage::Request(msg),
+            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::DeadlineExpired(callback_id) => {
+                self.to_reject_response(callback_id, "Call deadline has expired.")
+            }
+            CanisterInput::ResponseDropped(callback_id) => {
+                self.to_reject_response(callback_id, "Response was dropped.")
+            }
+        })
+    }
+
+    /// Generates a reject response for the given callback ID with the given
+    /// message.
+    ///
+    /// If the `CallContextManager` does not hold a callback with the given
+    /// `CallbackId`, generates a reject response with arbitrary values (but
+    /// matching `CallbackId`). The missing callback will generate a critical error
+    /// when the response is about to be executed, regardless.
+    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+        const UNKNOWN_CANISTER_ID: CanisterId =
+            CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
+        const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
+
+        let call_context_manager = self.call_context_manager().unwrap();
+        let (originator, respondent, deadline) =
+            match call_context_manager.callbacks().get(&callback_id) {
+                // Populate reject responses from the callback.
+                Some(callback) => (callback.originator, callback.respondent, callback.deadline),
+
+                // This should be unreachable, but if we somehow end up here, we can populate
+                // the reject response with arbitrary values, as trying to execute it it will
+                // fail anyway and produce a critical error. This is safer than panicking.
+                None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
+            };
+
+        CanisterMessage::Response(
+            Response {
+                originator,
+                respondent,
+                originator_reply_callback: callback_id,
+                refund: Cycles::zero(),
+                response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+                    RejectCode::SysUnknown,
+                    message,
+                    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+                )),
+                deadline,
+            }
+            .into(),
+        )
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.
@@ -1932,6 +1995,50 @@ pub mod testing {
         ) {
             self.split_input_schedules(own_canister_id, local_canisters)
         }
+    }
+
+    /// Early warning system / stumbling block forcing the authors of changes adding
+    /// or removing system state fields to think about and/or ask the Execution
+    /// team to think about any repercussions to the canister snapshot logic.
+    ///
+    /// If you do find yourself having to make changes to this function, it is quite
+    /// possible that you have not broken anything. But there is a non-zero chance
+    /// for changes to the structure of the system state to also require changes
+    /// to the canister snapshot logic or risk breaking it. Which is why this brute
+    /// force check exists.
+    ///
+    /// See `CanisterSnapshot::from_canister()` for more context.
+    #[allow(dead_code)]
+    fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
+        //
+        // DO NOT MODIFY WITHOUT READING DOC COMMENT!
+        //
+        let _system_state = SystemState {
+            controllers: Default::default(),
+            canister_id: 0.into(),
+            queues: Default::default(),
+            memory_allocation: Default::default(),
+            wasm_memory_threshold: Default::default(),
+            freeze_threshold: Default::default(),
+            status: CanisterStatus::Stopped,
+            certified_data: Default::default(),
+            canister_metrics: Default::default(),
+            cycles_balance: Default::default(),
+            ingress_induction_cycles_debit: Default::default(),
+            reserved_balance: Default::default(),
+            reserved_balance_limit: Default::default(),
+            task_queue: Default::default(),
+            global_timer: CanisterTimer::Inactive,
+            canister_version: Default::default(),
+            canister_history: Default::default(),
+            wasm_chunk_store: WasmChunkStore::new_for_testing(),
+            log_visibility: Default::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: Default::default(),
+            next_snapshot_id: Default::default(),
+            snapshots_memory_usage: Default::default(),
+            on_low_wasm_memory_hook_status: Default::default(),
+        };
     }
 }
 

@@ -187,11 +187,6 @@ impl GitRepository {
         canister.iter().map(|c| self.sha256_artifact(c)).collect()
     }
 
-    pub fn build_canister_artifact(&mut self, canister: &TargetCanister) -> CompressedWasmHash {
-        self.build_canisters();
-        self.sha256_artifact(canister)
-    }
-
     fn build_canisters(&mut self) {
         let build = Command::new("./ci/container/build-ic.sh")
             .arg("--canisters")

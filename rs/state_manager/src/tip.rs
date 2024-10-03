@@ -1003,8 +1003,6 @@ fn serialize_canister_to_tip(
             metrics,
         )?;
 
-    // Priority credit must be zero at this point
-    assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),

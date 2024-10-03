@@ -72,7 +72,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -3234,10 +3234,6 @@ impl ExecutionEnvironment {
                 .replace_paused_with_aborted_tasks(aborted_tasks);
 
             canister.apply_priority_credit();
-            // Aborting a long-running execution moves the canister to the
-            // default execution mode because the canister does not have a
-            // pending execution anymore.
-            canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,

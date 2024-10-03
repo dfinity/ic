@@ -20,7 +20,6 @@ use ic_nervous_system_clients::{
     update_settings::{CanisterSettings, LogVisibility, UpdateSettings},
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nns_constants::DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use std::{
     cell::RefCell,
@@ -28,10 +27,12 @@ use std::{
     fmt::Write,
     thread::LocalKey,
 };
+use types::SnsCanisterType;
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
+mod request_impls;
 pub mod types;
 
 // The number of dapp canisters that can be registered with the SNS Root
@@ -116,6 +117,39 @@ impl GetSnsCanistersSummaryResponse {
 
     pub fn index_canister_summary(&self) -> &CanisterSummary {
         self.index.as_ref().unwrap()
+    }
+}
+
+impl IntoIterator for GetSnsCanistersSummaryResponse {
+    type Item = (Option<CanisterSummary>, SnsCanisterType);
+
+    // Using Box<dyn Iterator<...>> because the type is very long otherwise.
+    // But this could be changed to a more specific type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let canisters = [
+            (self.root, SnsCanisterType::Root),
+            (self.governance, SnsCanisterType::Governance),
+            (self.ledger, SnsCanisterType::Ledger),
+            (self.swap, SnsCanisterType::Swap),
+            (self.index, SnsCanisterType::Index),
+        ];
+
+        Box::new(
+            canisters
+                .into_iter()
+                .chain(
+                    self.dapps
+                        .into_iter()
+                        .map(|d| (Some(d), SnsCanisterType::Dapp)),
+                )
+                .chain(
+                    self.archives
+                        .into_iter()
+                        .map(|a| (Some(a), SnsCanisterType::Archive)),
+                ),
+        )
     }
 }
 
@@ -763,48 +797,6 @@ impl SnsRootCanister {
         });
 
         defects.join("\n")
-    }
-
-    pub async fn migrate_canister_settings(
-        self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &impl ManagementCanisterClient,
-    ) {
-        let swap_canister_id = self_ref.with(|state| state.borrow().swap_canister_id);
-        let ledger_canister_id = self_ref.with(|state| state.borrow().ledger_canister_id);
-        let index_canister_id = self_ref.with(|state| state.borrow().index_canister_id);
-        let archive_canister_ids =
-            self_ref.with(|state| state.borrow().archive_canister_ids.clone());
-
-        for canister_id in [swap_canister_id, ledger_canister_id, index_canister_id]
-            .into_iter()
-            .flatten()
-            .chain(archive_canister_ids.into_iter())
-        {
-            let settings = CanisterSettings {
-                wasm_memory_limit: Some(candid::Nat::from(
-                    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-                )),
-                ..Default::default()
-            };
-            let result = management_canister_client
-                .update_settings(UpdateSettings {
-                    canister_id,
-                    settings,
-                    sender_canister_version: management_canister_client.canister_version(),
-                })
-                .await;
-            match result {
-                Ok(_) => (),
-                Err(err) => {
-                    log!(
-                        ERROR,
-                        "Unable to update settings for canister {}: {:?}",
-                        canister_id,
-                        err
-                    );
-                }
-            }
-        }
     }
 }
 
@@ -2805,7 +2797,7 @@ mod tests {
     async fn test_get_sns_canisters_summary_reports_settings() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = const { RefCell::new(SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
@@ -2813,7 +2805,7 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-            });
+            }) };
         }
 
         let root_canister_id = CanisterId::from_u64(4);
@@ -3396,92 +3388,6 @@ mod tests {
             MockManagementCanisterClientCall::CanisterStatus(CanisterIdRecord {
                 canister_id: CanisterId::try_from(expected_archive_canisters_principal_ids[1])
                     .unwrap(),
-            }),
-        ];
-        assert_eq!(
-            actual_management_canister_calls,
-            expected_management_canister_calls
-        );
-    }
-
-    #[tokio::test]
-    async fn test_migrate_canister_settings() {
-        // Step 1: Prepare the world.
-        thread_local! {
-            static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
-                governance_canister_id: Some(PrincipalId::new_user_test_id(99)),
-                swap_canister_id: Some(PrincipalId::new_user_test_id(0)),
-                ledger_canister_id: Some(PrincipalId::new_user_test_id(1)),
-                index_canister_id: Some(PrincipalId::new_user_test_id(2)),
-                dapp_canister_ids: vec![],
-                archive_canister_ids: vec![PrincipalId::new_user_test_id(3), PrincipalId::new_user_test_id(4), PrincipalId::new_user_test_id(5)],
-                ..Default::default()
-            });
-        }
-
-        // Step 1.1: Prepare helpers.
-        let management_canister_client = MockManagementCanisterClient::new(vec![
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-        ]);
-
-        // Step 2: Run code under test.
-        SnsRootCanister::migrate_canister_settings(&STATE, &management_canister_client).await;
-
-        // Step 3: Inspect results.
-        let actual_management_canister_calls = management_canister_client.get_calls_snapshot();
-        let expected_management_canister_calls = vec![
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(0),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(1),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(2),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(3),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(4),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: PrincipalId::new_user_test_id(5),
-                settings: CanisterSettings {
-                    wasm_memory_limit: Some(candid::Nat::from(3_u32 * (1_u32 << 30_u32))),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
             }),
         ];
         assert_eq!(

@@ -1,5 +1,6 @@
 use super::*;
 use crate::blocklist;
+use crate::types::BtcNetwork;
 use bitcoin::{
     absolute::LockTime, hashes::Hash, transaction::Version, Amount, OutPoint, PubkeyHash,
     ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
@@ -256,6 +257,9 @@ async fn test_fetch_tx() {
 #[tokio::test]
 async fn test_check_fetched() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    state::set_config(state::Config {
+        btc_network: BtcNetwork::Mainnet,
+    });
     let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
         .unwrap()
         .assume_checked();
@@ -305,8 +309,8 @@ async fn test_check_fetched() {
     state::set_fetch_status(txid_0, FetchTxStatus::Fetched(fetched.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
-            CheckTransactionPending::HighLoad
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::HighLoad
         ))
     ));
     // Check accepted cycle
@@ -332,8 +336,8 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Ok(tx_1.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
-            CheckTransactionPending::Pending
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::Pending
         ))
     ));
     // Check remaining cycle: we deduct all remaining cycles when they are not enough
@@ -408,8 +412,8 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
-            CheckTransactionPending::Pending
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::Pending
         ))
     ));
     // Try again with bigger buffer, should Pass
@@ -439,8 +443,8 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(
-            CheckTransactionPending::Pending
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::Pending
         ))
     ));
     // Try again with bigger buffer, still fails
@@ -448,7 +452,7 @@ async fn test_check_fetched() {
     assert!(matches!(
             env.check_fetched(txid_0, &fetched).await,
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-                CheckTransactionError::ResponseTooLarge { txid }
+                CheckTransactionIrrecoverableError::ResponseTooLarge { txid }
             )) if txid_2.as_ref() == txid));
     // Check remaining cycle
     assert_eq!(

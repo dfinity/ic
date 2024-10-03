@@ -1520,6 +1520,24 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         collect_subdirs(snapshots_dir.as_path(), 1, parse_snapshot_id)
     }
 
+    /// List all PageMaps with at least one file in the Checkpoint, including canister and snapshot
+    /// ones.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        Ok(self
+            .canister_ids()?
+            .into_iter()
+            .map(|id| self.canister(&id)?.all_existing_pagemaps())
+            .chain(
+                self.snapshot_ids()?
+                    .into_iter()
+                    .map(|id| self.snapshot(&id)?.all_existing_pagemaps()),
+            )
+            .collect::<Result<Vec<Vec<PageMapLayout<Permissions>>>, LayoutError>>()?
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
     /// Directory where the snapshot for `snapshot_id` is stored.
     /// Note that we store them by canister. This means we have the canister id in the path, which is
     /// necessary in the context of subnet splitting. Also see [`canister_id_from_path`].
@@ -1719,6 +1737,11 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
 
         Ok(())
     }
+
+    /// Whether the layout has any files.
+    pub fn exists(&self) -> Result<bool, LayoutError> {
+        Ok(self.base().exists() || !self.existing_overlays()?.is_empty())
+    }
 }
 
 impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
@@ -1834,6 +1857,23 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
+    /// List all PageMaps with at least one file.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        let mut result = Vec::new();
+        for pagemap in [
+            self.vmemory_0(),
+            self.stable_memory(),
+            self.wasm_chunk_store(),
+        ]
+        .into_iter()
+        {
+            if pagemap.exists()? {
+                result.push(pagemap)
+            }
+        }
+        Ok(result)
+    }
+
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
         PageMapLayout {
             root: self.canister_root.clone(),
@@ -1885,6 +1925,23 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
         &self,
     ) -> ProtoFileWith<pb_canister_snapshot_bits::CanisterSnapshotBits, Permissions> {
         self.snapshot_root.join(SNAPSHOT_FILE).into()
+    }
+
+    /// List all PageMaps with at least one file.
+    pub fn all_existing_pagemaps(&self) -> Result<Vec<PageMapLayout<Permissions>>, LayoutError> {
+        let mut result = Vec::new();
+        for pagemap in [
+            self.vmemory_0(),
+            self.stable_memory(),
+            self.wasm_chunk_store(),
+        ]
+        .into_iter()
+        {
+            if pagemap.exists()? {
+                result.push(pagemap)
+            }
+        }
+        Ok(result)
     }
 
     pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
@@ -2308,13 +2365,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.try_into())
             .transpose()?;
 
-        let consumed_cycles = match try_from_option_field(
-            value.consumed_cycles,
-            "CanisterStateBits::consumed_cycles",
-        ) {
-            Ok(consumed_cycles) => consumed_cycles,
-            Err(_) => NominalCycles::default(),
-        };
+        let consumed_cycles =
+            try_from_option_field(value.consumed_cycles, "CanisterStateBits::consumed_cycles")
+                .unwrap_or_default();
 
         let mut controllers = BTreeSet::new();
         for controller in value.controllers.into_iter() {
