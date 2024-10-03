@@ -562,6 +562,10 @@ fn test_id_from_reference_roundtrip() {
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Inbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
 
             // Outbound.
             let reference = OutboundReference::new(class, kind, 13);
@@ -569,6 +573,57 @@ fn test_id_from_reference_roundtrip() {
             assert_eq!(reference.0, id.0);
             assert_eq!(id, reference.into());
             assert_eq!(SomeReference::Outbound(reference), SomeReference::from(id));
+            assert_eq!(
+                (id.context(), id.class(), id.kind()),
+                (reference.context(), reference.class(), reference.kind())
+            );
+        }
+    }
+}
+
+#[test]
+fn test_is_inbound_best_effort_response() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                id.is_inbound_best_effort_response()
+            );
+            assert_eq!(
+                class == BestEffort && kind == Response,
+                reference.is_inbound_best_effort_response()
+            );
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_inbound_best_effort_response());
+            assert!(!reference.is_inbound_best_effort_response());
+        }
+    }
+}
+
+#[test]
+fn test_is_outbound_guaranteed_request() {
+    use Class::*;
+    use Kind::*;
+
+    for kind in [Request, Response] {
+        for class in [GuaranteedResponse, BestEffort] {
+            let reference = InboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert!(!id.is_outbound_guaranteed_request());
+
+            let reference = OutboundReference::new(class, kind, 13);
+            let id = Id::from(reference);
+            assert_eq!(
+                class == GuaranteedResponse && kind == Request,
+                id.is_outbound_guaranteed_request()
+            );
         }
     }
 }

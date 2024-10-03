@@ -815,6 +815,9 @@ impl CanisterQueues {
     ///
     /// Must only be called for not-yet-executing callbacks (i.e. not for a paused
     /// or aborted callback).
+    ///
+    /// Returns `Err` iff a compact response should have been enqueued, but wasn't
+    /// because no reserved slot was available.
     pub(super) fn try_push_deadline_expired_input(
         &mut self,
         callback_id: CallbackId,

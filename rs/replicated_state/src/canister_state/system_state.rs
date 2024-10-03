@@ -1461,7 +1461,7 @@ impl SystemState {
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> Result<(), StateError> {
+    ) -> Result<(), Vec<StateError>> {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
             return Ok(());
@@ -1474,7 +1474,7 @@ impl SystemState {
         // Safe to unwrap because we just checked that the status is not `Stopped`.
         let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
 
-        let mut return_value = Ok(());
+        let mut errors = Vec::new();
         let expired_callbacks = call_context_manager
             .expire_callbacks(current_time)
             .collect::<Vec<_>>();
@@ -1495,7 +1495,7 @@ impl SystemState {
                     local_canisters,
                 )
                 .unwrap_or_else(|err_str| {
-                    return_value = Err(StateError::NonMatchingResponse {
+                    errors.push(StateError::NonMatchingResponse {
                         err_str,
                         originator: callback.originator,
                         callback_id,
@@ -1504,7 +1504,12 @@ impl SystemState {
                     })
                 });
         }
-        return_value
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
