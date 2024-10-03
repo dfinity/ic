@@ -198,6 +198,7 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
+          BUILDEVENT_APIKEY: ${{ secrets.BUILDEVENT_APIKEY }}
       - <<: *bazel-bep
 
   bazel-build-fuzzers-afl:
@@ -213,6 +214,7 @@ jobs:
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
+          BUILDEVENT_APIKEY: ${{ secrets.BUILDEVENT_APIKEY }}
       - <<: *bazel-bep
 
   python-ci-tests:
@@ -345,6 +347,8 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
+        env:
+          BUILDEVENT_APIKEY: ${{ secrets.BUILDEVENT_APIKEY }}
         run: |
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
@@ -374,6 +378,8 @@ jobs:
           github.event_name == 'schedule' ||
           github.event_name == 'workflow_dispatch'
         shell: bash
+        env:
+          BUILDEVENT_APIKEY: ${{ secrets.BUILDEVENT_APIKEY }}
         run: |
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
