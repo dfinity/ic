@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "b115a4648adf9fa4e1fffd3db26566f012942b7a3406c6d4389ad808a57b173f",
-=======
   "checksum": "9ef6df4a9a9699fa60c0deb0f30df0446a5aaa79555f9225b15f48ccb5afca4d",
->>>>>>> origin/master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -201,7 +197,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -321,7 +317,7 @@
               "target": "brotli"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -909,7 +905,7 @@
               "target": "ahash"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -1624,7 +1620,7 @@
               "target": "axum"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -4432,7 +4428,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -4582,7 +4578,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -4606,7 +4602,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -4750,7 +4746,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -4850,7 +4846,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -4965,7 +4961,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -5221,7 +5217,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -5245,7 +5241,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -9599,14 +9595,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "bytes 1.7.2": {
+    "bytes 1.7.1": {
       "name": "bytes",
-      "version": "1.7.2",
+      "version": "1.7.1",
       "package_url": "https://github.com/tokio-rs/bytes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bytes/1.7.2/download",
-          "sha256": "428d9aa8fbc0670b7b8d6030a7fadd0f86151cae55e4dbbece15f3780a3dfaf3"
+          "url": "https://static.crates.io/crates/bytes/1.7.1/download",
+          "sha256": "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
         }
       },
       "targets": [
@@ -9646,7 +9642,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.7.2"
+        "version": "1.7.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -9686,7 +9682,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             }
           ],
@@ -17744,7 +17740,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -17989,7 +17985,7 @@
               "target": "hyper_socks2"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -18770,6 +18766,10 @@
             {
               "id": "tower-http 0.5.2",
               "target": "tower_http"
+            },
+            {
+              "id": "tower-layer 0.3.3",
+              "target": "tower_layer"
             },
             {
               "id": "tower-request-id 0.3.0",
@@ -21398,7 +21398,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -24749,7 +24749,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -24836,7 +24836,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -25243,7 +25243,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -25314,7 +25314,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26006,7 +26006,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26594,7 +26594,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26657,7 +26657,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26713,7 +26713,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26768,7 +26768,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26819,7 +26819,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -26875,7 +26875,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -27204,7 +27204,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -27322,7 +27322,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -27417,7 +27417,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -27441,7 +27441,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -27753,7 +27753,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -27847,7 +27847,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -27971,7 +27971,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -27999,14 +27999,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hyper-util 0.1.9": {
+    "hyper-util 0.1.7": {
       "name": "hyper-util",
-      "version": "0.1.9",
+      "version": "0.1.7",
       "package_url": "https://github.com/hyperium/hyper-util",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-util/0.1.9/download",
-          "sha256": "41296eb09f183ac68eec06e03cdbea2e759633d4067b2f6552fc2e009bcad08b"
+          "url": "https://static.crates.io/crates/hyper-util/0.1.7/download",
+          "sha256": "cde7055719c54e36e95e8719f95883f22072a48ede39db7fc17a4e1d5281e9b9"
         }
       },
       "targets": [
@@ -28047,7 +28047,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -28083,6 +28083,10 @@
               "target": "tokio"
             },
             {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
               "id": "tower-service 0.3.3",
               "target": "tower_service"
             },
@@ -28094,7 +28098,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.9"
+        "version": "0.1.7"
       },
       "license": "MIT",
       "license_ids": [
@@ -28441,7 +28445,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.9",
+                "id": "hyper-util 0.1.7",
                 "target": "hyper_util"
               },
               {
@@ -28535,7 +28539,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -28583,7 +28587,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -29866,7 +29870,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -33099,7 +33103,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -33123,7 +33127,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -34572,7 +34576,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -34616,7 +34620,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -38584,7 +38588,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -39959,7 +39963,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -42164,7 +42168,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -42229,7 +42233,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -48986,7 +48990,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             }
           ],
@@ -49051,7 +49055,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             }
           ],
@@ -49116,7 +49120,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -49222,7 +49226,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -50246,7 +50250,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -50340,7 +50344,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -52923,7 +52927,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -53135,7 +53139,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -53210,7 +53214,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.9",
+                "id": "hyper-util 0.1.7",
                 "target": "hyper_util"
               },
               {
@@ -53996,7 +54000,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -60062,7 +60066,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -65939,7 +65943,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -66418,7 +66422,7 @@
               "alias": "bincode_crate"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -66621,7 +66625,7 @@
               "target": "async_stream"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -66766,7 +66770,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -67024,7 +67028,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -67160,7 +67164,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -67188,7 +67192,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.9",
+              "id": "hyper-util 0.1.7",
               "target": "hyper_util"
             },
             {
@@ -67622,7 +67626,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -69148,7 +69152,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -69238,7 +69242,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -71156,7 +71160,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.7.2",
+              "id": "bytes 1.7.1",
               "target": "bytes"
             },
             {
@@ -79116,7 +79120,7 @@
     "by_address 1.1.0",
     "byte-unit 4.0.19",
     "byteorder 1.5.0",
-    "bytes 1.7.2",
+    "bytes 1.7.1",
     "cached 0.49.2",
     "canbench 0.1.4",
     "canbench-rs 0.1.4",
@@ -79178,7 +79182,7 @@
     "hyper 1.4.1",
     "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",
-    "hyper-util 0.1.9",
+    "hyper-util 0.1.7",
     "ic-agent 0.37.1",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
@@ -79382,6 +79386,7 @@
     "tonic-build 0.12.3",
     "tower 0.4.13",
     "tower-http 0.5.2",
+    "tower-layer 0.3.3",
     "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.4.2",
