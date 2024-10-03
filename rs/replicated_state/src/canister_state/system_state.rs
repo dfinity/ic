@@ -285,11 +285,22 @@ impl TaskQueue {
     pub fn from_checkpoint(
         queue: VecDeque<ExecutionTask>,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+        canister_id: &CanisterId,
     ) -> Self {
-        TaskQueue {
+        let queue = TaskQueue {
             queue,
             on_low_wasm_memory_hook_status,
-        }
+        };
+
+        // Because paused tasks are not allowed in checkpoint rounds when
+        // checking dts invariants that is equivalent to disabling dts.
+        queue.check_dts_invariants(
+            FlagStatus::Disabled,
+            ExecutionRoundType::CheckpointRound,
+            canister_id,
+        );
+
+        queue
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
@@ -378,16 +389,17 @@ impl TaskQueue {
                 }
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                     assert_eq!(
-                        deterministic_time_slicing,
-                        FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        task,
-                        id
-                    );
-                    assert_eq!(
                         current_round_type,
                         ExecutionRoundType::OrdinaryRound,
                         "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                        task,
+                        id
+                    );
+
+                    assert_eq!(
+                        deterministic_time_slicing,
+                        FlagStatus::Enabled,
+                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
                         task,
                         id
                     );
@@ -1051,7 +1063,11 @@ impl SystemState {
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
-            task_queue: TaskQueue::from_checkpoint(task_queue, on_low_wasm_memory_hook_status),
+            task_queue: TaskQueue::from_checkpoint(
+                task_queue,
+                on_low_wasm_memory_hook_status,
+                &canister_id,
+            ),
             global_timer,
             canister_version,
             canister_history,
