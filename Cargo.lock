@@ -9750,6 +9750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-instruction-stats-update-attribute"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-cdk 0.13.5",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [
