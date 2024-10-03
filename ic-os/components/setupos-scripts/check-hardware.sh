@@ -271,6 +271,7 @@ main() {
         verify_disks
         verify_deployment_path
     else
+        echo "* Hardware checks skipped by request via kernel command line"
         GENERATION=2
     fi
     log_end "$(basename $0)"
