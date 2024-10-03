@@ -4,8 +4,8 @@ mod tests;
 pub mod types;
 
 use crate::types::candid::{
-    BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
-    SendRawTransactionStatus, TransactionReceipt,
+    BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs,
+    SendRawTransactionStatus,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -16,9 +16,9 @@ use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub use evm_rpc_types::{
-    Block, ConsensusStrategy, EthMainnetService, HttpOutcallError, JsonRpcError, MultiRpcResult,
-    ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
-    ValidationError, Nat256
+    Block, ConsensusStrategy, EthMainnetService, HttpOutcallError, JsonRpcError, LogEntry,
+    MultiRpcResult, Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService,
+    RpcServices, TransactionReceipt, ValidationError,
 };
 
 #[async_trait]

@@ -1,8 +1,7 @@
-use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
     self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, ResponseSizeEstimate,
-    SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, Quantity,
+    ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -18,12 +17,12 @@ use evm_rpc_client::{
     types::candid::{
         BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
         GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
-        LogEntry as EvmLogEntry, SendRawTransactionStatus as EvmSendRawTransactionStatus,
-        TransactionReceipt as EvmTransactionReceipt,
+        SendRawTransactionStatus as EvmSendRawTransactionStatus,
     },
-    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, IcRuntime,
+    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, IcRuntime, LogEntry as EvmLogEntry,
     MultiRpcResult as EvmMultiRpcResult, OverrideRpcConfig, RpcConfig as EvmRpcConfig,
     RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+    TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -32,7 +31,6 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
-use std::str::FromStr;
 
 mod providers;
 pub mod requests;
@@ -651,25 +649,20 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
 
         fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
             Ok(LogEntry {
-                address: Address::from_str(&log.address)?,
+                address: Address::new(log.address.into()),
                 topics: log
                     .topics
                     .into_iter()
-                    .map(|t| FixedSizeData::from_str(&t))
-                    .collect::<Result<_, _>>()?,
-                data: Data::from_str(&log.data)?,
-                block_number: log.block_number.map(BlockNumber::try_from).transpose()?,
-                transaction_hash: log
-                    .transaction_hash
-                    .as_deref()
-                    .map(Hash::from_str)
-                    .transpose()?,
+                    .map(|t| FixedSizeData(t.into()))
+                    .collect(),
+                data: Data(log.data.into()),
+                block_number: log.block_number.map(BlockNumber::from),
+                transaction_hash: log.transaction_hash.map(|h| Hash(h.into())),
                 transaction_index: log
                     .transaction_index
-                    .map(|i| CheckedAmountOf::<()>::try_from(i).map(|c| c.into_inner()))
-                    .transpose()?,
-                block_hash: log.block_hash.as_deref().map(Hash::from_str).transpose()?,
-                log_index: log.log_index.map(LogIndex::try_from).transpose()?,
+                    .map(|i| Quantity::from_be_bytes(i.into_be_bytes())),
+                block_hash: log.block_hash.map(|h| Hash(h.into())),
+                log_index: log.log_index.map(LogIndex::from),
                 removed: log.removed,
             })
         }
@@ -733,18 +726,18 @@ impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
             receipt
                 .map(|evm_receipt| {
                     Ok(TransactionReceipt {
-                        block_hash: Hash::from_str(&evm_receipt.block_hash)?,
-                        block_number: BlockNumber::try_from(evm_receipt.block_number)?,
-                        effective_gas_price: WeiPerGas::try_from(evm_receipt.effective_gas_price)?,
-                        gas_used: GasAmount::try_from(evm_receipt.gas_used)?,
+                        block_hash: Hash(evm_receipt.block_hash.into()),
+                        block_number: BlockNumber::from(evm_receipt.block_number),
+                        effective_gas_price: WeiPerGas::from(evm_receipt.effective_gas_price),
+                        gas_used: GasAmount::from(evm_receipt.gas_used),
                         status: TransactionStatus::try_from(
                             evm_receipt
                                 .status
-                                .0
-                                .to_u8()
+                                .map(|s| s.as_ref().0.to_u8())
+                                .flatten()
                                 .ok_or("invalid transaction status")?,
                         )?,
-                        transaction_hash: Hash::from_str(&evm_receipt.transaction_hash)?,
+                        transaction_hash: Hash(evm_receipt.transaction_hash.into()),
                     })
                 })
                 .transpose()

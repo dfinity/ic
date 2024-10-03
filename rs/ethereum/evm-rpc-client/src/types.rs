@@ -13,42 +13,6 @@ pub mod candid {
         Number(Nat),
     }
 
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-    pub struct LogEntry {
-        /// The address from which this log originated.
-        pub address: String,
-        /// Array of 0 to 4 32-byte DATA elements of indexed log arguments.
-        /// In solidity: The first topic is the event signature hash (e.g. Deposit(address,bytes32,uint256)),
-        /// unless you declared the event with the anonymous specifier.
-        pub topics: Vec<String>,
-        /// Contains one or more 32-byte non-indexed log arguments.
-        pub data: String,
-        /// The block number in which this log appeared.
-        /// None if the block is pending.
-        #[serde(rename = "blockNumber")]
-        pub block_number: Option<Nat>,
-        /// 32-byte hash of the transaction from which this log was created.
-        /// None if the transaction is still pending.
-        #[serde(rename = "transactionHash")]
-        pub transaction_hash: Option<String>,
-        /// Integer of the transaction's position within the block the log was created from.
-        /// None if the transaction is still pending.
-        #[serde(rename = "transactionIndex")]
-        pub transaction_index: Option<Nat>,
-        /// 32-byte hash of the block in which this log appeared.
-        /// None if the block is pending.
-        #[serde(rename = "blockHash")]
-        pub block_hash: Option<String>,
-        /// Integer of the log index position in the block.
-        /// None if the log is pending.
-        #[serde(rename = "logIndex")]
-        pub log_index: Option<Nat>,
-        /// "true" when the log was removed due to a chain reorganization.
-        /// "false" if it is a valid log.
-        #[serde(default)]
-        pub removed: bool,
-    }
-
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
     pub struct GetLogsArgs {
         #[serde(rename = "fromBlock")]
@@ -96,31 +60,6 @@ pub mod candid {
         pub gas_used_ratio: Vec<f64>,
         /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
         pub reward: Vec<Vec<Nat>>,
-    }
-
-    #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-    pub struct TransactionReceipt {
-        #[serde(rename = "blockHash")]
-        pub block_hash: String,
-        #[serde(rename = "blockNumber")]
-        pub block_number: Nat,
-        #[serde(rename = "effectiveGasPrice")]
-        pub effective_gas_price: Nat,
-        #[serde(rename = "gasUsed")]
-        pub gas_used: Nat,
-        pub status: Nat,
-        #[serde(rename = "transactionHash")]
-        pub transaction_hash: String,
-        #[serde(rename = "contractAddress")]
-        pub contract_address: Option<String>,
-        pub from: String,
-        pub logs: Vec<LogEntry>,
-        #[serde(rename = "logsBloom")]
-        pub logs_bloom: String,
-        pub to: String,
-        #[serde(rename = "transactionIndex")]
-        pub transaction_index: Nat,
-        pub r#type: String,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
