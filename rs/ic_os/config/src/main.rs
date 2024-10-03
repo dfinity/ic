@@ -77,19 +77,21 @@ pub fn main() -> Result<()> {
                 gateway: ipv6_gateway,
             };
 
-            let ipv4_config =
-                if let (Some(address), Some(gateway), Some(prefix_length), Some(domain)) =
-                    (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
-                {
+            let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain) {
+                (Some(address), Some(gateway), Some(prefix_length), Some(domain)) => {
                     Some(Ipv4Config {
                         address,
                         gateway,
                         prefix_length,
                         domain,
                     })
-                } else {
+                }
+                (None, None, None, None) => None,
+                _ => {
+                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
                     None
-                };
+                }
+            };
 
             let network_settings = NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(deterministic_config),
