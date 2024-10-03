@@ -3037,7 +3037,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedInstallCode(id));
+                    .enqueue(ExecutionTask::PausedInstallCode(id));
 
                 match (dts_status, ingress_status) {
                     (DtsInstallCodeStatus::StartingFirstExecution, Some((message_id, status))) => {
@@ -3320,7 +3320,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution { id, input });
+                    .enqueue(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }

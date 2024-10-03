@@ -309,7 +309,7 @@ impl TaskQueue {
         self.queue.pop_back()
     }
 
-    pub fn push_front(&mut self, task: ExecutionTask) {
+    pub fn enqueue(&mut self, task: ExecutionTask) {
         match task {
             ExecutionTask::OnLowWasmMemory(hook_condition_check_result) => {
                 if let Some(is_hook_condition_satisfied) = hook_condition_check_result {

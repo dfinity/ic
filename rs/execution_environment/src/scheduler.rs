@@ -2528,10 +2528,10 @@ fn enqueue_tasks(
     // We first push the 'other_task' to the front of the queue and then
     // in front of it 'task' so that 'task' is executed first.
     if let Some(other_task) = other_task {
-        canister.system_state.task_queue.push_front(other_task);
+        canister.system_state.task_queue.enqueue(other_task);
     }
 
-    canister.system_state.task_queue.push_front(task);
+    canister.system_state.task_queue.enqueue(task);
 }
 
 /// Estimates the heap delta limit for the given round based on the maximum
