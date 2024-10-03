@@ -92,7 +92,6 @@ function assemble_config_media() {
 }
 
 function generate_guestos_config() {
-    # todo: can I use the generate mac address in hostos tool?
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
 
     CPU_DOMAIN="kvm"

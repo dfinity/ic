@@ -66,6 +66,7 @@ function read_config_variables() {
     node_operator_private_key=$(get_config_value '.icos_settings.node_operator_private_key_path')
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
+    ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
 }
 
 function assemble_config_media() {
@@ -85,7 +86,7 @@ function assemble_config_media() {
     if [ -f "$node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "$node_operator_private_key")
     fi
-    cmd+=(--accounts_ssh_authorized_keys "/boot/config/ssh_authorized_keys")
+    cmd+=(--accounts_ssh_authorized_keys "$ssh_authorized_keys")
 
     # Run the above command
     "${cmd[@]}"
@@ -93,7 +94,6 @@ function assemble_config_media() {
 }
 
 function generate_guestos_config() {
-    # todo: can I use the generate mac address in hostos tool?
     MAC_ADDRESS=$(/opt/ic/bin/hostos_tool generate-mac-address --node-type GuestOS)
 
     CPU_DOMAIN="kvm"
