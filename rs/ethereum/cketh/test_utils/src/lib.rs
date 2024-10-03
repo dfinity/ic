@@ -708,17 +708,19 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
 }
 
 fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
-    let args = EvmRpcInitArgs {
-        nodes_in_subnet: 28,
-    };
+    let args = InstallArgs::default();
     env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
         .unwrap();
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct EvmRpcInitArgs {
-    #[serde(rename = "nodesInSubnet")]
-    pub nodes_in_subnet: u32,
+// TODO XC-206: This should be in EVM-RPC types.
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct InstallArgs {
+    pub demo: Option<bool>,
+    #[serde(rename = "manageApiKeys")]
+    pub manage_api_keys: Option<Vec<Principal>>,
+    #[serde(rename = "logFilter")]
+    pub log_filter: Option<Principal>,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {

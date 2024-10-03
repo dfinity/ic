@@ -22,6 +22,12 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 
+# TODO XC-206: change version in WORKSPACE.bazel
+filegroup(
+    name = "new_evm_rpc.wasm.gz",
+    srcs = ["evm_rpc.wasm.gz"],
+)
+
 rust_library(
     name = "minter",
     srcs = glob(
@@ -223,8 +229,8 @@ rust_binary(
         ("", [], {}),
         (
             "_evm_rpc",
-            ["@evm_rpc.wasm.gz//file"],
-            {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
+            [":new_evm_rpc.wasm.gz"],
+            {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath :new_evm_rpc.wasm.gz)"},
         ),
     ]
 ]
