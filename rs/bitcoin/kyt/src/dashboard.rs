@@ -52,7 +52,13 @@ impl fmt::Display for Status {
             Status::PendingOutcall => write!(f, "Pending outcall"),
             Status::PendingRetry => write!(f, "Pending retry"),
             Status::Error(_) => write!(f, "Error"),
-            Status::Fetched(_) => write!(f, "Fetched"),
+            Status::Fetched(fetched) => {
+                if fetched.input_addresses.iter().all(|x| x.is_none()) {
+                    write!(f, "Fetched (transitive)")
+                } else {
+                    write!(f, "Fetched")
+                }
+            }
         }
     }
 }
