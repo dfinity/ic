@@ -871,7 +871,7 @@ fn pre_upgrade() {
         let writer = Writer::new(bs, 0);
         let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
         ciborium::ser::into_writer(&*ledger, &mut buffered_writer)
-            .expect("Failed to write the Ledger state in stable memory");
+            .expect("Failed to write the Ledger state to memory manager managed stable memory");
         let end = dfn_core::api::performance_counter(0);
         let instructions_consumed = end - start;
         let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
