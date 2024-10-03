@@ -287,7 +287,7 @@ fn compute_next_difficulty(
     let mut target = U256::from_big_endian(&prev_header.target().to_be_bytes());
     target *= U256::from(adjusted_interval);
     target /= U256::from(target_adjustment_interval_time);
-    let target = Target::from_be_bytes(target.into());
+    let target = Target::from_be_bytes(target.as_ref());
 
     // Adjusting the newly computed difficulty target so that it doesn't exceed the
     // max_difficulty_target limit

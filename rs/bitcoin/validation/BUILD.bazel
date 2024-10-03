@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:bitcoin",
+    "@crate_index//:primitive-types",
 ]
 
 MACRO_DEPENDENCIES = []
