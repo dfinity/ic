@@ -5,8 +5,8 @@ set -e
 # Generate the GuestOS configuration.
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/config.sh
 
 # Get keyword arguments
 for argument in "${@}"; do
