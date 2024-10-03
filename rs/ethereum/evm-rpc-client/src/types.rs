@@ -1,6 +1,5 @@
 pub mod candid {
     use candid::{CandidType, Deserialize, Nat};
-    use ic_cdk::api::management_canister::http_request::HttpHeader;
     use serde::Serialize;
 
     #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -178,56 +177,5 @@ pub mod candid {
         InsufficientFunds,
         NonceTooLow,
         NonceTooHigh,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-    pub enum RpcServices {
-        Custom {
-            #[serde(rename = "chainId")]
-            chain_id: u64,
-            services: Vec<RpcApi>,
-        },
-        EthMainnet(Option<Vec<EthMainnetService>>),
-        EthSepolia(Option<Vec<EthSepoliaService>>),
-    }
-
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
-    pub struct RpcApi {
-        pub url: String,
-        pub headers: Option<Vec<HttpHeader>>,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize)]
-    pub enum RpcService {
-        Custom(RpcApi),
-        EthMainnet(EthMainnetService),
-        EthSepolia(EthSepoliaService),
-    }
-
-    #[derive(
-        Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize,
-    )]
-    pub enum EthMainnetService {
-        Alchemy,
-        Ankr,
-        BlockPi,
-        PublicNode,
-        Cloudflare,
-    }
-
-    #[derive(
-        Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Serialize,
-    )]
-    pub enum EthSepoliaService {
-        Alchemy,
-        Ankr,
-        BlockPi,
-        PublicNode,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
-    pub struct RpcConfig {
-        #[serde(rename = "responseSizeEstimate")]
-        pub response_size_estimate: Option<u64>,
     }
 }

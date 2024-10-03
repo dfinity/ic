@@ -29,7 +29,7 @@ pub mod arb {
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use candid::Nat;
-    use evm_rpc_client::types::candid::{
+    use evm_rpc_client::{
         HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
         ProviderError as EvmProviderError, RpcError as EvmRpcError,
         ValidationError as EvmValidationError,
@@ -219,10 +219,6 @@ pub mod arb {
         prop_oneof![
             ".*".prop_map(EvmValidationError::Custom),
             ".*".prop_map(EvmValidationError::InvalidHex),
-            ".*".prop_map(EvmValidationError::UrlParseError),
-            ".*".prop_map(EvmValidationError::HostNotAllowed),
-            Just(EvmValidationError::CredentialPathNotAllowed),
-            Just(EvmValidationError::CredentialHeaderNotAllowed)
         ]
     }
 }

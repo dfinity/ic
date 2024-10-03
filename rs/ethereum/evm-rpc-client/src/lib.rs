@@ -5,7 +5,7 @@ pub mod types;
 
 use crate::types::candid::{
     Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
-    RpcConfig, RpcServices, SendRawTransactionStatus, TransactionReceipt,
+    SendRawTransactionStatus, TransactionReceipt,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -15,7 +15,11 @@ use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
-pub use evm_rpc_types::{HttpOutcallError, MultiRpcResult, ProviderError, RpcError, RpcResult};
+pub use evm_rpc_types::{
+    ConsensusStrategy, EthMainnetService, HttpOutcallError, JsonRpcError, MultiRpcResult,
+    ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
+    ValidationError,
+};
 
 #[async_trait]
 pub trait Runtime {

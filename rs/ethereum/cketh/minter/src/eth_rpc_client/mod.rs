@@ -19,11 +19,12 @@ use evm_rpc_client::{
         Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
         FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
         GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
-        RpcConfig as EvmRpcConfig, SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     },
-    EvmRpcClient, IcRuntime, MultiRpcResult as EvmMultiRpcResult, OverrideRpcConfig,
-    RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+    ConsensusStrategy, EvmRpcClient, IcRuntime, MultiRpcResult as EvmMultiRpcResult,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -77,6 +78,7 @@ impl EthRpcClient {
                             response_size_estimate: Some(
                                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                             ),
+                            response_consensus: Some(ConsensusStrategy::Equality),
                         }),
                         ..Default::default()
                     })

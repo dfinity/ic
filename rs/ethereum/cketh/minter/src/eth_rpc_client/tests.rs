@@ -655,13 +655,15 @@ mod evm_rpc_conversion {
     };
     use assert_matches::assert_matches;
     use candid::Nat;
-    use evm_rpc_client::types::candid::{
-        Block as EvmBlock, EthMainnetService as EvmEthMainnetService, FeeHistory as EvmFeeHistory,
-        HttpOutcallError as EvmHttpOutcallError, LogEntry as EvmLogEntry,
+    use evm_rpc_client::{
+        types::candid::{
+            Block as EvmBlock, FeeHistory as EvmFeeHistory, LogEntry as EvmLogEntry,
+            SendRawTransactionStatus as EvmSendRawTransactionStatus,
+            TransactionReceipt as EvmTransactionReceipt,
+        },
+        EthMainnetService as EvmEthMainnetService, HttpOutcallError as EvmHttpOutcallError,
         MultiRpcResult as EvmMultiRpcResult, RpcApi as EvmRpcApi, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, RpcService as EvmRpcService, RpcService,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
-        TransactionReceipt as EvmTransactionReceipt,
+        RpcResult as EvmRpcResult, RpcService as EvmRpcService,
     };
     use num_bigint::BigUint;
     use proptest::collection::vec;
@@ -1042,7 +1044,7 @@ mod evm_rpc_conversion {
         Ok(())
     }
 
-    fn evm_rpc_providers() -> (RpcService, RpcService, RpcService) {
+    fn evm_rpc_providers() -> (EvmRpcService, EvmRpcService, EvmRpcService) {
         let block_pi_evm_rpc_provider = EvmRpcService::Custom(EvmRpcApi {
             url: "block_pi".to_string(),
             headers: None,
