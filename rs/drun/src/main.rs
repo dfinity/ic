@@ -123,7 +123,7 @@ fn get_arg_matches() -> ArgMatches {
             Arg::new(ARG_EXTRA_BATCHES)
                 .long("extra-batches")
                 .value_name("INT")
-                .help(&format!(
+                .help(format!(
                     "Extra batches to execute after each response has been received (default: {}).",
                     DEFAULT_EXTRA_BATCHES
                 ))
@@ -134,7 +134,7 @@ fn get_arg_matches() -> ArgMatches {
                 .short('c')
                 .long("config")
                 .value_name("config")
-                .help(&format!(
+                .help(format!(
                     "Main configuration of the node (default: {}).",
                     DEFAULT_CONFIG_FILE
                 ))
