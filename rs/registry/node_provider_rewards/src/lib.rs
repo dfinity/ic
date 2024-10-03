@@ -57,12 +57,15 @@ pub fn calculate_rewards_v0(
             let rate = match rewards_table.get_rate(region, node_type) {
                 Some(rate) => rate,
                 None => {
-                    np_log.push(format!(
+                    let log_line = format!(
                         "The Node Rewards Table does not have an entry for \
                         node type '{}' within region '{}' or parent region, defaulting to 1 xdr per month per node, for \
                         NodeProvider '{}' on Node Operator '{}'",
                         node_type, region, node_provider_id, node_operator_id
-                    ));
+                    );
+                    println!("{log_line}");
+                    np_log.push(log_line);
+
                     NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 1,
                         reward_coefficient_percent: Some(100),
@@ -122,7 +125,7 @@ pub fn calculate_rewards_v0(
                     let mut dc_reward = 0;
                     for i in 0..*node_count {
                         let node_reward = (reward_base * np_coeff) as u64;
-                        np_log.push(format!(
+                        let log_line = format!(
                             "NodeProvider {} {}/{} {} node in {} DC: reward {}",
                             node_provider_id,
                             i + 1,
@@ -130,7 +133,9 @@ pub fn calculate_rewards_v0(
                             node_type.as_str(),
                             node_operator.dc_id,
                             node_reward,
-                        ));
+                        );
+                        println!("{log_line}");
+                        np_log.push(log_line);
                         dc_reward += node_reward;
                         np_coeff *= dc_reward_coefficient_percent;
                     }
@@ -140,14 +145,17 @@ pub fn calculate_rewards_v0(
                 _ => *node_count as u64 * rate.xdr_permyriad_per_node_per_month,
             };
 
-            np_log.push(format!(
+            let log_line = format!(
                 "NodeProvider {} reward for all {} {} nodes in {} DC: reward {}",
                 node_provider_id,
                 node_count,
                 node_type.as_str(),
                 node_operator.dc_id,
                 dc_reward,
-            ));
+            );
+            println!("{log_line}");
+            np_log.push(log_line);
+
             *np_rewards += dc_reward;
         }
     }
