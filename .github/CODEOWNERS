@@ -59,6 +59,7 @@ go_deps.bzl               @dfinity/idx
 /ic-os/components/boundary-guestos/                                     @dfinity/boundary-node @dfinity/node
 /ic-os/components/boundary-guestos.bzl                                  @dfinity/boundary-node @dfinity/node
 /ic-os/components/init/bootstrap-ic-node/boundary-guestos/              @dfinity/boundary-node @dfinity/node
+/ic-os/components/networking/nftables/                                  @dfinity/dre
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
