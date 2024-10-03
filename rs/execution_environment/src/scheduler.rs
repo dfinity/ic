@@ -2342,7 +2342,7 @@ fn can_execute_subnet_msg(
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
+            | Some(ExecutionTask::OnLowWasmMemory(..)) => (false, false),
             Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
             Some(ExecutionTask::AbortedExecution { .. })
