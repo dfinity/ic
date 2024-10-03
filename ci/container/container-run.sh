@@ -126,8 +126,8 @@ if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
-        )# privileged rootful podman is required due to requirements of IC-OS guest build
-# additionally, we need to use hosts's cgroups and network
+        ) # privileged rootful podman is required due to requirements of IC-OS guest build
+        # additionally, we need to use hosts's cgroups and network
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
@@ -172,7 +172,7 @@ fi
 # destroys the journal + wastes enormous amounts of CPU.
 # I witnessed journald and syslog peg 2 cores of my devenv
 # when running a simple cat /path/to/file.
-if tty >/dev/null 2>&1 ; then
+if tty >/dev/null 2>&1; then
     tty=" -t --log-driver=none"
 else
     tty="--log-driver=none"
