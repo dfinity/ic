@@ -460,15 +460,18 @@ pub(crate) fn spawn_tip_thread(
                                 checkpointed_state,
                                 execution_state,
                             );
-                            //for pm in checkpoint_layout.all_existing_pagemaps().expect(&format!(
-                            //"Failed to get list of existing pagemaps for {}",
-                            //checkpoint_layout.height()
-                            //)) {
-                            //verify(&pm).expect("Failed to remove unverified marker.");
-                            //}
-                            //checkpoint_layout
-                            //.remove_unverified_checkpoint_marker()
-                            //.expect("Failed to remove unverified marker.");
+                            match crate::checkpoint::validate_checkpoint(
+                                &checkpoint_layout,
+                                Some(&mut thread_pool),
+                            ) {
+                                Err(err) => fatal!(
+                                    &log,
+                                    "Checkpoint validation for {} has failed: {:#}",
+                                    checkpoint_layout.raw_path().display(),
+                                    err
+                                ),
+                                Ok(()) => (),
+                            }
                         }
 
                         TipRequest::Noop => {}
