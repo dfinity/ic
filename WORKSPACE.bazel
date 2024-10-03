@@ -1008,3 +1008,22 @@ http_file(
     sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
     url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
 )
+
+# IC-OS deps
+http_file(
+    name = "ubuntu-base-24.04.1-base-amd64.tar.gz",
+    sha256 = "5b0ffb1e31d4b85f5a2214f105d1377ba616c453b38ff46c278dc6472b21e2d8",
+    url = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04.1/release/ubuntu-base-24.04.1-base-amd64.tar.gz",
+)
+
+http_file(
+    name = "filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+    sha256 = "ce199f350704c21dbb23dc72ce2a4ecd2e6acb9ed7d4cc338489d72ddea5f3d7",
+    url = "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-oss-8.9.1-linux-x86_64.tar.gz",
+)
+
+http_file(
+    name = "node_exporter-1.8.1.linux-amd64.tar.gz",
+    sha256 = "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011",
+    url = "https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz",
+)
