@@ -340,7 +340,7 @@ impl TaskQueue {
         self.queue.len()
     }
 
-    pub fn get_on_low_wasm_memory_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+    pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
     }
 
