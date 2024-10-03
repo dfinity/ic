@@ -12,10 +12,10 @@ lazy_static! {
     /// The value of this is vec![1,2,3, ... 10, 20, 30, ... 100, 125, 150, 175,
     /// 200, 225, 250, 275, ...] and goes as high as i64 allows.
     pub static ref STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS: Vec<i64> = {
-        let units = (1..=9).into_iter().collect::<Vec<i64>>();
+        let units = (1..=9).collect::<Vec<i64>>();
 
         let max_e = i64::MAX.ilog10();
-        let powers_of_ten = (0..=max_e).into_iter().map(|e| 10_i64.pow(e)).collect::<Vec<i64>>();
+        let powers_of_ten = (0..=max_e).map(|e| 10_i64.pow(e)).collect::<Vec<i64>>();
 
         let mut result = powers_of_ten
             .iter()
@@ -73,7 +73,6 @@ lazy_static! {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Histogram {
     // DO NOT MERGE label_name_to_value: HashMap<String, String>,
-
     bin_inclusive_upper_bound_to_count: BTreeMap<i64, u64>,
 
     // Counts events that do not fall into one of the finite bins.
@@ -105,27 +104,35 @@ impl Histogram {
             .range_mut(value..)
             .next()
             .map(|(_, count)| count)
-            .unwrap_or_else(|| &mut self.infinity_bin_count);
+            .unwrap_or(&mut self.infinity_bin_count);
 
         *count += 1;
     }
 
     pub fn encode_metrics<'a, MyWrite: std::io::Write>(
         &self,
-        metric_labels: &Vec<(String, String)>,
+        metric_labels: &BTreeMap<String, String>,
         out: LabeledHistogramBuilder<'a, MyWrite>,
     ) -> std::io::Result<LabeledHistogramBuilder<'a, MyWrite>> {
+        // Convert String to &str.
         let metric_labels = metric_labels
             .iter()
             .map(|(name, value)| (name.as_str(), value.as_str()))
             .collect::<Vec<_>>();
 
+        // Convert from integers to floats.
         let bin_inclusive_upper_bound_to_count = self
             .bin_inclusive_upper_bound_to_count
             .iter()
-            .map(|(bin_inclusive_upper_bound, count)| (*bin_inclusive_upper_bound as f64, *count as f64))
+            .map(|(bin_inclusive_upper_bound, count)| {
+                (*bin_inclusive_upper_bound as f64, *count as f64)
+            })
             .chain([(f64::INFINITY, self.infinity_bin_count as f64)]);
 
-        out.histogram(&metric_labels, bin_inclusive_upper_bound_to_count, self.sum as f64)
+        out.histogram(
+            &metric_labels,
+            bin_inclusive_upper_bound_to_count,
+            self.sum as f64,
+        )
     }
 }

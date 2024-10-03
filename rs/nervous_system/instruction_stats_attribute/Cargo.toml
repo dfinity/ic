@@ -13,4 +13,3 @@ syn = { workspace = true }
 [dev-dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
-ic-nervous-system-instruction-stats = { path = "../instruction_stats" }

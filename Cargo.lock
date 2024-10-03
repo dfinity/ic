@@ -9626,7 +9626,6 @@ dependencies = [
  "ic-cdk 0.13.5",
  "ic-metrics-encoder",
  "ic-nervous-system-histogram",
- "itertools 0.12.1",
  "lazy_static",
 ]
 
@@ -9636,7 +9635,6 @@ version = "0.0.1"
 dependencies = [
  "candid",
  "ic-cdk 0.13.5",
- "ic-nervous-system-instruction-stats",
  "quote",
  "syn 1.0.109",
 ]

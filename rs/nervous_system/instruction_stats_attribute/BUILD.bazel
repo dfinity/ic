@@ -10,7 +10,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/nervous_system/instruction_stats",
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
 ]

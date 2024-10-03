@@ -2,10 +2,8 @@ use super::*;
 
 use ic_metrics_encoder::MetricsEncoder;
 use pretty_assertions::assert_eq;
-use prometheus_parse::{Scrape, Value, HistogramCount};
-use std::{
-    collections::HashMap,
-};
+use prometheus_parse::{HistogramCount, Scrape, Value};
+use std::collections::HashMap;
 
 #[test]
 fn test_standard_positive_bin_inclusive_upper_bounds() {
@@ -15,15 +13,26 @@ fn test_standard_positive_bin_inclusive_upper_bounds() {
 
     assert_eq!(
         x[0..27],
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200, 225, 250, 275, 300],
+        [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200,
+            225, 250, 275, 300
+        ],
     );
 
     assert_eq!(
         x[(x.len() - 9)..],
-        [7_000_000_000_000_000_000, 7_250_000_000_000_000_000, 7_500_000_000_000_000_000, 7_750_000_000_000_000_000,
-         8_000_000_000_000_000_000, 8_250_000_000_000_000_000, 8_500_000_000_000_000_000, 8_750_000_000_000_000_000,
-         9_000_000_000_000_000_000,
-        ]);
+        [
+            7_000_000_000_000_000_000,
+            7_250_000_000_000_000_000,
+            7_500_000_000_000_000_000,
+            7_750_000_000_000_000_000,
+            8_000_000_000_000_000_000,
+            8_250_000_000_000_000_000,
+            8_500_000_000_000_000_000,
+            8_750_000_000_000_000_000,
+            9_000_000_000_000_000_000,
+        ]
+    );
 
     let mut sorted = x.clone();
     sorted.sort();
@@ -54,14 +63,9 @@ fn test_add_event() {
 
 #[test]
 fn test_encode_metrics() {
-
     // Expected value from the previous test.
     let histogram = Histogram {
-        bin_inclusive_upper_bound_to_count: BTreeMap::from([
-            (10, 1),
-            (15, 2),
-            (20, 1),
-        ]),
+        bin_inclusive_upper_bound_to_count: BTreeMap::from([(10, 1), (15, 2), (20, 1)]),
         infinity_bin_count: 1,
         sum: 10 + 14 + 15 + 16 + 999,
     };
@@ -71,8 +75,10 @@ fn test_encode_metrics() {
         let now_millis = 123_456;
         let mut metrics_encoder = MetricsEncoder::new(&mut out, now_millis);
         let histogram_encoder = metrics_encoder.histogram_vec("latency_ms", "help").unwrap();
-        let labels = vec![("phase".to_string(), "getting_ready".to_string())];
-        histogram.encode_metrics(&labels, histogram_encoder).unwrap();
+        let labels = BTreeMap::from([("phase".to_string(), "getting_ready".to_string())]);
+        histogram
+            .encode_metrics(&labels, histogram_encoder)
+            .unwrap();
     }
 
     let out = String::from_utf8(out.to_vec())

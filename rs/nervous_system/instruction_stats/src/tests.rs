@@ -10,91 +10,27 @@ pub(crate) fn call_context_instruction_counter() -> u64 {
 }
 
 #[test]
-fn test_on_drop_basic_request() {
-    let request = BasicRequest { method_name: "make_sandwich" };
-
+fn test_on_drop() {
     // Simulate 4 calls.
     for _ in 0..4 {
-        let _on_drop = UpdateInstructionStatsOnDrop::new(&request);
+        let additional_labels = BTreeMap::from([("page_size".to_string(), "<= 10".to_string())]);
+        let _on_drop = UpdateInstructionStatsOnDrop::new("make_sandwich", additional_labels);
     }
 
     // Step 3: Inspect results.
 
     let stats = STATS.with(|stats| stats.borrow().clone());
 
-    let expected_labels = vec![("method_name".to_string(), "make_sandwich".to_string())];
+    let expected_label_set = BTreeMap::from([
+        ("method_name".to_string(), "make_sandwich".to_string()),
+        ("page_size".to_string(), "<= 10".to_string()),
+    ]);
     let mut expected_histogram = Histogram::new(INSTRUCTIONS_BIN_INCLUSIVE_UPPER_BOUNDS.clone());
     for event in [40_000_000_001, 2_760_000_000, 1_500_000, 123_456] {
         expected_histogram.add_event(event);
     }
     assert_eq!(
         stats,
-        HashMap::from([
-            (expected_labels, expected_histogram),
-        ]),
+        BTreeMap::from([(expected_label_set, expected_histogram),]),
     );
-}
-
-struct FancyRequest {
-    x: String,
-    y: String,
-}
-
-impl Request for FancyRequest {
-    fn method_name(&self) -> String {
-        "make_sandwich".to_string()
-    }
-
-    fn request_labels(&self) -> HashMap<String, String> {
-        HashMap::from([
-            ("x".to_string(), self.x.clone()),
-            ("y".to_string(), self.y.clone()),
-        ])
-    }
-}
-
-#[test]
-fn test_on_drop_custom_labels() {
-    let request = FancyRequest {
-        x: "hello".to_string(),
-        y: "world".to_string(),
-    };
-
-    {
-        let _on_drop = UpdateInstructionStatsOnDrop::new(&request);
-    }
-
-    let stats = || {
-        STATS.with(|stats| stats.borrow().clone())
-    };
-
-    let expected_key = vec![
-        ("method_name".to_string(), "make_sandwich".to_string()),
-        ("x".to_string(), "hello".to_string()),
-        ("y".to_string(), "world".to_string()),
-    ];
-    assert_eq!(
-        stats().keys().cloned().collect::<Vec<Vec<(String, String)>>>(),
-        vec![expected_key.clone()],
-    );
-
-    let observed_histogram = stats().get(&expected_key).unwrap().clone();
-    let mut expected_histogram = Histogram::new(INSTRUCTIONS_BIN_INCLUSIVE_UPPER_BOUNDS.clone());
-    expected_histogram.add_event(123_456);
-    assert_eq!(observed_histogram, expected_histogram);
-
-    for _ in 0..3 {
-        let _on_drop = UpdateInstructionStatsOnDrop::new(&request);
-    }
-
-    assert_eq!(
-        CALL_CONTEXT_INSTRUCTION_COUNTER_RESULTS.with(|results| results.borrow().clone()),
-        vec![],
-    );
-
-    let observed_histogram = stats().get(&expected_key).unwrap().clone();
-    for event in [1_500_000, 2_760_000_000, 40_000_000_001] {
-        expected_histogram.add_event(event);
-    }
-    assert_eq!(observed_histogram, expected_histogram);
 }
