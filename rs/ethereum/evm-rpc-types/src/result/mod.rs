@@ -4,6 +4,7 @@ mod tests;
 use crate::RpcService;
 use candid::{CandidType, Deserialize};
 use ic_cdk::api::call::RejectionCode;
+use thiserror::Error;
 
 pub type RpcResult<T> = Result<T, RpcError>;
 
@@ -63,26 +64,36 @@ impl<T> From<RpcResult<T>> for MultiRpcResult<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Error)]
 pub enum RpcError {
+    #[error("Provider error: {0}")]
     ProviderError(ProviderError),
+    #[error("HTTP outcall error: {0}")]
     HttpOutcallError(HttpOutcallError),
+    #[error("JSON-RPC error: {0}")]
     JsonRpcError(JsonRpcError),
+    #[error("Validation error: {0}")]
     ValidationError(ValidationError),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Error)]
 pub enum ProviderError {
+    #[error("No permission to call this provider")]
     NoPermission,
+    #[error("Not enough cycles, expected {expected}, received {received}")]
     TooFewCycles { expected: u128, received: u128 },
+    #[error("Provider not found")]
     ProviderNotFound,
+    #[error("Missing required provider")]
     MissingRequiredProvider,
+    #[error("Invalid RPC config: {0}")]
     InvalidRpcConfig(String),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize, Error)]
 pub enum HttpOutcallError {
     /// Error from the IC system API.
+    #[error("IC error (code: {code:?}): {message}")]
     IcError {
         code: RejectionCode,
         message: String,
@@ -90,6 +101,7 @@ pub enum HttpOutcallError {
     /// Response is not a valid JSON-RPC response,
     /// which means that the response was not successful (status other than 2xx)
     /// or that the response body could not be deserialized into a JSON-RPC response.
+    #[error("Invalid HTTP JSON-RPC response: status {status}, body: {body}, parsing error: {parsing_error:?}")]
     InvalidHttpJsonRpcResponse {
         status: u16,
         body: String,
@@ -98,15 +110,18 @@ pub enum HttpOutcallError {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize, Error)]
+#[error("JSON-RPC error (code: {code}): {message}")]
 pub struct JsonRpcError {
     pub code: i64,
     pub message: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, CandidType, Deserialize, Error)]
 pub enum ValidationError {
+    #[error("Custom: {0}")]
     Custom(String),
+    #[error("Invalid hex: {0}")]
     InvalidHex(String),
 }
 
