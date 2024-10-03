@@ -271,11 +271,7 @@ impl CanisterHistory {
     }
 }
 
-/// `TaskQueue` represents the implementation of queue structure for tasks satisfying  conditions:
-///
-/// 1. If there is a `Paused` or `Aborted` task it will be returned first.
-/// 2. If an `OnLowWasmMemoryHook` is ready to be executed, it will be returned next.
-/// 3. All other tasks will be returned based on the order in which they are added to the queue.
+/// `TaskQueue` represents the implementation of a queue structure for tasks.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
     /// Queue of tasks.
