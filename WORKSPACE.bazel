@@ -50,20 +50,6 @@ distroless_register_toolchains()
 
 load("@rules_distroless//apt:index.bzl", "deb_index")
 
-# Packageset based on an Ubuntu focal snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @focal//:lock
-deb_index(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-
-load("@focal//:packages.bzl", "focal_packages")
-
-focal_packages()
-
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
 # To update, comment out the `lock` field below and run:
@@ -150,13 +136,6 @@ oci_pull(
 # used in various places as base
 oci_pull(
     name = "ubuntu_base",
-    image = "docker.io/library/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
-    platforms = ["linux/amd64"],
-)
-
-# used in various places as base
-oci_pull(
-    name = "ubuntu_noble_base",
     image = "docker.io/library/ubuntu@sha256:77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a",
     platforms = ["linux/amd64"],
 )
