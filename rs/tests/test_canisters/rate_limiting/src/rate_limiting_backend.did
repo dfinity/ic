@@ -6,7 +6,7 @@ type InputRule = record {
 
 type OutputRule = record {
   id: text;
-  rule_raw: opt text;
+  rule_raw: opt blob;
   description: opt text;
 };
 

@@ -44,7 +44,7 @@ struct InputRule {
 #[derive(CandidType, candid::Deserialize, Clone)]
 struct OutputRule {
     id: Id,
-    rule_raw: Option<String>,
+    rule_raw: Option<Vec<u8>>,
     description: Option<String>,
 }
 
@@ -78,11 +78,10 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
         .rules
         .iter()
         .map(|r| {
-            let rule_raw = String::from_utf8(r.rule_raw.clone()).unwrap();
             OutputRule {
                 id: r.id.clone(),
                 description: Some(r.description.clone()),
-                rule_raw: Some(rule_raw),
+                rule_raw: Some(r.rule_raw.clone()),
             }
         })
         .collect();
