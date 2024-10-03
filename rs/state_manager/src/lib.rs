@@ -2599,6 +2599,7 @@ impl StateManagerImpl {
                             &self.metrics.checkpoint_metrics,
                             self.get_fd_factory(),
                         )?;
+                        checkpoint::validate_checkpoint(&layout, None)?;
                         Ok((layout, state))
                     })
                     .unwrap_or_else(|err| {
@@ -2667,6 +2668,7 @@ impl StateManagerImpl {
                 .send(TipRequest::ValidateReplicatedState {
                     checkpointed_state: Box::new(checkpointed_state.clone()),
                     execution_state: Box::new(state.clone()),
+                    checkpoint_layout: Box::new(cp_layout.clone()),
                 })
                 .expect("Failed to send Validate request");
             #[cfg(debug_assertions)]

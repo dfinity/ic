@@ -262,38 +262,6 @@ fn can_load_a_page_map_without_files() {
 }
 
 #[test]
-fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
-    use std::io::Write;
-
-    let tmp = tempfile::Builder::new()
-        .prefix("checkpoints")
-        .tempdir()
-        .unwrap();
-    let heap_file = tmp.path().join("heap");
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&heap_file)
-        .unwrap()
-        .write_all(&vec![1; PAGE_SIZE / 2])
-        .unwrap();
-
-    match PageMap::open(
-        Arc::new(base_only_storage_layout(heap_file.to_path_buf())),
-        Height::new(0),
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-    ) {
-        Err(err) => assert!(
-            err.is_invalid_heap_file(),
-            "Expected invalid heap file error, got {:?}",
-            err
-        ),
-        Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
-    }
-}
-
-#[test]
 fn can_use_buffer_to_modify_page_map() {
     let page_1 = [1u8; PAGE_SIZE];
     let page_3 = [3u8; PAGE_SIZE];

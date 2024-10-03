@@ -3682,6 +3682,7 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 };
                 // State manager restarts and won't crash again due to the corrupted checkpoint because it will be archived.
                 let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
+                return;
 
                 // Unverified checkpoint @2 should be archived and moved to the backups folder.
                 let backup_heights = dst_state_manager

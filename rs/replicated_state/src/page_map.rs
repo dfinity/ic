@@ -480,10 +480,6 @@ impl PageMap {
         self.storage.is_loaded()
     }
 
-    pub fn validate_load(&self) -> Result<(), PersistenceError> {
-        self.storage.validate_load()
-    }
-
     /// Creates a new page map that always returns zeroed pages.
     /// The allocator of this page map is backed by the file descriptor
     /// the page map is instantiated with.

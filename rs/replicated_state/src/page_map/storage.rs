@@ -159,6 +159,11 @@ pub(crate) struct StorageImpl {
     overlays: Vec<OverlayFile>,
 }
 
+pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError> {
+    StorageImpl::load(storage_layout)?;
+    Ok(())
+}
+
 #[derive(Default, Clone)]
 pub(crate) struct Storage {
     storage_layout: Option<Arc<dyn StorageLayout + Send + Sync>>,
@@ -177,16 +182,6 @@ impl Storage {
 
     pub fn is_loaded(&self) -> bool {
         self.imp.get().is_some()
-    }
-
-    pub fn validate_load(&self) -> Result<(), PersistenceError> {
-        match self.storage_layout.as_ref() {
-            None => Ok(()),
-            Some(storage_layout) => {
-                StorageImpl::load(storage_layout.deref())?;
-                Ok(())
-            }
-        }
     }
 
     pub fn lazy_load(

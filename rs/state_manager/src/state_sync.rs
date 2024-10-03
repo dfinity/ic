@@ -96,6 +96,17 @@ impl StateSync {
                 );
             }
         };
+        match crate::checkpoint::validate_checkpoint(&ro_layout, None) {
+            Ok(()) => (),
+            Err(err) => {
+                fatal!(
+                    self.log,
+                    "Failed to load checkpoint or remove the unverified marker @height {}: {}",
+                    height,
+                    err
+                );
+            }
+        }
 
         self.state_manager.on_synced_checkpoint(
             state,

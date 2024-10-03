@@ -20,7 +20,7 @@ use ic_replicated_state::{
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
-    page_map::{StorageLayout, PAGE_SIZE},
+    page_map::{storage::verify, StorageLayout, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
@@ -125,6 +125,7 @@ pub(crate) enum TipRequest {
     ValidateReplicatedState {
         checkpointed_state: Box<ReplicatedState>,
         execution_state: Box<ReplicatedState>,
+        checkpoint_layout: Box<CheckpointLayout<ReadOnly>>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -451,6 +452,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::ValidateReplicatedState {
                             checkpointed_state,
                             execution_state,
+                            checkpoint_layout,
                         } => {
                             debug_assert!(
                                 checkpointed_state == execution_state,
@@ -458,6 +460,15 @@ pub(crate) fn spawn_tip_thread(
                                 checkpointed_state,
                                 execution_state,
                             );
+                            //for pm in checkpoint_layout.all_existing_pagemaps().expect(&format!(
+                            //"Failed to get list of existing pagemaps for {}",
+                            //checkpoint_layout.height()
+                            //)) {
+                            //verify(&pm).expect("Failed to remove unverified marker.");
+                            //}
+                            //checkpoint_layout
+                            //.remove_unverified_checkpoint_marker()
+                            //.expect("Failed to remove unverified marker.");
                         }
 
                         TipRequest::Noop => {}

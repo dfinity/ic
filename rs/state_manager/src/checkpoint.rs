@@ -7,7 +7,9 @@ use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, PersistenceError};
+use ic_replicated_state::page_map::{
+    storage::verify, PageAllocatorFileDescriptor, PersistenceError,
+};
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -21,7 +23,7 @@ use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
+use std::convert::{identity, TryFrom};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -143,6 +145,20 @@ pub(crate) fn make_checkpoint(
     Ok((cp, state, has_downgrade))
 }
 
+pub fn validate_checkpoint(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+) -> Result<(), CheckpointError> {
+    maybe_parallel_map(
+        &mut thread_pool,
+        checkpoint_layout.all_existing_pagemaps()?.into_iter(),
+        |pm| verify(pm),
+    )
+    .into_iter()
+    .try_for_each(identity)?;
+    Ok(())
+}
+
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
 pub fn load_checkpoint_parallel(
@@ -162,22 +178,6 @@ pub fn load_checkpoint_parallel(
     )
 }
 
-// TODO layout
-pub fn validate_checkpoint(checkpointed_state: &ReplicatedState) -> Result<(), PersistenceError> {
-    for canister in checkpointed_state.canister_states.values() {
-        if let Some(execution_state) = canister.execution_state.as_ref() {
-            execution_state.wasm_memory.page_map.validate_load()?;
-            execution_state.stable_memory.page_map.validate_load()?;
-            canister
-                .system_state
-                .wasm_chunk_store
-                .page_map()
-                .validate_load()?;
-        }
-    }
-    Ok(())
-}
-
 /// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
 /// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
 pub fn load_checkpoint_parallel_and_mark_verified(
@@ -187,7 +187,7 @@ pub fn load_checkpoint_parallel_and_mark_verified(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let state = load_checkpoint_parallel(checkpoint_layout, own_subnet_type, metrics, fd_factory)?;
-    validate_checkpoint(&state).map_err(CheckpointError::from)?;
+    // DO NOT SUBMIT remove this function
     checkpoint_layout
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
