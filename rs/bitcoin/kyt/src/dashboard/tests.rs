@@ -1,7 +1,7 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status};
 use crate::state::Timestamp;
-use crate::BtcNetwork;
+use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork};
 use bitcoin::Address;
 use ic_btc_interface::Txid;
 use std::str::FromStr;
@@ -51,11 +51,10 @@ fn should_display_statuses() {
         input_addresses: parse_address(&["bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7"]),
     });
 
+    let good_address = "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp";
+    let blocked_address = BTC_ADDRESS_BLOCKLIST[0];
     let status_6 = Status::Fetched(Fetched {
-        input_addresses: parse_address(&[
-            "bc1q4h3mm2r8cn3ceu6908j56jeava8rjywppjhukp",
-            "bc1qz0z6xgaqa2qj87mwp093q8zj9l3sm53zeqa8ee",
-        ]),
+        input_addresses: parse_address(&[good_address, blocked_address]),
     });
 
     let dashboard = DashboardTemplate {
@@ -76,7 +75,17 @@ fn should_display_statuses() {
         .has_status(3, txid_3, 0, &status_3)
         .has_status(4, txid_4, 0, &status_4)
         .has_status(5, txid_5, 0, &status_5)
-        .has_status(6, txid_6, 0, &status_6);
+        .has_status(6, txid_6, 0, &status_6)
+        .has_address_html(
+            6,
+            1,
+            &format!("<code style=\"color: green\">{good_address}</code>"),
+        )
+        .has_address_html(
+            6,
+            2,
+            &format!("<code style=\"color: red\">{blocked_address}</code>"),
+        );
 }
 
 mod assertions {
@@ -156,6 +165,19 @@ mod assertions {
             )
         }
 
+        pub fn has_address_html(
+            &self,
+            row_index: u8,
+            address_index: u8,
+            address_html: &str,
+        ) -> &Self {
+            self.has_html_value(
+                &format!("#fetch-tx-status + table > tbody > tr:nth-child({row_index}) > td > table > tbody > tr:nth-child({address_index}) > td"),
+                &address_html,
+                "expect status",
+            )
+        }
+
         fn has_table_row_string_value(
             &self,
             selector: &str,
@@ -173,6 +195,20 @@ mod assertions {
                 &string_value, expected_value,
                 "{}. Rendered html: {}",
                 error_msg, self.rendered_html
+            );
+            self
+        }
+
+        fn has_html_value(&self, selector: &str, expected_value: &str, error_msg: &str) -> &Self {
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
+            let string_value = actual_value.inner_html();
+            assert_eq!(
+                string_value.trim(),
+                expected_value,
+                "{}. Rendered html: {}",
+                error_msg,
+                self.rendered_html
             );
             self
         }
