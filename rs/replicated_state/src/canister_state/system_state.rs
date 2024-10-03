@@ -14,8 +14,8 @@ use crate::{
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_error_types::RejectCode;
+use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
@@ -2037,7 +2037,6 @@ pub mod testing {
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
-            on_low_wasm_memory_hook_status: Default::default(),
         };
     }
 }
