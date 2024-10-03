@@ -7889,7 +7889,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.18",
  "futures",
  "hex",
  "ic-canister-sandbox-backend-lib",
