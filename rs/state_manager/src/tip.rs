@@ -1079,7 +1079,7 @@ fn serialize_canister_to_tip(
             on_low_wasm_memory_hook_status: canister_state
                 .system_state
                 .task_queue
-                .get_on_low_wasm_memory_hook_status(),
+                .peek_hook_status(),
         }
         .into(),
     )?;

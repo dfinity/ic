@@ -3037,7 +3037,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedInstallCode(id));
+                    .enqueue(ExecutionTask::PausedInstallCode(id));
 
                 match (dts_status, ingress_status) {
                     (DtsInstallCodeStatus::StartingFirstExecution, Some((message_id, status))) => {
@@ -3152,46 +3152,39 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
-    fn abort_paused_executions_and_return_tasks(
+    fn abort_paused_execution_and_return_task(
         &self,
-        paused_tasks: Vec<&ExecutionTask>,
+        paused_task: &ExecutionTask,
         log: &ReplicaLogger,
-    ) -> HashMap<PausedExecutionId, ExecutionTask> {
-        paused_tasks
-            .into_iter()
-            .map(|paused_task| match *paused_task {
-                ExecutionTask::PausedExecution { id, .. } => {
-                    let paused = self.take_paused_execution(id).unwrap();
-                    let (input, prepaid_execution_cycles) = paused.abort(log);
-                    (
-                        id,
-                        ExecutionTask::AbortedExecution {
-                            input,
-                            prepaid_execution_cycles,
-                        },
-                    )
+    ) -> ExecutionTask {
+        match *paused_task {
+            ExecutionTask::PausedExecution { id, .. } => {
+                let paused = self.take_paused_execution(id).unwrap();
+                let (input, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedExecution {
+                    input,
+                    prepaid_execution_cycles,
                 }
-                ExecutionTask::PausedInstallCode(id) => {
-                    let paused = self.take_paused_install_code(id).unwrap();
-                    let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
-                    (
-                        id,
-                        ExecutionTask::AbortedInstallCode {
-                            message,
-                            call_id,
-                            prepaid_execution_cycles,
-                        },
-                    )
+            }
+            ExecutionTask::PausedInstallCode(id) => {
+                let paused = self.take_paused_install_code(id).unwrap();
+                let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedInstallCode {
+                    message,
+                    call_id,
+                    prepaid_execution_cycles,
                 }
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory(..) => {
-                    unreachable!("Here must be a paused task.")
-                }
-            })
-            .collect()
+            }
+            ExecutionTask::AbortedExecution { .. }
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory(..) => {
+                unreachable!("Here must be a paused task.")
+            }
+        }
     }
 
     /// Registers the given paused execution and returns its id.
@@ -3218,20 +3211,17 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let paused_tasks = canister.system_state.task_queue.get_all_paused_tasks();
+            if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
+                self.metrics.executions_aborted.inc();
+                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
+                // we can abort all exectuions on it without `paused_tasks`.
+                let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
 
-            self.metrics
-                .executions_aborted
-                .inc_by(paused_tasks.len().try_into().unwrap());
-
-            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
-            // we can abort all exectuions on it without `paused_tasks`.
-            let aborted_tasks = self.abort_paused_executions_and_return_tasks(paused_tasks, log);
-
-            canister
-                .system_state
-                .task_queue
-                .replace_paused_with_aborted_tasks(aborted_tasks);
+                canister
+                    .system_state
+                    .task_queue
+                    .replace_paused_with_aborted_task(aborted_task);
+            }
 
             canister.apply_priority_credit();
             let canister_id = canister.canister_id();
@@ -3320,7 +3310,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution { id, input });
+                    .enqueue(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }

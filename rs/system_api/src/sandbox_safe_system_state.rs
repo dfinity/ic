@@ -305,7 +305,7 @@ impl SystemStateChanges {
 
         system_state
             .task_queue
-            .push_front(ExecutionTask::OnLowWasmMemory(
+            .enqueue(ExecutionTask::OnLowWasmMemory(
                 self.on_low_wasm_memory_hook_condition_check_result,
             ));
 
