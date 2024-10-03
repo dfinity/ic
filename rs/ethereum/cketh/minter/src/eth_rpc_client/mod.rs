@@ -15,13 +15,13 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     types::candid::{
-        BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
+        BlockTag as EvmBlockTag, FeeHistoryArgs as EvmFeeHistoryArgs,
         GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
         SendRawTransactionStatus as EvmSendRawTransactionStatus,
     },
-    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, IcRuntime, LogEntry as EvmLogEntry,
-    MultiRpcResult as EvmMultiRpcResult, OverrideRpcConfig, RpcConfig as EvmRpcConfig,
-    RpcError as EvmRpcError, RpcResult as EvmRpcResult,
+    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, FeeHistory as EvmFeeHistory, IcRuntime,
+    LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
+    RpcConfig as EvmRpcConfig, RpcError as EvmRpcError, RpcResult as EvmRpcResult,
     TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
@@ -687,18 +687,18 @@ impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
         fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
             let fee_history = fee_history.ok_or("No fee history available")?;
             Ok(FeeHistory {
-                oldest_block: BlockNumber::try_from(fee_history.oldest_block)?,
-                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas)?,
+                oldest_block: BlockNumber::from(fee_history.oldest_block),
+                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas),
                 reward: fee_history
                     .reward
                     .into_iter()
                     .map(wei_per_gas_iter)
-                    .collect::<Result<_, _>>()?,
+                    .collect(),
             })
         }
 
-        fn wei_per_gas_iter(values: Vec<Nat>) -> Result<Vec<WeiPerGas>, String> {
-            values.into_iter().map(WeiPerGas::try_from).collect()
+        fn wei_per_gas_iter(values: Vec<Nat256>) -> Vec<WeiPerGas> {
+            values.into_iter().map(WeiPerGas::from).collect()
         }
 
         ReducedResult::from_internal(self).map_reduce(&map_fee_history, |results| {

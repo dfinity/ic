@@ -1,6 +1,5 @@
 pub mod candid {
     use candid::{CandidType, Deserialize, Nat};
-    use serde::Serialize;
 
     #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
     pub enum BlockTag {
@@ -41,25 +40,6 @@ pub mod candid {
         /// will be determined, accounting for gas consumed.
         #[serde(rename = "rewardPercentiles")]
         pub reward_percentiles: Option<Vec<u8>>,
-    }
-
-    #[derive(Clone, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-    pub struct FeeHistory {
-        /// Lowest number block of the returned range.
-        #[serde(rename = "oldestBlock")]
-        pub oldest_block: Nat,
-        /// An array of block base fees per gas.
-        /// This includes the next block after the newest of the returned range,
-        /// because this value can be derived from the newest block.
-        /// Zeroes are returned for pre-EIP-1559 blocks.
-        #[serde(rename = "baseFeePerGas")]
-        pub base_fee_per_gas: Vec<Nat>,
-        /// An array of block gas used ratios (gasUsed / gasLimit).
-        #[serde(default)]
-        #[serde(rename = "gasUsedRatio")]
-        pub gas_used_ratio: Vec<f64>,
-        /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-        pub reward: Vec<Vec<Nat>>,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
