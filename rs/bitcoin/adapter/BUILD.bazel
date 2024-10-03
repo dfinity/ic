@@ -7,6 +7,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/async_utils",
     "//rs/bitcoin/service",
+    "//rs/bitcoin/validation",
     "//rs/config",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -16,8 +17,6 @@ DEPENDENCIES = [
     "@crate_index//:hashlink",
     "@crate_index//:hex",
     "@crate_index//:http",
-    "@crate_index//:hyper-util",
-    "@crate_index//:ic-btc-validation",
     "@crate_index//:parking_lot",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
@@ -84,6 +83,7 @@ rust_binary(
     deps = DEPENDENCIES + [
         ":adapter",
         "//rs/monitoring/adapter_metrics/server",
+        "@crate_index//:hyper-util",
     ],
 )
 

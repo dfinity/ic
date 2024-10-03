@@ -500,16 +500,7 @@ impl PrivateKey {
         message: &[u8; 32],
         aux_rand: &[u8; 32],
     ) -> Option<[u8; 64]> {
-        let need_flip = self.public_key().serialize_sec1(true)[0] == 0x03;
-
-        let bip340 = if need_flip {
-            let ns = self.key.to_nonzero_scalar().negate();
-            let nz_ns =
-                k256::NonZeroScalar::new(ns).expect("Negation of non-zero is always non-zero");
-            k256::schnorr::SigningKey::from(nz_ns)
-        } else {
-            k256::schnorr::SigningKey::from(&self.key)
-        };
+        let bip340 = k256::schnorr::SigningKey::from(&self.key);
 
         bip340
             .sign_prehash_with_aux_rand(message, aux_rand)
@@ -833,25 +824,18 @@ impl PublicKey {
 
     /// Verify a BIP340 (message,signature) pair
     pub fn verify_bip340_signature(&self, message: &[u8], signature: &[u8]) -> bool {
-        use k256::elliptic_curve::point::AffineCoordinates;
         use k256::schnorr::signature::hazmat::PrehashVerifier;
-        use std::ops::Neg;
 
         let signature = match k256::schnorr::Signature::try_from(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };
 
-        let pt = self.key.to_projective().to_affine();
+        let pt = self.serialize_sec1(true);
 
-        let pt = if pt.y_is_odd().into() { pt.neg() } else { pt };
-
-        if let Ok(pk) = k256::PublicKey::from_affine(pt) {
-            if let Ok(bip340) = k256::schnorr::VerifyingKey::try_from(pk) {
-                bip340.verify_prehash(message, &signature).is_ok()
-            } else {
-                false
-            }
+        // from_bytes takes just the x coordinate encoding:
+        if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
+            bip340.verify_prehash(message, &signature).is_ok()
         } else {
             false
         }

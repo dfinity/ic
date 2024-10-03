@@ -24,15 +24,13 @@ members = [
     "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
+    "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
-    "rs/boundary_node/certificate_issuance/certificate_syncer",
-    "rs/boundary_node/denylist_updater",
     "rs/boundary_node/discower_bowndary",
     "rs/boundary_node/ic_balance_exporter",
     "rs/boundary_node/ic_boundary",
-    "rs/boundary_node/icx_proxy",
     "rs/boundary_node/prober",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
@@ -120,8 +118,9 @@ members = [
     "rs/execution_environment",
     "rs/execution_environment/benches/lib",
     "rs/execution_environment/tools",
-    "rs/http_endpoints/public",
     "rs/http_endpoints/metrics",
+    "rs/http_endpoints/public",
+    "rs/http_endpoints/xnet",
     "rs/http_utils",
     "rs/ic_os/dev_test_tools/deterministic_ips",
     "rs/ic_os/build_tools/dflate",
@@ -246,6 +245,7 @@ members = [
     "rs/registry/proto_data_provider",
     "rs/registry/provisional_whitelist",
     "rs/registry/regedit",
+    "rs/registry/node_provider_rewards",
     "rs/registry/nns_data_provider",
     "rs/registry/nns_data_provider_wrappers",
     "rs/registry/routing_table",
@@ -256,37 +256,37 @@ members = [
     "rs/replica",
     "rs/replica_tests",
     "rs/replicated_state",
-    "rs/rosetta-api",
-    "rs/rosetta-api/rosetta_core",
-    "rs/rosetta-api/runner",
-    "rs/rosetta-api/client",
-    "rs/rosetta-api/icp_ledger",
-    "rs/rosetta-api/icp_ledger/archive",
-    "rs/rosetta-api/icp_ledger/ledger",
-    "rs/rosetta-api/icp_ledger/protobuf_generator",
-    "rs/rosetta-api/icp_ledger/index",
-    "rs/rosetta-api/icp_ledger/rosetta-integration-tests",
-    "rs/rosetta-api/icp_ledger/test_utils",
-    "rs/rosetta-api/ledger_core",
-    "rs/rosetta-api/ledger_canister_core",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
+    "rs/rosetta-api/icp",
+    "rs/rosetta-api/common/rosetta_core",
+    "rs/rosetta-api/icp/runner",
+    "rs/rosetta-api/icp/client",
+    "rs/ledger_suite/icp",
+    "rs/ledger_suite/icp/archive",
+    "rs/ledger_suite/icp/ledger",
+    "rs/ledger_suite/icp/protobuf_generator",
+    "rs/ledger_suite/icp/index",
+    "rs/rosetta-api/icp/tests/integration_tests",
+    "rs/ledger_suite/icp/test_utils",
+    "rs/ledger_suite/common/ledger_core",
+    "rs/ledger_suite/common/ledger_canister_core",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "rs/ledger_suite/icrc1",
+    "rs/ledger_suite/icrc1/benchmark/generator",
+    "rs/ledger_suite/icrc1/benchmark/worker",
+    "rs/ledger_suite/icrc1/index",
+    "rs/ledger_suite/icrc1/index-ng",
+    "rs/ledger_suite/icrc1/ledger",
+    "rs/ledger_suite/tests/sm-tests",
+    "rs/ledger_suite/icrc1/archive",
+    "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/tokens_u64",
+    "rs/ledger_suite/icrc1/tokens_u256",
+    "rs/ledger_suite/icp/test_utils",
+    "rs/rosetta-api/icp/test_utils/sender_canister",
     "rs/rosetta-api/icrc1",
-    "rs/rosetta-api/icrc1/benchmark/generator",
-    "rs/rosetta-api/icrc1/benchmark/worker",
-    "rs/rosetta-api/icrc1/index",
-    "rs/rosetta-api/icrc1/index-ng",
-    "rs/rosetta-api/icrc1/ledger",
-    "rs/rosetta-api/icrc1/rosetta",
-    "rs/rosetta-api/icrc1/rosetta/client",
-    "rs/rosetta-api/icrc1/rosetta/runner",
-    "rs/rosetta-api/icrc1/ledger/sm-tests",
-    "rs/rosetta-api/icrc1/archive",
-    "rs/rosetta-api/icrc1/test_utils",
-    "rs/rosetta-api/icrc1/tokens_u64",
-    "rs/rosetta-api/icrc1/tokens_u256",
-    "rs/rosetta-api/test_utils",
-    "rs/rosetta-api/test_utils/sender_canister",
+    "rs/rosetta-api/icrc1/client",
+    "rs/rosetta-api/icrc1/runner",
     "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
@@ -394,11 +394,9 @@ members = [
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
     "rs/workload_generator",
-    "rs/xnet/endpoint",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
-    "rs/registry/node_provider_rewards",
 ]
 
 resolver = "2"
@@ -467,10 +465,11 @@ async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
 async-stream = "0.3.5"
 async-trait = "0.1.81"
-axum = "0.7.5"
+axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
+bitcoin = { version = "0.28.2", features = ["default", "use-serde", "rand"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
@@ -603,8 +602,8 @@ prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
 proptest-derive = "0.5.0"
-prost = "^0.13"
-prost-build = "^0.13"
+prost = "0.13.3"
+prost-build = "0.13.3"
 protobuf = "2.28.0"
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
@@ -617,7 +616,7 @@ rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
-regex = "1.10.6"
+regex = "1.11.0"
 reqwest = { version = "0.12.7", default-features = false, features = [
     "blocking",
     "http2",
@@ -671,8 +670,8 @@ tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
 tokio-util = { version = "0.7.12", features = ["full"] }
-tonic = "0.12.0"
-tonic-build = "0.12.0"
+tonic = "0.12.3"
+tonic-build = "0.12.3"
 tower = { version = "0.4.13", features = ["full"] }
 tower-http = { version = "0.5.2", features = [
     "cors",

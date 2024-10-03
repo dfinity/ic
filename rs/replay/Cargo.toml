@@ -40,7 +40,7 @@ ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../ledger_suite/icp" }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

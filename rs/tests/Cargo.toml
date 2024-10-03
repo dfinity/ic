@@ -34,7 +34,6 @@ ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-http = "0.2.12"
 humantime = "2.0"
 ic-async-utils = { path = "../async_utils" }
 ic-base-types = { path = "../types/base_types" }
@@ -56,14 +55,14 @@ ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 ic-http-utils = { path = "../http_utils" }
-ic-icrc1 = { path = "../rosetta-api/icrc1" }
-ic-icrc1-index-ng = { path = "../rosetta-api/icrc1/index-ng" }
-ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
-ic-icrc1-test-utils = { path = "../rosetta-api/icrc1/test_utils" }
+ic-icrc1 = { path = "../ledger_suite/icrc1" }
+ic-icrc1-index-ng = { path = "../ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "../ledger_suite/icrc1/ledger" }
+ic-icrc1-test-utils = { path = "../ledger_suite/icrc1/test_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
-ic-ledger-core = { path = "../rosetta-api/ledger_core" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-core = { path = "../ledger_suite/common/ledger_core" }
 ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-message = { path = "./test_canisters/message" }
@@ -96,8 +95,8 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-replay = { path = "../replay" }
-ic-rosetta-api = { path = "../rosetta-api" }
-ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
+ic-rosetta-api = { path = "../rosetta-api/icp" }
+ic-rosetta-test-utils = { path = "../rosetta-api/icp/test_utils" }
 ic-sns-governance = { path = "../sns/governance" }
 ic-sns-init = { path = "../sns/init" }
 ic-sns-root = { path = "../sns/root" }
@@ -115,7 +114,7 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic_consensus_system_test_utils = { path = "./consensus/utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "./consensus/tecdsa/utils" }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 indoc = "1.0.9"
@@ -148,7 +147,7 @@ regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
-rosetta-core = { path = "../rosetta-api/rosetta_core" }
+rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
 rsa = { version = "0.9.2", features = ["sha2"] }
 rust_decimal = "1.25"
 schnorr_fun = "0.10"
