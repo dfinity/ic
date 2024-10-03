@@ -32,10 +32,10 @@ RUN \
 # Second build stage:
 # - Construct base images with the differences between dev and prod (IC-OS root filesystem)
 #
-FROM $BASE_IMAGE as image-dev
+FROM $BASE_IMAGE AS image-dev
 # nns public key will be on the USB stick
 
-FROM $BASE_IMAGE as image-prod
+FROM $BASE_IMAGE AS image-prod
 USER root:root
 
 # Bake the nns public key into the image
@@ -118,6 +118,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
     done && \
     systemctl enable \
+    ssh \
     chrony \
     nftables \
     systemd-networkd \
@@ -125,14 +126,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
     systemd-resolved \
     systemd-journal-gatewayd
 
-# Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
-# E.g., systemd-timesync/coredump
-RUN systemd-sysusers && \
-    # Fix reproducibility issue. Notes in boundary-guestos/context/Dockerfile
-    usermod -p '!!' systemd-timesync && \
-    usermod -p '!!' systemd-coredump && \
-    # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
-    echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninteractive dash
+RUN ln -sf /bin/bash /usr/bin/sh
 
 # Group accounts to which parts of the runtime state are assigned such that
 # user accounts can be granted individual access rights.
@@ -190,15 +184,15 @@ COPY opt /opt
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
-        /var/cache/fontconfig/* /var/cache/ldconfig/aux-cache \
-        /var/log/alternatives.log /var/log/apt/history.log \
-        /var/log/apt/term.log /var/log/dpkg.log \
-        /var/lib/apt/lists/* /var/lib/dbus/machine-id \
-        /var/lib/initramfs-tools/5.8.0-50-generic && \
-    find /usr/local/share/fonts -name .uuid | xargs rm && \
-    find /usr/share/fonts -name .uuid | xargs rm && \
-    find /usr/lib -name "*.pyc" | xargs rm -rf&& \
-    find /usr/share -name "*.pyc" | xargs rm -rf&& \
+        /var/cache/fontconfig/* \
+        /var/cache/ldconfig/aux-cache \
+        /var/log/alternatives.log \
+        /var/log/apt/history.log \
+        /var/log/apt/term.log \
+        /var/log/dpkg.log \
+        /var/lib/apt/lists/* \
+        /var/lib/dbus/machine-id && \
+    find /usr -name "*.pyc" -delete && \
     truncate --size 0 /etc/machine-id
 
 # Update POSIX permissions in /opt

@@ -13,7 +13,7 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1",
     "//rs/limits",
-    "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
