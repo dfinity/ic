@@ -132,6 +132,7 @@ impl StateMachine for StateMachineImpl {
                 CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
                 error
             );
+            self.metrics.critical_error_induct_response_failed.inc();
         }
 
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
