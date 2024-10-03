@@ -1,16 +1,6 @@
 {
   "images": [
     {
-      "image": "library/ubuntu",
-      "repo": "docker.io",
-      "sha256": "965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea"
-    },
-    {
-      "image": "library/ubuntu",
-      "repo": "docker.io",
-      "sha256": "5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
-    },
-    {
       "note": "ubuntu:noble-20250415.1",
       "image": "library/ubuntu",
       "repo": "docker.io",
