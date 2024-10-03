@@ -27,7 +27,9 @@ check_config_file() {
 
 # Establish run order
 main() {
+    log_start "$(basename $0)"
     check_config_file
+    log_end "$(basename $0)"
 }
 
 main
