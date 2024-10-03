@@ -10,6 +10,11 @@ source /opt/ic/bin/functions.sh
 
 CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
+# Overridable with $FIREWALL_FILE.
+# FIREWALL_FILE must not be defaulted, because the logic
+# to check an explicitly-specified firewall file is different
+# from the logic to check the default one.
+DEFAULT_FIREWALL_FILE="/var/ic/config/firewall.json"
 
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could
@@ -103,6 +108,31 @@ function get_network_settings() {
 
     HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
     GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)
+}
+
+function check_firewall_rules() {
+    local ret=0
+    if [ -v FIREWALL_FILE ]; then
+        echo "* Checking firewall rules in ${FIREWALL_FILE}..."
+        test -f "${FIREWALL_FILE}" || {
+            echo >&2 "Failed to read explicitly-specified firewall file ${FIREWALL_FILE}"
+            return 1
+        }
+        /opt/ic/bin/setupos_tool check-firewall-config "${FIREWALL_FILE}" >/dev/null || {
+            ret=$?
+            echo >&2 "Failed to parse explicitly-specified firewall rules file ${FIREWALL_FILE}."
+            return ${ret}
+        }
+    else
+        if [ -f "${DEFAULT_FIREWALL_FILE}" ]; then
+            echo "* Checking firewall rules in ${DEFAULT_FIREWALL_FILE}..."
+            /opt/ic/bin/setupos_tool check-firewall-config "${DEFAULT_FIREWALL_FILE}" >/dev/null || {
+                ret=$?
+                echo >&2 "Failed to parse default firewall rules file ${DEFAULT_FIREWALL_FILE}."
+                return ${ret}
+            }
+        fi
+    fi
 }
 
 function print_network_settings() {
@@ -217,6 +247,13 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
+    if kernel_cmdline_bool_default_true ic.setupos.check_firewall_rules; then
+        check_firewall_rules
+        log_and_halt_installation_on_error "${?}" "Current firewall rules would leave the installed system in an insecure state.  Stopping."
+    else
+        echo "* Firewall rule checks skipped by request via kernel command line"
+    fi
+
     if kernel_cmdline_bool_default_true ic.setupos.check_network; then
         read_variables
         get_network_settings
