@@ -553,7 +553,8 @@ pub struct SystemState {
     /// fail if `reserved_balance + N` exceeds this limit if the limit is set.
     reserved_balance_limit: Option<Cycles>,
 
-    /// Queue of the tasks to be executed next.
+    /// Queue of tasks to be executed next. If a paused or aborted execution task is
+    /// present, it must be executed before any other tasks or messages.
     pub task_queue: TaskQueue,
 
     /// Canister global timer.
