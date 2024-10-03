@@ -25,7 +25,7 @@ ic-sns-wasm = { path = "../../../nns/sns-wasm" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
-icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }

@@ -301,6 +301,30 @@ impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
     }
 }
 
+impl<T> TryFrom<u64> for Reference<T>
+where
+    T: ToContext,
+{
+    type Error = ProxyDecodeError;
+    fn try_from(item: u64) -> Result<Self, Self::Error> {
+        let id = Id(item);
+        if id.context() == T::context() {
+            Ok(Reference(item, PhantomData))
+        } else {
+            Err(ProxyDecodeError::Other(format!(
+                "Mismatched reference context: {}",
+                item
+            )))
+        }
+    }
+}
+
+impl<T> From<&Reference<T>> for u64 {
+    fn from(item: &Reference<T>) -> Self {
+        item.0
+    }
+}
+
 /// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);
@@ -673,16 +697,6 @@ impl MessagePool {
     /// Returns the number of messages in the pool.
     pub(super) fn len(&self) -> usize {
         self.messages.len()
-    }
-
-    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
-    /// response requests.
-    pub(super) fn outbound_guaranteed_request_deadline<T>(
-        &self,
-        reference: Reference<T>,
-    ) -> Option<&CoarseTime> {
-        self.outbound_guaranteed_request_deadlines
-            .get(&reference.into())
     }
 
     /// Returns a reference to the pool's message stats.

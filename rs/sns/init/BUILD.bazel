@@ -12,14 +12,14 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/ledger_suite/common/ledger_canister_core",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icrc1/index-ng",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
-    "//rs/rosetta-api/icrc1/index-ng",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_canister_core",
-    "//rs/rosetta-api/ledger_core",
     "//rs/sns/governance",
     "//rs/sns/root",
     "//rs/sns/swap:swap",

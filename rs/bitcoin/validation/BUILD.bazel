@@ -1,0 +1,53 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:bitcoin",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:csv",
+    "@crate_index//:hex",
+    "@crate_index//:proptest",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "validation",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_btc_validation",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "validation_test",
+    crate = ":validation",
+    data = [
+        # Keep sorted.
+        "tests/data/headers.csv",
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "validation_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    data = [
+        # Keep sorted.
+        "tests/data/headers.csv",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":validation"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
