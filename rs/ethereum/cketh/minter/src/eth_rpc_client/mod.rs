@@ -19,11 +19,11 @@ use evm_rpc_client::{
         Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
         FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
         GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
-        MultiRpcResult as EvmMultiRpcResult, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        RpcConfig as EvmRpcConfig, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     },
-    EvmRpcClient, IcRuntime, OverrideRpcConfig,
+    EvmRpcClient, IcRuntime, MultiRpcResult as EvmMultiRpcResult, OverrideRpcConfig,
+    RpcError as EvmRpcError, RpcResult as EvmRpcResult,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -481,6 +481,7 @@ pub enum SingleCallError {
     EvmRpcError(String),
 }
 
+// TODO XC-206: Implement Error for error types in evm_rpc_types
 impl From<EvmRpcError> for SingleCallError {
     fn from(value: EvmRpcError) -> Self {
         match value {

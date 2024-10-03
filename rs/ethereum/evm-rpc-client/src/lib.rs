@@ -5,8 +5,7 @@ pub mod types;
 
 use crate::types::candid::{
     Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
-    MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices, SendRawTransactionStatus,
-    TransactionReceipt,
+    RpcConfig, RpcServices, SendRawTransactionStatus, TransactionReceipt,
 };
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
@@ -15,6 +14,8 @@ use ic_canister_log::{log, Sink};
 use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
+
+pub use evm_rpc_types::{HttpOutcallError, MultiRpcResult, ProviderError, RpcError, RpcResult};
 
 #[async_trait]
 pub trait Runtime {
@@ -161,8 +162,10 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
                     attached_cycles,
                 )
                 .await
-                .unwrap_or_else(|(code, msg)| {
-                    MultiRpcResult::Consistent(Err(RpcError::from_rejection(code, msg)))
+                .unwrap_or_else(|(code, message)| {
+                    MultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(
+                        HttpOutcallError::IcError { code, message },
+                    )))
                 });
             log!(
                 self.logger,
@@ -192,8 +195,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
 }
 
 fn max_expected_too_few_cycles_error<Out>(result: &MultiRpcResult<Out>) -> Option<u128> {
-    result
-        .iter()
+    multi_rpc_result_iter(result)
         .filter_map(|res| match res {
             Err(RpcError::ProviderError(ProviderError::TooFewCycles {
                 expected,
@@ -202,6 +204,17 @@ fn max_expected_too_few_cycles_error<Out>(result: &MultiRpcResult<Out>) -> Optio
             _ => None,
         })
         .max()
+}
+
+fn multi_rpc_result_iter<Out>(
+    result: &MultiRpcResult<Out>,
+) -> Box<dyn Iterator<Item = &RpcResult<Out>> + '_> {
+    match result {
+        MultiRpcResult::Consistent(result) => Box::new(std::iter::once(result)),
+        MultiRpcResult::Inconsistent(results) => {
+            Box::new(results.iter().map(|(_service, result)| result))
+        }
+    }
 }
 
 pub struct EvmRpcClientBuilder<R: Runtime, L: Sink> {

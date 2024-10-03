@@ -13,6 +13,7 @@ ic-cdk = { workspace = true }
 num-bigint = { workspace = true }
 serde = { workspace = true }
 strum = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

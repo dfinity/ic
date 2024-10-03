@@ -19,6 +19,7 @@ rust_library(
         "@crate_index//:num-bigint",
         "@crate_index//:serde",
         "@crate_index//:strum",
+        "@crate_index//:thiserror",
     ],
 )
 

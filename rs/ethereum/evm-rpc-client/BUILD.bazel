@@ -18,7 +18,7 @@ rust_library(
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
         "@crate_index//:thiserror",
-        "//rs/ethereum/evm-rpc-types",
+        "//rs/ethereum/evm-rpc-types:evm_rpc_types",
     ],
 )
 

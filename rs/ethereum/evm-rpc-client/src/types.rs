@@ -1,10 +1,7 @@
 pub mod candid {
     use candid::{CandidType, Deserialize, Nat};
-    use ic_cdk::api::call::RejectionCode;
     use ic_cdk::api::management_canister::http_request::HttpHeader;
     use serde::Serialize;
-    use std::iter;
-    use thiserror::Error;
 
     #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
     pub enum BlockTag {
@@ -181,100 +178,6 @@ pub mod candid {
         InsufficientFunds,
         NonceTooLow,
         NonceTooHigh,
-    }
-
-    pub type RpcResult<T> = Result<T, RpcError>;
-
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
-    pub enum MultiRpcResult<T> {
-        Consistent(RpcResult<T>),
-        Inconsistent(Vec<(RpcService, RpcResult<T>)>),
-    }
-
-    impl<T> MultiRpcResult<T> {
-        pub fn iter(&self) -> Box<dyn Iterator<Item = &RpcResult<T>> + '_> {
-            match self {
-                Self::Consistent(result) => Box::new(iter::once(result)),
-                Self::Inconsistent(results) => {
-                    Box::new(results.iter().map(|(_service, result)| result))
-                }
-            }
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Error)]
-    pub enum RpcError {
-        #[error("Provider error: {0}")]
-        ProviderError(ProviderError),
-        #[error("HTTP outcall error: {0}")]
-        HttpOutcallError(HttpOutcallError),
-        #[error("JSON-RPC error: {0}")]
-        JsonRpcError(JsonRpcError),
-        #[error("Validation error: {0}")]
-        ValidationError(ValidationError),
-    }
-
-    impl RpcError {
-        pub(crate) fn from_rejection(code: RejectionCode, message: String) -> Self {
-            Self::HttpOutcallError(HttpOutcallError::IcError { code, message })
-        }
-    }
-
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Error)]
-    pub enum ProviderError {
-        #[error("No permission to call this provider")]
-        NoPermission,
-        #[error("Not enough cycles, expected {expected}, received {received}")]
-        TooFewCycles { expected: u128, received: u128 },
-        #[error("Provider not found")]
-        ProviderNotFound,
-        #[error("Missing required provider")]
-        MissingRequiredProvider,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error)]
-    pub enum HttpOutcallError {
-        /// Error from the IC system API.
-        #[error("IC error (code: {code:?}): {message}")]
-        IcError {
-            code: RejectionCode,
-            message: String,
-        },
-        /// Response is not a valid JSON-RPC response,
-        /// which means that the response was not successful (status other than 2xx)
-        /// or that the response body could not be deserialized into a JSON-RPC response.
-        #[error("Invalid HTTP JSON-RPC response: status {status}, body: {body}, parsing error: {parsing_error:?}")]
-        InvalidHttpJsonRpcResponse {
-            status: u16,
-            body: String,
-            #[serde(rename = "parsingError")]
-            parsing_error: Option<String>,
-        },
-    }
-
-    #[derive(
-        Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error, Serialize,
-    )]
-    #[error("JSON-RPC error (code: {code}): {message}")]
-    pub struct JsonRpcError {
-        pub code: i64,
-        pub message: String,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize, Error)]
-    pub enum ValidationError {
-        #[error("Custom: {0}")]
-        Custom(String),
-        #[error("Invalid hex: {0}")]
-        InvalidHex(String),
-        #[error("Invalid URL: {0}")]
-        UrlParseError(String),
-        #[error("Host not allowed: {0}")]
-        HostNotAllowed(String),
-        #[error("Credential path not allowed")]
-        CredentialPathNotAllowed,
-        #[error("Credential header not allowed")]
-        CredentialHeaderNotAllowed,
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
