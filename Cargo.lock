@@ -9745,6 +9745,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-instruction-stats"
+version = "0.0.1"
+dependencies = [
+ "ic-cdk 0.13.5",
+ "ic-metrics-encoder",
+ "ic-nervous-system-histogram",
+ "lazy_static",
+]
+
+[[package]]
 name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [
