@@ -1,9 +1,9 @@
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
 use crate::metrics::MetricsAssert;
-use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_cdk::api::management_canister::main::CanisterStatusResponse;
+use ic_cdk::api::management_canister::main::{
+    CanisterId, CanisterSettings, CanisterStatusResponse, CanisterStatusType,
+};
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, Erc20Contract, InitArg, InstalledCanister, InstalledLedgerSuite,
     LedgerInitArg, ManagedCanisterIds, OrchestratorArg, OrchestratorInfo, UpgradeArg,
@@ -11,15 +11,10 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
-};
-use ic_state_machine_tests::{
-    CanisterStatusResultV2, Cycles, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
 use ic_test_utilities_load_wasm::load_wasm;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+use pocket_ic::{CallError, PocketIc, PocketIcBuilder, WasmResult};
 use std::sync::Arc;
 
 pub mod arbitrary;
@@ -38,7 +33,8 @@ pub const MINTER_PRINCIPAL: Principal =
     Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 156, 1, 1]);
 
 pub struct LedgerSuiteOrchestrator {
-    pub env: Arc<StateMachine>,
+    pub env: Arc<PocketIc>,
+    pub controller: Principal,
     pub ledger_suite_orchestrator_id: CanisterId,
     pub ledger_suite_orchestrator_wasm: Vec<u8>,
     pub embedded_ledger_wasm_hash: WasmHash,
@@ -52,8 +48,8 @@ impl Default for LedgerSuiteOrchestrator {
     }
 }
 
-impl AsRef<StateMachine> for LedgerSuiteOrchestrator {
-    fn as_ref(&self) -> &StateMachine {
+impl AsRef<PocketIc> for LedgerSuiteOrchestrator {
+    fn as_ref(&self) -> &PocketIc {
         &self.env
     }
 }
@@ -67,11 +63,19 @@ impl LedgerSuiteOrchestrator {
         Self::new(Arc::new(new_state_machine()), init_arg)
     }
 
-    pub fn new(env: Arc<StateMachine>, init_arg: InitArg) -> Self {
-        let ledger_suite_orchestrator_id =
-            env.create_canister_with_cycles(None, Cycles::new(u128::MAX), None);
+    pub fn new(env: Arc<PocketIc>, init_arg: InitArg) -> Self {
+        let controller = NNS_ROOT_PRINCIPAL;
+        let ledger_suite_orchestrator_id = env.create_canister_with_settings(
+            Some(controller),
+            Some(CanisterSettings {
+                controllers: Some(vec![controller]),
+                ..CanisterSettings::default()
+            }),
+        );
+        env.add_cycles(ledger_suite_orchestrator_id, u128::MAX);
         Self {
             env,
+            controller,
             ledger_suite_orchestrator_id,
             ledger_suite_orchestrator_wasm: ledger_suite_orchestrator_wasm(),
             embedded_ledger_wasm_hash: ledger_wasm().hash().clone(),
@@ -81,11 +85,19 @@ impl LedgerSuiteOrchestrator {
         .install_ledger_suite_orchestrator(init_arg)
     }
 
-    pub fn new_with_ledger_get_blocks_disabled(env: Arc<StateMachine>, init_arg: InitArg) -> Self {
-        let ledger_suite_orchestrator_id =
-            env.create_canister_with_cycles(None, Cycles::new(u128::MAX), None);
+    pub fn new_with_ledger_get_blocks_disabled(env: Arc<PocketIc>, init_arg: InitArg) -> Self {
+        let controller = NNS_ROOT_PRINCIPAL;
+        let ledger_suite_orchestrator_id = env.create_canister_with_settings(
+            Some(controller),
+            Some(CanisterSettings {
+                controllers: Some(vec![controller]),
+                ..CanisterSettings::default()
+            }),
+        );
+        env.add_cycles(ledger_suite_orchestrator_id, u128::MAX);
         Self {
             env,
+            controller,
             ledger_suite_orchestrator_id,
             ledger_suite_orchestrator_wasm: ledger_suite_orchestrator_get_blocks_disabled_wasm(),
             embedded_ledger_wasm_hash: ledger_get_blocks_disabled_wasm().hash().clone(),
@@ -96,13 +108,12 @@ impl LedgerSuiteOrchestrator {
     }
 
     fn install_ledger_suite_orchestrator(self, init_arg: InitArg) -> Self {
-        self.env
-            .install_existing_canister(
-                self.ledger_suite_orchestrator_id,
-                self.ledger_suite_orchestrator_wasm.clone(),
-                Encode!(&OrchestratorArg::InitArg(init_arg)).unwrap(),
-            )
-            .unwrap();
+        self.env.install_canister(
+            self.ledger_suite_orchestrator_id,
+            self.ledger_suite_orchestrator_wasm.clone(),
+            Encode!(&OrchestratorArg::InitArg(init_arg)).unwrap(),
+            Some(self.controller),
+        );
         self
     }
 
@@ -139,29 +150,20 @@ impl LedgerSuiteOrchestrator {
     pub fn upgrade_ledger_suite_orchestrator_with_same_wasm(
         &self,
         upgrade_arg: &OrchestratorArg,
-    ) -> Result<(), UserError> {
+    ) -> Result<(), CallError> {
         self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
         self.env.upgrade_canister(
             self.ledger_suite_orchestrator_id,
             self.ledger_suite_orchestrator_wasm.clone(),
             Encode!(upgrade_arg).unwrap(),
+            Some(self.controller),
         )
     }
 
     pub fn get_canister_status(&self) -> CanisterStatusResponse {
-        Decode!(
-            &assert_reply(
-                self.env
-                    .execute_ingress(
-                        self.ledger_suite_orchestrator_id,
-                        "get_canister_status",
-                        Encode!().unwrap()
-                    )
-                    .expect("failed to call get_canister_status")
-            ),
-            CanisterStatusResponse
-        )
-        .unwrap()
+        self.env
+            .canister_status(self.ledger_suite_orchestrator_id, Some(self.controller))
+            .unwrap()
     }
 
     pub fn assert_managed_canisters(self, contract: &Erc20Contract) -> ManagedCanistersAssert {
@@ -229,10 +231,12 @@ impl LedgerSuiteOrchestrator {
                 self.ledger_suite_orchestrator_id,
                 new_ledger_suite_orchestrator_wasm.clone(),
                 Encode!(&OrchestratorArg::UpgradeArg(upgrade_arg)).unwrap(),
+                Some(self.controller),
             )
             .expect("Failed to upgrade ERC20");
         Self {
             env: self.env,
+            controller: self.controller,
             ledger_suite_orchestrator_id: self.ledger_suite_orchestrator_id,
             ledger_suite_orchestrator_wasm: new_ledger_suite_orchestrator_wasm,
             embedded_ledger_wasm_hash: new_embedded_ledger_wasm_hash,
@@ -248,8 +252,9 @@ impl LedgerSuiteOrchestrator {
         Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress(
+                    .query_call(
                         self.ledger_suite_orchestrator_id,
+                        Principal::anonymous(),
                         "canister_ids",
                         Encode!(contract).unwrap()
                     )
@@ -280,13 +285,12 @@ impl LedgerSuiteOrchestrator {
         self.env.tick();
     }
 
-    pub fn canister_status_of(&self, controlled_canister_id: CanisterId) -> CanisterStatusResultV2 {
+    pub fn canister_status_of(&self, controlled_canister_id: CanisterId) -> CanisterStatusResponse {
         self.env
-            .canister_status_as(
-                self.ledger_suite_orchestrator_id.into(),
+            .canister_status(
                 controlled_canister_id,
+                Some(self.ledger_suite_orchestrator_id),
             )
-            .unwrap()
             .unwrap()
     }
 
@@ -294,8 +298,9 @@ impl LedgerSuiteOrchestrator {
         Decode!(
             &assert_reply(
                 self.env
-                    .query(
+                    .query_call(
                         self.ledger_suite_orchestrator_id,
+                        Principal::anonymous(),
                         "get_orchestrator_info",
                         Encode!().unwrap()
                     )
@@ -320,11 +325,8 @@ pub fn default_init_arg() -> InitArg {
     }
 }
 
-pub fn new_state_machine() -> StateMachine {
-    StateMachineBuilder::new()
-        .with_master_ecdsa_public_key()
-        .with_default_canister_range()
-        .build()
+pub fn new_state_machine() -> PocketIc {
+    PocketIcBuilder::new().with_fiduciary_subnet().build()
 }
 
 pub fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
@@ -472,42 +474,29 @@ pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-pub fn out_of_band_upgrade<T: AsRef<StateMachine>>(
+pub fn out_of_band_upgrade<T: AsRef<PocketIc>>(
     env: T,
-    controller: PrincipalId,
+    controller: Principal,
     target: CanisterId,
     wasm: Vec<u8>,
-) -> Result<(), UserError> {
+) -> Result<(), CallError> {
     env.as_ref()
-        .execute_ingress_as(
-            controller,
-            CanisterId::ic_00(),
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Upgrade,
-                target,
-                wasm,
-                Encode!(&()).unwrap(),
-                None,
-                None,
-            )
-            .encode(),
-        )
-        .map(|_| ())
+        .upgrade_canister(target, wasm, Encode!(&()).unwrap(), Some(controller))
 }
 
-pub fn stop_canister<T: AsRef<StateMachine>, P: Into<PrincipalId>>(
+pub fn stop_canister<T: AsRef<PocketIc>, P: Into<Principal>>(
     env: T,
     controller: P,
     target: CanisterId,
 ) {
     let controller = controller.into();
-    let stop_res = env.as_ref().stop_canister_as(controller, target);
-    assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
+    env.as_ref()
+        .stop_canister(target, Some(controller))
+        .expect("stopping canister failed");
     let status = env
         .as_ref()
-        .canister_status_as(controller, target)
+        .canister_status(target, Some(controller))
         .unwrap()
-        .unwrap();
-    assert_eq!(status.status(), CanisterStatusType::Stopped);
+        .status;
+    assert_eq!(status, CanisterStatusType::Stopped);
 }

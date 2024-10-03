@@ -5,14 +5,14 @@ use crate::{
     LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
 };
 use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
 use ic_management_canister_types::CanisterInfoResponse;
-use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use pocket_ic::PocketIc;
 use std::collections::BTreeSet;
 
 pub struct AddErc20TokenFlow {
@@ -34,8 +34,8 @@ pub struct ManagedCanistersAssert {
     pub canister_ids: ManagedCanisterIds,
 }
 
-impl AsRef<StateMachine> for ManagedCanistersAssert {
-    fn as_ref(&self) -> &StateMachine {
+impl AsRef<PocketIc> for ManagedCanistersAssert {
+    fn as_ref(&self) -> &PocketIc {
         self.setup.env.as_ref()
     }
 }
@@ -46,10 +46,9 @@ impl ManagedCanistersAssert {
             assert_eq!(
                 self.setup
                     .canister_status_of(canister_id)
-                    .settings()
-                    .controllers()
+                    .settings
+                    .controllers
                     .into_iter()
-                    .map(|p| p.0)
                     .collect::<BTreeSet<_>>(),
                 expected_controllers
                     .iter()
@@ -94,7 +93,7 @@ impl ManagedCanistersAssert {
             .expect("BUG: fail to make a transfer to trigger archive creation");
         }
 
-        self.setup.env.run_until_completion(/*max_ticks=*/ 10);
+        // self.setup.env.run_until_completion(/*max_ticks=*/ 10);
 
         let archive_ids_after: BTreeSet<_> = self
             .call_ledger_archives()
@@ -184,7 +183,7 @@ impl ManagedCanistersAssert {
         self
     }
 
-    pub fn ledger_out_of_band_upgrade<T: Into<PrincipalId>>(
+    pub fn ledger_out_of_band_upgrade<T: Into<Principal>>(
         self,
         controller: T,
         wasm: LedgerWasm,
@@ -199,7 +198,7 @@ impl ManagedCanistersAssert {
         self
     }
 
-    pub fn index_out_of_band_upgrade<T: Into<PrincipalId>>(
+    pub fn index_out_of_band_upgrade<T: Into<Principal>>(
         self,
         controller: T,
         wasm: IndexWasm,
@@ -220,32 +219,33 @@ impl ManagedCanistersAssert {
         arg: &TransferArg,
     ) -> Result<Nat, TransferError> {
         Decode!(
-            &self.setup.env.execute_ingress_as(
-                PrincipalId(from),
+            &assert_reply(
+            self.setup.env.update_call(
                 self.ledger_canister_id(),
+                from,
                 "icrc1_transfer",
-                Encode!(arg)
-                .unwrap()
+                Encode!(arg).unwrap()
             )
             .expect("failed to transfer funds")
-            .bytes(),
+            ),
             Result<Nat, TransferError>
         )
-        .expect("failed to decode transfer response")
+        .unwrap()
     }
 
     pub fn call_ledger_icrc3_get_blocks(&self, request: &Vec<GetBlocksRequest>) -> GetBlocksResult {
         Decode!(
-            &self
-                .setup
-                .env
-                .execute_ingress(
-                    self.ledger_canister_id(),
-                    "icrc3_get_blocks",
-                    Encode!(request).unwrap()
-                )
-                .expect("failed to call icrc3_get_blocks")
-                .bytes(),
+            &assert_reply(
+                self.setup
+                    .env
+                    .query_call(
+                        self.ledger_canister_id(),
+                        Principal::anonymous(),
+                        "icrc3_get_blocks",
+                        Encode!(request).unwrap()
+                    )
+                    .expect("failed to call icrc3_get_blocks")
+            ),
             GetBlocksResult
         )
         .expect("failed to decode icrc3_get_blocks response")
@@ -253,12 +253,17 @@ impl ManagedCanistersAssert {
 
     fn call_ledger_archives(&self) -> Vec<ArchiveInfo> {
         Decode!(
-            &self
-                .setup
-                .env
-                .query(self.ledger_canister_id(), "archives", Encode!().unwrap())
-                .expect("failed to query archives")
-                .bytes(),
+            &assert_reply(
+                self.setup
+                    .env
+                    .query_call(
+                        self.ledger_canister_id(),
+                        Principal::anonymous(),
+                        "archives",
+                        Encode!().unwrap()
+                    )
+                    .expect("failed to query archives")
+            ),
             Vec<ArchiveInfo>
         )
         .expect("failed to decode archives response")
@@ -272,12 +277,12 @@ impl ManagedCanistersAssert {
         self
     }
 
-    pub fn ledger_canister_status(&self) -> CanisterStatusResultV2 {
+    pub fn ledger_canister_status(&self) -> CanisterStatusResponse {
         self.setup.canister_status_of(self.ledger_canister_id())
     }
 
     pub fn assert_ledger_has_cycles(self, expected: u128) -> Self {
-        assert_eq!(self.ledger_canister_status().cycles(), expected);
+        assert_eq!(self.ledger_canister_status().cycles, Nat::from(expected));
         self
     }
 
@@ -285,8 +290,8 @@ impl ManagedCanistersAssert {
         assert_eq!(
             self.setup
                 .canister_status_of(self.index_canister_id())
-                .cycles(),
-            expected
+                .cycles,
+            Nat::from(expected)
         );
         self
     }
@@ -297,14 +302,17 @@ impl ManagedCanistersAssert {
             "BUG: no archive canisters"
         );
         for archive in self.archive_canister_ids() {
-            assert_eq!(self.setup.canister_status_of(archive).cycles(), expected);
+            assert_eq!(
+                self.setup.canister_status_of(archive).cycles,
+                Nat::from(expected)
+            );
         }
         self
     }
 
     pub fn assert_ledger_has_wasm_hash<T: AsRef<[u8]>>(self, expected: T) -> Self {
         assert_eq!(
-            self.ledger_canister_status().module_hash(),
+            self.ledger_canister_status().module_hash,
             Some(expected.as_ref().to_vec()),
             "BUG: unexpected wasm hash for ledger canister"
         );
@@ -315,7 +323,7 @@ impl ManagedCanistersAssert {
         assert_eq!(
             self.setup
                 .canister_status_of(self.index_canister_id())
-                .module_hash(),
+                .module_hash,
             Some(expected.as_ref().to_vec()),
             "BUG: unexpected wasm hash for index canister"
         );
@@ -327,7 +335,12 @@ impl ManagedCanistersAssert {
             &assert_reply(
                 self.setup
                     .env
-                    .query(self.index_canister_id(), "ledger_id", Encode!().unwrap())
+                    .query_call(
+                        self.index_canister_id(),
+                        Principal::anonymous(),
+                        "ledger_id",
+                        Encode!().unwrap()
+                    )
                     .expect("failed to query get_transactions on the ledger")
             ),
             Principal
@@ -335,19 +348,15 @@ impl ManagedCanistersAssert {
         .unwrap()
     }
     pub fn ledger_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.ledger.unwrap()))
+        self.canister_ids.ledger.unwrap()
     }
 
     pub fn index_canister_id(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.index.unwrap()))
+        self.canister_ids.index.unwrap()
     }
 
     pub fn archive_canister_ids(&self) -> Vec<CanisterId> {
-        self.canister_ids
-            .archives
-            .iter()
-            .map(|p| CanisterId::unchecked_from_principal(PrincipalId::from(*p)))
-            .collect()
+        self.canister_ids.archives.clone()
     }
 
     fn all_canister_ids(&self) -> Vec<CanisterId> {
@@ -361,11 +370,11 @@ impl ManagedCanistersAssert {
 macro_rules! assert_ledger {
     ($name:expr, $ty:ty) => {
         paste::paste! {
-            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_state_machine_tests::CanisterId) -> $ty {
+            pub fn [<call_ledger_$name:snake >](env: &pocket_ic::PocketIc, ledger_canister_id: candid::Principal) -> $ty {
                 candid::Decode!(
                     &assert_reply(
                             env
-                            .query(ledger_canister_id, $name, candid::Encode!().unwrap())
+                            .query_call(ledger_canister_id, candid::Principal::anonymous(), $name, candid::Encode!().unwrap())
                             .expect("failed to query on the ledger")
                     ),
                     $ty

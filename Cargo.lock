@@ -9195,6 +9195,7 @@ dependencies = [
  "mockall 0.13.0",
  "num-traits",
  "paste",
+ "pocket-ic",
  "proptest",
  "scopeguard",
  "scraper",
@@ -9216,11 +9217,11 @@ dependencies = [
  "ic-cdk 0.13.5",
  "ic-ledger-suite-orchestrator",
  "ic-management-canister-types",
- "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-universal-canister",
  "icrc-ledger-types",
  "paste",
+ "pocket-ic",
  "proptest",
 ]
 

@@ -150,6 +150,7 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+        "//:pocket-ic-server",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
@@ -159,12 +160,14 @@ rust_ic_test(
         "LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz)",
         "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+        "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },
     proc_macro_deps = [],
     deps = [
         # Keep sorted.
         ":ledger_suite_orchestrator",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ledger_suite/icrc1/ledger",
@@ -173,6 +176,7 @@ rust_ic_test(
         "//rs/types/base_types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
         "@crate_index//:proptest",
     ],
 )

@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
@@ -13,14 +12,13 @@ use ic_ledger_suite_orchestrator_test_utils::{
     new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
     LedgerSuiteOrchestrator, GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
-use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+use pocket_ic::{CallError, ErrorCode, UserError};
 use proptest::prelude::ProptestConfig;
 use proptest::proptest;
 use std::sync::Arc;
 
-const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 
 pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
@@ -35,7 +33,7 @@ proptest! {
         init_arg.minter_id = Some(minter_id);
         let more_controllers = init_arg.more_controller_ids.clone();
         let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg).register_embedded_wasms();
-        let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
+        let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id;
         let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
 
         for token in supported_erc20_tokens() {
@@ -146,7 +144,7 @@ fn should_change_cycles_for_canister_creation() {
 fn should_spawn_archive_from_ledger_with_correct_controllers() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let expected_controllers = vec![
-        orchestrator.ledger_suite_orchestrator_id.get().into(),
+        orchestrator.ledger_suite_orchestrator_id,
         NNS_ROOT_PRINCIPAL,
     ];
 
@@ -198,7 +196,7 @@ fn should_reject_adding_an_already_managed_erc20_token() {
     let result = orchestrator
         .upgrade_ledger_suite_orchestrator_with_same_wasm(&OrchestratorArg::AddErc20Arg(usdc()));
 
-    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
+    assert_matches!(result, Err(CallError::UserError(e)) if e.code == ErrorCode::CanisterCalledTrap && e.description.contains("Erc20ContractAlreadyManaged"));
 }
 
 #[test]
@@ -216,35 +214,31 @@ fn should_top_up_spawned_canisters() {
     let canisters = orchestrator
         .call_orchestrator_canister_ids(&usdc_erc20_contract())
         .unwrap();
+    let ledger_canister_id = canisters.ledger.unwrap();
+    let index_canister_id = canisters.index.unwrap();
 
-    let ledger_canister_id =
-        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.ledger.unwrap()));
-
-    let index_canister_id =
-        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.index.unwrap()));
-
-    let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
-    let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+    let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles;
+    let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles;
 
     orchestrator.advance_time_for_periodic_tasks();
     let balance_ledger_after_first_top_up =
-        orchestrator.canister_status_of(ledger_canister_id).cycles();
+        orchestrator.canister_status_of(ledger_canister_id).cycles;
     let balance_index_after_first_top_up =
-        orchestrator.canister_status_of(index_canister_id).cycles();
+        orchestrator.canister_status_of(index_canister_id).cycles;
     assert_eq!(
-        balance_index_after_first_top_up - pre_top_up_balance_index,
+        balance_index_after_first_top_up.clone() - pre_top_up_balance_index,
         TEN_TRILLIONS as u128
     );
     assert_eq!(
-        balance_ledger_after_first_top_up - pre_top_up_balance_ledger,
+        balance_ledger_after_first_top_up.clone() - pre_top_up_balance_ledger,
         TEN_TRILLIONS as u128
     );
 
     orchestrator.advance_time_for_periodic_tasks();
     let balance_ledger_after_second_top_up =
-        orchestrator.canister_status_of(ledger_canister_id).cycles();
+        orchestrator.canister_status_of(ledger_canister_id).cycles;
     let balance_index_after_second_top_up =
-        orchestrator.canister_status_of(index_canister_id).cycles();
+        orchestrator.canister_status_of(index_canister_id).cycles;
     assert_eq!(
         balance_index_after_second_top_up - balance_index_after_first_top_up,
         TEN_TRILLIONS as u128
@@ -265,7 +259,7 @@ fn should_reject_upgrade_with_invalid_args() {
     ) {
         let result =
             orchestrator.upgrade_ledger_suite_orchestrator_with_same_wasm(invalid_upgrade_arg);
-        assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: "));
+        assert_matches!(result, Err(CallError::UserError(e)) if e.code == ErrorCode::CanisterCalledTrap && e.description.contains("ERROR: "));
     }
 
     let orchestrator = LedgerSuiteOrchestrator::default();
@@ -328,18 +322,19 @@ fn should_reject_update_calls_to_http_request() {
         body: Default::default(),
     };
 
-    let message_id = orchestrator.env.send_ingress(
-        PrincipalId::new_user_test_id(1),
-        orchestrator.ledger_suite_orchestrator_id,
-        "http_request",
-        Encode!(&request).expect("failed to encode HTTP request"),
-    );
+    let error = orchestrator
+        .env
+        .update_call(
+            orchestrator.ledger_suite_orchestrator_id,
+            Principal::from_slice(&[0; 42]),
+            "http_request",
+            Encode!(&request).expect("failed to encode HTTP request"),
+        )
+        .expect_err("expected update call to fail");
 
     assert_matches!(
-        orchestrator
-            .env
-            .await_ingress(message_id.clone(), MAX_TICKS),
-        Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
+        error,
+        UserError {code,description} if code == ErrorCode::CanisterCalledTrap && description.contains("update call rejected")
     );
 }
 
@@ -371,11 +366,11 @@ fn should_retrieve_orchestrator_info() {
         erc20_contract: usdc.contract.clone(),
         ckerc20_token_symbol: "ckUSDC".to_string(),
         ledger: Some(ManagedCanisterStatus::Installed {
-            canister_id: usdc_ledger_id.into(),
+            canister_id: usdc_ledger_id,
             installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
         }),
         index: Some(ManagedCanisterStatus::Installed {
-            canister_id: usdc_index_id.into(),
+            canister_id: usdc_index_id,
             installed_wasm_hash: embedded_index_wasm_hash.to_string(),
         }),
         archives: vec![],
@@ -384,11 +379,11 @@ fn should_retrieve_orchestrator_info() {
         erc20_contract: usdt.contract.clone(),
         ckerc20_token_symbol: "ckUSDT".to_string(),
         ledger: Some(ManagedCanisterStatus::Installed {
-            canister_id: usdt_ledger_id.into(),
+            canister_id: usdt_ledger_id,
             installed_wasm_hash: embedded_ledger_wasm_hash.to_string(),
         }),
         index: Some(ManagedCanisterStatus::Installed {
-            canister_id: usdt_index_id.into(),
+            canister_id: usdt_index_id,
             installed_wasm_hash: embedded_index_wasm_hash.to_string(),
         }),
         archives: vec![],
@@ -459,8 +454,9 @@ fn should_query_logs_and_metrics() {
             &assert_reply(
                 orchestrator
                     .env
-                    .query(
+                    .query_call(
                         orchestrator.ledger_suite_orchestrator_id,
+                        Principal::anonymous(),
                         "http_request",
                         Encode!(&request).expect("failed to encode HTTP request"),
                     )
@@ -493,7 +489,7 @@ fn should_require_to_register_embedded_wasms_before_adding_ckerc20() {
     let usdc = usdc();
     assert_matches!(orchestrator
     .upgrade_ledger_suite_orchestrator_with_same_wasm(&OrchestratorArg::AddErc20Arg(usdc.clone())),
-     Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: ")
+     Err(CallError::UserError(e)) if e.code == ErrorCode::CanisterCalledTrap && e.description.contains("ERROR: ")
     );
 
     let orchestrator = orchestrator.register_embedded_wasms();
@@ -559,6 +555,7 @@ fn should_not_change_ledger_suite_version_when_registering_embedded_wasms_a_seco
 
 mod upgrade {
     use super::*;
+    use ic_cdk::api::management_canister::main::CanisterStatusType;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
     use ic_ledger_suite_orchestrator::state::WasmHash;
@@ -569,9 +566,9 @@ mod upgrade {
         default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
         usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
     };
-    use ic_state_machine_tests::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+    use pocket_ic::CanisterSettings;
     use proptest::prelude::Rng;
 
     #[test]
@@ -676,13 +673,12 @@ mod upgrade {
         orchestrator_v2.advance_time_for_upgrade();
 
         for ledger in [ckusdc_ledger, ckusdt_ledger] {
-            let status = orchestrator_v2
-                .canister_status_of(CanisterId::unchecked_from_principal(ledger.into()));
+            let status = orchestrator_v2.canister_status_of(ledger);
             assert_eq!(
-                status.module_hash(),
+                status.module_hash,
                 Some(embedded_ledger_wasm_v2.hash().as_ref().to_vec())
             );
-            assert_eq!(status.status(), CanisterStatusType::Running);
+            assert_eq!(status.status, CanisterStatusType::Running);
         }
     }
 
@@ -1077,12 +1073,13 @@ mod upgrade {
         let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
-        let [ledger, index] = {
+        let (initial_controller, [ledger, index]) = {
             // Temporary orchestrator is used as helper to spawn-off a new ledger suite.
             let orchestrator_v1 = LedgerSuiteOrchestrator::new_with_ledger_get_blocks_disabled(
                 env.clone(),
                 default_init_arg(),
             );
+            let initial_controller = orchestrator_v1.ledger_suite_orchestrator_id;
             let embedded_ledger_wasm_hash_v1 = orchestrator_v1.embedded_ledger_wasm_hash.clone();
             let embedded_index_wasm_hash_v1 = orchestrator_v1.embedded_index_wasm_hash.clone();
             assert_ne!(embedded_ledger_wasm_hash, embedded_ledger_wasm_hash_v1);
@@ -1092,24 +1089,32 @@ mod upgrade {
                 .expect_new_ledger_and_index_canisters()
                 .assert_ledger_has_wasm_hash(&embedded_ledger_wasm_hash_v1)
                 .canister_ids;
-            [
-                InstalledCanister {
-                    canister_id: canisters.ledger.unwrap(),
-                    installed_wasm_hash: embedded_ledger_wasm_hash_v1.to_string(),
-                },
-                InstalledCanister {
-                    canister_id: canisters.index.unwrap(),
-                    installed_wasm_hash: embedded_index_wasm_hash_v1.to_string(),
-                },
-            ]
+            (
+                initial_controller,
+                [
+                    InstalledCanister {
+                        canister_id: canisters.ledger.unwrap(),
+                        installed_wasm_hash: embedded_ledger_wasm_hash_v1.to_string(),
+                    },
+                    InstalledCanister {
+                        canister_id: canisters.index.unwrap(),
+                        installed_wasm_hash: embedded_index_wasm_hash_v1.to_string(),
+                    },
+                ],
+            )
         };
-        let universal_canister = UniversalCanister::new(env.clone());
+        assert_ne!(
+            initial_controller,
+            orchestrator.ledger_suite_orchestrator_id
+        );
         for canister_id in [ledger.canister_id, index.canister_id] {
-            env.update_settings(
-                &CanisterId::try_from(PrincipalId(canister_id)).unwrap(),
-                CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![orchestrator.ledger_suite_orchestrator_id.into()])
-                    .build(),
+            env.update_canister_settings(
+                canister_id,
+                Some(initial_controller),
+                CanisterSettings {
+                    controllers: Some(vec![orchestrator.ledger_suite_orchestrator_id]),
+                    ..CanisterSettings::default()
+                },
             )
             .unwrap();
         }
@@ -1134,9 +1139,10 @@ mod upgrade {
         orchestrator.advance_time_for_upgrade();
         orchestrator.advance_time_for_upgrade();
 
+        let universal_canister = UniversalCanister::new(env.clone());
         assert_eq!(
             universal_canister
-                .canister_info(CanisterId::try_from(PrincipalId(index.canister_id)).unwrap())
+                .canister_info(index.canister_id)
                 .module_hash()
                 .unwrap()
                 .as_slice(),
@@ -1144,7 +1150,7 @@ mod upgrade {
         );
         assert_eq!(
             universal_canister
-                .canister_info(CanisterId::try_from(PrincipalId(ledger.canister_id)).unwrap())
+                .canister_info(ledger.canister_id)
                 .module_hash()
                 .unwrap()
                 .as_slice(),
