@@ -955,13 +955,11 @@ impl ReplicatedState {
         let mut errors = Vec::new();
         for canister_id in canister_ids_with_expired_callbacks {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            let ret = canister.system_state.time_out_callbacks(
-                current_time,
-                &canister_id,
-                &self.canister_states,
-            );
-            expired_callback_count += ret.0;
-            errors.extend(ret.1);
+            let (canister_expired_callback_count, canister_errors) = canister
+                .system_state
+                .time_out_callbacks(current_time, &canister_id, &self.canister_states);
+            expired_callback_count += canister_expired_callback_count;
+            errors.extend(canister_errors);
             self.canister_states.insert(canister_id, canister);
         }
 

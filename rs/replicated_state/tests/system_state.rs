@@ -166,16 +166,16 @@ impl SystemStateFixture {
     /// number of expired callbacks.
     fn time_out_callbacks(&mut self, current_time: CoarseTime) -> (usize, Vec<StateError>) {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
-        let ret =
+        let (expired, errors) =
             self.system_state
                 .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
         assert_eq!(
-            input_responses_after - input_responses_before + ret.1.len(),
-            ret.0
+            input_responses_after - input_responses_before + errors.len(),
+            expired
         );
-        ret
+        (expired, errors)
     }
 }
 
