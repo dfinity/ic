@@ -1,23 +1,35 @@
 type InputRule = record {
   id: text;
-  rule_raw: text;
+  rule_raw: blob;
   description: text;
+};
+
+type OutputRule = record {
+  id: text;
+  rule_raw: opt text;
+  description: opt text;
 };
 
 type InputConfig = record {
   rules: vec InputRule; 
 };
 
+type OutputConfig = record {
+  rules: vec OutputRule; 
+};
+
 type OverwriteConfigResponse = record {
   result: bool;
 };
 
-type GetLatestConfigResponse = record {
-  config: InputConfig
+type GetConfigResponse = record {
+  config: OutputConfig
 };
+
+type Version = nat64;
 
 service : (nat64) -> {
     get_api_boundary_nodes_count : () -> (nat64) query;
     overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
-    get_latest_config: () -> (GetLatestConfigResponse);
+    get_config: (opt Version) -> (GetConfigResponse);
 }

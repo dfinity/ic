@@ -4,6 +4,7 @@ use ic_cdk::api::call::call;
 use serde_json::Value;
 use std::sync::atomic::{AtomicU64, Ordering};
 type Id = String;
+type Version = u64;
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
@@ -19,8 +20,13 @@ struct OverwriteConfigResponse {
 }
 
 #[derive(CandidType, candid::Deserialize)]
-struct GetLatestConfigResponse {
-    config: InputConfig,
+struct GetConfigResponse {
+    config: OutputConfig,
+}
+
+#[derive(CandidType, candid::Deserialize, Clone)]
+struct OutputConfig {
+    rules: Vec<OutputRule>,
 }
 
 #[derive(CandidType, candid::Deserialize, Clone)]
@@ -31,8 +37,15 @@ struct InputConfig {
 #[derive(CandidType, candid::Deserialize, Clone)]
 struct InputRule {
     id: Id,
-    rule_raw: String,
+    rule_raw: Vec<u8>,
     description: String,
+}
+
+#[derive(CandidType, candid::Deserialize, Clone)]
+struct OutputRule {
+    id: Id,
+    rule_raw: Option<String>,
+    description: Option<String>,
 }
 
 thread_local! {
@@ -47,7 +60,8 @@ fn get_api_boundary_nodes_count() -> u64 {
 #[ic_cdk_macros::update]
 fn overwrite_config(config: InputConfig) -> OverwriteConfigResponse {
     for rule in config.rules.iter() {
-        assert!(serde_json::from_str::<Value>(&rule.rule_raw).is_ok())
+        let rule_raw = String::from_utf8(rule.rule_raw.clone()).unwrap();
+        assert!(serde_json::from_str::<Value>(&rule_raw).is_ok())
     }
     CONFIG.with(|p| {
         *p.borrow_mut() = config;
@@ -57,9 +71,26 @@ fn overwrite_config(config: InputConfig) -> OverwriteConfigResponse {
 }
 
 #[ic_cdk_macros::update]
-fn get_latest_config() -> GetLatestConfigResponse {
-    GetLatestConfigResponse {
-        config: CONFIG.with(|config| config.borrow().clone()),
+fn get_config(version: Option<Version>) -> GetConfigResponse {
+    let config = CONFIG.with(|config| config.borrow().clone());
+
+    let rules = config
+        .rules
+        .iter()
+        .map(|r| {
+            let rule_raw = String::from_utf8(r.rule_raw.clone()).unwrap();
+            OutputRule {
+                id: r.id.clone(),
+                description: Some(r.description.clone()),
+                rule_raw: Some(rule_raw),
+            }
+        })
+        .collect();
+
+    let output_config = OutputConfig { rules };
+
+    GetConfigResponse {
+        config: output_config,
     }
 }
 
