@@ -195,7 +195,7 @@ use_repo(oci, "rust_base", "rust_base_linux_amd64")
 # used in various places as base
 oci.pull(
     name = "ubuntu_base",
-    image = "ghcr.io/dfinity/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    image = "ghcr.io/dfinity/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
@@ -233,17 +233,6 @@ use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 bazel_dep(name = "rules_distroless", version = "0.3.8")
 
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
-
-## Packageset based on an Ubuntu focal snapshot, see manifest file
-## for details
-## To update, comment out the `lock` field below and run:
-##   bazel run @focal//:lock
-apt.install(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-use_repo(apt, "focal")
 
 # Packageset based on an Ubuntu noble snapshot, see manifest file
 # for details
