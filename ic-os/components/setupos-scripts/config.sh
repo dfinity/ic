@@ -12,6 +12,8 @@ CONFIG_INI="${CONFIG_DIR}/config.ini"
 CONFIG_INI_CLONE="${CONFIG_TMP}/config.ini"
 SSH_AUTHORIZED_KEYS="${CONFIG_DIR}/ssh_authorized_keys"
 SSH_AUTHORIZED_KEYS_CLONE="${CONFIG_TMP}/ssh_authorized_keys"
+FIREWALL_JSON="${CONFIG_DIR}/firewall.json"
+FIREWALL_JSON_CLONE="${CONFIG_TMP}/firewall.json"
 
 source /opt/ic/bin/functions.sh
 
@@ -59,6 +61,11 @@ function clone_config() {
 
     if [ ! -d "${SSH_AUTHORIZED_KEYS_CLONE}" ]; then
         log_and_halt_installation_on_error "1" "Cloned 'ssh_authorized_keys' directory does not exist."
+    fi
+
+    if [ -f "${FIREWALL_JSON}" ]; then
+        cp ${FIREWALL_JSON} ${FIREWALL_JSON_CLONE}
+        log_and_halt_installation_on_error "${?}" "Unable to copy 'firewall.json' firewall rules file."
     fi
 }
 
