@@ -6,7 +6,7 @@ use url::Url;
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct SetupOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -16,7 +16,7 @@ pub struct SetupOSConfig {
 }
 
 /// HostOS configuration. In production, this struct inherits settings from `SetupOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct HostOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -25,7 +25,7 @@ pub struct HostOSConfig {
 }
 
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct GuestOSConfig {
     pub network_settings: NetworkSettings,
     pub icos_settings: ICOSSettings,
@@ -33,11 +33,11 @@ pub struct GuestOSConfig {
 }
 
 /// Placeholder for SetupOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct HostOSSettings {
     pub vm_memory: u32,
     pub vm_cpu: String,
@@ -45,7 +45,7 @@ pub struct HostOSSettings {
 }
 
 /// GuestOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSSettings {
     /// Externally generated cryptographic keys.
     /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
@@ -62,7 +62,7 @@ pub struct GuestOSSettings {
 }
 
 /// GuestOS development configuration. These settings are strictly used for development images.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct GuestOSDevSettings {
     pub backup_spool: Option<BackupSpoolSettings>,
     pub malicious_behavior: Option<MaliciousBehaviour>,
@@ -73,7 +73,7 @@ pub struct GuestOSDevSettings {
 }
 
 /// Configures the usage of the backup spool directory.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct BackupSpoolSettings {
     /// The maximum age of any file or directory kept in the backup spool.
     pub backup_retention_time_seconds: Option<u64>,
@@ -81,7 +81,7 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<u64>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
     pub logging: Logging,
     /// This file must be a text file containing the public key of the NNS to be used.
@@ -102,12 +102,12 @@ pub struct ICOSSettings {
     pub icos_dev_settings: ICOSDevSettings,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSDevSettings {
     pub mgmt_mac: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Logging {
     /// Space-separated lists of hosts to ship logs to.
     pub elasticsearch_hosts: String,
@@ -115,13 +115,13 @@ pub struct Logging {
     pub elasticsearch_tags: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
     pub ipv4_config: Option<Ipv4Config>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Ipv4Config {
     pub address: Ipv4Addr,
     pub gateway: Ipv4Addr,
@@ -129,21 +129,21 @@ pub struct Ipv4Config {
     pub domain: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub enum Ipv6Config {
     Deterministic(DeterministicIpv6Config),
     Fixed(FixedIpv6Config),
     RouterAdvertisement,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct DeterministicIpv6Config {
     pub prefix: String,
     pub prefix_length: u8,
     pub gateway: Ipv6Addr,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct FixedIpv6Config {
     pub address: Ipv6Addr,
     pub gateway: Ipv6Addr,
