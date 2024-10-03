@@ -891,6 +891,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
                 default_features = False,
             ),
+            "primitive-types": crate.spec(
+                version = "^0.13.1",
+            ),
             "predicates": crate.spec(
                 version = "^3.0.4",
             ),
