@@ -15,7 +15,14 @@ use syn::{parse_macro_input, ItemFn, Stmt};
 /// this data, ic_nervous_system_instruction_stats::encode_instruction_metrics
 /// needs to be called.
 #[proc_macro_attribute]
-pub fn update(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn update(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr = parse_macro_input!(attr as syn::AttributeArgs);
+    let update_attr = if attr.is_empty() {
+        quote! { #[ic_cdk::update] }
+    } else {
+        quote! { #[ic_cdk::update(#(#attr),*)] }
+    };
+
     let mut item_fn = parse_macro_input!(item as ItemFn);
 
     let function_name = item_fn.sig.ident.to_string();
@@ -32,7 +39,7 @@ pub fn update(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item_fn.block.stmts.insert(0, new_stmt);
 
     let updated_item_fn = quote! {
-        #[ic_cdk::update]
+        #update_attr
         #item_fn
     };
 
