@@ -119,7 +119,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
         isolated = True,
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
-        cargo_config = "//:bazel/cargo.config",
         annotations = CRATE_ANNOTATIONS,
         packages = {
             "actix-rt": crate.spec(
@@ -231,24 +230,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "bit-vec": crate.spec(
                 version = "^0.6.3",
             ),
-            "bitcoin-0-32": crate.spec(
-                package = "bitcoin",
-                version = "^0.32.2",
-                default_features = False,
-            ),
             "bitcoin": crate.spec(
-                version = "^0.28.2",
-                features = [
-                    "default",
-                    "rand",
-                    "use-serde",
-                ],
+                version = "^0.32.3",
             ),
             "bitcoincore-rpc": crate.spec(
-                version = "^0.15.0",
+                version = "^0.19.0",
             ),
             "bitcoind": crate.spec(
-                version = "^0.32.0",
+                version = "^0.36.0",
             ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
@@ -901,6 +890,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "prost-codec",
                 ],
                 default_features = False,
+            ),
+            "primitive-types": crate.spec(
+                version = "^0.13.1",
             ),
             "predicates": crate.spec(
                 version = "^3.0.4",

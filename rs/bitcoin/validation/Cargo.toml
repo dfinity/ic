@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 bitcoin = { workspace = true }
+primitive-types = "0.13.1"
 
 [dev-dependencies]
 csv = "1.1"
