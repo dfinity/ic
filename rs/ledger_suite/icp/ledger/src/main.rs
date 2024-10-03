@@ -787,7 +787,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             let reader = Reader::new(bs, 0);
             let mut buffered_reader = BufferedReader::new(BUFFER_SIZE, reader);
             let ledger_state = ciborium::de::from_reader(&mut buffered_reader).expect(
-                "Failed to read the Ledger state from memory manager managed stable structures",
+                "Failed to read the Ledger state from memory manager managed stable memory",
             );
             let mut pre_upgrade_instructions_counter_bytes = [0u8; 8];
             pre_upgrade_instructions_consumed =
