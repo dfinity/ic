@@ -154,6 +154,6 @@ pub fn calculate_rewards_v0(
 
     Ok(RewardsPerNodeProvider {
         rewards_per_node_provider: rewards,
-        computation_log
+        computation_log,
     })
 }
