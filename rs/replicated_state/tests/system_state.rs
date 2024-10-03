@@ -477,7 +477,10 @@ fn time_out_callbacks() {
         .unwrap();
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).
+    assert!(!fixture.system_state.has_expired_callbacks(d1));
+    assert!(fixture.system_state.has_expired_callbacks(d2));
     assert_eq!((1, Vec::new()), fixture.time_out_callbacks(d2));
+    assert!(!fixture.system_state.has_expired_callbacks(d2));
 
     // Pop the response for `c2`.
     assert_matches!(
@@ -495,7 +498,9 @@ fn time_out_callbacks() {
     assert_eq!(None, fixture.pop_input());
 
     // Time out callbacks with deadlines before `d3` (i.e. `c4`).
+    assert!(fixture.system_state.has_expired_callbacks(d3));
     assert_eq!((1, Vec::new()), fixture.time_out_callbacks(d3));
+    assert!(!fixture.system_state.has_expired_callbacks(d3));
 
     // Pop the reject responses for `c4`.
     assert_matches!(
@@ -527,7 +532,9 @@ fn time_out_callbacks_no_reserved_slot() {
     let c3 = register_callback(&mut fixture, d1);
 
     // Time out callbacks with deadlines before `d2`.
+    assert!(fixture.system_state.has_expired_callbacks(d2));
     let (expired_callbacks, errors) = fixture.time_out_callbacks(d2);
+    assert!(!fixture.system_state.has_expired_callbacks(d2));
 
     // Three callbacks expired.
     assert_eq!(3, expired_callbacks);
