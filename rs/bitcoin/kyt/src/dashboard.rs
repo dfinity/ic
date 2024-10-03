@@ -27,6 +27,9 @@ mod filters {
 pub struct DashboardTemplate {
     btc_network: BtcNetwork,
     outcall_capacity: u32,
+    cached_entries: usize,
+    oldest_entry_time: Option<Timestamp>,
+    latest_entry_time: Option<Timestamp>,
     fetch_tx_status: Vec<(Txid, Timestamp, Status)>,
 }
 
@@ -73,6 +76,22 @@ pub fn dashboard() -> DashboardTemplate {
     DashboardTemplate {
         btc_network: state::get_config().btc_network,
         outcall_capacity: state::OUTCALL_CAPACITY.with(|capacity| *capacity.borrow()),
+        cached_entries: state::FETCH_TX_CACHE.with(|cache| cache.borrow().iter().count()),
+        oldest_entry_time: state::FETCH_TX_CACHE.with(|cache| {
+            cache
+                .borrow()
+                .iter()
+                .next()
+                .map(|(_, timestamp, _)| timestamp)
+        }),
+        latest_entry_time: state::FETCH_TX_CACHE.with(|cache| {
+            cache
+                .borrow()
+                .iter()
+                .rev()
+                .next()
+                .map(|(_, timestamp, _)| timestamp)
+        }),
         fetch_tx_status: state::FETCH_TX_CACHE.with(|cache| {
             cache
                 .borrow()

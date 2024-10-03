@@ -14,15 +14,24 @@ fn mock_txid(v: u8) -> Txid {
 fn should_display_metadata() {
     let btc_network = BtcNetwork::Mainnet;
     let outcall_capacity = 50;
+    let cached_entries = 0;
+    let oldest_entry_time = 0;
+    let latest_entry_time = 1_000_000_000_000;
     let dashboard = DashboardTemplate {
         btc_network,
         outcall_capacity,
+        cached_entries,
+        oldest_entry_time: Some(oldest_entry_time),
+        latest_entry_time: Some(latest_entry_time),
         fetch_tx_status: Vec::new(),
     };
 
     DashboardAssert::assert_that(dashboard)
         .has_btc_network_in_title(btc_network)
         .has_outcall_capacity(outcall_capacity)
+        .has_cached_entries(cached_entries)
+        .has_oldest_entry_time(oldest_entry_time)
+        .has_latest_entry_time(latest_entry_time)
         .has_no_status();
 }
 
@@ -60,6 +69,9 @@ fn should_display_statuses() {
     let dashboard = DashboardTemplate {
         btc_network: BtcNetwork::Mainnet,
         outcall_capacity: 50,
+        cached_entries: 6,
+        oldest_entry_time: None,
+        latest_entry_time: None,
         fetch_tx_status: vec![
             (txid_1, 0, status_1.clone()),
             (txid_2, 0, status_2.clone()),
@@ -122,6 +134,30 @@ mod assertions {
                 "#outcall-capacity > td > code",
                 &format!("{}", outcall_capacity),
                 "wrong outcall capacity",
+            )
+        }
+
+        pub fn has_cached_entries(&self, cached_entries: usize) -> &Self {
+            self.has_string_value(
+                "#cached-entries > td > code",
+                &format!("{}", cached_entries),
+                "wrong cached entries",
+            )
+        }
+
+        pub fn has_latest_entry_time(&self, timestamp: Timestamp) -> &Self {
+            self.has_string_value(
+                "#latest-entry-time > td > code",
+                &filters::timestamp_to_datetime(timestamp).unwrap(),
+                "wrong latest entry time",
+            )
+        }
+
+        pub fn has_oldest_entry_time(&self, timestamp: Timestamp) -> &Self {
+            self.has_string_value(
+                "#oldest-entry-time > td > code",
+                &filters::timestamp_to_datetime(timestamp).unwrap(),
+                "wrong oldest entry time",
             )
         }
 

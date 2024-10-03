@@ -1,3 +1,11 @@
+{% macro show_datetime_opt(ts) -%}
+    {% match ts %}
+        {%- when Some(time) -%}
+            {{ time|timestamp_to_datetime }}
+        {%- when None -%}
+    {% endmatch %}
+{%- endmacro %}
+
 {% macro btc_tx_link(txid) -%}
     {% match btc_network %}
         {%- when BtcNetwork::Mainnet -%}
@@ -74,6 +82,18 @@
                     <tr id="outcall-capacity">
                         <th>Outcall Capacity</th>
                         <td><code>{{ outcall_capacity }}</code></td>
+                    </tr>
+                    <tr id="cached-entries">
+                        <th>Number of cached entries</th>
+                        <td><code>{{ cached_entries }}</code></td>
+                    </tr>
+                   <tr id="latest-entry-time">
+                        <th>Latest entry initiated at</th>
+                        <td><code>{% call show_datetime_opt(latest_entry_time) %}</code></td>
+                    </tr>
+                    <tr id="oldest-entry-time">
+                        <th>Oldest entry initiated at</th>
+                        <td><code>{% call show_datetime_opt(oldest_entry_time) %}</code></td>
                     </tr>
                 </tbody>
             </table>
