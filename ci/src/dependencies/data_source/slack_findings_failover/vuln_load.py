@@ -22,7 +22,11 @@ class SlackVulnerabilityLoader:
         vuln_by_vuln_id: Dict[str, SlackVulnerabilityInfo] = {}
         for slack_api in self.slack_api_by_channel.values():
             channel_id = slack_api.channel_config.channel_id
-            history = slack_api.get_channel_history(prefix=VULNERABILITY_HEADER, ignore_reaction=VULNERABILITY_MSG_FIXED_REACTION, author=VULNERABILITY_MSG_AUTHOR)
+            history = slack_api.get_channel_history(
+                prefix=VULNERABILITY_HEADER,
+                ignore_reaction=VULNERABILITY_MSG_FIXED_REACTION,
+                author=VULNERABILITY_MSG_AUTHOR,
+            )
             for slack_msg in history:
                 block_iter = iter(slack_msg.blocks)
                 assert next(block_iter)["type"] == "header"
@@ -60,20 +64,43 @@ class SlackVulnerabilityLoader:
                     projects: List[str] = []
                     cur_block = next(block_iter)
                     assert cur_block["type"] == "rich_text" and len(cur_block["elements"]) == 2
-                    assert cur_block["elements"][1]["type"] == "rich_text_list" and len(cur_block["elements"][1]["elements"]) > 0
+                    assert (
+                        cur_block["elements"][1]["type"] == "rich_text_list"
+                        and len(cur_block["elements"][1]["elements"]) > 0
+                    )
                     for proj_block in cur_block["elements"][1]["elements"]:
-                        assert proj_block["type"] == "rich_text_section" and len(proj_block["elements"]) == 1 and proj_block["elements"][0]["type"] in ["link", "text"]
-                        url = " ({})".format(proj_block["elements"][0]["url"]) if proj_block["elements"][0]["type"] == "link" else ""
+                        assert (
+                            proj_block["type"] == "rich_text_section"
+                            and len(proj_block["elements"]) == 1
+                            and proj_block["elements"][0]["type"] in ["link", "text"]
+                        )
+                        url = (
+                            " ({})".format(proj_block["elements"][0]["url"])
+                            if proj_block["elements"][0]["type"] == "link"
+                            else ""
+                        )
                         text = proj_block["elements"][0]["text"]
                         projects.append(f"{text}{url}")
 
-                    slack_finding = SlackFinding(repository=finding_repo, scanner=finding_scanner, dependency_id=finding_dep, dependency_version=finding_vers, projects=projects)
+                    slack_finding = SlackFinding(
+                        repository=finding_repo,
+                        scanner=finding_scanner,
+                        dependency_id=finding_dep,
+                        dependency_version=finding_vers,
+                        projects=projects,
+                    )
                     findings_by_id[slack_finding.id()] = slack_finding
 
                 if slack_vuln.id in vuln_by_vuln_id:
                     if slack_vuln != vuln_by_vuln_id[slack_vuln.id].vulnerability:
-                        raise RuntimeError(f"vulnerability with same id but different values found in slack findings: {slack_vuln} {vuln_by_vuln_id[slack_vuln.id].vulnerability}")
+                        raise RuntimeError(
+                            f"vulnerability with same id but different values found in slack findings: {slack_vuln} {vuln_by_vuln_id[slack_vuln.id].vulnerability}"
+                        )
                     vuln_by_vuln_id[slack_vuln.id].merge_with(findings_by_id, channel_id, slack_msg.id)
                 else:
-                    vuln_by_vuln_id[slack_vuln.id] = SlackVulnerabilityInfo(vulnerability=slack_vuln, finding_by_id=findings_by_id, msg_id_by_channel={channel_id: slack_msg.id})
+                    vuln_by_vuln_id[slack_vuln.id] = SlackVulnerabilityInfo(
+                        vulnerability=slack_vuln,
+                        finding_by_id=findings_by_id,
+                        msg_id_by_channel={channel_id: slack_msg.id},
+                    )
         return vuln_by_vuln_id

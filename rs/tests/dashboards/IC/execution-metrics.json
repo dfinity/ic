@@ -42,6 +42,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
+  "id": 143,
   "links": [
     {
       "asDropdown": true,
@@ -143,7 +144,7 @@
               "format": "blocks/s",
               "label": "",
               "logBase": 1,
-              "max": "2",
+              "max": "3",
               "min": "0",
               "show": true
             },
@@ -740,7 +741,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "label_replace(\n  quantile by (status, ic_subnet) (\n    0.5,\n    sum without(api_type) (\n      rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type=\"non replicated query\",status!~\"Success|NoResponse\"}[$__rate_interval])\n    )\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  sum by (status, ic_subnet) (\n    rate(sandboxed_execution_executed_message_slices_total{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",api_type=\"non replicated query\",status!~\"Success|NoResponse\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "interval": "",
               "legendFormat": "{{ic_subnet}}: {{status}}",
               "refId": "A"
@@ -1402,7 +1403,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "label_replace(\n  quantile by(ic_subnet) (\n    0.5,\n    process_resident_memory_bytes{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by(ic_subnet) (\n    0.5,\n    process_resident_memory_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "interval": "",
               "legendFormat": "{{ic_subnet}}",
               "refId": "A"
@@ -3279,7 +3280,7 @@
             "y": 10
           },
           "hiddenSeries": false,
-          "id": 139,
+          "id": 142,
           "legend": {
             "avg": false,
             "current": false,
@@ -9827,7 +9828,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 36
+            "y": 8
           },
           "hiddenSeries": false,
           "id": 289,
@@ -9901,6 +9902,102 @@
           }
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Average canister log memory usage per canister on a subnet",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "decbytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 304,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  avg by (ic_subnet) (\n    rate(canister_log_memory_usage_bytes_v2_sum{ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$heatmap_period])\n    /\n    rate(canister_log_memory_usage_bytes_v2_count{ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$heatmap_period])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Canister log memory usage, average per canister",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
           "cards": {
             "cardPadding": 0
           },
@@ -9938,7 +10035,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 36
+            "y": 16
           },
           "heatmap": {},
           "hideZeroBuckets": true,
@@ -9995,7 +10092,7 @@
             {
               "editorMode": "code",
               "exemplar": true,
-              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n        rate(canister_log_memory_usage_bytes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n      / ignoring(le) group_left\n        rate((state_manager_max_resident_height{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} != 0)[$heatmap_period:10s])\n    )\n  )\n)\n",
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n        rate(canister_log_memory_usage_bytes_v2_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n      / ignoring(le) group_left\n        rate((state_manager_max_resident_height{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"} != 0)[$heatmap_period:10s])\n    )\n  )\n)\n",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "intervalFactor": 1,
@@ -10292,6 +10389,6 @@
   "timezone": "utc",
   "title": "Execution Metrics",
   "uid": "execution-metrics",
-  "version": 1,
+  "version": 7,
   "weekStart": ""
 }

@@ -18,11 +18,8 @@ done
 # run build with release on protected branches or if a pull_request is targeting an rc branch
 if [ "${IS_PROTECTED_BRANCH:-}" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ci/container/build-ic.sh -i -c -b
-# if an override was requested to run all bazel targets with no release
-elif [[ "${CI_PULL_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-    ci/container/build-ic.sh -i -c -b --no-release
-# check if the workflow was triggered by a pull request and if the job requested running only on diff
-elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+# check if the job requested running only on diff, otherwise run full build with no release
+elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 
@@ -41,6 +38,10 @@ elif [[ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ]] && [[ "${RUN_ON_DIFF_ONLY
     fi
 
     if [ ${#ARGS[@]} -eq 1 ]; then
+        if [ "${IS_PROTECTED_BRANCH:-}" == "true" ]; then
+            echo "Error: No changes to build on protected branch. Aborting."
+            exit 1
+        fi
         echo "No changes that require building IC-OS, binaries or canisters."
         touch build-ic.tar
         exit 0
@@ -60,7 +61,7 @@ fi
 
 tar -chf artifacts.tar artifacts
 ls -l /ceph-s3-info/** || true
-URL="http://$(cat /ceph-s3-info/BUCKET_HOST)/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}"
+URL="http://$(cat /ceph-s3-info/BUCKET_HOST)/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_NAME}"
 curl --request PUT --upload-file artifacts.tar "${URL}/artifacts.tar"
 
 mkdir build-ic
@@ -71,7 +72,7 @@ for DIR in release canisters icos/guestos icos/hostos icos/setupos; do
     fi
 done
 
-EXTERNAL_URL="https://objects.$(echo "${NODE_NAME:-}" | cut -d'-' -f1)-idx1.dfinity.network/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}/artifacts.tar"
+EXTERNAL_URL="https://objects.$(echo "${NODE_NAME:-}" | cut -d'-' -f1)-idx1.dfinity.network/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_NAME}/artifacts.tar"
 echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
 echo "${EXTERNAL_URL}" >./build-ic/url
 tar -cf build-ic.tar build-ic

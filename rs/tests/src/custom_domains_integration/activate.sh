@@ -1,4 +1,8 @@
-#!/run/current-system/sw/bin/bash
+#!/usr/bin/env bash
+
+# Load docker images for various services. Services are started by the test driver.
+
+set -euo pipefail
 
 # load all necessary images
 

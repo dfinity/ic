@@ -916,7 +916,8 @@ impl GovernanceCanisterFixtureBuilder {
                 sns_ledger,
                 icp_ledger,
                 Box::new(self.cmc_fixture),
-            ),
+            )
+            .enable_test_features(),
             initial_state: None,
         };
         governance.capture_state();
