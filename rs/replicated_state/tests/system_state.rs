@@ -164,14 +164,18 @@ impl SystemStateFixture {
 
     /// Times out all callbacks with deadlines before `current_time`. Returns the
     /// number of expired callbacks.
-    fn time_out_callbacks(&mut self, current_time: CoarseTime) -> usize {
+    fn time_out_callbacks(
+        &mut self,
+        current_time: CoarseTime,
+    ) -> (usize, Result<(), Vec<StateError>>) {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
-        self.system_state
-            .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new())
-            .unwrap();
+        // TODO: Add test for `time_out_callbacks()` returning an error.
+        let result =
+            self.system_state
+                .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
-        input_responses_after - input_responses_before
+        (input_responses_after - input_responses_before, result)
     }
 }
 
@@ -398,10 +402,8 @@ fn induct_messages_to_self_full_queue() {
     assert_eq!(0, fixture.system_state.queues().output_message_count());
 }
 
-#[test]
-fn time_out_callbacks() {
-    let mut fixture = SystemStateFixture::running();
-
+/// Registers a callback with the given deadline.
+fn register_callback(fixture: &mut SystemStateFixture, deadline: CoarseTime) -> CallbackId {
     let call_context_manager = fixture.system_state.call_context_manager_mut().unwrap();
     let time = Time::from_nanos_since_unix_epoch(1);
     let call_context_id = call_context_manager.new_call_context(
@@ -411,33 +413,36 @@ fn time_out_callbacks() {
         RequestMetadata::new(0, time),
     );
 
-    // Simulates an outbound call with the given deadline, by registering a callback
-    // and reserving a response slot.
-    let mut simulate_outbound_call = |deadline| {
-        // Register a callback.
-        let callback = Callback::new(
-            call_context_id,
-            CANISTER_ID,
-            OTHER_CANISTER_ID,
-            Cycles::zero(),
-            Cycles::new(42),
-            Cycles::new(84),
-            WasmClosure::new(0, 2),
-            WasmClosure::new(0, 2),
-            None,
-            deadline,
-        );
-        let call_context_manager = fixture.system_state.call_context_manager_mut().unwrap();
-        let callback_id = call_context_manager.register_callback(callback);
+    call_context_manager.register_callback(Callback::new(
+        call_context_id,
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
+        Cycles::zero(),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(0, 2),
+        None,
+        deadline,
+    ))
+}
 
-        // Reserve a response slot.
-        fixture
-            .push_output_request(output_request(deadline))
-            .unwrap();
-        fixture.pop_output().unwrap();
+/// Simulates an outbound call with the given deadline, by registering a
+/// callback and reserving a response slot.
+fn simulate_outbound_call(fixture: &mut SystemStateFixture, deadline: CoarseTime) -> CallbackId {
+    // Reserve a response slot.
+    fixture
+        .push_output_request(output_request(deadline))
+        .unwrap();
+    fixture.pop_output().unwrap();
 
-        callback_id
-    };
+    // Register a callback.
+    register_callback(fixture, deadline)
+}
+
+#[test]
+fn time_out_callbacks() {
+    let mut fixture = SystemStateFixture::running();
 
     let deadline_expired_reject_payload = Payload::Reject(RejectContext::new(
         RejectCode::SysUnknown,
@@ -448,10 +453,10 @@ fn time_out_callbacks() {
     let d2 = CoarseTime::from_secs_since_unix_epoch(2);
     let d3 = CoarseTime::from_secs_since_unix_epoch(3);
 
-    let c1 = simulate_outbound_call(d1);
-    let c2 = simulate_outbound_call(d1);
-    let c3 = simulate_outbound_call(d1);
-    let c4 = simulate_outbound_call(d2);
+    let c1 = simulate_outbound_call(&mut fixture, d1);
+    let c2 = simulate_outbound_call(&mut fixture, d1);
+    let c3 = simulate_outbound_call(&mut fixture, d1);
+    let c4 = simulate_outbound_call(&mut fixture, d2);
 
     // Simulate a paused execution for `c1`.
     fixture
@@ -472,7 +477,7 @@ fn time_out_callbacks() {
         .unwrap();
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).
-    assert_eq!(1, fixture.time_out_callbacks(d2));
+    assert_eq!((1, Ok(())), fixture.time_out_callbacks(d2));
 
     // Pop the response for `c2`.
     assert_matches!(
@@ -490,7 +495,7 @@ fn time_out_callbacks() {
     assert_eq!(None, fixture.pop_input());
 
     // Time out callbacks with deadlines before `d3` (i.e. `c4`).
-    assert_eq!(1, fixture.time_out_callbacks(d3));
+    assert_eq!((1, Ok(())), fixture.time_out_callbacks(d3));
 
     // Pop the reject responses for `c4`.
     assert_matches!(
@@ -499,6 +504,46 @@ fn time_out_callbacks() {
             if response.originator_reply_callback == c4 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());
+
+    assert!(!fixture.system_state.has_input());
+    assert!(!fixture.system_state.queues().has_output());
+}
+
+#[test]
+fn time_out_callbacks_no_reserved_slot() {
+    let mut fixture = SystemStateFixture::running();
+
+    let deadline_expired_reject_payload = Payload::Reject(RejectContext::new(
+        RejectCode::SysUnknown,
+        "Call deadline has expired.",
+    ));
+
+    let d1 = CoarseTime::from_secs_since_unix_epoch(1);
+    let d2 = CoarseTime::from_secs_since_unix_epoch(2);
+
+    // Register 3 callbacks, but only make one slot reservation.
+    let c1 = simulate_outbound_call(&mut fixture, d1);
+    let c2 = register_callback(&mut fixture, d1);
+    let c3 = register_callback(&mut fixture, d1);
+
+    // Time out callbacks with deadlines before `d2`.
+    let (expired_callbacks, result) = fixture.time_out_callbacks(d2);
+
+    // Only one timeout reject for `c1` was enqueued before we ran out of slots.
+    assert_eq!(1, expired_callbacks);
+    assert_matches!(
+        fixture.pop_input(),
+        Some(CanisterMessage::Response(response))
+            if response.originator_reply_callback == c1 && response.response_payload == deadline_expired_reject_payload
+    );
+    assert_eq!(None, fixture.pop_input());
+
+    // The result should contain two errors: one for `c2` and one for `c3`.
+    assert_matches!(result, Err(_));
+    let errors = result.unwrap_err();
+    assert_eq!(2, errors.len());
+    assert_matches!(errors[0], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c2 && deadline == d1);
+    assert_matches!(errors[1], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c3 && deadline == d1);
 
     assert!(!fixture.system_state.has_input());
     assert!(!fixture.system_state.queues().has_output());
