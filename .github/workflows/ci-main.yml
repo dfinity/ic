@@ -26,7 +26,6 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   bazel-test-all:
     name: Bazel Test All
@@ -345,6 +344,9 @@ jobs:
           BAZEL_COMMAND: "build"
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
+          BUILDEVENT_DATASET: "github-ci-dfinity"
+          HONEYCOMB_API_TOKEN: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v4
         with:
