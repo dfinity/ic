@@ -270,6 +270,7 @@ main() {
         verify_memory
         verify_disks
     else
+        echo "* Hardware checks skipped by request via kernel command line"
         GENERATION=2
     fi
     verify_deployment_path
