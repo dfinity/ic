@@ -94,8 +94,7 @@ pub fn dashboard() -> DashboardTemplate {
             cache
                 .borrow()
                 .iter()
-                .rev()
-                .next()
+                .next_back()
                 .map(|(_, timestamp, _)| timestamp)
         }),
         fetch_tx_status: state::FETCH_TX_CACHE.with(|cache| {
