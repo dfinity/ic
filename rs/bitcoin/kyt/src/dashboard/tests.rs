@@ -1,6 +1,6 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::{filters, DashboardTemplate, Fetched, Status};
-use crate::state::Timestamp;
+use crate::state::{Timestamp, MAX_FETCH_TX_ENTRIES};
 use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork};
 use bitcoin::Address;
 use ic_btc_interface::Txid;
@@ -100,6 +100,41 @@ fn should_display_statuses() {
         );
 }
 
+#[test]
+fn should_fit_2mb() {
+    let fetch_tx_status = (0..MAX_FETCH_TX_ENTRIES)
+        .map(|i| {
+            let mock_address = Address::from_str("bc1q6xmv92ujqs2szzlpz4hhtn8dfzvpev72zv8zv7")
+                .unwrap()
+                .assume_checked();
+            let txid = mock_txid((i % 0xff) as u8);
+            let mut input_addresses = Vec::new();
+            // Every 5 transaction, we have a transaction with 4 inputs.
+            if i % 5 == 0 {
+                for _ in 0..4 {
+                    input_addresses.push(Some(mock_address.clone()));
+                }
+            }
+            (txid, 0, Status::Fetched(Fetched { input_addresses }))
+        })
+        .collect();
+    let btc_network = BtcNetwork::Mainnet;
+    let outcall_capacity = 50;
+    let cached_entries = 0;
+    let oldest_entry_time = 0;
+    let latest_entry_time = 1_000_000_000_000;
+    let dashboard = DashboardTemplate {
+        btc_network,
+        outcall_capacity,
+        cached_entries,
+        oldest_entry_time: Some(oldest_entry_time),
+        latest_entry_time: Some(latest_entry_time),
+        fetch_tx_status,
+    };
+    let rendered_html = DashboardAssert::assert_that(dashboard).rendered_html;
+    assert!(rendered_html.len() < 2_000_000, "{}", rendered_html.len());
+}
+
 mod assertions {
     use super::*;
     use crate::dashboard::DashboardTemplate;
@@ -108,7 +143,7 @@ mod assertions {
     use scraper::Selector;
 
     pub struct DashboardAssert {
-        rendered_html: String,
+        pub rendered_html: String,
         actual: Html,
     }
 
