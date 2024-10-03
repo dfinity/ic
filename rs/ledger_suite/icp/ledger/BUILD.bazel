@@ -123,7 +123,7 @@ rust_canister(
     crate_features = ["upgrade-to-memory-manager"],
     data = LEDGER_CANISTER_DATA,
     rustc_env = LEDGER_CANISTER_RUSTC_ENV,
-    service_file = "//rs/rosetta-api/icp_ledger:ledger.did",
+    service_file = "//rs/ledger_suite/icp:ledger.did",
     deps = LEDGER_CANISTER_DEPS,
 )
 
