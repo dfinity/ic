@@ -5824,10 +5824,9 @@ dependencies = [
 [[package]]
 name = "ic-btc-validation"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e73b5f400b954d3ddb64706bd4392ef0b5829976606c2baa49e692181192761"
 dependencies = [
  "bitcoin 0.28.2",
+ "csv",
 ]
 
 [[package]]
@@ -8235,6 +8234,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-http-endpoints-xnet"
+version = "0.9.0"
+dependencies = [
+ "axum 0.7.7",
+ "bytes",
+ "crossbeam-channel",
+ "hyper 1.4.1",
+ "hyper-util",
+ "ic-async-utils",
+ "ic-config",
+ "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
+ "ic-interfaces-certified-stream-store",
+ "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-metrics",
+ "ic-test-utilities-types",
+ "ic-types",
+ "maplit",
+ "prometheus",
+ "prost 0.13.3",
+ "reqwest 0.12.7",
+ "serde",
+ "serde_json",
+ "slog",
+ "tokio",
+ "tokio-rustls 0.26.0",
+ "tower 0.4.13",
+ "url",
+]
+
+[[package]]
 name = "ic-http-gateway"
 version = "0.0.0"
 source = "git+https://github.com/dfinity/http-gateway?tag=0.1.0-b0#3be26b5a2c71bf56e05b910951c1935a1ac550c4"
@@ -8584,6 +8623,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
+ "lazy_static",
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",
@@ -10947,6 +10987,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-endpoints-metrics",
  "ic-http-endpoints-public",
+ "ic-http-endpoints-xnet",
  "ic-https-outcalls-adapter-client",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -10970,7 +11011,6 @@ dependencies = [
  "ic-test-utilities",
  "ic-tracing",
  "ic-types",
- "ic-xnet-endpoint",
  "ic-xnet-payload-builder",
  "libc",
  "nix 0.24.3",
@@ -13076,46 +13116,6 @@ dependencies = [
  "tokio",
  "url",
  "wat",
-]
-
-[[package]]
-name = "ic-xnet-endpoint"
-version = "0.9.0"
-dependencies = [
- "axum 0.7.7",
- "bytes",
- "crossbeam-channel",
- "hyper 1.4.1",
- "hyper-util",
- "ic-async-utils",
- "ic-config",
- "ic-crypto-tls-interfaces",
- "ic-crypto-tls-interfaces-mocks",
- "ic-interfaces-certified-stream-store",
- "ic-interfaces-registry",
- "ic-interfaces-registry-mocks",
- "ic-interfaces-state-manager",
- "ic-logger",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-keys",
- "ic-replicated-state",
- "ic-test-utilities",
- "ic-test-utilities-logger",
- "ic-test-utilities-metrics",
- "ic-test-utilities-types",
- "ic-types",
- "maplit",
- "prometheus",
- "prost 0.13.3",
- "reqwest 0.12.7",
- "serde",
- "serde_json",
- "slog",
- "tokio",
- "tokio-rustls 0.26.0",
- "tower 0.4.13",
- "url",
 ]
 
 [[package]]

@@ -9,6 +9,7 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
@@ -33,7 +34,6 @@ use ic_types::{
     messages::SignedIngress,
     Height, NodeId, PrincipalId, SubnetId,
 };
-use ic_xnet_endpoint::XNetEndpoint;
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::{
     str::FromStr,

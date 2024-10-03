@@ -18,9 +18,8 @@ done
 # run build with release on protected branches or if a pull_request is targeting an rc branch
 if [ "${IS_PROTECTED_BRANCH:-}" == "true" ] || [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" == "rc--"* ]]; then
     ci/container/build-ic.sh -i -c -b
-fi
 # check if the job requested running only on diff, otherwise run full build with no release
-if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+elif [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     TARGETS=$(ci/bazel-scripts/diff.sh)
     ARGS=(--no-release)
 
@@ -39,6 +38,10 @@ if [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
     fi
 
     if [ ${#ARGS[@]} -eq 1 ]; then
+        if [ "${IS_PROTECTED_BRANCH:-}" == "true" ]; then
+            echo "Error: No changes to build on protected branch. Aborting."
+            exit 1
+        fi
         echo "No changes that require building IC-OS, binaries or canisters."
         touch build-ic.tar
         exit 0

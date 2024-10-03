@@ -37,6 +37,7 @@ fn main() {
     let round_schedule = RoundSchedule::new(
         scheduler_cores,
         long_execution_cores,
+        0,
         ordered_new_execution_canister_ids,
         ordered_long_execution_canister_ids,
     );
