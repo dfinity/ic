@@ -518,7 +518,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.3",
+                version = "^0.27.2",
                 features = [
                     "http1",
                     "http2",
@@ -1005,7 +1005,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.11.0",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.8",
+                version = "^0.12.7",
                 default_features = False,
                 features = [
                     "blocking",
@@ -1063,7 +1063,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.23.13",
+                version = "^0.23.12",
                 default_features = False,
                 features = [
                     "ring",
