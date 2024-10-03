@@ -1,5 +1,6 @@
 use crate::message_routing::{ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys};
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
+use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
@@ -7,6 +8,7 @@ use ic_logger::{fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
+use ic_types::NumBytes;
 use ic_types::{batch::Batch, ExecutionRound};
 use std::time::Instant;
 
@@ -17,6 +19,7 @@ const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
 const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
+const PHASE_SHED_MESSAGES: &str = "shed_messages";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -34,6 +37,7 @@ pub(crate) struct StateMachineImpl {
     scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     demux: Box<dyn Demux>,
     stream_builder: Box<dyn StreamBuilder>,
+    best_effort_message_memory_capacity: NumBytes,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
 }
@@ -43,6 +47,7 @@ impl StateMachineImpl {
         scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
         demux: Box<dyn Demux>,
         stream_builder: Box<dyn StreamBuilder>,
+        hypervisor_config: HypervisorConfig,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
     ) -> Self {
@@ -50,6 +55,7 @@ impl StateMachineImpl {
             scheduler,
             demux,
             stream_builder,
+            best_effort_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
             log,
             metrics,
         }
@@ -162,8 +168,15 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Postprocess the state and consolidate the Streams.
-        let state_after_stream_builder = self.stream_builder.build_streams(state_after_execution);
+        let mut state_after_stream_builder =
+            self.stream_builder.build_streams(state_after_execution);
         self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
+
+        let since = Instant::now();
+        // Shed some messages if above the best-effort message memory limit.
+        state_after_stream_builder
+            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
+        self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
         state_after_stream_builder
     }

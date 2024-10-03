@@ -1346,6 +1346,11 @@ impl SystemState {
         (self.queues.guaranteed_response_memory_usage() as u64).into()
     }
 
+    /// Returns the memory currently used by best-effort canister messages.
+    pub fn best_effort_message_memory_usage(&self) -> NumBytes {
+        (self.queues.best_effort_message_memory_usage() as u64).into()
+    }
+
     /// Returns the memory currently in use by the `SystemState`
     /// for canister history.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
@@ -1449,6 +1454,19 @@ impl SystemState {
     ) -> usize {
         self.queues
             .time_out_messages(current_time, own_canister_id, local_canisters)
+    }
+
+    /// Removes the largest best-effort message in the underlying pool. Returns
+    /// `true` if a message was removed; `false` otherwise.
+    ///
+    /// Time complexity: `O(log(n))`.
+    pub fn shed_largest_message(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> bool {
+        self.queues
+            .shed_largest_message(own_canister_id, local_canisters)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`

@@ -585,6 +585,7 @@ impl BatchProcessorImpl {
             scheduler,
             demux,
             stream_builder,
+            hypervisor_config.clone(),
             log.clone(),
             metrics.clone(),
         ));
