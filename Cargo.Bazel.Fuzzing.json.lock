@@ -1,5 +1,5 @@
 {
-  "checksum": "123402f2d21338d52c8bf2514e3ed412acbedade28194d1f4f2f920128c49245",
+  "checksum": "b115a4648adf9fa4e1fffd3db26566f012942b7a3406c6d4389ad808a57b173f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11124,7 +11124,7 @@
                 "target": "serde_wasm_bindgen"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               }
             ]
@@ -11478,7 +11478,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               }
             ],
@@ -13186,7 +13186,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             }
           ],
@@ -17977,7 +17977,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -18464,7 +18464,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
             {
@@ -18520,7 +18520,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -18740,7 +18740,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-socks 0.5.2",
+              "id": "tokio-socks 0.5.1",
               "target": "tokio_socks"
             },
             {
@@ -18840,7 +18840,7 @@
               "target": "warp"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             },
             {
@@ -23644,7 +23644,7 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -27437,7 +27437,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -27567,14 +27567,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-rustls 0.27.3": {
+    "hyper-rustls 0.27.2": {
       "name": "hyper-rustls",
-      "version": "0.27.3",
+      "version": "0.27.2",
       "package_url": "https://github.com/rustls/hyper-rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-rustls/0.27.3/download",
-          "sha256": "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.2/download",
+          "sha256": "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
         }
       },
       "targets": [
@@ -27761,11 +27761,11 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.8.0",
+              "id": "rustls-native-certs 0.7.0",
               "target": "rustls_native_certs"
             },
             {
@@ -27793,7 +27793,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.3"
+        "version": "0.27.2"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -28152,7 +28152,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               }
             ],
@@ -28382,7 +28382,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
             {
@@ -28437,7 +28437,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper-rustls 0.27.3",
+                "id": "hyper-rustls 0.27.2",
                 "target": "hyper_rustls"
               },
               {
@@ -28445,7 +28445,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "rustls-webpki 0.102.8",
+                "id": "rustls-webpki 0.102.6",
                 "target": "webpki"
               },
               {
@@ -28611,11 +28611,11 @@
               "target": "rcgen"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -33166,7 +33166,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -33906,7 +33906,7 @@
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             }
           ],
@@ -34655,7 +34655,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.3",
+              "id": "hyper-rustls 0.27.2",
               "target": "hyper_rustls"
             },
             {
@@ -34683,7 +34683,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -46567,7 +46567,7 @@
           "selects": {
             "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               },
               {
@@ -46719,7 +46719,7 @@
               "target": "ic_cdk"
             },
             {
-              "id": "reqwest 0.12.8",
+              "id": "reqwest 0.12.7",
               "target": "reqwest"
             },
             {
@@ -50315,7 +50315,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -50403,7 +50403,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -53091,7 +53091,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               },
               {
@@ -53127,14 +53127,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.8": {
+    "reqwest 0.12.7": {
       "name": "reqwest",
-      "version": "0.12.8",
+      "version": "0.12.7",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.8/download",
-          "sha256": "f713147fbe92361e52392c73b8c9e48c04c6625bce969ef54dc901e58e042a7b"
+          "url": "https://static.crates.io/crates/reqwest/0.12.7/download",
+          "sha256": "f8f4955649ef5c38cc7f9e8aa41761d48fb9677197daea9984dc54f56aad5e63"
         }
       },
       "targets": [
@@ -53253,7 +53253,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.27.3",
+                "id": "hyper-rustls 0.27.2",
                 "target": "hyper_rustls"
               },
               {
@@ -53285,11 +53285,11 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.23.13",
+                "id": "rustls 0.23.12",
                 "target": "rustls"
               },
               {
-                "id": "rustls-native-certs 0.8.0",
+                "id": "rustls-native-certs 0.7.0",
                 "target": "rustls_native_certs"
               },
               {
@@ -53309,7 +53309,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-socks 0.5.2",
+                "id": "tokio-socks 0.5.1",
                 "target": "tokio_socks"
               },
               {
@@ -53327,7 +53327,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               },
               {
@@ -53352,7 +53352,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.8"
+        "version": "0.12.7"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55573,7 +55573,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.8",
+              "id": "rustls-webpki 0.102.6",
               "target": "webpki"
             },
             {
@@ -55612,14 +55612,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.13": {
+    "rustls 0.23.12": {
       "name": "rustls",
-      "version": "0.23.13",
+      "version": "0.23.12",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.13/download",
-          "sha256": "f2dabaac7466917e566adb06783a81ca48944c6898a1b08b9374106dd671f4c8"
+          "url": "https://static.crates.io/crates/rustls/0.23.12/download",
+          "sha256": "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
         }
       },
       "targets": [
@@ -55687,7 +55687,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "build_script_build"
             },
             {
@@ -55696,7 +55696,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.8",
+              "id": "rustls-webpki 0.102.6",
               "target": "webpki"
             },
             {
@@ -55711,7 +55711,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.13"
+        "version": "0.23.12"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -56004,79 +56004,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-native-certs 0.8.0": {
-      "name": "rustls-native-certs",
-      "version": "0.8.0",
-      "package_url": "https://github.com/rustls/rustls-native-certs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.0/download",
-          "sha256": "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rustls_native_certs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rustls_native_certs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rustls-pemfile 2.1.2",
-              "target": "rustls_pemfile"
-            },
-            {
-              "id": "rustls-pki-types 1.7.0",
-              "target": "rustls_pki_types",
-              "alias": "pki_types"
-            }
-          ],
-          "selects": {
-            "cfg(all(unix, not(target_os = \"macos\")))": [
-              {
-                "id": "openssl-probe 0.1.5",
-                "target": "openssl_probe"
-              }
-            ],
-            "cfg(target_os = \"macos\")": [
-              {
-                "id": "security-framework 2.9.2",
-                "target": "security_framework"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "schannel 0.1.22",
-                "target": "schannel"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.8.0"
-      },
-      "license": "Apache-2.0 OR ISC OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "ISC",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "rustls-pemfile 1.0.3": {
       "name": "rustls-pemfile",
       "version": "1.0.3",
@@ -56293,14 +56220,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-webpki 0.102.8": {
+    "rustls-webpki 0.102.6": {
       "name": "rustls-webpki",
-      "version": "0.102.8",
+      "version": "0.102.6",
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-webpki/0.102.8/download",
-          "sha256": "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
+          "url": "https://static.crates.io/crates/rustls-webpki/0.102.6/download",
+          "sha256": "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
         }
       },
       "targets": [
@@ -56446,7 +56373,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.102.8"
+        "version": "0.102.6"
       },
       "license": "ISC",
       "license_ids": [
@@ -58755,7 +58682,7 @@
               "target": "serde"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             }
           ],
@@ -66465,7 +66392,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.13",
+              "id": "rustls 0.23.12",
               "target": "rustls"
             },
             {
@@ -66583,14 +66510,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tokio-socks 0.5.2": {
+    "tokio-socks 0.5.1": {
       "name": "tokio-socks",
-      "version": "0.5.2",
+      "version": "0.5.1",
       "package_url": "https://github.com/sticnarf/tokio-socks",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-socks/0.5.2/download",
-          "sha256": "0d4770b8024672c1101b3f6733eab95b18007dbe0847a8afe341fcf79e06043f"
+          "url": "https://static.crates.io/crates/tokio-socks/0.5.1/download",
+          "sha256": "51165dfa029d2a65969413a6cc96f354b86b464498702f174a4efa13608fd8c0"
         }
       },
       "targets": [
@@ -66612,13 +66539,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "tokio"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -66641,7 +66561,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.2"
+        "version": "0.5.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -71432,14 +71352,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen 0.2.93": {
+    "wasm-bindgen 0.2.87": {
       "name": "wasm-bindgen",
-      "version": "0.2.93",
+      "version": "0.2.87",
       "package_url": "https://github.com/rustwasm/wasm-bindgen",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.93/download",
-          "sha256": "a82edfc16a6c469f5f44dc7b571814045d60404b55a0ee849f9bcfa2e63dd9b5"
+          "url": "https://static.crates.io/crates/wasm-bindgen/0.2.87/download",
+          "sha256": "7706a72ab36d8cb1f80ffbf0e071533974a60d0a308d01a5d0375bf60499a342"
         }
       },
       "targets": [
@@ -71488,48 +71408,44 @@
               "target": "cfg_if"
             },
             {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
+        "edition": "2018",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "wasm-bindgen-macro 0.2.93",
+              "id": "wasm-bindgen-macro 0.2.87",
               "target": "wasm_bindgen_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.93"
+        "version": "0.2.87"
       },
       "build_script_attrs": {
         "data_glob": [
           "**"
         ]
       },
-      "license": "MIT OR Apache-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-backend 0.2.93": {
+    "wasm-bindgen-backend 0.2.87": {
       "name": "wasm-bindgen-backend",
-      "version": "0.2.93",
+      "version": "0.2.87",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/backend",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-backend/0.2.93/download",
-          "sha256": "9de396da306523044d3302746f1208fa71d7532227f15e347e2d93e4145dd77b"
+          "url": "https://static.crates.io/crates/wasm-bindgen-backend/0.2.87/download",
+          "sha256": "5ef2b6d3c510e9625e5fe6f509ab07d66a760f0885d858736483c32ed7809abd"
         }
       },
       "targets": [
@@ -71584,16 +71500,16 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.93",
+              "id": "wasm-bindgen-shared 0.2.87",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.2.93"
+        "edition": "2018",
+        "version": "0.2.87"
       },
-      "license": "MIT OR Apache-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -71640,7 +71556,7 @@
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             }
           ],
@@ -71663,14 +71579,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro 0.2.93": {
+    "wasm-bindgen-macro 0.2.87": {
       "name": "wasm-bindgen-macro",
-      "version": "0.2.93",
+      "version": "0.2.87",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.93/download",
-          "sha256": "585c4c91a46b072c92e908d99cb1dcdf95c5218eeb6f3bf1efa991ee7a68cccf"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro/0.2.87/download",
+          "sha256": "dee495e55982a3bd48105a7b947fd2a9b4a8ae3010041b9e0faab3f9cd028f1d"
         }
       },
       "targets": [
@@ -71705,30 +71621,30 @@
               "target": "quote"
             },
             {
-              "id": "wasm-bindgen-macro-support 0.2.93",
+              "id": "wasm-bindgen-macro-support 0.2.87",
               "target": "wasm_bindgen_macro_support"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.2.93"
+        "edition": "2018",
+        "version": "0.2.87"
       },
-      "license": "MIT OR Apache-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-macro-support 0.2.93": {
+    "wasm-bindgen-macro-support 0.2.87": {
       "name": "wasm-bindgen-macro-support",
-      "version": "0.2.93",
+      "version": "0.2.87",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro-support",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.93/download",
-          "sha256": "afc340c74d9005395cf9dd098506f7f44e38f2b4a21c6aaacf9a105ea5e1e836"
+          "url": "https://static.crates.io/crates/wasm-bindgen-macro-support/0.2.87/download",
+          "sha256": "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
         }
       },
       "targets": [
@@ -71771,34 +71687,34 @@
               "target": "syn"
             },
             {
-              "id": "wasm-bindgen-backend 0.2.93",
+              "id": "wasm-bindgen-backend 0.2.87",
               "target": "wasm_bindgen_backend"
             },
             {
-              "id": "wasm-bindgen-shared 0.2.93",
+              "id": "wasm-bindgen-shared 0.2.87",
               "target": "wasm_bindgen_shared"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.2.93"
+        "edition": "2018",
+        "version": "0.2.87"
       },
-      "license": "MIT OR Apache-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "wasm-bindgen-shared 0.2.93": {
+    "wasm-bindgen-shared 0.2.87": {
       "name": "wasm-bindgen-shared",
-      "version": "0.2.93",
+      "version": "0.2.87",
       "package_url": "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/shared",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.93/download",
-          "sha256": "c62a0a307cb4a311d3a07867860911ca130c3494e8c2719593806c08bc5d0484"
+          "url": "https://static.crates.io/crates/wasm-bindgen-shared/0.2.87/download",
+          "sha256": "ca6ad05a4870b2bf5fe995117d3728437bd27d7cd5f06f13c17443ef369775a1"
         }
       },
       "targets": [
@@ -71835,14 +71751,14 @@
         "deps": {
           "common": [
             {
-              "id": "wasm-bindgen-shared 0.2.93",
+              "id": "wasm-bindgen-shared 0.2.87",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.2.93"
+        "edition": "2018",
+        "version": "0.2.87"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -71850,7 +71766,7 @@
         ],
         "links": "wasm_bindgen"
       },
-      "license": "MIT OR Apache-2.0",
+      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -72089,7 +72005,7 @@
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             },
             {
@@ -73544,7 +73460,7 @@
               "target": "js_sys"
             },
             {
-              "id": "wasm-bindgen 0.2.93",
+              "id": "wasm-bindgen 0.2.87",
               "target": "wasm_bindgen"
             }
           ],
@@ -73598,7 +73514,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "wasm-bindgen 0.2.93",
+                "id": "wasm-bindgen 0.2.87",
                 "target": "wasm_bindgen"
               }
             ]
@@ -79307,7 +79223,7 @@
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
     "hyper 1.4.1",
-    "hyper-rustls 0.27.3",
+    "hyper-rustls 0.27.2",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.9",
     "ic-agent 0.37.1",
@@ -79433,7 +79349,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.0",
-    "reqwest 0.12.8",
+    "reqwest 0.12.7",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",
@@ -79448,7 +79364,7 @@
     "rust_decimal_macros 1.32.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.13",
+    "rustls 0.23.12",
     "rustls-pemfile 2.1.2",
     "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
@@ -79506,7 +79422,7 @@
     "tokio-metrics 0.3.1",
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
-    "tokio-socks 0.5.2",
+    "tokio-socks 0.5.1",
     "tokio-test 0.4.3",
     "tokio-util 0.7.12",
     "toml 0.5.11",
@@ -79531,7 +79447,7 @@
     "vsock 0.4.0",
     "walkdir 2.3.3",
     "warp 0.3.7",
-    "wasm-bindgen 0.2.93",
+    "wasm-bindgen 0.2.87",
     "wasm-encoder 0.215.0",
     "wasm-smith 0.212.0",
     "wasmparser 0.215.0",
