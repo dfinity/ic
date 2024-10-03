@@ -92,16 +92,16 @@ process ( Claim_Neuron \in Claim_Neuron_Process_Ids )
                         neuron := Remove_Arguments(neuron, {neuron_id});
                         neuron_id_by_account := Remove_Arguments(neuron_id_by_account, {account});
                     };
-                    locks := locks \ {neuron_id};
                 };
             };
+            locks := locks \ {neuron_id};
         };
         cn_reset_local_vars();
     };
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "6e7725a2" /\ chksum(tla) = "bf389988")
+\* BEGIN TRANSLATION (chksum(pcal) = "2eb57c75" /\ chksum(tla) = "9f05b2c5")
 VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, pc, account, neuron_id
 
@@ -142,14 +142,13 @@ WaitForBalanceQuery(self) == /\ pc[self] = "WaitForBalanceQuery"
                                   /\ IF answer.response = Variant("Fail", UNIT)
                                         THEN /\ neuron' = Remove_Arguments(neuron, {neuron_id[self]})
                                              /\ neuron_id_by_account' = Remove_Arguments(neuron_id_by_account, {account[self]})
-                                             /\ locks' = locks
                                         ELSE /\ LET b == VariantGetOrElse("BalanceQueryOk", answer.response, 0) IN
-                                                  /\ IF b >= MIN_STAKE
-                                                        THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = b] ]
-                                                             /\ UNCHANGED neuron_id_by_account
-                                                        ELSE /\ neuron' = Remove_Arguments(neuron, {neuron_id[self]})
-                                                             /\ neuron_id_by_account' = Remove_Arguments(neuron_id_by_account, {account[self]})
-                                                  /\ locks' = locks \ {neuron_id[self]}
+                                                  IF b >= MIN_STAKE
+                                                     THEN /\ neuron' = [neuron EXCEPT ![neuron_id[self]] = [@ EXCEPT !.cached_stake = b] ]
+                                                          /\ UNCHANGED neuron_id_by_account
+                                                     ELSE /\ neuron' = Remove_Arguments(neuron, {neuron_id[self]})
+                                                          /\ neuron_id_by_account' = Remove_Arguments(neuron_id_by_account, {account[self]})
+                                  /\ locks' = locks \ {neuron_id[self]}
                              /\ account' = [account EXCEPT ![self] = DUMMY_ACCOUNT]
                              /\ neuron_id' = [neuron_id EXCEPT ![self] = 0]
                              /\ pc' = [pc EXCEPT ![self] = "Done"]
