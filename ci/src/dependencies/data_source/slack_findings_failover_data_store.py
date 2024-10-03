@@ -32,10 +32,8 @@ SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't use slack failover store")
 
-FAILOVER_FINDING_IDS = {
-    ("ic", "BAZEL_TRIVY_CS", "linux-libc-dev"),
-    ("ic", "BAZEL_TRIVY_CS", "linux-modules-5.15.0"),
-    ("ic", "BAZEL_TRIVY_CS", "linux-modules-6.8.0"),
+FAILOVER_FINDING_PREFIXES = {
+    ("ic", "BAZEL_TRIVY_CS"): ["linux-libc-dev", "linux-modules"],
 }
 
 
@@ -107,11 +105,13 @@ class SlackFindingsFailoverDataStore(FindingsFailoverDataStore):
         return res
 
     def can_handle(self, finding: Finding) -> bool:
-        is_failover_finding = (
-            finding.repository,
-            finding.scanner,
-            finding.vulnerable_dependency.id,
-        ) in FAILOVER_FINDING_IDS
+        is_failover_finding = False
+        key = (finding.repository, finding.scanner)
+        if key in FAILOVER_FINDING_PREFIXES:
+            for dep_id_prefix in FAILOVER_FINDING_PREFIXES[key]:
+                if finding.vulnerable_dependency.id.startswith(dep_id_prefix):
+                    is_failover_finding = True
+                    break
         if is_failover_finding:
             # check that all projects are known if not raise an exception (configuration error)
             self.__info_by_project(set(finding.projects))
