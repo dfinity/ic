@@ -304,11 +304,6 @@ impl TaskQueue {
         self.queue.pop_front()
     }
 
-    #[cfg(test)]
-    pub fn pop_back(&mut self) -> Option<ExecutionTask> {
-        self.queue.pop_back()
-    }
-
     pub fn enqueue(&mut self, task: ExecutionTask) {
         match task {
             ExecutionTask::OnLowWasmMemory(hook_condition_check_result) => {
@@ -324,11 +319,6 @@ impl TaskQueue {
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => self.queue.push_front(task),
         };
-    }
-
-    #[cfg(test)]
-    pub fn push_back(&mut self, task: ExecutionTask) {
-        self.queue.push_back(task);
     }
 
     pub fn is_empty(&self) -> bool {
