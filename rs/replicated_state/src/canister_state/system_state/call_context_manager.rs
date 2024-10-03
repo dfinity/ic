@@ -821,10 +821,18 @@ impl CallContextManager {
         })
     }
 
+    /// Checks whether there exist any not previously expired best-effort callbacks
+    /// whose deadlines are `< now`.
+    pub(super) fn has_expired_callbacks(&self, now: CoarseTime) -> bool {
+        self.unexpired_callbacks
+            .first()
+            .map(|(deadline, _)| *deadline < now)
+            .unwrap_or(false)
+    }
+
     /// Expires (i.e. removes from the set of unexpired callbacks, with no change to
-    /// the callback itself) and returns the IDs of all best-effort callbacks whose
-    /// deadlines have expired since the previous call to this method, given the
-    /// current time.
+    /// the callback itself) and returns the IDs of all not previously expired
+    /// best-effort callbacks whose deadlines are `< now`.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
     pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {

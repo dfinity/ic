@@ -816,15 +816,19 @@ impl CanisterQueues {
     /// Must only be called for not-yet-executing callbacks (i.e. not for a paused
     /// or aborted callback).
     ///
-    /// Returns `Err` iff a compact response should have been enqueued, but wasn't
-    /// because no reserved slot was available.
+    /// Returns:
+    ///  * `Ok(true)` if a "deadline expired" compact response was enqueued;
+    ///  * `Ok(false)` if no compact response was enqueued (because the callback
+    ///    already had a response);
+    ///  * `Err` iff a compact response should have been enqueued, but wasn't
+    ///    because no reserved slot was available.
     pub(super) fn try_push_deadline_expired_input(
         &mut self,
         callback_id: CallbackId,
         respondent: &CanisterId,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         // For a not yet executed callback, there must be a queue with either a reserved
         // slot or an enqueued response.
         let Some((input_queue, _)) = self.canister_queues.get_mut(respondent) else {
@@ -837,7 +841,7 @@ impl CanisterQueues {
         // Check against duplicate responses.
         if !self.callbacks_with_enqueued_response.insert(callback_id) {
             // There is already a response enqueued for the callback.
-            return Ok(());
+            return Ok(false);
         }
 
         if input_queue.check_has_reserved_response_slot().is_err() {
@@ -865,7 +869,7 @@ impl CanisterQueues {
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&|_| InputQueueType::RemoteSubnet));
 
-        Ok(())
+        Ok(true)
     }
 
     /// Pops the next canister input queue message.

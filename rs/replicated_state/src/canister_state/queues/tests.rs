@@ -73,7 +73,7 @@ impl CanisterQueuesFixture {
         )
     }
 
-    fn try_push_deadline_expired_input(&mut self) -> Result<(), String> {
+    fn try_push_deadline_expired_input(&mut self) -> Result<bool, String> {
         self.last_callback_id += 1;
         self.queues.try_push_deadline_expired_input(
             CallbackId::from(self.last_callback_id),
@@ -477,7 +477,7 @@ fn test_deadline_expired_input() {
     // Enqueue a "deadline expired" compact reject response.
     fixture.push_output_request().unwrap();
     fixture.pop_output().unwrap();
-    fixture.try_push_deadline_expired_input().unwrap();
+    assert_eq!(Ok(true), fixture.try_push_deadline_expired_input());
 
     // We have one input (compact) response.
     assert_eq!(1, fixture.queues.input_queues_message_count());
@@ -514,8 +514,8 @@ fn test_try_push_deadline_expired_input_no_queue() {
 
     // Pushing a deadline expired input into a non-existent queue signals a bug.
     assert_eq!(
-        "No input queue for expired callback: 1",
-        fixture.try_push_deadline_expired_input().unwrap_err()
+        Err("No input queue for expired callback: 1".to_string()),
+        fixture.try_push_deadline_expired_input()
     );
 }
 
@@ -528,8 +528,8 @@ fn test_try_push_deadline_expired_input_no_reserved_slot() {
 
     // Pushing a deadline expired input without a reserved slot signals a bug.
     assert_eq!(
-        "No reserved response slot for expired callback: 1",
-        fixture.try_push_deadline_expired_input().unwrap_err()
+        Err("No reserved response slot for expired callback: 1".to_string()),
+        fixture.try_push_deadline_expired_input()
     );
 }
 
