@@ -1,6 +1,6 @@
 [Unit]
 Description=Set up hostname
-Before=systemd-networkd.target
+Before=systemd-networkd.service
 DefaultDependencies=no
 After=bootstrap-ic-node.service
 Before=systemd-networkd.service
