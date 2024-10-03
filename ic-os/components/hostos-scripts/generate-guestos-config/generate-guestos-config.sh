@@ -54,12 +54,12 @@ MEDIA="${MEDIA:=/run/ic-node/config.img}"
 OUTPUT="${OUTPUT:=/var/lib/libvirt/guestos.xml}"
 
 function read_config_variables() {
-    ipv6_prefix=$(get_config_value '.network_settings.ipv6_prefix')
-    ipv6_gateway=$(get_config_value '.network_settings.ipv6_gateway')
-    ipv4_address=$(get_config_value '.network_settings.ipv4_address')
-    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_prefix_length')
-    ipv4_gateway=$(get_config_value '.network_settings.ipv4_gateway')
-    domain=$(get_config_value '.network_settings.domain')
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
+    domain=$(get_config_value '.network_settings.ipv4_config.domain')
     elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
     nns_public_key=$(get_config_value '.icos_settings.nns_public_key_path')
     nns_urls=$(get_config_value '.icos_settings.nns_urls')

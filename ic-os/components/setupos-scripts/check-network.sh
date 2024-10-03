@@ -10,12 +10,12 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
 function read_config_variables() {
-    ipv6_prefix=$(get_config_value '.network_settings.ipv6_prefix')
-    ipv6_gateway=$(get_config_value '.network_settings.ipv6_gateway')
-    ipv4_address=$(get_config_value '.network_settings.ipv4_address')
-    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_prefix_length')
-    ipv4_gateway=$(get_config_value '.network_settings.ipv4_gateway')
-    domain=$(get_config_value '.network_settings.domain')
+    ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')
+    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
+    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
+    domain=$(get_config_value '.network_settings.ipv4_config.domain')
 }
 
 # WARNING: Uses 'eval' for command execution.
@@ -115,20 +115,20 @@ function validate_domain_name() {
     IFS='.' read -ra domain_parts <<<"${domain}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
         if [ -z "$domain_part" ] || [ ${#domain_part} -gt 63 ]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation: ${domain_part}"
         fi
 
         if [[ $domain_part == -* ]] || [[ $domain_part == *- ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen: ${domain_part}"
         fi
 
         if ! [[ $domain_part =~ ^[a-zA-Z0-9-]+$ ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part"
+            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part: ${domain_part}"
         fi
     done
 }
