@@ -516,7 +516,7 @@ http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
 hyper = { version = "1.4.1", features = ["full"] }
-hyper-rustls = { version = "0.27.2", default-features = false, features = [
+hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
@@ -524,7 +524,7 @@ hyper-rustls = { version = "0.27.2", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.9", features = ["full"] }
+hyper-util = { version = "0.1.8", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
     "hyper",
@@ -630,7 +630,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 rolling-file = "0.2.0"
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.12", default-features = false, features = [
+rustls = { version = "0.23.13", default-features = false, features = [
     "ring",
     "std",
     "brotli",
