@@ -16,15 +16,14 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     types::candid::{
-        Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
-        FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
-        GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
-        SendRawTransactionStatus as EvmSendRawTransactionStatus,
+        BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
+        GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs,
+        LogEntry as EvmLogEntry, SendRawTransactionStatus as EvmSendRawTransactionStatus,
         TransactionReceipt as EvmTransactionReceipt,
     },
-    ConsensusStrategy, EvmRpcClient, IcRuntime, MultiRpcResult as EvmMultiRpcResult,
-    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-    RpcResult as EvmRpcResult,
+    Block as EvmBlock, ConsensusStrategy, EvmRpcClient, IcRuntime,
+    MultiRpcResult as EvmMultiRpcResult, OverrideRpcConfig, RpcConfig as EvmRpcConfig,
+    RpcError as EvmRpcError, RpcResult as EvmRpcResult,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -625,8 +624,8 @@ impl Reduce for EvmMultiRpcResult<EvmBlock> {
         ReducedResult::from_internal(self).map_reduce(
             &|block: EvmBlock| {
                 Ok::<Block, String>(Block {
-                    number: BlockNumber::try_from(block.number)?,
-                    base_fee_per_gas: Wei::try_from(block.base_fee_per_gas)?,
+                    number: BlockNumber::from(block.number),
+                    base_fee_per_gas: Wei::from(block.base_fee_per_gas.expect("BUG: must be present in blocks after the London Upgrade / EIP-1559, which pre-dates the ckETH minter")),
                 })
             },
             MultiCallResults::reduce_with_equality,

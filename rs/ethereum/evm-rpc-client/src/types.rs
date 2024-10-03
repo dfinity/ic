@@ -14,46 +14,6 @@ pub mod candid {
     }
 
     #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-    pub struct Block {
-        #[serde(rename = "baseFeePerGas")]
-        pub base_fee_per_gas: Nat,
-        pub number: Nat,
-        pub difficulty: Nat,
-        #[serde(rename = "extraData")]
-        pub extra_data: String,
-        #[serde(rename = "gasLimit")]
-        pub gas_limit: Nat,
-        #[serde(rename = "gasUsed")]
-        pub gas_used: Nat,
-        pub hash: String,
-        #[serde(rename = "logsBloom")]
-        pub logs_bloom: String,
-        pub miner: String,
-        #[serde(rename = "mixHash")]
-        pub mix_hash: String,
-        pub nonce: Nat,
-        #[serde(rename = "parentHash")]
-        pub parent_hash: String,
-        #[serde(rename = "receiptsRoot")]
-        pub receipts_root: String,
-        #[serde(rename = "sha3Uncles")]
-        pub sha3_uncles: String,
-        pub size: Nat,
-        #[serde(rename = "stateRoot")]
-        pub state_root: String,
-        #[serde(rename = "timestamp")]
-        pub timestamp: Nat,
-        #[serde(rename = "totalDifficulty")]
-        pub total_difficulty: Nat,
-        #[serde(default)]
-        pub transactions: Vec<String>,
-        #[serde(rename = "transactionsRoot")]
-        pub transactions_root: Option<String>,
-        #[serde(default)]
-        pub uncles: Vec<String>,
-    }
-
-    #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
     pub struct LogEntry {
         /// The address from which this log originated.
         pub address: String,

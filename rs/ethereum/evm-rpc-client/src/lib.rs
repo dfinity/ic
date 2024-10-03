@@ -4,7 +4,7 @@ mod tests;
 pub mod types;
 
 use crate::types::candid::{
-    Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
+    BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
     SendRawTransactionStatus, TransactionReceipt,
 };
 use async_trait::async_trait;
@@ -16,9 +16,9 @@ use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub use evm_rpc_types::{
-    ConsensusStrategy, EthMainnetService, HttpOutcallError, JsonRpcError, MultiRpcResult,
+    Block, ConsensusStrategy, EthMainnetService, HttpOutcallError, JsonRpcError, MultiRpcResult,
     ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
-    ValidationError,
+    ValidationError, Nat256
 };
 
 #[async_trait]
