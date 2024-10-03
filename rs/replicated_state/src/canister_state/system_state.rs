@@ -278,6 +278,8 @@ impl CanisterHistory {
 /// 3. All other tasks will be returned based on the order in which they are added to the queue.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
+    paused_or_aborted_task: Option<ExecutionTask>,
+
     /// Queue of tasks.
     queue: VecDeque<ExecutionTask>,
 
@@ -290,8 +292,25 @@ impl TaskQueue {
         queue: VecDeque<ExecutionTask>,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
+        let mut mut_queue = queue;
+
+        let paused_or_aborted_task = if let Some(task) = mut_queue.front() {
+            match task {
+                ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::PausedExecution { .. }
+                | ExecutionTask::PausedInstallCode(_)
+                | ExecutionTask::AbortedExecution { .. } => mut_queue.pop_front(),
+                ExecutionTask::OnLowWasmMemory(_)
+                | ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer => None,
+            }
+        } else {
+            None
+        };
+
         TaskQueue {
-            queue,
+            paused_or_aborted_task,
+            queue: mut_queue,
             on_low_wasm_memory_hook_status,
         }
     }
