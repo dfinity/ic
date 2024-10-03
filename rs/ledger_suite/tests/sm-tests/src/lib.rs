@@ -2602,7 +2602,7 @@ pub fn test_upgrade_serialization(
     let minter_principal: Principal = minter.sender().unwrap();
     const INITIAL_TX_BATCH_SIZE: usize = 100;
     const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
-    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 6 * ADDITIONAL_TX_BATCH_SIZE;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 7 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
             &(valid_transactions_strategy(
@@ -2610,7 +2610,7 @@ pub fn test_upgrade_serialization(
                 FEE,
                 TOTAL_TX_COUNT,
                 now,
-            ),),
+            ).no_shrink(),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
@@ -2657,9 +2657,9 @@ pub fn test_upgrade_serialization(
                     // Test serializing to the memory manager
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
-                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
 
-                    // Current mainnet ICP wasm cannot deserialize from memory manager, but ICRC can
+                    // Current mainnet ICP wasm (V0) cannot deserialize from memory manager, but ICRC (V1) can
                     match env.upgrade_canister(
                         ledger_id,
                         ledger_wasm_mainnet.clone(),
@@ -2668,6 +2668,14 @@ pub fn test_upgrade_serialization(
                         Ok(_) => {
                             if !downgrade_to_mainnet_should_succeed {
                                 panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
+                            } else {
+                                // In case this succeeded, we need to upgrade the ledger back to
+                                // the next version, so that the subsequent upgrade is from
+                                // `ledger_wasm_nextmigrationversionmemorymanager` to
+                                // `ledger_wasm_current`, rather than from `ledger_wasm_mainnet` to
+                                // `ledger_wasm_current` (currently, from V2 -> V1, rather than from
+                                // V1 -> V1).
+                                test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
                             }
                         }
                         Err(e) => {
