@@ -8623,6 +8623,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
+ "lazy_static",
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",

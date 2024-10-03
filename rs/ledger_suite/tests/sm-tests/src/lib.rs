@@ -222,14 +222,6 @@ pub fn send_transfer(
         "icrc1_transfer",
         Encode!(arg).unwrap(),
     );
-    match &response {
-        Ok(_) => {
-            println!("Transfer successful");
-        }
-        Err(err) => {
-            println!("User error: {:?}", err);
-        }
-    }
     Decode!(
         &response
         .expect("failed to transfer funds")
