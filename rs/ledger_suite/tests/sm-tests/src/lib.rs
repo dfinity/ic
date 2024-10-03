@@ -2595,6 +2595,7 @@ pub fn test_upgrade_serialization(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
+    downgrade_to_mainnet_should_succeed: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2658,16 +2659,21 @@ pub fn test_upgrade_serialization(
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
 
-                    // Current mainnet wasm cannot deserialize from memory manager
+                    // Current mainnet ICP wasm cannot deserialize from memory manager, but ICRC can
                     match env.upgrade_canister(
                         ledger_id,
                         ledger_wasm_mainnet.clone(),
                         upgrade_args.clone(),
                     ) {
                         Ok(_) => {
-                            panic!("Upgrade from memory manager directly to mainnet should fail!")
+                            if !downgrade_to_mainnet_should_succeed {
+                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
+                            }
                         }
                         Err(e) => {
+                            if downgrade_to_mainnet_should_succeed {
+                               panic!("Downgrade from memory manager to mainnet should succeed (since mainnet is V1), but failed with error: {}", e)
+                            }
                             assert!(
                                 e.description().contains("failed to decode ledger state")
                                     || e.description().contains("Decoding stable memory failed")
