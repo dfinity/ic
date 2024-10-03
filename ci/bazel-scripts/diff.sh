@@ -14,7 +14,7 @@ set -x
 cd "$(git rev-parse --show-toplevel)"
 
 MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
-# we can't use HEAD here because that is the merge commit which contains more changes
+# we can't use HEAD here because that is the merge commit which contains the changes of the current HEAD of master
 COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."$BRANCH_HEAD_SHA}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
