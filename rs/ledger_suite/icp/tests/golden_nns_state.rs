@@ -100,7 +100,7 @@ impl Setup {
         let ledger_blocks = icp_get_blocks(&self.state_machine, LEDGER_CANISTER_ID);
         // Wait for the index to sync with the ledger and archives
         wait_until_sync_is_completed(&self.state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
-        println!("Retrieving blocks from the index");
+        println!("Retrieving {} blocks from the index", ledger_blocks.len());
         let index_blocks = get_all_blocks(
             &self.state_machine,
             INDEX_CANISTER_ID,
