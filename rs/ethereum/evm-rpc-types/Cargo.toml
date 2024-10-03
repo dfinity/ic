@@ -1,0 +1,18 @@
+[package]
+name = "evm_rpc_types"
+description = "Candid types for interacting with the EVM RPC canister"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+hex = { workspace = true }
+ic-cdk = { workspace = true }
+num-bigint = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

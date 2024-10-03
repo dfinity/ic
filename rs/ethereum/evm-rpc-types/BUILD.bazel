@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "evm-rpc-client",
+    name = "evm_rpc_types",
     srcs = glob(
         ["src/**/*.rs"],
     ),
@@ -14,21 +14,20 @@ rust_library(
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
-        "@crate_index//:ic-canister-log",
+        "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:num-bigint",
         "@crate_index//:serde",
-        "@crate_index//:thiserror",
-        "//rs/ethereum/evm-rpc-types",
+        "@crate_index//:strum",
     ],
 )
 
 rust_test(
     name = "unit_tests",
-    crate = ":evm-rpc-client",
+    crate = ":evm_rpc_types",
     deps = [
         # Keep sorted.
-        ":evm-rpc-client",
-        "@crate_index//:mockall",
-        "@crate_index//:tokio",
+        ":evm_rpc_types",
+        "@crate_index//:proptest",
     ],
 )
