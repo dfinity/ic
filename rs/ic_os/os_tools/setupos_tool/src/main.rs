@@ -119,7 +119,9 @@ pub fn main() -> Result<()> {
             {
                 ipv6_config
             } else {
-                return Err(anyhow!("Ipv6Config is not of type Deterministic"));
+                return Err(anyhow!(
+                    "Ipv6Config is not of type Deterministic. Cannot generate IPv6 address."
+                ));
             };
 
             let ipv6_address = generate_ipv6_address(&ipv6_config.prefix, &generated_mac)?;
