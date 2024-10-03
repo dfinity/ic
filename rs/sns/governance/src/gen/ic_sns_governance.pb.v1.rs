@@ -1636,14 +1636,19 @@ pub struct Governance {
     #[prost(message, optional, tag = "23")]
     pub deployed_version: ::core::option::Option<governance::Version>,
     /// Version SNS is in process of upgrading to.
+    /// TODO: this probably needs to go into a new field, pending_upgrades or something.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    #[prost(message, repeated, tag = "28")]
+    pub queued_versions: ::prost::alloc::vec::Vec<governance::UpgradeInProgress>,
     /// True if the heartbeat function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "26")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
+    #[prost(message, optional, tag = "28")]
+    pub target_version: ::core::option::Option<governance::Version>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2034,6 +2039,9 @@ pub struct GetRunningSnsVersionResponse {
     /// The upgrade in progress, if any.
     #[prost(message, optional, tag = "2")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    /// The target version that the SNS is in the process of upgrading to.
+    #[prost(message, optional, tag = "3")]
+    pub target_version: ::core::option::Option<governance::Version>,
 }
 /// Request to fail an upgrade proposal that is Adopted but not Executed or
 /// Failed if it is past the time when it should have been marked as failed.
@@ -3330,6 +3338,26 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionResponse {}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(

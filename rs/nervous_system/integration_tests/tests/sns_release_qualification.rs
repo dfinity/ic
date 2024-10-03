@@ -13,6 +13,7 @@ use ic_nns_test_utils::sns_wasm::{
     build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_sns_wasm,
     ensure_sns_wasm_gzipped,
 };
+use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 

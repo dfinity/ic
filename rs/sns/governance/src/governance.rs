@@ -2028,8 +2028,7 @@ impl Governance {
             }
             Action::UpgradeSnsToNextVersion(_) => {
                 log!(INFO, "Executing UpgradeSnsToNextVersion action",);
-                let upgrade_sns_result =
-                    self.perform_upgrade_to_next_sns_version(proposal_id).await;
+                let upgrade_sns_result = self.queue_upgrade_to_next_sns_version(proposal_id).await;
 
                 // If the upgrade returned `Ok(true)` that means the upgrade completed successfully
                 // and the proposal can be marked as "executed". If the upgrade returned `Ok(false)`
@@ -2493,15 +2492,41 @@ impl Governance {
             })
     }
 
+    /// This should iterate over the list of pending upgrades, and remove the ones that are invalid w.r.t. the current SNS-W state.
+    /// It should do this by calling SNS-W's endpoint to get the upgrade path, with starting_at set to the current version and specifying the current SNS.
+    /// Then, iterate over the pending upgrades, and if we find one not in the upgrade path, remove it and all following ones.
+    /// (and mark their proposals as failed).
+    ///
+    /// Finally, return UpgradeSnsParams if there is a version in the chain received from SNS-W after the last version in pending_upgrades.
+    async fn prune_pending_versions(&mut self) -> Option<crate::sns_upgrade::SnsVersion> {
+        todo!();
+    }
+
     /// Return `Ok(true)` if the upgrade was completed successfully, return `Ok(false)` if an
     /// upgrade was successfully kicked-off, but its completion is pending.
-    async fn perform_upgrade_to_next_sns_version(
+    async fn queue_upgrade_to_next_sns_version(
         &mut self,
         proposal_id: u64,
     ) -> Result<bool, GovernanceError> {
-        err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
+        let Some(next_version) = self.prune_pending_versions().await else {
+            todo!("Return governanceerror in this case")
+        };
+        let pending_version: UpgradeInProgress = todo!(); // implement based on next_version
+        self.proto.queued_versions.push(pending_version);
 
-        let current_version = self.proto.deployed_version_or_panic();
+        log!(INFO, "Successfully queued upgrade",);
+
+        return Ok(false);
+    }
+
+    async fn execute_next_upgrade_to_next_sns_version(&mut self) -> Result<bool, GovernanceError> {
+        if self.proto.queued_versions.is_empty() {
+            // fail the upgrade
+            return Ok(true);
+        }
+
+        let upgrade_in_progress = self.proto.queued_versions.remove(0);
+        self.proto.pending_version = Some(upgrade_in_progress);
         let root_canister_id = self.proto.root_canister_id_or_panic();
 
         let UpgradeSnsParams {
@@ -2509,14 +2534,7 @@ impl Governance {
             canister_type_to_upgrade,
             new_wasm_hash,
             canister_ids_to_upgrade,
-        } = get_upgrade_params(&*self.env, root_canister_id, &current_version)
-            .await
-            .map_err(|e| {
-                GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Could not execute proposal: {}", e),
-                )
-            })?;
+        } = todo!();
 
         // SNS Swap is controlled by NNS Governance, so this SNS instance cannot upgrade it.
         // Simply set `deployed_version` to `next_version` version so that other SNS upgrades can
@@ -2565,7 +2583,7 @@ impl Governance {
             target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
             checking_upgrade_lock: 0,
-            proposal_id,
+            proposal_id: todo!(),
         });
 
         log!(
@@ -4601,6 +4619,11 @@ impl Governance {
 
         if self.should_check_upgrade_status() {
             self.check_upgrade_status().await;
+        } else {
+            if !self.proto.queued_versions.is_empty() {
+                self.execute_next_upgrade_to_next_sns_version().await; // todo, log errors
+            }
+            // todo: pop from the queue if it is non-empty
         }
 
         let should_distribute_rewards = self.should_distribute_rewards();

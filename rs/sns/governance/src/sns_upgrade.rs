@@ -27,6 +27,7 @@ pub(crate) async fn get_upgrade_params(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     current_version: &Version,
+    
 ) -> Result<UpgradeSnsParams, String> {
     let next_version = match get_next_version(env, &current_version.clone()).await {
         Some(next) => next,

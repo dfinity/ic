@@ -1425,7 +1425,9 @@ message Governance {
   }
 
   // Version SNS is in process of upgrading to.
-  UpgradeInProgress pending_version = 24;
+  // TODO: this probably needs to go into a new field, pending_upgrades or something.
+  optional UpgradeInProgress pending_version = 24;
+  repeated UpgradeInProgress queued_versions = 28;
 
   // True if the heartbeat function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
@@ -1449,6 +1451,8 @@ message Governance {
 
   reserved "migrated_root_wasm_memory_limit";
   reserved 27;
+
+  Governance.Version target_version = 28;
 }
 
 // Request message for 'get_metadata'.
@@ -1480,6 +1484,8 @@ message GetRunningSnsVersionResponse {
   Governance.Version deployed_version = 1;
   // The upgrade in progress, if any.
   Governance.UpgradeInProgress pending_version = 2;
+  // The target version that the SNS is in the process of upgrading to.
+  Governance.Version target_version = 3;
 }
 
 // Request to fail an upgrade proposal that is Adopted but not Executed or
@@ -2137,4 +2143,20 @@ message Account {
   // The subaccount of the account. If not set then the default
   // subaccount (all bytes set to 0) is used.
   optional Subaccount subaccount = 2;
+}
+
+message AdvanceTargetVersionRequest {
+
+}
+
+message AdvanceTargetVersionResponse {
+
+}
+
+message UpgradeToNextRequest {
+
+}
+
+message UpgradeToNextResponse {
+
 }
