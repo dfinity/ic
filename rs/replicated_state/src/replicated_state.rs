@@ -956,7 +956,7 @@ impl ReplicatedState {
             .filter_map(|(canister_id, canister)| {
                 let memory_usage = canister.system_state.best_effort_message_memory_usage();
                 if memory_usage > ZERO {
-                    Some((memory_usage, canister_id.clone()))
+                    Some((memory_usage, *canister_id))
                 } else {
                     None
                 }
