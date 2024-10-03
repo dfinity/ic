@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
+use config::firewall_json::get_firewall_rules_json_or_default;
 use config::serialize_and_write_config;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,9 @@ pub enum Commands {
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
+
+        #[arg(long, default_value = None, value_name = "firewall.json")]
+        firewall_json_path: Option<PathBuf>,
     },
     /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
@@ -60,6 +64,7 @@ pub fn main() -> Result<()> {
             ssh_authorized_keys_path,
             node_operator_private_key_path,
             setupos_config_json_path,
+            firewall_json_path,
         }) => {
             // get config.ini settings
             let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
@@ -77,6 +82,12 @@ pub fn main() -> Result<()> {
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
 
+            // get firewall.json rules
+            let firewall = get_firewall_rules_json_or_default(
+                firewall_json_path.as_ref().map(Path::new),
+                Path::new(config::DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH),
+            )?;
+
             let network_settings = NetworkSettings {
                 ipv6_prefix,
                 ipv6_prefix_length,
@@ -86,6 +97,7 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain,
                 mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+                firewall,
             };
 
             let logging = Logging {

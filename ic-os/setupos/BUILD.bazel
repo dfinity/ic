@@ -4,6 +4,7 @@ exports_files([
     "partitions.csv",
     "grub.cfg",
     "config/config.ini",
+    "config/firewall.json",
     "config/node_operator_private_key.pem",
     "config/ssh_authorized_keys/admin",
     "data/deployment.json.template",

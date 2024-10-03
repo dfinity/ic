@@ -110,6 +110,9 @@ options may be specified:
   --socks_proxy url
     The URL of the socks proxy to use. To be used in
     systems tests only.
+
+  --firewall_rules_file path
+    Optional. Should point to a file containing a firewall.json rules file.
 EOF
 }
 
@@ -130,6 +133,7 @@ function build_ic_bootstrap_tar() {
     local QUERY_STATS_EPOCH_LENGTH
     local BITCOIND_ADDR
     local JAEGER_ADDR
+    local FIREWALL_RULES_FILE
 
     while true; do
         if [ $# == 0 ]; then
@@ -203,6 +207,9 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
+            --firewall_rules_file)
+                FIREWALL_RULES_FILE="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -273,6 +280,9 @@ EOF
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
+    fi
+    if [ "${FIREWALL_RULES_FILE}" != "" ]; then
+        cp "${FIREWALL_RULES_FILE}" "${BOOTSTRAP_TMPDIR}/firewall.json"
     fi
 
     tar cf "${OUT_FILE}" \

@@ -13,6 +13,7 @@ use utils::get_command_stdout;
 use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
 
 pub static DEFAULT_GUESTOS_NETWORK_CONFIG_PATH: &str = "/boot/config/network.conf";
+pub static DEFAULT_GUESTOS_FIREWALL_JSON_PATH: &str = "/boot/config/firewall.json";
 
 const IPV4_NAME_SERVER_NETWORKD_CONTENTS: &str =
     "DNS=1.1.1.1\nDNS=1.0.0.1\nDNS=8.8.8.8\nDNS=8.8.4.4\n";

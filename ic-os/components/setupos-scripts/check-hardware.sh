@@ -263,10 +263,14 @@ function verify_deployment_path() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    check_generation
-    verify_cpu
-    verify_memory
-    verify_disks
+    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+        check_generation
+        verify_cpu
+        verify_memory
+        verify_disks
+    else
+        GENERATION=2
+    fi
     verify_deployment_path
     log_end "$(basename $0)"
 }

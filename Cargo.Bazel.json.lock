@@ -1,5 +1,5 @@
 {
-  "checksum": "6d91b4d8565bf0af7b7870fd7a6b31e599c590eb3e7bf682ba77d1f93a035912",
+  "checksum": "8c7eb3b6f79b6e190dca4b2c651d578bf3b1fcf469913f067eafa7a36e320629",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -33244,7 +33244,17 @@
         "crate_features": {
           "common": [
             "default",
+            "serde",
             "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            }
           ],
           "selects": {}
         },

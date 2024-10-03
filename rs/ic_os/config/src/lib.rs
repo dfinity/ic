@@ -1,5 +1,6 @@
 pub mod config_ini;
 pub mod deployment_json;
+pub mod firewall_json;
 pub mod types;
 
 use anyhow::{Context, Result};
@@ -10,6 +11,7 @@ use std::path::Path;
 
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";
 pub static DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH: &str = "/config/config.ini";
+pub static DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH: &str = "/config/firewall.json";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
 pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
 pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/config/ssh_authorized_keys";
@@ -20,6 +22,7 @@ pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/con
 
 pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
 pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
+pub static DEFAULT_HOSTOS_FIREWALL_JSON_PATH: &str = "/boot/config/firewall.json";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -62,6 +65,7 @@ mod tests {
             ipv4_prefix_length: None,
             domain: None,
             mgmt_mac: None,
+            firewall: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [

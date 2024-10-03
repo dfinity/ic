@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from ipaddress import IPv6Address
 from multiprocessing import Pool
 from pathlib import Path
+from shlex import quote
 from typing import Any, List, Optional
 
 import fabric
@@ -94,6 +95,9 @@ class Args:
 
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this text into firewall.json
+    inject_firewall_json: Optional[str] = None
 
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
@@ -464,10 +468,10 @@ def benchmark_node(bmc_info: BMCInfo, benchmark_driver_script: str, benchmark_ru
 
     ip_address = bmc_info.guestos_ipv6_address
 
-    benchmark_tools = " ".join(benchmark_tools) if benchmark_tools is not None else ""
+    benchmark_tools_quoted_list_of_commands = " ".join(quote(t) for t in benchmark_tools)
 
     # Throw away the result, for now
-    invoke.run(f"{benchmark_driver_script} {benchmark_runner_script} {file_share_ssh_key} {ip_address} {benchmark_tools}", warn=True)
+    invoke.run(f"{benchmark_driver_script} {benchmark_runner_script} {file_share_ssh_key} {ip_address} {benchmark_tools_quoted_list_of_commands}", warn=True)
     return OperationResult(bmc_info, success=True)
 
 
@@ -551,7 +555,8 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
                              ipv6_gateway: str,
                              ipv4_args: Optional[Ipv4Args],
                              verbose: Optional[str],
-                             pub_key: Optional[str]) -> Path:
+                             pub_key: Optional[str],
+                             firewall_json: Optional[str]) -> Path:
     """
     Transform the compressed image.
     * Decompress image into working_dir
@@ -569,28 +574,25 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
-    img_path = Path(f"{working_dir}/disk.img")
+    img_path = Path(os.path.join(working_dir, "disk.img"))
     assert img_path.exists()
 
-    image_part = f"--image-path {img_path}"
-    prefix_part = f"--ipv6-prefix {ipv6_prefix}"
-    gateway_part = f"--ipv6-gateway {ipv6_gateway}"
+    image_part = f"--image-path {quote(str(img_path))}"
+    prefix_part = f"--ipv6-prefix {quote(ipv6_prefix)}"
+    gateway_part = f"--ipv6-gateway {quote(ipv6_gateway)}"
     ipv4_part = ""
     if ipv4_args:
-        ipv4_part = f"--ipv4-address {ipv4_args.address} "
-        ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
-        ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
-        ipv4_part += f"--domain {ipv4_args.domain} "
+        ipv4_part = f"--ipv4-address {quote(ipv4_args.address)} "
+        ipv4_part += f"--ipv4-gateway {quote(ipv4_args.gateway)} "
+        ipv4_part += f"--ipv4-prefix-length {quote(ipv4_args.prefix_length)} "
+        ipv4_part += f"--domain {quote(ipv4_args.domain)}"
 
-    verbose_part = ""
-    if verbose:
-        verbose_part = f"--verbose {verbose} "
+    verbose_part = "" if not verbose else f"--verbose {quote(verbose)}"
+    firewall_json_part = "" if not firewall_json else f"--firewall-json {quote(firewall_json)}"
 
-    admin_key_part = ""
-    if pub_key:
-        admin_key_part = f"--public-keys \"{pub_key}\""
+    admin_key_part = "" if not pub_key else f"--public-keys {quote(pub_key)}"
 
-    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}", echo=True)
+    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part} {firewall_json_part}", echo=True)
 
     # Reuse the name of the compressed image path in the working directory
     result_filename = compressed_image_path.name
@@ -656,8 +658,9 @@ def main():
                 args.inject_image_ipv6_gateway,
                 ipv4_args,
                 args.inject_image_verbose,
-                args.inject_image_pub_key
-                )
+                args.inject_image_pub_key,
+                args.inject_firewall_json,
+            )
 
             upload_to_file_share(
                 modified_image_path,
