@@ -115,7 +115,9 @@ RUN if [ "${ROOT_PASSWORD}" != "" ]; then \
 # to node operation.
 
 RUN for SERVICE in /etc/systemd/system/*; do \
-    if [ -f "$SERVICE" -a ! -L "$SERVICE" ] && grep -q '^.Install.' "$SERVICE" ; then systemctl enable "${SERVICE#/etc/systemd/system/}" ; fi ; \
+        if [ -f "$SERVICE" ] && [ ! -L "$SERVICE" ] && ! echo "$SERVICE" | grep -Eq "@\.service$"; then \
+            systemctl enable "${SERVICE#/etc/systemd/system/}"; \
+        fi ; \
     done && \
     systemctl enable \
     chrony \
