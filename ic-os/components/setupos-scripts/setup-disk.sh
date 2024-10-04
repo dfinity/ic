@@ -8,8 +8,6 @@ source /opt/ic/bin/functions.sh
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-source /opt/ic/bin/functions.sh
-
 function purge_partitions() {
     echo "* Purging partitions..."
 

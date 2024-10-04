@@ -9,8 +9,6 @@ source /opt/ic/bin/functions.sh
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-source /opt/ic/bin/functions.sh
-
 GENERATION=
 
 MINIMUM_CPU_SOCKETS=2
