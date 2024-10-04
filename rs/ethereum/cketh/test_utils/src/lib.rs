@@ -3,34 +3,30 @@ use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
 };
 use crate::mock::JsonRpcMethod;
-use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings, CanisterStatusType};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
     AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
     WithdrawalDetail, WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
-use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
     endpoints::{CandidBlockTag, Eip1559TransactionPrice},
     lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
 };
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
-use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, CanisterId, CanisterStatusType, Cycles, PayloadBuilder,
-    PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
-};
+use ic_ledger_suite_orchestrator_test_utils::NNS_ROOT_PRINCIPAL;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
+use pocket_ic::{PocketIc, PocketIcBuilder, UserError, WasmResult};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 pub mod ckerc20;
 pub mod events;
@@ -43,7 +39,8 @@ mod tests;
 pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
 pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
-pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
+pub const DEFAULT_PRINCIPAL_ID: Principal = Principal::from_slice(&[0x9d, 0xf7, 0x01]);
+pub const OTHER_PRINCIPAL: Principal = Principal::from_slice(&[0x9d, 0xf7, 0x02]);
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
 pub const DEFAULT_DEPOSIT_FROM_ADDRESS: &str = "0x55654e7405fcb336386ea8f36954a211b2cda764";
 pub const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
@@ -84,8 +81,9 @@ const RECEIVED_ERC20_EVENT_TOPIC: &str =
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 
 pub struct CkEthSetup {
-    pub env: Arc<StateMachine>,
-    pub caller: PrincipalId,
+    pub env: Arc<PocketIc>,
+    pub controller: Principal,
+    pub caller: Principal,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
     pub evm_rpc_id: Option<CanisterId>,
@@ -104,17 +102,30 @@ impl AsRef<CkEthSetup> for CkEthSetup {
 }
 
 impl CkEthSetup {
-    pub fn new(env: Arc<StateMachine>) -> Self {
-        let minter_id =
-            env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
-        let ledger_id = env.create_canister(None);
+    pub fn new(env: Arc<PocketIc>) -> Self {
+        let controller = NNS_ROOT_PRINCIPAL;
+        let minter_id = env.create_canister_with_settings(
+            Some(controller),
+            Some(CanisterSettings {
+                controllers: Some(vec![controller]),
+                ..CanisterSettings::default()
+            }),
+        );
+        env.add_cycles(minter_id, 100_000_000_000_000);
+        let ledger_id = env.create_canister_with_settings(
+            Some(controller),
+            Some(CanisterSettings {
+                controllers: Some(vec![controller]),
+                ..CanisterSettings::default()
+            }),
+        );
 
-        env.install_existing_canister(
+        env.install_canister(
             ledger_id,
             ledger_wasm(),
             Encode!(&LedgerArgument::Init(
                 LedgerInitArgsBuilder::with_symbol_and_name("ckETH", "ckETH")
-                    .with_minting_account(minter_id.get().0)
+                    .with_minting_account(minter_id)
                     .with_transfer_fee(CKETH_TRANSFER_FEE)
                     .with_max_memo_length(80)
                     .with_decimals(18)
@@ -122,13 +133,32 @@ impl CkEthSetup {
                     .build(),
             ))
             .unwrap(),
-        )
-        .unwrap();
-        let minter_id = install_minter(&env, ledger_id, minter_id);
-        let caller = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID);
+            Some(controller),
+        );
+
+        let args = MinterInitArgs {
+            ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
+            ethereum_network: EthereumNetwork::Mainnet,
+            ledger_id,
+            next_transaction_nonce: 0_u8.into(),
+            ethereum_block_height: CandidBlockTag::Finalized,
+            ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
+            minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
+            last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
+        };
+        let minter_arg = MinterArg::InitArg(args);
+        env.install_canister(
+            minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+            Some(controller),
+        );
+
+        let caller = DEFAULT_PRINCIPAL_ID;
 
         let cketh = Self {
             env,
+            controller,
             caller,
             ledger_id,
             minter_id,
@@ -142,11 +172,16 @@ impl CkEthSetup {
         cketh
     }
 
-    fn new_with_evm_rpc(env: Arc<StateMachine>) -> Self {
+    fn new_with_evm_rpc(env: Arc<PocketIc>) -> Self {
         // install ckETH first to keep the same canisterID and minter Ethereum address.
         let mut cketh = Self::new(env);
-        let evm_rpc_id = cketh.env.create_canister(None);
-        install_evm_rpc(&cketh.env, evm_rpc_id);
+        let evm_rpc_id = cketh.env.create_canister();
+        let args = EvmRpcInitArgs {
+            nodes_in_subnet: 28,
+        };
+        cketh
+            .env
+            .install_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap(), None);
         cketh.upgrade_minter(UpgradeArg {
             evm_rpc_id: Some(evm_rpc_id.into()),
             ..Default::default()
@@ -161,7 +196,7 @@ impl CkEthSetup {
         Self::maybe_evm_rpc(Arc::new(new_state_machine()))
     }
 
-    pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
+    pub fn maybe_evm_rpc(env: Arc<PocketIc>) -> Self {
         match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
             Ok(_) => CkEthSetup::new_with_evm_rpc(env),
             Err(_) => CkEthSetup::new(env),
@@ -179,9 +214,9 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress_as(
-                        self.caller,
+                    .update_call(
                         self.minter_id,
+                        self.caller,
                         "minter_address",
                         Encode!().unwrap(),
                     )
@@ -196,9 +231,9 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress_as(
-                        self.caller,
+                    .update_call(
                         self.minter_id,
+                        self.caller,
                         "retrieve_eth_status",
                         Encode!(&block_index.0.to_u64().unwrap()).unwrap(),
                     )
@@ -216,9 +251,9 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .query_as(
-                        self.caller,
+                    .query_call(
                         self.minter_id,
+                        self.caller,
                         "withdrawal_status",
                         Encode!(parameter).unwrap(),
                     )
@@ -238,8 +273,9 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .query(
+                    .query_call(
                         ledger_id,
+                        self.caller,
                         "icrc1_balance_of",
                         Encode!(&account.into()).unwrap()
                     )
@@ -253,15 +289,19 @@ impl CkEthSetup {
     pub fn eip_1559_transaction_price(
         &self,
         ledger_id: Option<Principal>,
-    ) -> Result<WasmResult, ic_state_machine_tests::UserError> {
+    ) -> Result<WasmResult, UserError> {
         let arg = match ledger_id {
             None => Encode!().unwrap(),
             Some(ckerc20_ledger_id) => {
                 Encode!(&Some(Eip1559TransactionPriceArg { ckerc20_ledger_id })).unwrap()
             }
         };
-        self.env
-            .query(self.minter_id, "eip_1559_transaction_price", arg)
+        self.env.query_call(
+            self.minter_id,
+            self.caller,
+            "eip_1559_transaction_price",
+            arg,
+        )
     }
 
     pub fn eip_1559_transaction_price_expecting_ok(
@@ -279,7 +319,7 @@ impl CkEthSetup {
         let error = self
             .eip_1559_transaction_price(Some(principal_id))
             .expect_err("Expecting Err but got Ok");
-        assert!(error.description().contains(&format!(
+        assert!(error.description.contains(&format!(
             "ERROR: Unsupported ckERC20 token ledger {}",
             principal_id
         )));
@@ -290,9 +330,9 @@ impl CkEthSetup {
         from: Principal,
         erc20: &AddCkErc20Token,
     ) -> Result<WasmResult, UserError> {
-        self.env.execute_ingress_as(
-            PrincipalId::from(from),
+        self.env.update_call(
             self.minter_id,
+            from,
             "add_ckerc20_token",
             Encode!(erc20).unwrap(),
         )
@@ -311,7 +351,12 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .query(self.minter_id, "get_minter_info", Encode!().unwrap())
+                    .query_call(
+                        self.minter_id,
+                        self.caller,
+                        "get_minter_info",
+                        Encode!().unwrap()
+                    )
                     .unwrap()
             ),
             MinterInfo
@@ -336,9 +381,9 @@ impl CkEthSetup {
         amount: u64,
         from_subaccount: Option<[u8; 32]>,
     ) -> ApprovalFlow {
-        let approval_response = Decode!(&assert_reply(self.env.execute_ingress_as(
-            PrincipalId::from(from),
+        let approval_response = Decode!(&assert_reply(self.env.update_call(
             ledger_id,
+            from,
             "icrc2_approve",
             Encode!(&ApproveArgs {
                 from_subaccount,
@@ -377,7 +422,7 @@ impl CkEthSetup {
         ledger_index: T,
     ) -> LedgerTransactionAssert<Self> {
         let ledger_transaction =
-            crate::flow::call_ledger_id_get_transaction(&self.env, ledger_id, ledger_index);
+            flow::call_ledger_id_get_transaction(&self.env, ledger_id, ledger_index);
         LedgerTransactionAssert {
             setup: self,
             ledger_transaction,
@@ -391,35 +436,19 @@ impl CkEthSetup {
         recipient: String,
     ) -> WithdrawalFlow {
         let arg = WithdrawalArg { amount, recipient };
-        let message_id = self.env.send_ingress(
-            PrincipalId::from(from),
-            self.minter_id,
-            "withdraw_eth",
-            Encode!(&arg).expect("failed to encode withdraw args"),
-        );
+        let message_id = self
+            .env
+            .submit_call(
+                self.minter_id,
+                from,
+                "withdraw_eth",
+                Encode!(&arg).expect("failed to encode withdraw args"),
+            )
+            .expect("failed to submit withdraw_eth call");
         WithdrawalFlow {
             setup: self,
             message_id,
         }
-    }
-
-    pub fn _get_logs(&self, priority: &str) -> Log {
-        let request = HttpRequest {
-            method: "".to_string(),
-            url: format!("/logs?priority={priority}"),
-            headers: vec![],
-            body: serde_bytes::ByteBuf::new(),
-        };
-        let response = Decode!(
-            &assert_reply(
-                self.env
-                    .query(self.minter_id, "http_request", Encode!(&request).unwrap(),)
-                    .expect("failed to get minter info")
-            ),
-            HttpResponse
-        )
-        .unwrap();
-        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
     }
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
@@ -444,8 +473,9 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .execute_ingress(
+                    .query_call(
                         self.minter_id,
+                        Principal::anonymous(),
                         "get_events",
                         Encode!(&GetEventsArg { start, length }).unwrap(),
                     )
@@ -474,7 +504,12 @@ impl CkEthSetup {
         Decode!(
             &assert_reply(
                 self.env
-                    .query(self.minter_id, "check_audit_log", Encode!().unwrap())
+                    .query_call(
+                        self.minter_id,
+                        Principal::anonymous(),
+                        "check_audit_log",
+                        Encode!().unwrap()
+                    )
                     .unwrap(),
             ),
             ()
@@ -489,47 +524,47 @@ impl CkEthSetup {
                 self.minter_id,
                 minter_wasm(),
                 Encode!(&MinterArg::UpgradeArg(upgrade_arg)).unwrap(),
+                Some(self.controller),
             )
             .unwrap();
         self.start_minter();
     }
 
     pub fn stop_minter(&self) {
-        let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
-        self.stop_ongoing_https_outcalls();
-        let stop_res = self.env.await_ingress(stop_msg_id, 100);
-        assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
+        self.env
+            .stop_canister(self.minter_id, Some(self.controller))
+            .expect("failed to stop minter");
     }
 
-    pub fn stop_ongoing_https_outcalls(&self) {
-        let server_error_response = CanisterHttpResponsePayload {
-            status: 500_u128,
-            headers: vec![],
-            body: vec![],
-        };
-        let ongoing_https_outcalls: Vec<_> = self
-            .env
-            .canister_http_request_contexts()
-            .into_keys()
-            .collect();
-        let mut payload = PayloadBuilder::new();
-        for callback_id in ongoing_https_outcalls {
-            payload = payload.http_response(callback_id, &server_error_response);
-        }
-        self.env.execute_payload(payload);
-    }
+    // pub fn stop_ongoing_https_outcalls(&self) {
+    //     let server_error_response = CanisterHttpResponsePayload {
+    //         status: 500_u128,
+    //         headers: vec![],
+    //         body: vec![],
+    //     };
+    //     let ongoing_https_outcalls: Vec<_> = self
+    //         .env
+    //         .canister_http_request_contexts()
+    //         .into_keys()
+    //         .collect();
+    //     let mut payload = PayloadBuilder::new();
+    //     for callback_id in ongoing_https_outcalls {
+    //         payload = payload.http_response(callback_id, &server_error_response);
+    //     }
+    //     self.env.execute_payload(payload);
+    // }
 
     pub fn start_minter(&self) {
-        let start_res = self.env.start_canister(self.minter_id);
-        assert_matches!(start_res, Ok(WasmResult::Reply(_)));
+        self.env
+            .start_canister(self.minter_id, Some(self.controller))
+            .expect("failed to start minter");
     }
 
     pub fn minter_status(&self) -> CanisterStatusType {
         self.env
-            .canister_status(self.minter_id)
+            .canister_status(self.minter_id, Some(self.controller))
             .unwrap()
-            .unwrap()
-            .status()
+            .status
     }
 
     pub fn upgrade_minter_to_add_orchestrator_id(self, orchestrator_id: Principal) -> Self {
@@ -563,11 +598,11 @@ impl CkEthSetup {
         for _ in 0..MAX_TICKS {
             if let Some(unexpected_request) = self
                 .env
-                .canister_http_request_contexts()
-                .values()
+                .get_canister_http()
+                .into_iter()
                 .map(|context| {
                     crate::mock::JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                        std::str::from_utf8(&context.body.clone()).unwrap(),
                     )
                     .expect("BUG: invalid JSON RPC method")
                 })
@@ -647,17 +682,24 @@ impl CkEthSetup {
             ]
         }
     }
+
+    pub fn time_since_epoch(&self) -> u64 {
+        self.env
+            .get_time()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_u64()
+            .unwrap()
+    }
 }
 
 pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
     Address::from_str(address).unwrap().to_string()
 }
 
-fn new_state_machine() -> StateMachine {
-    StateMachineBuilder::new()
-        .with_master_ecdsa_public_key()
-        .with_default_canister_range()
-        .build()
+pub fn new_state_machine() -> PocketIc {
+    PocketIcBuilder::new().with_fiduciary_subnet().build()
 }
 
 fn ledger_wasm() -> Vec<u8> {
@@ -688,31 +730,6 @@ fn evm_rpc_wasm() -> Vec<u8> {
         "evm_rpc_canister",
         &[],
     )
-}
-
-fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: CanisterId) -> CanisterId {
-    let args = MinterInitArgs {
-        ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
-        ethereum_network: EthereumNetwork::Mainnet,
-        ledger_id: ledger_id.get().0,
-        next_transaction_nonce: 0_u8.into(),
-        ethereum_block_height: CandidBlockTag::Finalized,
-        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
-        minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
-        last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
-    };
-    let minter_arg = MinterArg::InitArg(args);
-    env.install_existing_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
-        .unwrap();
-    minter_id
-}
-
-fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
-    let args = EvmRpcInitArgs {
-        nodes_in_subnet: 28,
-    };
-    env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
-        .unwrap();
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

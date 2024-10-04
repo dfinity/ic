@@ -34,8 +34,10 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
 use num_traits::cast::ToPrimitive;
+use pocket_ic::{ErrorCode, UserError};
 use serde_json::json;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -52,7 +54,7 @@ fn should_deposit_and_withdraw() {
         .expect_mint(Mint {
             amount: EXPECTED_BALANCE.into(),
             to: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                owner: DEFAULT_PRINCIPAL_ID.into(),
                 subaccount: None,
             },
             memo: Some(Memo::from(MintMemo::Convert {
@@ -69,7 +71,7 @@ fn should_deposit_and_withdraw() {
 
     let withdrawal_id = cketh.withdrawal_id().clone();
 
-    let time = cketh.setup.env.get_time().as_nanos_since_unix_epoch();
+    let time = cketh.setup.time_since_epoch();
     let max_fee_per_gas = Nat::from(33003708258u64);
     let gas_limit = Nat::from(21_000_u32);
     let max_priority_fee_per_gas = Nat::from(1_500_000_000_u32);
@@ -84,7 +86,7 @@ fn should_deposit_and_withdraw() {
         .expect_burn(Burn {
             amount: withdrawal_amount.clone(),
             from: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                owner: DEFAULT_PRINCIPAL_ID.into(),
                 subaccount: None,
             },
             spender: Some(Account {
@@ -148,7 +150,7 @@ fn should_retrieve_cache_transaction_price() {
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let result = cketh.eip_1559_transaction_price(None);
-    assert_matches!(result, Err(e) if e.code() == ic_state_machine_tests::ErrorCode::CanisterCalledTrap);
+    assert_matches!(result, Err(UserError{code, description: _}) if code == ErrorCode::CanisterCalledTrap);
 
     let cketh = cketh
         .deposit(DepositParams::default())
@@ -390,7 +392,7 @@ fn should_reimburse() {
         .expect_mint(Mint {
             amount: EXPECTED_BALANCE.into(),
             to: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                owner: DEFAULT_PRINCIPAL_ID.into(),
                 subaccount: None,
             },
             memo: Some(Memo::from(MintMemo::Convert {
@@ -406,10 +408,7 @@ fn should_reimburse() {
     let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
-    let time_at_withdrawal = cketh
-        .env
-        .get_time_of_next_round()
-        .as_nanos_since_unix_epoch();
+    let time_at_withdrawal = cketh.time_since_epoch();
 
     let cketh = cketh
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
@@ -428,7 +427,7 @@ fn should_reimburse() {
         .expect_burn(Burn {
             amount: withdrawal_amount.clone(),
             from: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                owner: DEFAULT_PRINCIPAL_ID.into(),
                 subaccount: None,
             },
             spender: Some(Account {
@@ -481,7 +480,7 @@ fn should_reimburse() {
         .expect_mint(Mint {
             amount: reimbursed_amount.clone(),
             to: Account {
-                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                owner: DEFAULT_PRINCIPAL_ID.into(),
                 subaccount: None,
             },
             memo: Some(Memo::from(MintMemo::ReimburseTransaction {

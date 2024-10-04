@@ -61,8 +61,8 @@ ic-cketh-test-utils = { path = "../test_utils" }
 ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
 maplit = "1"
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 rand = { workspace = true }
 scraper = "0.17.1"
