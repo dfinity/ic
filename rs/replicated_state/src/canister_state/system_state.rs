@@ -1414,9 +1414,9 @@ impl SystemState {
             // Protect against enqueuing a second response for the currently executing
             // (aborted or paused) callback.
             if let RequestOrResponse::Response(response) = &msg {
-                if let Some(aboirted_or_paused_response) = self.aborted_or_paused_response() {
+                if let Some(aborted_or_paused_response) = self.aborted_or_paused_response() {
                     if response.originator_reply_callback
-                        == aboirted_or_paused_response.originator_reply_callback
+                        == aborted_or_paused_response.originator_reply_callback
                     {
                         // The callback is already executing, don't enqueue a second response for it.
                         return;
