@@ -35,6 +35,7 @@ use common::*;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const SUBNET_CALLBACK_SOFT_CAP: u64 = 1_000_000;
 
 #[test]
 fn push_output_request_fails_not_enough_cycles_for_request() {
@@ -64,6 +65,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
         None,
@@ -118,6 +120,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
         None,
@@ -155,6 +158,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         caller,
         None,
@@ -206,6 +210,7 @@ fn correct_charging_source_canister_for_a_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(request.sender().into()),
         None,
@@ -353,6 +358,7 @@ fn is_controller_test() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         caller,
         None,
@@ -434,6 +440,7 @@ fn test_inter_canister_call(
         topo,
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        SUBNET_CALLBACK_SOFT_CAP,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(sender.into()),
         None,

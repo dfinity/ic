@@ -438,12 +438,17 @@ impl Hypervisor {
             ),
         }
         let caller = api_type.caller();
+        let subnet_available_callbacks = round_limits.subnet_available_callbacks.max(0) as u64;
+        let canister_available_callbacks = system_state
+            .call_context_manager()
+            .map_or(50, |ccm| 50u64.saturating_sub(ccm.callbacks().len() as u64));
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
+            canister_available_callbacks.max(subnet_available_callbacks),
             request_metadata,
             api_type.caller(),
             api_type.call_context_id(),

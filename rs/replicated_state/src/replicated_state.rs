@@ -684,6 +684,18 @@ impl ReplicatedState {
         self.metadata.ingress_history.memory_usage()
     }
 
+    /// Returns the total number of callbacks across all canisters.
+    pub fn callback_count(&self) -> usize {
+        self.canisters_iter()
+            .map(|canister| {
+                canister
+                    .system_state
+                    .call_context_manager()
+                    .map_or(0, |ccm| ccm.callbacks().len())
+            })
+            .sum()
+    }
+
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {

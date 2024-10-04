@@ -94,6 +94,10 @@ struct SchedulerRoundLimits {
     /// - Wasm execution pushes a new request to the output queue.
     subnet_available_memory: SubnetAvailableMemory,
 
+    /// Keeps track of the number of outgoing calls that can still be made across
+    /// the subnet before canisters are limited to their own callback quota only.
+    subnet_available_callbacks: i64,
+
     // Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
 }
@@ -103,6 +107,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.subnet_instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -111,6 +116,7 @@ impl SchedulerRoundLimits {
         RoundLimits {
             instructions: self.instructions,
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
         }
     }
@@ -118,12 +124,14 @@ impl SchedulerRoundLimits {
     fn update_subnet_round_limits(&mut self, round_limits: &RoundLimits) {
         self.subnet_instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 
     pub fn update_canister_round_limits(&mut self, round_limits: &RoundLimits) {
         self.instructions = round_limits.instructions;
         self.subnet_available_memory = round_limits.subnet_available_memory;
+        self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
     }
 }
@@ -926,6 +934,9 @@ impl SchedulerImpl {
             instructions: round_limits.instructions,
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
+            // XXX: Since this is enforcing a soft cap, it seems counterproductive to divide
+            // the available callbacks between the threads.
+            subnet_available_callbacks: round_limits.subnet_available_callbacks,
             compute_allocation_used: round_limits.compute_allocation_used,
         };
         // Run canisters in parallel. The results will be stored in `results_by_thread`.
@@ -947,6 +958,7 @@ impl SchedulerImpl {
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
                     subnet_available_memory: round_limits_per_thread.subnet_available_memory,
+                    subnet_available_callbacks: round_limits_per_thread.subnet_available_callbacks,
                     compute_allocation_used: round_limits.compute_allocation_used,
                 };
                 let config = &self.config;
@@ -1582,6 +1594,7 @@ impl Scheduler for SchedulerImpl {
                     self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
                 ),
                 subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
             }
         };

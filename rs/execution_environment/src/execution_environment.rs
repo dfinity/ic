@@ -253,6 +253,10 @@ pub struct RoundLimits {
     /// - Wasm execution pushes a new request to the output queue.
     pub subnet_available_memory: SubnetAvailableMemory,
 
+    /// The number of outgoing calls that can still be made across the subnet before
+    /// canisters are limited to their own callback quota.
+    pub subnet_available_callbacks: i64,
+
     // TODO would be nice to change that to available, but this requires
     // a lot of changes since available allocation sits in CanisterManager config
     pub compute_allocation_used: u64,
@@ -455,6 +459,13 @@ impl ExecutionEnvironment {
     pub fn subnet_available_message_memory(&self, state: &ReplicatedState) -> i64 {
         self.config.subnet_message_memory_capacity.get() as i64
             - state.guaranteed_response_message_memory_taken().get() as i64
+    }
+
+    /// Computes number of callbacks available up tp the subnet's callback soft cap.
+    pub fn subnet_available_callbacks(&self, state: &ReplicatedState) -> i64 {
+        self.config
+            .subnet_callback_soft_cap
+            .saturating_sub(state.callback_count()) as i64
     }
 
     /// Executes a replicated message sent to a subnet.
@@ -1772,6 +1783,7 @@ impl ExecutionEnvironment {
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
+            canister_callback_quota: self.config.canister_callback_quota as u64,
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode,

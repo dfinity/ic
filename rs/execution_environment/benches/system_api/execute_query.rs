@@ -43,6 +43,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
              time,
              mut execution_parameters,
              subnet_available_memory,
+             subnet_available_callbacks,
              network_topology,
              ..
          }| {
@@ -52,6 +53,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                subnet_available_callbacks,
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
