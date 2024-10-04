@@ -1009,12 +1009,12 @@ impl ExecutionTest {
                 canister
                     .system_state
                     .task_queue
-                    .enqueue(ExecutionTask::OnLowWasmMemory(Some(false)));
+                    .remove(ExecutionTask::OnLowWasmMemory);
                 // Set `OnLowWasmMemoryHookStatus` to `Ready`.
                 canister
                     .system_state
                     .task_queue
-                    .enqueue(ExecutionTask::OnLowWasmMemory(Some(true)));
+                    .enqueue(ExecutionTask::OnLowWasmMemory);
             }
         }
         let result = execute_canister(
