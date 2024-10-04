@@ -6604,7 +6604,6 @@ dependencies = [
  "ic-crypto-prng",
  "ic-interfaces",
  "ic-interfaces-registry",
- "ic-interfaces-state-manager",
  "ic-logger",
  "ic-management-canister-types",
  "ic-protobuf",
