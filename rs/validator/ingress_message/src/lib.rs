@@ -29,7 +29,7 @@ pub use internal::TimeProvider;
 ///   see [`IngressMessageVerifier::builder`].
 ///
 /// # Errors
-/// * [`RequestValidationError::InvalidRequestExpiry`]:
+/// * [`RequestValidationError::InvalidIngressExpiry`]:
 ///   if the request expired or its provided expiry is too far off in the future.
 /// * [`RequestValidationError::InvalidDelegationExpiry`]: if any of the delegations expired.
 /// * [`RequestValidationError::UserIdDoesNotMatchPublicKey`]: if the ID of the issuer
@@ -52,7 +52,7 @@ pub trait HttpRequestVerifier<C> {
 /// with [`HttpRequestVerifier::validate_request`].
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum RequestValidationError {
-    InvalidRequestExpiry(String),
+    InvalidIngressExpiry(String),
     InvalidDelegationExpiry(String),
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
     InvalidSignature(AuthenticationError),
@@ -68,7 +68,7 @@ pub enum RequestValidationError {
 impl Display for RequestValidationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestValidationError::InvalidRequestExpiry(msg) => write!(f, "{}", msg),
+            RequestValidationError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
             RequestValidationError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
             RequestValidationError::UserIdDoesNotMatchPublicKey(user_id, pubkey) => write!(
                 f,

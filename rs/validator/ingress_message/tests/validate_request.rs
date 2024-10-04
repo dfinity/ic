@@ -135,7 +135,7 @@ mod request_nonce {
 
 mod ingress_expiry {
     use super::*;
-    use crate::RequestValidationError::InvalidRequestExpiry;
+    use crate::RequestValidationError::InvalidIngressExpiry;
     use ic_validator_http_request_test_utils::{AuthenticationScheme, HttpRequestBuilder};
     use std::time::Duration;
 
@@ -173,7 +173,7 @@ mod ingress_expiry {
 
             assert_matches!(
                 result,
-                Err(InvalidRequestExpiry(_)),
+                Err(InvalidIngressExpiry(_)),
                 "Test with {builder_info} failed",
             );
         }
@@ -214,7 +214,7 @@ mod ingress_expiry {
 
             assert_matches!(
                 result,
-                Err(InvalidRequestExpiry(_)),
+                Err(InvalidIngressExpiry(_)),
                 "Test with {builder_info} failed",
             );
         }
