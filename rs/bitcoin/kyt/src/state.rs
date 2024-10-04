@@ -52,9 +52,9 @@ pub struct FetchedTx {
 // Max number of concurrent http outcalls.
 const MAX_CONCURRENT: u32 = 50;
 
-// Max number of entries in the cache is set to 3000 so that dashboard html has a good chance to
-// fit within the 2MiB limit of message response.
-pub(crate) const MAX_FETCH_TX_ENTRIES: usize = 3000;
+// Max number of entries in the cache is set to 10_000. Since the average transaction size
+// is about 400 bytes, the estimated memory usage of the cache is in the order of 10s of MBs.
+const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 
 // The internal KYT state includes:
 // 1. Outcall capacity, a semaphore limiting max concurrent outcalls.

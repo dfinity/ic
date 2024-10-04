@@ -23,7 +23,7 @@ mod filters {
 }
 
 #[derive(Template)]
-#[template(path = "dashboard.html", whitespace = "suppress")]
+#[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
     btc_network: BtcNetwork,
     outcall_capacity: u32,
