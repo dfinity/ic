@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 DEPLOYMENT="${DEPLOYMENT:=/data/deployment.json}"
 
@@ -200,7 +202,6 @@ function query_nns_nodes() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     read_variables
     get_network_settings
