@@ -113,7 +113,7 @@ pub fn main() -> Result<()> {
             let icos_settings = ICOSSettings {
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
-                nns_url: deployment_json_settings.nns.url.clone(),
+                nns_urls: deployment_json_settings.nns.url.clone(),
                 hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
