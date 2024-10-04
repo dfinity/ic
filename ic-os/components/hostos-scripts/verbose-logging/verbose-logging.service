@@ -4,7 +4,7 @@ Requires=guestos.service
 After=guestos.service
 
 [Service]
-ExecStart=/opt/ic/bin/verbose-logging.sh 
+ExecStart=/opt/ic/bin/verbose-logging.sh
 Restart=on-failure
 
 [Install]
