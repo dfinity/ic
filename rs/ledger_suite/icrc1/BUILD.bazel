@@ -120,10 +120,10 @@ rust_test(
         data = [
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
-            "@mainnet_ckbtc_ic-icrc1-ledger//file",
             "@mainnet_ckbtc-index-ng//file",
-            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
             "@mainnet_cketh-index-ng//file",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
             "@mainnet_ic-icrc1-index-ng//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
