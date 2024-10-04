@@ -1,6 +1,8 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
-    checkpoint::{load_checkpoint, make_checkpoint},
+    checkpoint::{
+        load_checkpoint, make_checkpoint, validate_checkpoint_and_remove_unverified_marker,
+    },
     flush_canister_snapshots_and_page_maps,
     tip::spawn_tip_thread,
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
@@ -212,7 +214,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
     );
 
-    make_checkpoint(
+    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
         state,
         new_height,
         &tip_channel,
@@ -222,6 +224,8 @@ fn write_checkpoint(
         config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(thread_pool))
+        .map_err(|e| format!("Falied to validate checkpoint: {}", e))?;
 
     Ok(())
 }

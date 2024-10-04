@@ -69,17 +69,19 @@ fn make_checkpoint_and_get_state_impl(
     tip_channel: &Sender<TipRequest>,
     log: &ReplicaLogger,
 ) -> ReplicatedState {
-    make_checkpoint(
+    let mut thread_pool = thread_pool();
+    let (cp_layout, state, _has_downgrade) = make_checkpoint(
         state,
         height,
         tip_channel,
         &state_manager_metrics(log).checkpoint_metrics,
-        &mut thread_pool(),
+        &mut thread_pool,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         ic_config::state_manager::lsmt_config_default().lsmt_status,
     )
-    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
-    .1
+    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
+    validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(&mut thread_pool)).unwrap();
+    state
 }
 
 fn make_checkpoint_and_get_state(

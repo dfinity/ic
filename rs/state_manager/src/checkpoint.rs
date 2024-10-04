@@ -138,12 +138,10 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    cp.remove_unverified_checkpoint_marker()?;
-
     Ok((cp, state, has_downgrade))
 }
 
-pub(crate) fn validate_checkpoint(
+pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     mut thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> Result<(), CheckpointError> {
@@ -176,7 +174,7 @@ pub fn load_checkpoint_parallel_and_validate(
         Some(&mut thread_pool),
         Arc::clone(&fd_factory),
     )?;
-    validate_checkpoint(checkpoint_layout, Some(&mut thread_pool))?;
+    validate_checkpoint_and_remove_unverified_marker(checkpoint_layout, Some(&mut thread_pool))?;
     Ok(state)
 }
 
