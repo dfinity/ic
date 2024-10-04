@@ -4602,8 +4602,6 @@ impl Governance {
 
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
-        use dfn_core::println;
-
         self.process_proposals();
 
         if self.should_check_upgrade_status() {
@@ -4640,40 +4638,44 @@ impl Governance {
 
         self.maybe_gc();
 
-        if self.should_refresh_cached_upgrade_steps() {
-            self.temporarily_lock_refresh_cached_upgrade_steps();
-            self.refresh_cached_upgrade_steps().await;
+        {
+            let now_timestamp_seconds = self.env.now();
+            if self.should_refresh_cached_upgrade_steps(now_timestamp_seconds) {
+                self.temporarily_lock_refresh_cached_upgrade_steps(now_timestamp_seconds);
+                self.refresh_cached_upgrade_steps(now_timestamp_seconds)
+                    .await;
+            }
         }
     }
 
-    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
+    pub fn should_refresh_cached_upgrade_steps(&self, now_timestamp_seconds: u64) -> bool {
+        if let Some(CachedUpgradeSteps {
+            requested_timestamp_seconds: Some(ref requested_timestamp_seconds),
+            ..
+        }) = self.proto.cached_upgrade_steps
+        {
+            if now_timestamp_seconds - requested_timestamp_seconds
+                < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self, now_timestamp_seconds: u64) {
         if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
+            cached_upgrade_steps.requested_timestamp_seconds = Some(now_timestamp_seconds);
         } else {
             self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                requested_timestamp_seconds: Some(self.env.now()),
+                requested_timestamp_seconds: Some(now_timestamp_seconds),
                 ..Default::default()
             });
         }
     }
 
-    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
-        let now = self.env.now();
-
-        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            let requested_timestamp_seconds = cached_upgrade_steps
-                .requested_timestamp_seconds
-                .unwrap_or(0);
-            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
-                return false;
-            }
-        }
-
-        true
-    }
-
     /// Refreshes the cached_upgrade_steps field
-    pub async fn refresh_cached_upgrade_steps(&mut self) {
+    pub async fn refresh_cached_upgrade_steps(&mut self, now_timestamp_seconds: u64) {
         let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
             log!(
                 ERROR,
@@ -4682,15 +4684,16 @@ impl Governance {
             return;
         };
         let sns_governance_canister_id = self.env.canister_id().get();
+        let current_version = deployed_version.clone();
 
         let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
             &*self.env,
-            deployed_version.clone(),
+            current_version,
             sns_governance_canister_id,
         )
         .await;
 
-        let upgrade_steps = match upgrade_steps {
+        let versions = match upgrade_steps {
             Ok(upgrade_steps) => upgrade_steps,
             Err(err) => {
                 log!(
@@ -4701,26 +4704,17 @@ impl Governance {
                 return;
             }
         };
-        let upgrade_steps = Versions {
-            versions: upgrade_steps,
-        };
+        let upgrade_steps = Some(Versions { versions });
+        let requested_timestamp_seconds = Some(now_timestamp_seconds);
 
-        // The following code must remain after the async call.
-        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
-        }
-        // It's unlikely that cached_upgrade_steps is None, the caller is
-        // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
-        // and that requires cached_upgrade_steps != None.
-        // However, we handle it just in case.
-        else {
-            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                response_timestamp_seconds: Some(self.env.now()),
-                upgrade_steps: Some(upgrade_steps),
-                ..Default::default()
-            });
-        }
+        // The call to `self.env.now()` must remain after the async call.
+        let response_timestamp_seconds = Some(self.env.now());
+
+        self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+            upgrade_steps,
+            requested_timestamp_seconds,
+            response_timestamp_seconds,
+        });
     }
 
     pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {

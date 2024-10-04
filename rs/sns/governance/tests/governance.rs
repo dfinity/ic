@@ -2864,6 +2864,7 @@ async fn test_mint_tokens() {
 
 #[tokio::test]
 async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
+    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Check that the initial state is None
@@ -2880,7 +2881,7 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
     {
         let should_refresh = canister_fixture
             .governance
-            .should_refresh_cached_upgrade_steps();
+            .should_refresh_cached_upgrade_steps(now);
         assert!(should_refresh);
     }
 
@@ -2888,7 +2889,7 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
         canister_fixture.governance.proto.deployed_version = None;
         canister_fixture
             .governance
-            .refresh_cached_upgrade_steps()
+            .refresh_cached_upgrade_steps(now)
             .await;
     }
 
@@ -2905,6 +2906,7 @@ async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
 
 #[tokio::test]
 async fn test_refresh_cached_upgrade_steps() {
+    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     let expected_upgrade_steps = vec![Version::default(), Version::default(), Version::default()];
@@ -2937,13 +2939,13 @@ async fn test_refresh_cached_upgrade_steps() {
     {
         let should_refresh = canister_fixture
             .governance
-            .should_refresh_cached_upgrade_steps();
+            .should_refresh_cached_upgrade_steps(now);
         assert!(should_refresh);
     }
 
     canister_fixture
         .governance
-        .temporarily_lock_refresh_cached_upgrade_steps();
+        .temporarily_lock_refresh_cached_upgrade_steps(now);
 
     // Check that the lock has been set
     {
@@ -2963,7 +2965,7 @@ async fn test_refresh_cached_upgrade_steps() {
     // Refresh the upgrade steps
     canister_fixture
         .governance
-        .refresh_cached_upgrade_steps()
+        .refresh_cached_upgrade_steps(now)
         .await;
 
     // Check that the state has been updated
@@ -2988,11 +2990,13 @@ async fn test_refresh_cached_upgrade_steps() {
         )
     }
 
+    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1;
+
     // Check that the canister no longer wants to refresh the cached_upgrade_steps
     {
         let should_refresh = canister_fixture
             .governance
-            .should_refresh_cached_upgrade_steps();
+            .should_refresh_cached_upgrade_steps(now);
         assert!(!should_refresh);
     }
 
@@ -3001,7 +3005,7 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture.advance_time_by(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS - 2);
         let should_refresh = canister_fixture
             .governance
-            .should_refresh_cached_upgrade_steps();
+            .should_refresh_cached_upgrade_steps(now);
         assert!(!should_refresh);
     }
 
@@ -3010,7 +3014,7 @@ async fn test_refresh_cached_upgrade_steps() {
         canister_fixture.advance_time_by(1);
         let should_refresh = canister_fixture
             .governance
-            .should_refresh_cached_upgrade_steps();
+            .should_refresh_cached_upgrade_steps(now);
         assert!(should_refresh);
     }
 }
