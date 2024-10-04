@@ -34,8 +34,11 @@ options may be specified:
   --ipv4_gateway a.b.c.d
     (optional) Default IPv4 gateway (e.g. 18.208.190.33).
 
-    --domain domain
+  --domain domain
     (optional) The domain name to assign to the guest.
+
+  --node_remuneration_type node_remuneration_type
+    (optional) The node remuneration type used for node rewards
 
   --hostname name
     Name to assign to the host. Will be used in logging.
@@ -152,6 +155,9 @@ function build_ic_bootstrap_tar() {
             --domain)
                 DOMAIN="$2"
                 ;;
+            --node_remuneration_type)
+                NODE_REMUNERATION_TYPE="$2"
+                ;;
             --hostname)
                 HOSTNAME="$2"
                 ;;
@@ -228,6 +234,9 @@ ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 ${DOMAIN:+domain=$DOMAIN}
 EOF
+    if [ "${NODE_REMUNERATION_TYPE}" != "" ]; then
+        echo "node_remuneration_type=$NODE_REMUNERATION_TYPE" >"${BOOTSTRAP_TMPDIR}/remuneration.conf"
+    fi
     if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
         echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
     fi

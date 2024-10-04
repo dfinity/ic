@@ -320,6 +320,7 @@ function build_bootstrap_images() {
             ${use_crypto:+"--ic_crypto"} ${use_crypto:+"${IC_PREP_DIR}/node-${node_idx}/crypto/"} \
             "--nns_url" "${NNS_URL}" \
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
+            "--node_remuneration_type type3.1" \
             "--hostname" "${hostname}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
             ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \

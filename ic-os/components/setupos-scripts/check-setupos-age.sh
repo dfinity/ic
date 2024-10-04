@@ -6,6 +6,8 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/functions.sh
+
 function check_setupos_age() {
     if [ -f "/build-time" ]; then
         six_weeks_ago=$(date -u -d '6 weeks ago' +%s)
@@ -22,7 +24,9 @@ function check_setupos_age() {
 }
 
 main() {
+    log_start "$(basename $0)"
     check_setupos_age
+    log_end "$(basename $0)"
 }
 
 main

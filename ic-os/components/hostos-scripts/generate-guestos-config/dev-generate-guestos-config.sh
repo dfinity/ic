@@ -87,6 +87,7 @@ function read_variables() {
             "ipv4_prefix_length") ipv4_prefix_length="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
             "domain") domain="${value}" ;;
+            "node_remuneration_type") node_remuneration_type="${value}" ;;
         esac
     done <"${CONFIG}"
 }
@@ -101,6 +102,9 @@ function assemble_config_media() {
         cmd+=(--ipv4_address "${ipv4_address}/${ipv4_prefix_length}")
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
         cmd+=(--domain "${domain}")
+    fi
+    if [[ -n "$node_remuneration_type" ]]; then
+        cmd+=(--node_remuneration_type "${node_remuneration_type}")
     fi
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
