@@ -31,6 +31,7 @@ ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
@@ -41,6 +42,7 @@ ic-sns-root = { path = "../root" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
+pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty-bytes = "0.2.2"
 proptest = { workspace = true }
 prost = { workspace = true }
