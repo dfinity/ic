@@ -107,9 +107,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 Ok(value) => value,
                 Err(_) => {
                     return http::HttpResponseBuilder::bad_request()
-                        .with_body_and_content_length(
-                            "failed to parse the 'page' parameter",
-                        )
+                        .with_body_and_content_length("failed to parse the 'page' parameter")
                         .build()
                 }
             },
