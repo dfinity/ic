@@ -82,7 +82,7 @@ impl PaymentProtocolTestSetup {
         // install the ICP ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icp_ledger/ledger",
+                "../../ledger_suite/icp/ledger",
                 "ledger-canister",
                 &[],
             );
@@ -94,7 +94,7 @@ impl PaymentProtocolTestSetup {
         // install the sns ledger
         {
             let wasm = ic_test_utilities_load_wasm::load_wasm(
-                "../../rosetta-api/icrc1/ledger",
+                "../../ledger_suite/icrc1/ledger",
                 "ic-icrc1-ledger",
                 &[],
             );

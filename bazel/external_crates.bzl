@@ -237,7 +237,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "bitcoin": crate.spec(
-                version = "^0.28.1",
+                version = "^0.28.2",
                 features = [
                     "default",
                     "rand",
@@ -495,9 +495,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-body-util": crate.spec(
                 version = "^0.1.2",
             ),
-            "httptest": crate.spec(
-                version = "^0.15.4",
-            ),
             "hmac": crate.spec(
                 version = "^0.12",
             ),
@@ -534,9 +531,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tls12",
                 ],
             ),
-            "hyperlocal-next": crate.spec(
-                version = "^0.9.0",
-            ),
             "ic0": crate.spec(
                 version = "^0.18.11",
             ),
@@ -563,9 +557,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.2",
-            ),
-            "ic-btc-validation": crate.spec(
-                version = "^0.1.0",
             ),
             "ic-btc-test-utils": crate.spec(
                 version = "^0.1.0",
@@ -1081,9 +1072,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "brotli",
                 ],
             ),
-            "rustls-native-certs": crate.spec(
-                version = "^0.7.0",
-            ),
             "rustls-pemfile": crate.spec(
                 version = "^2.1.2",
             ),
@@ -1211,13 +1199,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "1.1.0",
             ),
             "strum": crate.spec(
-                version = "^0.26.2",
-                features = [
-                    "derive",
-                ],
+                version = "^0.26.3",
+                default_features = False,
             ),
             "strum_macros": crate.spec(
-                version = "^0.26.2",
+                version = "^0.26.4",
             ),
             "stubborn-io": crate.spec(
                 version = "^0.3.2",

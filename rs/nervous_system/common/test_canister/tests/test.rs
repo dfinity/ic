@@ -1,6 +1,6 @@
 use candid::Decode;
 use canister_test::Project;
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 
 #[test]
