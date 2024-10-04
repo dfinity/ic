@@ -15,6 +15,7 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
+    RoundSchedule,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -3235,7 +3236,7 @@ impl ExecutionEnvironment {
                 .task_queue
                 .replace_paused_with_aborted_tasks(aborted_tasks);
 
-            canister.apply_priority_credit();
+            RoundSchedule::apply_priority_credit(canister);
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,

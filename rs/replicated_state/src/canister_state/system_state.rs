@@ -25,7 +25,7 @@ use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
     CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
-    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
+    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext, NO_DEADLINE,
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
@@ -507,7 +507,7 @@ pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
     // This must remain private, in order to properly enforce system states (running, stopping,
-    // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
+    // stopped) when enqueueing inputs; and to ensure message memory reservations are accurate.
     #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     /// The canister's memory allocation.
@@ -1500,9 +1500,12 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    if !call_context_manager
-                        .should_enqueue(response)
-                        .map_err(|err| (err, msg.clone()))?
+                    if !should_enqueue_input(
+                        response,
+                        call_context_manager,
+                        self.aborted_or_paused_response(),
+                    )
+                    .map_err(|err| (err, msg.clone()))?
                     {
                         // Best effort response whose callback is gone. Silently drop it.
                         return Ok(());
@@ -1646,8 +1649,20 @@ impl SystemState {
             if own_subnet_type != SubnetType::System
                 && can_push(msg, *subnet_available_memory).is_err()
             {
-                // Bail out if not enough memory available for message.
                 return;
+            }
+
+            // Protect against enqueuing a second response for the currently executing
+            // (aborted or paused) callback.
+            if let RequestOrResponse::Response(response) = &msg {
+                if let Some(aborted_or_paused_response) = self.aborted_or_paused_response() {
+                    if response.originator_reply_callback
+                        == aborted_or_paused_response.originator_reply_callback
+                    {
+                        // The callback is already executing, don't enqueue a second response for it.
+                        return;
+                    }
+                }
             }
 
             // Attempt inducting `msg`. May fail if the input queue is full.
@@ -1690,6 +1705,67 @@ impl SystemState {
     ) -> usize {
         self.queues
             .time_out_messages(current_time, own_canister_id, local_canisters)
+    }
+
+    /// Enqueues "deadline expired" references for all expired best-effort callbacks
+    /// without a response.
+    ///
+    /// Returns `Err` if a `SystemState` internal inconsistency prevented  one or
+    /// more "deadline expired" references from being enqueued.
+    pub fn time_out_callbacks(
+        &mut self,
+        current_time: CoarseTime,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> Result<(), Vec<StateError>> {
+        if self.status == CanisterStatus::Stopped {
+            // Stopped canisters have no call context manager, so no callbacks.
+            return Ok(());
+        }
+
+        let aborted_or_paused_callback_id = self
+            .aborted_or_paused_response()
+            .map(|response| response.originator_reply_callback);
+
+        // Safe to unwrap because we just checked that the status is not `Stopped`.
+        let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+
+        let mut errors = Vec::new();
+        let expired_callbacks = call_context_manager
+            .expire_callbacks(current_time)
+            .collect::<Vec<_>>();
+        for callback_id in expired_callbacks {
+            if Some(callback_id) == aborted_or_paused_callback_id {
+                // This callback is already executing, don't produce a second response for it.
+                continue;
+            }
+
+            // Safe to unwrap because this is a callback ID we just got from the
+            // `CallContextManager`.
+            let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+            self.queues
+                .try_push_deadline_expired_input(
+                    callback_id,
+                    &callback.respondent,
+                    own_canister_id,
+                    local_canisters,
+                )
+                .unwrap_or_else(|err_str| {
+                    errors.push(StateError::NonMatchingResponse {
+                        err_str,
+                        originator: callback.originator,
+                        callback_id,
+                        respondent: callback.respondent,
+                        deadline: callback.deadline,
+                    })
+                });
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1949,6 +2025,75 @@ pub(crate) fn push_input(
     let res = queues.push_input(msg, input_queue_type);
     *subnet_available_memory -= queues.guaranteed_response_memory_usage() as i64;
     res
+}
+
+/// Tests whether the given response should be inducted or silently dropped.
+/// Verifies that the stored respondent and originator associated with the
+/// `callback_id`, as well as its deadline match those of the response.
+///
+/// Returns:
+///
+///  * `Ok(true)` if the response can be safely inducted.
+///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
+///    for a best-effort response (because the callback might have expired and
+///    been closed; or because the callback is executing -- aborted or paused).
+///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
+///    not found for a guaranteed response.
+///  * `Err(StateError::NonMatchingResponse)` if the response details do not
+///    match those of the callback.
+pub(crate) fn should_enqueue_input(
+    response: &Response,
+    call_context_manager: &CallContextManager,
+    aborted_or_paused_response: Option<&Response>,
+) -> Result<bool, StateError> {
+    let callback = match aborted_or_paused_response {
+        Some(aborted_or_paused_response)
+            if response.originator_reply_callback
+                == aborted_or_paused_response.originator_reply_callback =>
+        {
+            // A response for the same callback as `aborted_or_paused_response`. In other
+            // words, it does not match any unresponded callback.
+            None
+        }
+        _ => call_context_manager.callback(response.originator_reply_callback),
+    };
+
+    match callback {
+        Some(callback) if response.respondent != callback.respondent
+                || response.originator != callback.originator
+                || response.deadline != callback.deadline => {
+            Err(StateError::non_matching_response(format!(
+                    "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
+                    callback.originator, callback.respondent, Time::from(callback.deadline)
+                ), response))
+        }
+        Some(_) => Ok(true),
+        None => {
+            // Received an unknown callback ID.
+            if response.deadline == NO_DEADLINE {
+                // This is an error for a guaranteed response.
+                Err(StateError::non_matching_response("unknown callback ID", response))
+            } else {
+                // But should be ignored in the case of a best-effort response (as the callback
+                // may have expired and been dropped in the meantime).
+                Ok(false)
+            }
+        }
+    }
+}
+
+fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
+    match status {
+        CanisterStatus::Running {
+            call_context_manager,
+        }
+        | CanisterStatus::Stopping {
+            call_context_manager,
+            ..
+        } => Some(call_context_manager),
+
+        CanisterStatus::Stopped => None,
+    }
 }
 
 pub mod testing {
