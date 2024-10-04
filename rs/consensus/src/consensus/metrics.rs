@@ -16,7 +16,7 @@ use ic_types::{
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
-use std::sync::RwLock;
+use std::{sync::RwLock, time::Duration};
 
 use crate::idkg::metrics::{
     count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
@@ -412,8 +412,8 @@ impl NotaryMetrics {
     pub fn report_notarization(
         &self,
         block: &Block,
-        elapsed: std::time::Duration,
-        adjusted_notary_delay: std::time::Duration,
+        elapsed: Duration,
+        adjusted_notary_delay: Duration,
     ) {
         let rank = block.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {

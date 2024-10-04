@@ -442,7 +442,8 @@ mod tests {
                 common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef,
                 schnorr::PreSignatureTranscriptRef, KeyTranscriptCreation, MaskedTranscript,
                 MasterKeyTranscript, PreSigId, UnmaskedTranscript,
-            }, Rank,
+            },
+            Rank,
         },
         crypto::{
             canister_threshold_sig::idkg::{
