@@ -137,7 +137,7 @@ fn test_pagination() {
     }
     // The displayed txids is in reverse order, so we reverse expected values too.
     expected_txids.reverse();
-    let pages = vec![dashboard::dashboard(0), dashboard::dashboard(1)];
+    let pages = [dashboard::dashboard(0), dashboard::dashboard(1)];
     let txids = pages
         .iter()
         .flat_map(|page| {
