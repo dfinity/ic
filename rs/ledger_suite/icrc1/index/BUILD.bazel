@@ -104,6 +104,7 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/ledger_suite/icrc1/tokens_u64",
         "//rs/ledger_suite/tests/sm-tests",
+        "//rs/pocket_ic_tests",
         "//rs/rosetta-api/icp/test_utils",
         "//rs/rust_canisters/http_types",
         "//rs/test_utilities/load_wasm",

@@ -163,6 +163,7 @@ rust_ic_test(
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/test_utils",
         "//rs/ledger_suite/tests/sm-tests",
+        "//rs/pocket_ic_tests",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
