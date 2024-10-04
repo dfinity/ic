@@ -347,7 +347,10 @@ impl NeuronStore {
             clock: Box::new(IcClock::new()),
             use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
         };
-
+        println!(
+            "use_stable_memory_for_all_neurons: {}",
+            neuron_store.use_stable_memory_for_all_neurons
+        );
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
