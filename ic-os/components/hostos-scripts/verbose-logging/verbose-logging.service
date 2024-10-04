@@ -4,9 +4,8 @@ Requires=guestos.service
 After=guestos.service
 
 [Service]
-Type=oneshot
 ExecStart=/opt/ic/bin/verbose-logging.sh 
-RemainAfterExit=true
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
