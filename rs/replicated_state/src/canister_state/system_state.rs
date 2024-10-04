@@ -332,10 +332,6 @@ impl TaskQueue {
         self.queue.is_empty()
     }
 
-    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
-        &self.queue
-    }
-
     pub fn len(&self) -> usize {
         self.queue.len()
     }
