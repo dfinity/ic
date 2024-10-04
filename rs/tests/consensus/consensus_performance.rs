@@ -169,11 +169,8 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
-fn test_case(ingress_message_size: usize, rps: f64) -> TestFunction {
-    TestFunction::new(
-        &format!("message size: {}, rps: {}", ingress_message_size, rps),
-        move |env| test(env, ingress_message_size, rps),
-    )
+fn test_case(test_name: &str, ingress_message_size: usize, rps: f64) -> TestFunction {
+    TestFunction::new(test_name, move |env| test(env, ingress_message_size, rps))
 }
 
 #[allow(dead_code)]
@@ -187,9 +184,9 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(test_case(1, 1.0))
-        .add_test(test_case(4_000, 500.0))
-        .add_test(test_case(950_000, 4.0))
+        .add_test(test_case("few_small_messages", 1, 1.0))
+        .add_test(test_case("many_small_messages", 4_000, 500.0))
+        .add_test(test_case("large_messages", 950_000, 4.0))
         // Uncomment this to download the prometheus data.
         // To see the grafana dashboard first locate the `prometheus-data-dir.tar.zst` file in the
         // test output directory and then run the `/ic/rs/tests/run-p8s.sh` script.
