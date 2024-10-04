@@ -2,6 +2,7 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
+    is_active_neurons_in_stable_memory_enabled,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
@@ -302,6 +303,8 @@ pub struct NeuronStore {
     // In non-test builds, Box would suffice. However, in test, the containing struct (to wit,
     // NeuronStore) implements additional traits. Therefore, more elaborate wrapping is needed.
     clock: Box<dyn PracticalClock>,
+
+    use_stable_memory_for_all_neurons: bool,
 }
 
 /// Does not use clock, but other than that, behaves as you would expect.
@@ -314,6 +317,7 @@ impl PartialEq for NeuronStore {
             heap_neurons,
             topic_followee_index,
             clock: _,
+            use_stable_memory_for_all_neurons: _,
         } = self;
 
         *heap_neurons == other.heap_neurons && *topic_followee_index == other.topic_followee_index
@@ -326,6 +330,7 @@ impl Default for NeuronStore {
             heap_neurons: BTreeMap::new(),
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
+            use_stable_memory_for_all_neurons: false,
         }
     }
 }
@@ -340,6 +345,7 @@ impl NeuronStore {
             heap_neurons: BTreeMap::new(),
             topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
             clock: Box::new(IcClock::new()),
+            use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
         };
 
         // Adds the neurons one by one into neuron store.
@@ -370,6 +376,7 @@ impl NeuronStore {
                 .collect(),
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
+            use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
         }
     }
 
@@ -455,7 +462,7 @@ impl NeuronStore {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 
-        if neuron.is_inactive(self.now()) {
+        if self.use_stable_memory_for_all_neurons || neuron.is_inactive(self.now()) {
             // Write as primary copy in stable storage.
             with_stable_neuron_store_mut(|stable_neuron_store| {
                 stable_neuron_store.create(neuron.clone())
@@ -612,11 +619,12 @@ impl NeuronStore {
         new_neuron: Neuron,
         previous_location: StorageLocation,
     ) -> Result<(), NeuronStoreError> {
-        let target_location = if new_neuron.is_inactive(self.now()) {
-            StorageLocation::Stable
-        } else {
-            StorageLocation::Heap
-        };
+        let target_location =
+            if self.use_stable_memory_for_all_neurons || new_neuron.is_inactive(self.now()) {
+                StorageLocation::Stable
+            } else {
+                StorageLocation::Heap
+            };
         let is_neuron_changed = *old_neuron != new_neuron;
 
         // Perform transition between 2 storage if necessary.
