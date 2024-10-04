@@ -63,7 +63,7 @@ options may be specified:
     (make sure to quote the argument string so it appears as a single argument
     to the script, e.g. --elasticsearch_tags "testnet1 slo")
 
-  --nns_url urls
+  --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
     separated by commas.
 
