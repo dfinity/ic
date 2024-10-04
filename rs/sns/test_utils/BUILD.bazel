@@ -21,6 +21,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
+    "//rs/pocket_ic_tests",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
