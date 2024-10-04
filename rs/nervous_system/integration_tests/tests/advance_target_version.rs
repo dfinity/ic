@@ -1,5 +1,3 @@
-use ic_base_types::PrincipalId;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -57,15 +55,7 @@ async fn test_get_upgrade_journal() {
 
     // Deploy an SNS instance via proposal.
     let sns = {
-        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
-            .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
-            .with_one_developer_neuron(
-                PrincipalId::new_user_test_id(830947),
-                ONE_MONTH_SECONDS * 6,
-                756575,
-                0,
-            )
-            .build();
+        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default().build();
         let swap_parameters = create_service_nervous_system
             .swap_parameters
             .clone()

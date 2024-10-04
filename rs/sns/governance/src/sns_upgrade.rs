@@ -640,6 +640,8 @@ pub struct GetProposalIdThatAddedWasmResponse {
     pub proposal_id: ::core::option::Option<u64>,
 }
 
+/// Copied from ic-sns-wasm
+/// A request to list upgrade steps (for list_upgrade_steps_pretty at present)
 #[derive(Clone, PartialEq, candid::CandidType, candid::Deserialize, Debug)]
 pub struct ListUpgradeStepsRequest {
     /// If provided, limit response to only include entries for this version and later
@@ -649,10 +651,16 @@ pub struct ListUpgradeStepsRequest {
     /// Limit to number of entries (for paging)
     pub limit: u32,
 }
+
+/// Copied from ic-sns-wasm
+/// A human readable list of upgrade steps in order.
 #[derive(candid::CandidType, candid::Deserialize, Debug)]
 pub struct ListUpgradeStepsResponse {
     pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
 }
+
+/// Copied from ic-sns-wasm
+/// A step in the upgrade path for human or programmatic consumption
 #[derive(candid::CandidType, candid::Deserialize, Debug)]
 pub struct ListUpgradeStep {
     pub version: ::core::option::Option<SnsVersion>,
