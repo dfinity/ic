@@ -131,7 +131,7 @@ pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
     if !output.status.success() {
         eprintln!(
             "Error running ipmitool: {}",
-            String::from_utf8_lossy(&output.stderr)
+            std::str::from_utf8(&output.stderr)?
         );
     }
     let ipmitool_output = String::from_utf8(output.stdout)?;
