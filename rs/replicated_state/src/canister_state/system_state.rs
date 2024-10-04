@@ -353,10 +353,6 @@ impl TaskQueue {
         self.paused_or_aborted_task.is_none() && self.queue.is_empty()
     }
 
-    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
-        &self.queue
-    }
-
     pub fn len(&self) -> usize {
         self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
     }
@@ -444,7 +440,7 @@ impl TaskQueue {
         }
     }
 
-    /// Removes aborted `Heartbeat` and `GlobalTimer` tasks.
+    /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
         self.queue.clear();
     }
