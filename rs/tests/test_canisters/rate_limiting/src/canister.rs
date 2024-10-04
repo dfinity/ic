@@ -5,15 +5,12 @@ use ic_cdk::api::time;
 use serde_json::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 type Id = String;
 type Version = u64;
 type Timestamp = u64;
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
-
-static API_BNS_COUNT: AtomicU64 = AtomicU64::new(0);
 
 #[derive(CandidType, candid::Deserialize)]
 pub struct GetApiBoundaryNodeIdsRequest {}
@@ -62,11 +59,6 @@ struct OutputRule {
 thread_local! {
     static VERSION: RefCell<Version> = RefCell::new(0);
     static CONFIGS: RefCell<HashMap<Version, StoredConfig>> = RefCell::new(HashMap::new());
-}
-
-#[ic_cdk::query]
-fn get_api_boundary_nodes_count() -> u64 {
-    API_BNS_COUNT.load(Ordering::Relaxed)
 }
 
 #[ic_cdk_macros::update]
@@ -128,15 +120,14 @@ fn init(timer_interval_secs: u64) {
     ic_cdk_timers::set_timer_interval(interval, || {
         ic_cdk::spawn(async {
             let canister_id = Principal::from_text(REGISTRY_CANISTER_ID).unwrap();
-            let (result,): (Result<Vec<Option<Principal>>, String>,) = call(
+            let (_api_bns_result,): (Result<Vec<Option<Principal>>, String>,) = call(
                 canister_id,
                 REGISTRY_CANISTER_METHOD,
                 (&GetApiBoundaryNodeIdsRequest {},),
             )
             .await
             .unwrap();
-            let api_bns_count = result.unwrap().len();
-            API_BNS_COUNT.store(api_bns_count as u64, Ordering::Relaxed);
+            // TODO: add _api_bns to authorized principals
         });
     });
 }

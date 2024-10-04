@@ -44,7 +44,6 @@ type DisclosesRulesResponse = variant {
 }
 
 service : (nat64) -> {
-    get_api_boundary_nodes_count : () -> (nat64) query;
     overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
     get_config: (opt Version) -> (GetConfigResponse);
     disclose_rules: (vec RuleId) -> (DisclosesRulesResponse);
