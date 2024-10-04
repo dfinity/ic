@@ -164,18 +164,18 @@ impl SystemStateFixture {
 
     /// Times out all callbacks with deadlines before `current_time`. Returns the
     /// number of expired callbacks.
-    fn time_out_callbacks(
-        &mut self,
-        current_time: CoarseTime,
-    ) -> (usize, Result<(), Vec<StateError>>) {
+    fn time_out_callbacks(&mut self, current_time: CoarseTime) -> (usize, Vec<StateError>) {
         let input_responses_before = self.system_state.queues().input_queues_response_count();
-        // TODO: Add test for `time_out_callbacks()` returning an error.
-        let result =
+        let (expired, errors) =
             self.system_state
                 .time_out_callbacks(current_time, &CANISTER_ID, &BTreeMap::new());
         let input_responses_after = self.system_state.queues().input_queues_response_count();
 
-        (input_responses_after - input_responses_before, result)
+        assert_eq!(
+            input_responses_after - input_responses_before + errors.len(),
+            expired
+        );
+        (expired, errors)
     }
 }
 
@@ -477,7 +477,10 @@ fn time_out_callbacks() {
         .unwrap();
 
     // Time out callbacks with deadlines before `d2` (only applicable to `c3` now).
-    assert_eq!((1, Ok(())), fixture.time_out_callbacks(d2));
+    assert!(!fixture.system_state.has_expired_callbacks(d1));
+    assert!(fixture.system_state.has_expired_callbacks(d2));
+    assert_eq!((1, Vec::new()), fixture.time_out_callbacks(d2));
+    assert!(!fixture.system_state.has_expired_callbacks(d2));
 
     // Pop the response for `c2`.
     assert_matches!(
@@ -495,7 +498,9 @@ fn time_out_callbacks() {
     assert_eq!(None, fixture.pop_input());
 
     // Time out callbacks with deadlines before `d3` (i.e. `c4`).
-    assert_eq!((1, Ok(())), fixture.time_out_callbacks(d3));
+    assert!(fixture.system_state.has_expired_callbacks(d3));
+    assert_eq!((1, Vec::new()), fixture.time_out_callbacks(d3));
+    assert!(!fixture.system_state.has_expired_callbacks(d3));
 
     // Pop the reject responses for `c4`.
     assert_matches!(
@@ -527,10 +532,14 @@ fn time_out_callbacks_no_reserved_slot() {
     let c3 = register_callback(&mut fixture, d1);
 
     // Time out callbacks with deadlines before `d2`.
-    let (expired_callbacks, result) = fixture.time_out_callbacks(d2);
+    assert!(fixture.system_state.has_expired_callbacks(d2));
+    let (expired_callbacks, errors) = fixture.time_out_callbacks(d2);
+    assert!(!fixture.system_state.has_expired_callbacks(d2));
+
+    // Three callbacks expired.
+    assert_eq!(3, expired_callbacks);
 
     // Only one timeout reject for `c1` was enqueued before we ran out of slots.
-    assert_eq!(1, expired_callbacks);
     assert_matches!(
         fixture.pop_input(),
         Some(CanisterMessage::Response(response))
@@ -538,9 +547,7 @@ fn time_out_callbacks_no_reserved_slot() {
     );
     assert_eq!(None, fixture.pop_input());
 
-    // The result should contain two errors: one for `c2` and one for `c3`.
-    assert_matches!(result, Err(_));
-    let errors = result.unwrap_err();
+    // And two errors were produced: one for `c2` and one for `c3`.
     assert_eq!(2, errors.len());
     assert_matches!(errors[0], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c2 && deadline == d1);
     assert_matches!(errors[1], StateError::NonMatchingResponse { callback_id, deadline, .. } if callback_id == c3 && deadline == d1);

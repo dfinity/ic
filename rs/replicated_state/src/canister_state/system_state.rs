@@ -1446,9 +1446,9 @@ impl SystemState {
         self.queues.garbage_collect();
     }
 
-    /// Queries whether any of the `OutputQueues` in `self.queues` have any expired
-    /// deadlines in them.
-    pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
+    /// Queries whether any of the `OutputQueues` in `self.queues` hold messages
+    /// with expired deadlines in them.
+    pub fn has_expired_message_deadlines(&self, current_time: Time) -> bool {
         self.queues.has_expired_deadlines(current_time)
     }
 
@@ -1466,20 +1466,31 @@ impl SystemState {
             .time_out_messages(current_time, own_canister_id, local_canisters)
     }
 
+    /// Queries whether the `CallContextManager` in `self.state` holds any not
+    /// previouosly expired (i.e. returned by `time_out_callbacks()`) callbacks with
+    /// deadlines `< current_time`.
+    pub fn has_expired_callbacks(&self, current_time: CoarseTime) -> bool {
+        self.call_context_manager()
+            .map(|ccm| ccm.has_expired_callbacks(current_time))
+            .unwrap_or(false)
+    }
+
     /// Enqueues "deadline expired" references for all expired best-effort callbacks
     /// without a response.
     ///
-    /// Returns `Err` if a `SystemState` internal inconsistency prevented  one or
-    /// more "deadline expired" references from being enqueued.
+    /// Returns the number of expired callbacks; plus one `StateError` for every
+    /// instance where a `SystemState` internal inconsistency prevented a "deadline
+    /// expired" reference from being enqueued.
+    #[must_use]
     pub fn time_out_callbacks(
         &mut self,
         current_time: CoarseTime,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> Result<(), Vec<StateError>> {
+    ) -> (usize, Vec<StateError>) {
         if self.status == CanisterStatus::Stopped {
             // Stopped canisters have no call context manager, so no callbacks.
-            return Ok(());
+            return (0, Vec::new());
         }
 
         let aborted_or_paused_callback_id = self
@@ -1489,6 +1500,7 @@ impl SystemState {
         // Safe to unwrap because we just checked that the status is not `Stopped`.
         let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
 
+        let mut expired_callback_count = 0;
         let mut errors = Vec::new();
         let expired_callbacks = call_context_manager
             .expire_callbacks(current_time)
@@ -1509,6 +1521,11 @@ impl SystemState {
                     own_canister_id,
                     local_canisters,
                 )
+                .map(|pushed| {
+                    if pushed {
+                        expired_callback_count += 1;
+                    }
+                })
                 .unwrap_or_else(|err_str| {
                     errors.push(StateError::NonMatchingResponse {
                         err_str,
@@ -1516,15 +1533,12 @@ impl SystemState {
                         callback_id,
                         respondent: callback.respondent,
                         deadline: callback.deadline,
-                    })
+                    });
+                    expired_callback_count += 1;
                 });
         }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        (expired_callback_count, errors)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
