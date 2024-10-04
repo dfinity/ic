@@ -1,13 +1,17 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{filters, DashboardTemplate, Fetched, Status};
+use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
 use crate::state::Timestamp;
-use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork};
+use crate::{blocklist::BTC_ADDRESS_BLOCKLIST, dashboard, state, BtcNetwork};
 use bitcoin::Address;
+use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
 use ic_btc_interface::Txid;
 use std::str::FromStr;
 
-fn mock_txid(v: u8) -> Txid {
-    Txid::from([v; 32])
+fn mock_txid(v: usize) -> Txid {
+    let be = v.to_be_bytes();
+    let mut bytes = [0; 32];
+    bytes[0..be.len()].copy_from_slice(&be);
+    Txid::from(bytes)
 }
 
 #[test]
@@ -102,6 +106,57 @@ fn should_display_statuses() {
             2,
             &format!("<code style=\"color: red\">{blocked_address}</code>"),
         );
+}
+
+#[test]
+fn test_pagination() {
+    use askama::Template;
+    use scraper::{Html, Selector};
+
+    state::set_config(state::Config {
+        btc_network: BtcNetwork::Mainnet,
+    });
+    let mock_transaction = Transaction {
+        version: Version::ONE,
+        lock_time: LockTime::ZERO,
+        input: Vec::new(),
+        output: Vec::new(),
+    };
+    let mut expected_txids = vec![];
+    // Generate entries to fill one and half pages
+    for i in 0..DEFAULT_TX_TABLE_PAGE_SIZE * 3 / 2 {
+        let txid = mock_txid(i);
+        expected_txids.push(txid);
+        state::set_fetch_status(
+            txid,
+            state::FetchTxStatus::Fetched(state::FetchedTx {
+                tx: mock_transaction.clone(),
+                input_addresses: vec![],
+            }),
+        );
+    }
+    // The displayed txids is in reverse order, so we reverse expected values too.
+    expected_txids.reverse();
+    let pages = vec![dashboard::dashboard(0), dashboard::dashboard(1)];
+    let txids = pages
+        .iter()
+        .flat_map(|page| {
+            let rendered_html = page.render().unwrap();
+            let parsed = Html::parse_document(&rendered_html);
+            (1..=DEFAULT_TX_TABLE_PAGE_SIZE).flat_map(move |i| {
+                let selector = Selector::parse(&format!(
+                    "#fetch-tx-status + table > tbody > tr:nth-child({i}) > td:nth-child(1)"
+                ))
+                .unwrap();
+                parsed
+                    .select(&selector)
+                    .next()
+                    .map(|txt| Txid::from_str(&txt.text().collect::<String>()).unwrap())
+            })
+        })
+        .collect::<Vec<Txid>>();
+    // Parsed txids from all pages should be equal to expected_txids
+    assert_eq!(txids, expected_txids);
 }
 
 mod assertions {

@@ -105,6 +105,7 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                 .iter()
                 .rev()
                 .skip(page_index * tx_table_page_size)
+                .take(tx_table_page_size)
                 .map(|(txid, timestamp, status)| {
                     (
                         txid,
@@ -126,7 +127,6 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                         },
                     )
                 })
-                .take(tx_table_page_size)
                 .collect::<Vec<_>>()
         }),
     }
