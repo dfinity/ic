@@ -310,6 +310,11 @@ impl SubnetRecordBuilder {
         self
     }
 
+    pub fn with_initial_notary_delay(mut self, notary_delay: Duration) -> Self {
+        self.record.initial_notary_delay_millis = notary_delay.as_millis() as u64;
+        self
+    }
+
     pub fn with_membership(mut self, node_ids: &[NodeId]) -> Self {
         self.record.membership = node_ids
             .iter()

@@ -386,7 +386,8 @@ impl FinalizerMetrics {
 }
 
 pub struct NotaryMetrics {
-    pub time_to_notary_sign: HistogramVec,
+    time_to_notary_sign: HistogramVec,
+    adjusted_notary_delay: HistogramVec,
 }
 
 impl NotaryMetrics {
@@ -398,16 +399,30 @@ impl NotaryMetrics {
                 vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0],
                 &["rank"],
             ),
+            adjusted_notary_delay: metrics_registry.histogram_vec(
+                "consensus_adjusted_notary_delay",
+                "The adjusted notary delay in seconds, labeled by ranks",
+                vec![0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.6, 2.8, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 8.0, 10.0, 15.0, 20.0],
+                &["rank"],
+            ),
         }
     }
 
     /// Report metrics after notarizing `block`
-    pub fn report_notarization(&self, block: &Block, elapsed: std::time::Duration) {
+    pub fn report_notarization(
+        &self,
+        block: &Block,
+        elapsed: std::time::Duration,
+        adjusted_notary_delay: std::time::Duration,
+    ) {
         let rank = block.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {
             self.time_to_notary_sign
                 .with_label_values(&[RANKS_TO_RECORD[rank]])
-                .observe(elapsed.as_secs_f64())
+                .observe(elapsed.as_secs_f64());
+            self.adjusted_notary_delay
+                .with_label_values(&[RANKS_TO_RECORD[rank]])
+                .observe(adjusted_notary_delay.as_secs_f64());
         }
     }
 }
