@@ -17,7 +17,6 @@ use ic_types::{
 use std::{
     collections::{BTreeSet, HashSet},
     convert::TryFrom,
-    fmt,
     sync::Arc,
 };
 use thiserror::Error;
@@ -226,8 +225,8 @@ fn validate_request_target<C: HasCanisterId>(
 #[derive(PartialEq, Debug, Error)]
 pub enum RequestValidationError {
     #[error("Invalid ingress expiry: {0}")]
-    InvalidIngressExpiry(String),
-    #[error("Invalid delegation expirty: {0}")]
+    InvalidRequestExpiry(String),
+    #[error("Invalid delegation expiry: {0}")]
     InvalidDelegationExpiry(String),
     #[error("The user id '{0}' does not match the public key '{:?}'", hex::encode(.1))]
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
@@ -252,37 +251,22 @@ pub enum RequestValidationError {
 }
 
 /// Error in verifying the signature or authentication part of a request.
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Error)]
 pub enum AuthenticationError {
+    #[error("Invalid basic signature: {0}")]
     InvalidBasicSignature(CryptoError),
+    #[error("Invalid canister signature: {0}")]
     InvalidCanisterSignature(String),
+    #[error("Invalid public key: {0}")]
     InvalidPublicKey(CryptoError),
+    #[error("{0}")]
     WebAuthnError(String),
+    #[error("{0}")]
     DelegationTargetError(String),
+    #[error{"Chain of delegations is too long: got {length} delegations, but at most {maximum} are allowed."}]
     DelegationTooLongError { length: usize, maximum: usize },
+    #[error("Chain of delegations contains at least one cycle: first repeating public key encountered {}", hex::encode(.public_key))]
     DelegationContainsCyclesError { public_key: Vec<u8> },
-}
-
-impl fmt::Display for AuthenticationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InvalidBasicSignature(err) => write!(f, "Invalid basic signature: {}", err),
-            InvalidCanisterSignature(err) => write!(f, "Invalid canister signature: {}", err),
-            InvalidPublicKey(err) => write!(f, "Invalid public key: {}", err),
-            WebAuthnError(msg) => write!(f, "{}", msg),
-            DelegationTargetError(msg) => write!(f, "{}", msg),
-            DelegationTooLongError { length, maximum } => write!(
-                f,
-                "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
-                length, maximum
-            ),
-            DelegationContainsCyclesError { public_key } => write!(
-                f,
-                "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
-                hex::encode(public_key)
-            ),
-        }
-    }
 }
 
 /// Set of canister IDs.
@@ -443,7 +427,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     let max_expiry_diff = MAX_INGRESS_TTL
         .checked_add(PERMITTED_DRIFT_AT_VALIDATOR)
         .ok_or_else(|| {
-            InvalidIngressExpiry(format!(
+            InvalidRequestExpiry(format!(
                 "Addition of MAX_INGRESS_TTL {MAX_INGRESS_TTL:?} with \
                 PERMITTED_DRIFT_AT_VALIDATOR {PERMITTED_DRIFT_AT_VALIDATOR:?} overflows",
             ))
@@ -451,7 +435,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     let max_allowed_expiry = min_allowed_expiry
         .checked_add(max_expiry_diff)
         .ok_or_else(|| {
-            InvalidIngressExpiry(format!(
+            InvalidRequestExpiry(format!(
                 "Addition of min_allowed_expiry {min_allowed_expiry:?} \
                 with max_expiry_diff {max_expiry_diff:?} overflows",
             ))
@@ -464,7 +448,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
              Provided expiry:        {}",
             min_allowed_expiry, max_allowed_expiry, provided_expiry
         );
-        return Err(InvalidIngressExpiry(msg));
+        return Err(InvalidRequestExpiry(msg));
     }
     Ok(())
 }

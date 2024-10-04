@@ -65,7 +65,7 @@ impl Default for IngressMessageVerifier<ConstantRootOfTrustProvider> {
     /// let result = verifier.validate_request(&request);
     ///
     /// match result {
-    ///     Err(RequestValidationError::InvalidIngressExpiry(_)) => {}
+    ///     Err(RequestValidationError::InvalidRequestExpiry(_)) => {}
     ///     _ => panic!("unexpected result type {:?}", result)
     /// }
     /// ```
@@ -170,8 +170,8 @@ where
 
 fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestValidationError {
     match error {
-        ic_validator::RequestValidationError::InvalidIngressExpiry(msg) => {
-            RequestValidationError::InvalidIngressExpiry(msg)
+        ic_validator::RequestValidationError::InvalidRequestExpiry(msg) => {
+            RequestValidationError::InvalidRequestExpiry(msg)
         }
         ic_validator::RequestValidationError::InvalidDelegationExpiry(msg) => {
             RequestValidationError::InvalidDelegationExpiry(msg)

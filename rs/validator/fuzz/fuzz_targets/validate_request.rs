@@ -77,8 +77,8 @@ fn assert_eq_ignoring_timestamps_in_error_messages(
 ) {
     match (result, other) {
         (
-            Err(RequestValidationError::InvalidIngressExpiry(_msg1)), //contains output of chrono::Utc::now()
-            Err(RequestValidationError::InvalidIngressExpiry(_msg2)),
+            Err(RequestValidationError::InvalidRequestExpiry(_msg1)), //contains output of chrono::Utc::now()
+            Err(RequestValidationError::InvalidRequestExpiry(_msg2)),
         ) => {}
         (
             Err(RequestValidationError::InvalidDelegationExpiry(_msg1)), //contains output of chrono::Utc::now()
