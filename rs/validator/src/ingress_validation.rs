@@ -259,9 +259,9 @@ pub enum AuthenticationError {
     InvalidCanisterSignature(String),
     #[error("Invalid public key: {0}")]
     InvalidPublicKey(CryptoError),
-    #[error("{0}")]
+    #[error("WebAuthn error: {0}")]
     WebAuthnError(String),
-    #[error("{0}")]
+    #[error("Delegation target error: {0}")]
     DelegationTargetError(String),
     #[error{"Chain of delegations is too long: got {length} delegations, but at most {maximum} are allowed."}]
     DelegationTooLongError { length: usize, maximum: usize },
