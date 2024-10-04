@@ -551,15 +551,15 @@ fn test_try_push_deadline_expired_input_with_same_callback_id() {
 
     // Pushing a deadline expired input with the same callback ID is a no-op.
     let callback_id = fixture.last_callback_id.into();
-    fixture
-        .queues
-        .try_push_deadline_expired_input(
+    assert_eq!(
+        Ok(false),
+        fixture.queues.try_push_deadline_expired_input(
             callback_id,
             &fixture.other,
             &fixture.this,
             &BTreeMap::new(),
         )
-        .unwrap();
+    );
 
     // Nothing has changed.
     assert_eq!(1, fixture.queues.input_queues_message_count());
@@ -1921,7 +1921,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
         .unwrap();
     assert_eq!(4, queues.output_into_iter().count());
 
-    // Enqueue 3 inbound responses.
+    // Enqueue 3 inbound responses plus a deadine expired compact reject response.
     queues
         .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
         .unwrap();
@@ -1931,9 +1931,15 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     queues
         .push_input(response(3, deadline).into(), LocalSubnet)
         .unwrap();
-    queues
-        .try_push_deadline_expired_input(4.into(), &canister_id, &canister_id, &BTreeMap::new())
-        .unwrap();
+    assert_eq!(
+        Ok(true),
+        queues.try_push_deadline_expired_input(
+            4.into(),
+            &canister_id,
+            &canister_id,
+            &BTreeMap::new()
+        )
+    );
 
     // Shed the response for callback 3.
     assert!(queues.shed_largest_message(&canister_id, &BTreeMap::new()));
