@@ -14,8 +14,7 @@ set -x
 cd "$(git rev-parse --show-toplevel)"
 
 MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
-# we can't use HEAD here because that is the merge commit which contains the changes of the current HEAD of master
-COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
+COMMIT_RANGE=${COMMIT_RANGE:-$MERGE_BASE".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
 if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
