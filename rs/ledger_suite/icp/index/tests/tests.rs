@@ -9,7 +9,9 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
+use ic_ledger_test_utils::state_machine_helpers::index::{
+    wait_until_sync_is_completed, SYNC_STEP_SECONDS,
+};
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
@@ -445,8 +447,6 @@ fn get_account_identifier_transactions(
     assert_eq!(accountidentifier_txs.transactions, account_txs.transactions);
     accountidentifier_txs
 }
-
-const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
 
 #[track_caller]
 fn assert_tx_eq(tx1: &SettledTransaction, tx2: &SettledTransaction) {

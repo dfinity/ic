@@ -705,9 +705,9 @@ http_file(
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "cf5e0a00275f3ed974a3e961db0d6923390f85ba83f7d7f5d89ebe7c5a1c2b6b",
-    strip_prefix = "rules_haskell-220503b4c7403d02d8e3537eb57c722fe1f14c7a",
-    url = "https://github.com/tweag/rules_haskell/archive/220503b4c7403d02d8e3537eb57c722fe1f14c7a.tar.gz",
+    sha256 = "4cae22bc84f327bf3cb7605021c3663160ff6bc8a0b7b6266062366bcbd19e79",
+    strip_prefix = "rules_haskell-1.0",
+    urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],
 )
 
 # Load the rules_haskell dependencies necessary for loading the toolchains
