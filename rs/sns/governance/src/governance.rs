@@ -21,7 +21,7 @@ use crate::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
                 CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
-                UpgradeInProgress, Version, Versions,
+                UpgradeInProgress, UpgradeLock, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -155,6 +155,9 @@ pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
 // How frequently the canister should attempt to refresh the cached_upgrade_steps
 pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
+
+// Maximum amount of time that is given for a single attempt to upgrade this SNS to next version.
+pub const UPGRADE_ATTEMPT_TIMEOUT_SECONDS: u64 = 5 * 60; // 5 minutes
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -4646,6 +4649,82 @@ impl Governance {
                     .await;
             }
         }
+
+        {
+            let now_timestamp_seconds = self.env.now();
+            if self.try_acquire_upgrade_to_next_version_lock(now_timestamp_seconds) {
+                // self.upgrade_to_next_version(now_timestamp_seconds)
+                //     .await;
+            }
+        }
+    }
+
+    /// This function does the following:
+    // TODO: --- DO NOT MERGE ---
+    // TODO: Currently, this function does not use the target, rather assuming that the SNS always
+    // TODO: wants to upgrade to the next available version. This should be changed before merging.
+    // TODO: --- DO NOT MERGE ---
+    pub fn try_acquire_upgrade_to_next_version_lock(&mut self, now_timestamp_seconds: u64) -> bool {
+        let Some(CachedUpgradeSteps {
+            upgrade_steps: Some(ref upgrade_steps),
+            ..
+        }) = self.proto.cached_upgrade_steps
+        else {
+            return false;
+        };
+
+        // In this function, we're interested in just the first two version (current and next).
+        let (current_version, next_version) = match &upgrade_steps.versions[..] {
+            [current_version] => (current_version, None),
+            [current_version, next_version, ..] => (current_version, Some(next_version)),
+            _ => {
+                // We have fewer than two versions; nothing to upgrade.
+                return false;
+            }
+        };
+
+        if let Some(ref mut upgrade_lock) = self.proto.upgrade_lock {
+            // Check if an ongoing upgrade has succeeded.
+            if let Some(ref expected_version) = upgrade_lock.expected_version {
+                if *expected_version == *current_version {
+                    upgrade_lock.released_timestamp_seconds = Some(now_timestamp_seconds);
+                } else {
+                    let acquired_timestamp_seconds =
+                        upgrade_lock.acquired_timestamp_seconds.unwrap_or_default();
+
+                    if now_timestamp_seconds - acquired_timestamp_seconds
+                        < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
+                    {
+                        return false;
+                    }
+                }
+            } else {
+                log!(
+                    ERROR,
+                    "Inconsistent {:?}; resetting the lock to None.",
+                    upgrade_lock
+                );
+                self.proto.upgrade_lock = None;
+                return false;
+            }
+        }
+
+        let Some(next_version) = next_version else {
+            return false;
+        };
+
+        let acquired_timestamp_seconds = Some(now_timestamp_seconds);
+        let starting_version = Some(current_version.clone());
+        let expected_version = Some(next_version.clone());
+
+        self.proto.upgrade_lock = Some(UpgradeLock {
+            acquired_timestamp_seconds,
+            starting_version,
+            expected_version,
+            ..Default::default()
+        });
+
+        true
     }
 
     pub fn should_refresh_cached_upgrade_steps(&self, now_timestamp_seconds: u64) -> bool {

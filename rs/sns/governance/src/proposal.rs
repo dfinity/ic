@@ -2490,6 +2490,7 @@ mod tests {
             is_finalizing_disburse_maturity: None,
             maturity_modulation: None,
             cached_upgrade_steps: None,
+            upgrade_lock: None,
         }
     }
 

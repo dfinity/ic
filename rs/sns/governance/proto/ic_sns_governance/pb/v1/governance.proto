@@ -1470,6 +1470,14 @@ message Governance {
     optional uint64 response_timestamp_seconds = 3;
   }
   CachedUpgradeSteps cached_upgrade_steps = 29;
+
+  message UpgradeLock {
+    optional Governance.Version starting_version = 1;
+    optional Governance.Version expected_version = 2;
+    optional uint64 acquired_timestamp_seconds = 3;
+    optional uint64 released_timestamp_seconds = 4;
+  }
+  UpgradeLock upgrade_lock = 30;
 }
 
 // Request message for 'get_metadata'.
