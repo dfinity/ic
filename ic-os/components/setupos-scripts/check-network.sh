@@ -123,20 +123,20 @@ function validate_domain_name() {
     IFS='.' read -ra domain_parts <<<"${domain}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain: ${domain}"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
         if [ -z "$domain_part" ] || [ ${#domain_part} -gt 63 ]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation: ${domain_part}"
         fi
 
         if [[ $domain_part == -* ]] || [[ $domain_part == *- ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen: ${domain_part}"
         fi
 
         if ! [[ $domain_part =~ ^[a-zA-Z0-9-]+$ ]]; then
-            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part"
+            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part: ${domain_part}"
         fi
     done
 }
