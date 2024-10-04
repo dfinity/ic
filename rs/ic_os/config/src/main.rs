@@ -168,14 +168,15 @@ pub fn main() -> Result<()> {
 
             // update select file paths for HostOS
             let mut hostos_icos_settings = setupos_config.icos_settings;
+            let hostos_config_path = Path::new("/boot/config");
             if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
-                *path = PathBuf::from("/boot/config/ssh_authorized_keys");
+                *path = hostos_config_path.join("ssh_authorized_keys");
             }
             if let Some(ref mut path) = hostos_icos_settings.node_operator_private_key_path {
-                *path = PathBuf::from("/boot/config/node_operator_private_key.pem");
+                *path = hostos_config_path.join("node_operator_private_key.pem");
             }
             hostos_icos_settings.nns_public_key_path =
-                PathBuf::from("/boot/config/nns_public_key.pem");
+                hostos_config_path.join("nns_public_key.pem");
 
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
