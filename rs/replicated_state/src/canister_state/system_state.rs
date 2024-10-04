@@ -421,7 +421,7 @@ impl TaskQueue {
         });
     }
 
-    /// Removes aborted `Heartbeat` and `GlobalTimer` tasks.
+    /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
         self.queue.retain(|task| match task {
             ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
