@@ -181,7 +181,7 @@ impl LedgerSuiteConfig {
             retrieve_blocks_from_ledger_interval_seconds: None,
         });
         let args = Encode!(&index_upgrade_arg).unwrap();
-        for wasm in vec![&wasms.index_wasm, &wasms.index_wasm_bumped_timestamp] {
+        for wasm in [&wasms.index_wasm, &wasms.index_wasm_bumped_timestamp] {
             state_machine
                 .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
                 .expect("should successfully upgrade index canister");
@@ -192,7 +192,7 @@ impl LedgerSuiteConfig {
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        for wasm in vec![&wasms.ledger_wasm, &wasms.ledger_wasm_bumped_timestamp] {
+        for wasm in [&wasms.ledger_wasm, &wasms.ledger_wasm_bumped_timestamp] {
             state_machine
                 .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
                 .expect("should successfully upgrade ledger canister");
