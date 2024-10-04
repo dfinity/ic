@@ -3,20 +3,23 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
-use ic_types::crypto::threshold_sig::RootOfTrustProvider;
-use ic_types::crypto::{CanisterSig, CanisterSigOf};
-use ic_types::messages::{Query, ReadState, SignedIngressContent};
 use ic_types::{
-    crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey},
+    crypto::{
+        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
+        CanisterSigOf, CryptoError, UserPublicKey,
+    },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
-        SignedDelegation, UserSignature, WebAuthnSignature,
+        Query, ReadState, SignedDelegation, SignedIngressContent, UserSignature, WebAuthnSignature,
     },
     CanisterId, PrincipalId, Time, UserId,
 };
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::{collections::BTreeSet, convert::TryFrom, fmt};
+use std::{
+    collections::{BTreeSet, HashSet},
+    convert::TryFrom,
+    fmt,
+    sync::Arc,
+};
 use thiserror::Error;
 use AuthenticationError::*;
 use RequestValidationError::*;
@@ -220,60 +223,32 @@ fn validate_request_target<C: HasCanisterId>(
 }
 
 /// Error in validating an [HttpRequest].
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Error)]
 pub enum RequestValidationError {
+    #[error("Invalid ingress expiry: {0}")]
     InvalidIngressExpiry(String),
+    #[error("Invalid delegation expirty: {0}")]
     InvalidDelegationExpiry(String),
+    #[error("The user id '{0}' does not match the public key '{:?}'", hex::encode(.1))]
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
+    #[error("Invalid signature: {0}")]
     InvalidSignature(AuthenticationError),
+    #[error("Authentication error: {0}")]
     InvalidDelegation(AuthenticationError),
+    #[error("Missing signature from user: {0}")]
     MissingSignature(UserId),
+    #[error("Signature is not allowed for the anonymous user.")]
     AnonymousSignatureNotAllowed,
+    #[error("Canister '{0}' is not one of the delegation targets.")]
     CanisterNotInDelegationTargets(CanisterId),
+    #[error("Too many paths in read state request: got {length} paths, but at most {maximum} are allowed.")]
     TooManyPathsError { length: usize, maximum: usize },
+    #[error("At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed.")]
     PathTooLongError { length: usize, maximum: usize },
+    #[error(
+        "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."
+    )]
     NonceTooBigError { num_bytes: usize, maximum: usize },
-}
-
-impl fmt::Display for RequestValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InvalidIngressExpiry(msg) => write!(f, "{}", msg),
-            InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
-            UserIdDoesNotMatchPublicKey(user_id, pubkey) => write!(
-                f,
-                "The user id {} does not match the public key {}",
-                user_id,
-                hex::encode(pubkey)
-            ),
-            InvalidSignature(err) => write!(f, "Invalid signature: {}", err),
-            InvalidDelegation(err) => write!(f, "Invalid delegation: {}", err),
-            MissingSignature(user_id) => write!(f, "Missing signature from user: {}", user_id),
-            AnonymousSignatureNotAllowed => {
-                write!(f, "Signature is not allowed for the anonymous user")
-            }
-            CanisterNotInDelegationTargets(canister_id) => write!(
-                f,
-                "Canister {} is not one of the delegation targets",
-                canister_id
-            ),
-            TooManyPathsError { length, maximum } => write!(
-                f,
-                "Too many paths in read state request: got {} paths, but at most {} are allowed",
-                length, maximum
-            ),
-            PathTooLongError { length, maximum } => write!(
-                f,
-                "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
-                length, maximum
-            ),
-            NonceTooBigError { num_bytes: length, maximum } => write!(
-                f,
-                "Nonce in request is too big: got {} bytes, but at most {} are allowed",
-                length, maximum
-            ),
-        }
-    }
 }
 
 /// Error in verifying the signature or authentication part of a request.
