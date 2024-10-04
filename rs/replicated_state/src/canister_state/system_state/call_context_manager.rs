@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use crate::StateError;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
@@ -602,45 +601,6 @@ impl CallContextManager {
     /// Returns a reference to the callback with `callback_id`.
     pub fn callback(&self, callback_id: CallbackId) -> Option<&Callback> {
         self.callbacks.get(&callback_id).map(AsRef::as_ref)
-    }
-
-    /// Tests whether the given response should be inducted or silently dropped.
-    /// Verifies that the stored respondent and originator associated with the
-    /// `callback_id`, as well as its deadline match those of the response.
-    ///
-    /// Returns:
-    ///
-    ///  * `Ok(true)` if the response can be safely inducted.
-    ///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
-    ///    for a best-effort response (because the callback might have expired and
-    ///    been closed).
-    ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
-    ///    not found for a guaranteed response.
-    ///  * `Err(StateError::NonMatchingResponse)` if the response details do not
-    ///    match those of the callback.
-    pub(crate) fn should_enqueue(&self, response: &Response) -> Result<bool, StateError> {
-        match self.callback(response.originator_reply_callback) {
-            Some(callback) if response.respondent != callback.respondent
-                    || response.originator != callback.originator
-                    || response.deadline != callback.deadline => {
-                Err(StateError::non_matching_response(format!(
-                        "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
-                        callback.originator, callback.respondent, Time::from(callback.deadline)
-                    ), response))
-            }
-            Some(_) => Ok(true),
-            None => {
-                // Received an unknown callback ID.
-                if response.deadline == NO_DEADLINE {
-                    // This is an error for a guaranteed response.
-                    Err(StateError::non_matching_response("unknown callback ID", response))
-                } else {
-                    // But should be ignored in the case of a best-effort response (as the callback
-                    // may have expired and been dropped in the meantime).
-                    Ok(false)
-                }
-            }
-        }
     }
 
     /// Accepts a canister result and produces an action that should be taken
