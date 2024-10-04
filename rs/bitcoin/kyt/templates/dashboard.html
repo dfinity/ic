@@ -34,6 +34,52 @@
 <head>
     <title>KYT Canister Dashboard for Bitcoin ({{ btc_network }})</title>
     <style>
+        details {
+            margin-right: 1rem;
+            min-width: 20rem;
+        }
+
+        details[disabled] summary {
+            pointer-events: none;
+            user-select: none;
+        }
+
+        summary {
+            display: block;
+            padding-left: 1.5rem;
+            position: relative;
+            user-select: none;
+        }
+
+        .live > summary:before {
+            content: '';
+            border-width: .4rem;
+            border-style: solid;
+            border-color: transparent transparent transparent #000;
+            position: absolute;
+            top: 0.2rem;
+            left: 0.5rem;
+            transform: rotate(0);
+            transform-origin: .2rem 50%;
+            transition: .25s transform ease;
+        }
+
+        details[open] > summary:before {
+            transform: rotate(90deg);
+        }
+
+        details summary.live::-webkit-details-marker {
+            display:none;
+        }
+
+        details > ul {
+            margin: 0;
+            padding-top: 0.5em;
+            padding-left: 1.5rem;
+            list-style-type: none;
+            max-width: 20rem;
+        }
+
         table {
             border: solid;
             text-align: left;
@@ -68,6 +114,11 @@
 
         tbody tr:nth-child(even) {
             background-color: #ffffff;
+        }
+
+        td {
+            padding: 0.5em;
+            vertical-align: top;
         }
     </style>
 </head>
@@ -110,18 +161,28 @@
                         <td>{% call btc_tx_link(txid) %}</td>
                         <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
                         <td>
-                            <table><thead><th>{{ status }}</th></thead>
-                                {% if let Some(fetched) = status.fetched() %}
-                                <tbody>
-                                    {% for address in fetched.input_addresses %}
-                                    <tr><td>{% call btc_address(address) %}</td></tr>
-                                    {% endfor %}
-                                </tbody>
-                                {% endif %}
-                                {% if let Some(error) = status.error() %}
-                                <tbody><tr><td>{{ error }}</td></tr></tbody>
-                                {% endif %}
-                              </table>
+                            {% if let Some(fetched) = status.fetched() %}
+                            <details {#+ #}
+                                     {% if !fetched.input_addresses.is_empty() %}
+                                     class="live"
+                                     {% else %}
+                                     disabled
+                                     {% endif %}
+                            ><summary>{{ status }}</summary>
+                                <ul>
+                                {% for address in fetched.input_addresses %}
+                                    <li>{% call btc_address(address) %}</li>
+                                {% endfor %}
+                                </ul>
+                            </details>
+                            {% else if let Some(error) = status.error() %}
+                            <details open disabled>
+                               <summary>{{ status }}</summary>
+                               {{ error }}
+                            </details>
+                            {% else %}
+                            <details open disabled><summary>{{ status }}</summary></details>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

@@ -243,7 +243,7 @@ mod assertions {
             address_html: &str,
         ) -> &Self {
             self.has_html_value(
-                &format!("#fetch-tx-status + table > tbody > tr:nth-child({row_index}) > td > table > tbody > tr:nth-child({address_index}) > td"),
+                &format!("#fetch-tx-status + table > tbody > tr:nth-child({row_index}) > td > details > ul > li:nth-child({address_index})"),
                 address_html,
                 "expect status",
             )
