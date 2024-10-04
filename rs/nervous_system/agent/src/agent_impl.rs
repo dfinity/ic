@@ -15,6 +15,8 @@ pub enum AgentCallError {
     CandidDecode(candid::Error),
 }
 
+impl crate::sealed::Sealed for Agent {}
+
 impl CallCanisters for Agent {
     type Error = AgentCallError;
     async fn call<R: Request>(

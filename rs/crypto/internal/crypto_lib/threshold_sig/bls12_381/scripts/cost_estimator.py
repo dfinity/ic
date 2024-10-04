@@ -51,32 +51,28 @@ import math
 import operator as op
 
 
-def cost(group, op, n = 1):
-    assert(n >= 1)
+def cost(group, op, n=1):
+    assert n >= 1
 
     # all costs are in microseconds
     costs = {
-        'g1': {
-            'mul': 276,
-            'mul2': 360,
-            'hash': 110,
-            'serialize': 29,
-            'deserialize': 113,
+        "g1": {
+            "mul": 276,
+            "mul2": 360,
+            "hash": 110,
+            "serialize": 29,
+            "deserialize": 113,
         },
-        'g2': {
-            'mul': 835,
-            'serialize': 34,
-            'deserialize': 410,
+        "g2": {
+            "mul": 835,
+            "serialize": 34,
+            "deserialize": 410,
         },
-        'gt': {
-            'pair4': 2253,
-            'search16': 300,
-            'add': 5
-        }
+        "gt": {"pair4": 2253, "search16": 300, "add": 5},
     }
 
     muln_costs = {
-        'g1': {
+        "g1": {
             2: 268,
             4: 534,
             8: 1068,
@@ -90,7 +86,7 @@ def cost(group, op, n = 1):
             128: 7958,
             256: 14364,
         },
-        'g2': {
+        "g2": {
             2: 845,
             4: 1711,
             8: 3485,
@@ -103,13 +99,13 @@ def cost(group, op, n = 1):
             96: 21738,
             128: 27324,
             256: 48344,
-            }
+        },
     }
 
-    if op == 'muln_sparse':
-        return int(0.1 * cost(group, 'muln', n))
+    if op == "muln_sparse":
+        return int(0.1 * cost(group, "muln", n))
 
-    if op == 'muln':
+    if op == "muln":
         if group in muln_costs:
             avail = muln_costs[group].keys()
 
@@ -121,9 +117,10 @@ def cost(group, op, n = 1):
             return int(n * (muln_costs[group][closest] / closest))
         else:
             # just assume naive mul
-            return cost(group, 'mul', n)
+            return cost(group, "mul", n)
 
     return n * costs[group][op]
+
 
 class Time(object):
     def __init__(self, n):
@@ -163,6 +160,7 @@ class Time(object):
         hours = minutes / 60
         return "%.02f hours" % (hours)
 
+
 class Bytes(object):
     def __init__(self, n):
         if isinstance(n, int):
@@ -185,10 +183,11 @@ class Bytes(object):
     def __str__(self):
         bytes = self.val
 
-        if bytes >= 1024*1024:
-            return "%.02f MiB" % (bytes/(1024*1024))
+        if bytes >= 1024 * 1024:
+            return "%.02f MiB" % (bytes / (1024 * 1024))
 
         return "%d bytes" % (bytes)
+
 
 class NidkgCosts(object):
     def __init__(self):
@@ -198,12 +197,12 @@ class NidkgCosts(object):
         self.params[nm] = expr
 
     def parse_vars(self, str):
-        for line in str.split('\n'):
-            if line == '' or line.startswith('#'):
+        for line in str.split("\n"):
+            if line == "" or line.startswith("#"):
                 continue
 
             try:
-                (k,v) = line.split(' = ')
+                (k, v) = line.split(" = ")
                 self.set_var(k, v)
             except ValueError:
                 print("Failed to parse '%s' as key = val" % (line))
@@ -222,55 +221,55 @@ class NidkgCosts(object):
 
     def eval(self, nm):
         expr = self.params[nm]
-        return self._eval(ast.parse(expr, mode='eval').body)
+        return self._eval(ast.parse(expr, mode="eval").body)
 
     def eval_all(self):
         results = []
         for nm in self.params:
             expr = self.params[nm]
-            val = self._eval(ast.parse(expr, mode='eval').body)
+            val = self._eval(ast.parse(expr, mode="eval").body)
             results.append((nm, val))
         return results
 
     def _eval(self, node):
-
-        operators = {ast.Add: op.add,
-                     ast.Sub: op.sub,
-                     ast.Mult: op.mul,
-                     ast.FloorDiv: op.floordiv,
-                     ast.Div: op.truediv,
-                     ast.Pow: op.pow,
-                     ast.USub: op.neg
+        operators = {
+            ast.Add: op.add,
+            ast.Sub: op.sub,
+            ast.Mult: op.mul,
+            ast.FloorDiv: op.floordiv,
+            ast.Div: op.truediv,
+            ast.Pow: op.pow,
+            ast.USub: op.neg,
         }
 
         if isinstance(node, ast.Num):
             return node.n
-        elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+        elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
             return operators[type(node.op)](self._eval(node.left), self._eval(node.right))
         elif isinstance(node, ast.Name):
             val = self.eval(node.id)
-            if node.id.endswith('_bytes'):
+            if node.id.endswith("_bytes"):
                 return Bytes(val)
             else:
                 return val
         elif isinstance(node, ast.Call):
             if node.func.id == "pow2":
-                assert(len(node.args) == 1)
+                assert len(node.args) == 1
                 val = self._eval(node.args[0])
                 return (1 << val) - 1
             if node.func.id == "ceil":
-                assert(len(node.args) == 1)
+                assert len(node.args) == 1
                 val = self._eval(node.args[0])
                 return math.ceil(val)
             if node.func.id == "sqrt":
-                assert(len(node.args) == 1)
+                assert len(node.args) == 1
                 val = self._eval(node.args[0])
                 return math.ceil(math.sqrt(val))
             elif node.func.id == "cost":
-                assert(len(node.args) == 2 or len(node.args) == 3)
+                assert len(node.args) == 2 or len(node.args) == 3
                 group = node.args[0].id
                 oper = node.args[1].id
-                n = 1 # default
+                n = 1  # default
 
                 if len(node.args) == 3:
                     n = self._eval(node.args[2])
@@ -280,6 +279,7 @@ class NidkgCosts(object):
                 raise Exception("Unknown func %s" % (node.func.id))
         else:
             raise Exception("Bad expression")
+
 
 nidkg_expr = """
 security_level = 256
@@ -364,6 +364,7 @@ fs_decryption_usual_cost = number_of_chunks * (cost(gt, pair4) + cost(gt, search
 fs_decryption_worst_cost = fs_decryption_usual_cost + cheating_dealer_setup_cost + number_of_chunks*cheating_dealer_search_cost
 """
 
+
 class Repl(cmd.Cmd, object):
     intro = "Welcome to NIDKG cost estimator"
     prompt = "> "
@@ -377,7 +378,7 @@ class Repl(cmd.Cmd, object):
     def do_eval(self, arg):
         """Evaluate an expression"""
         try:
-            for v in arg.split(' '):
+            for v in arg.split(" "):
                 for f in self.rules.match_prefix(v):
                     print("%s = %s" % (f, self.rules.eval(f)))
         except KeyError as e:
@@ -388,7 +389,7 @@ class Repl(cmd.Cmd, object):
 
     def do_eval_all(self, arg):
         """Evaluate all stored expressions"""
-        for (key,val) in self.rules.eval_all():
+        for key, val in self.rules.eval_all():
             print("%s = %s" % (key, val))
 
     def do_set(self, arg):
@@ -400,7 +401,7 @@ class Repl(cmd.Cmd, object):
 
     def do_keys(self, arg):
         """List stored expressions (with optional prefix matching)"""
-        for v in arg.split(' '):
+        for v in arg.split(" "):
             for f in self.rules.match_prefix(v):
                 print("%s = %s" % (f, self.rules.expr(f)))
 
@@ -415,6 +416,7 @@ class Repl(cmd.Cmd, object):
     def do_EOF(self, arg):
         print("\nGoodbye")
         return True
+
 
 if __name__ == "__main__":
     Repl(nidkg_expr).cmdloop()

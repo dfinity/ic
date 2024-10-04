@@ -5765,6 +5765,7 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
+ "askama",
  "bitcoin 0.32.2",
  "candid",
  "candid_parser",
@@ -5772,13 +5773,16 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
+ "scraper",
  "serde",
+ "time",
  "tokio",
 ]
 
@@ -7880,7 +7884,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.18",
  "futures",
  "hex",
  "ic-canister-sandbox-backend-lib",
@@ -9453,9 +9457,12 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-nervous-system-clients",
+ "ic-nns-common",
  "ic-nns-constants",
+ "ic-nns-governance-api",
  "ic-sns-governance",
  "ic-sns-root",
+ "ic-sns-swap",
  "ic-sns-wasm",
  "pocket-ic",
  "serde",
@@ -11395,10 +11402,13 @@ dependencies = [
 name = "ic-sns-audit"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "candid",
  "colored",
  "csv",
  "ic-agent",
+ "ic-base-types",
+ "ic-nervous-system-agent",
  "ic-nervous-system-common-test-keys",
  "ic-neurons-fund",
  "ic-nns-common",
@@ -11410,6 +11420,7 @@ dependencies = [
  "serde",
  "serde_json",
  "textplots",
+ "thiserror",
  "tokio",
 ]
 
