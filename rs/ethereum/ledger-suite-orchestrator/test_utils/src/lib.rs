@@ -294,6 +294,15 @@ impl LedgerSuiteOrchestrator {
             .unwrap()
     }
 
+    pub fn cycles_of(&self, canister_id: CanisterId) -> u128 {
+        use num_traits::cast::ToPrimitive;
+        self.canister_status_of(canister_id)
+            .cycles
+            .0
+            .to_u128()
+            .unwrap()
+    }
+
     pub fn get_orchestrator_info(&self) -> OrchestratorInfo {
         Decode!(
             &assert_reply(

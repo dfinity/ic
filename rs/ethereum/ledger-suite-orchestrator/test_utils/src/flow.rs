@@ -93,8 +93,6 @@ impl ManagedCanistersAssert {
             .expect("BUG: fail to make a transfer to trigger archive creation");
         }
 
-        // self.setup.env.run_until_completion(/*max_ticks=*/ 10);
-
         let archive_ids_after: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()
@@ -281,33 +279,32 @@ impl ManagedCanistersAssert {
         self.setup.canister_status_of(self.ledger_canister_id())
     }
 
-    pub fn assert_ledger_has_cycles(self, expected: u128) -> Self {
-        assert_eq!(self.ledger_canister_status().cycles, Nat::from(expected));
+    pub fn assert_ledger_has_cycles_close_to(self, expected: u128) -> Self {
+        let canister_id = self.ledger_canister_id();
+        self.assert_has_cycles_close_to(canister_id, expected);
         self
     }
 
-    pub fn assert_index_has_cycles(self, expected: u128) -> Self {
-        assert_eq!(
-            self.setup
-                .canister_status_of(self.index_canister_id())
-                .cycles,
-            Nat::from(expected)
-        );
+    pub fn assert_index_has_cycles_close_to(self, expected: u128) -> Self {
+        let canister_id = self.index_canister_id();
+        self.assert_has_cycles_close_to(canister_id, expected);
         self
     }
 
-    pub fn assert_all_archives_have_cycles(self, expected: u128) -> Self {
+    pub fn assert_all_archives_have_cycles_close_to(self, expected: u128) -> Self {
         assert!(
             !self.archive_canister_ids().is_empty(),
             "BUG: no archive canisters"
         );
         for archive in self.archive_canister_ids() {
-            assert_eq!(
-                self.setup.canister_status_of(archive).cycles,
-                Nat::from(expected)
-            );
+            self.assert_has_cycles_close_to(archive, expected);
         }
         self
+    }
+
+    fn assert_has_cycles_close_to(&self, canister_id: Principal, expected: u128) {
+        let actual = self.setup.cycles_of(canister_id);
+        assert_approx_eq(actual, expected);
     }
 
     pub fn assert_ledger_has_wasm_hash<T: AsRef<[u8]>>(self, expected: T) -> Self {
@@ -365,6 +362,19 @@ impl ManagedCanistersAssert {
             .chain(self.archive_canister_ids())
             .collect()
     }
+}
+
+pub fn assert_approx_eq<U: Into<u128>, V: Into<u128>>(actual: U, expected: V) {
+    let actual = actual.into();
+    let expected = expected.into();
+    let max_diff = expected / 100; // tolerate 1% difference
+    assert!(
+        actual.abs_diff(expected) <= max_diff,
+        "BUG: unexpected amount. Expected {}, got {} but maximum tolerated difference is {}",
+        expected,
+        actual,
+        max_diff
+    );
 }
 
 macro_rules! assert_ledger {

@@ -9220,6 +9220,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "ic-universal-canister",
  "icrc-ledger-types",
+ "num-traits",
  "paste",
  "pocket-ic",
  "proptest",

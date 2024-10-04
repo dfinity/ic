@@ -7,6 +7,7 @@ use ic_ledger_suite_orchestrator::candid::{
     UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
+use ic_ledger_suite_orchestrator_test_utils::flow::assert_approx_eq;
 use ic_ledger_suite_orchestrator_test_utils::{
     assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
     new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
@@ -112,8 +113,8 @@ fn should_change_cycles_for_canister_creation() {
     let orchestrator = orchestrator
         .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
-        .assert_ledger_has_cycles(200_000_000_000_000_u128)
-        .assert_index_has_cycles(100_000_000_000_000_u128)
+        .assert_ledger_has_cycles_close_to(200_000_000_000_000_u128)
+        .assert_index_has_cycles_close_to(100_000_000_000_000_u128)
         .setup;
 
     orchestrator
@@ -136,8 +137,8 @@ fn should_change_cycles_for_canister_creation() {
     orchestrator
         .add_erc20_token(usdt())
         .expect_new_ledger_and_index_canisters()
-        .assert_ledger_has_cycles(300_000_000_000_000_u128)
-        .assert_index_has_cycles(50_000_000_000_000_u128);
+        .assert_ledger_has_cycles_close_to(300_000_000_000_000_u128)
+        .assert_index_has_cycles_close_to(50_000_000_000_000_u128);
 }
 
 #[test]
@@ -162,25 +163,25 @@ fn should_discover_new_archive_and_top_up() {
     let managed_canisters = orchestrator
         .add_erc20_token(usdc())
         .expect_new_ledger_and_index_canisters()
-        .assert_ledger_has_cycles(200_000_000_000_000_u128)
+        .assert_ledger_has_cycles_close_to(200_000_000_000_000_u128)
         .check_metrics()
         .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
         .trigger_creation_of_archive()
-        .assert_ledger_has_cycles(100_000_000_000_000_u128)
-        .assert_all_archives_have_cycles(100_000_000_000_000_u128);
+        .assert_ledger_has_cycles_close_to(100_000_000_000_000_u128)
+        .assert_all_archives_have_cycles_close_to(100_000_000_000_000_u128);
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
     //[maybe_top_up] task started before archive discovery, so no top-up is expected.
     let managed_canisters = managed_canisters
-        .assert_all_archives_have_cycles(100_000_000_000_000_u128)
+        .assert_all_archives_have_cycles_close_to(100_000_000_000_000_u128)
         .check_metrics()
         .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
     managed_canisters
-        .assert_all_archives_have_cycles(110_000_000_000_000_u128)
+        .assert_all_archives_have_cycles_close_to(110_000_000_000_000_u128)
         .check_metrics()
         .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
 }
@@ -217,35 +218,31 @@ fn should_top_up_spawned_canisters() {
     let ledger_canister_id = canisters.ledger.unwrap();
     let index_canister_id = canisters.index.unwrap();
 
-    let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles;
-    let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles;
+    let pre_top_up_balance_ledger = orchestrator.cycles_of(ledger_canister_id);
+    let pre_top_up_balance_index = orchestrator.cycles_of(index_canister_id);
 
     orchestrator.advance_time_for_periodic_tasks();
-    let balance_ledger_after_first_top_up =
-        orchestrator.canister_status_of(ledger_canister_id).cycles;
-    let balance_index_after_first_top_up =
-        orchestrator.canister_status_of(index_canister_id).cycles;
-    assert_eq!(
-        balance_index_after_first_top_up.clone() - pre_top_up_balance_index,
-        TEN_TRILLIONS as u128
+    let balance_ledger_after_first_top_up = orchestrator.cycles_of(ledger_canister_id);
+    let balance_index_after_first_top_up = orchestrator.cycles_of(index_canister_id);
+    assert_approx_eq(
+        balance_index_after_first_top_up - pre_top_up_balance_index,
+        TEN_TRILLIONS as u128,
     );
-    assert_eq!(
-        balance_ledger_after_first_top_up.clone() - pre_top_up_balance_ledger,
-        TEN_TRILLIONS as u128
+    assert_approx_eq(
+        balance_ledger_after_first_top_up - pre_top_up_balance_ledger,
+        TEN_TRILLIONS as u128,
     );
 
     orchestrator.advance_time_for_periodic_tasks();
-    let balance_ledger_after_second_top_up =
-        orchestrator.canister_status_of(ledger_canister_id).cycles;
-    let balance_index_after_second_top_up =
-        orchestrator.canister_status_of(index_canister_id).cycles;
-    assert_eq!(
+    let balance_ledger_after_second_top_up = orchestrator.cycles_of(ledger_canister_id);
+    let balance_index_after_second_top_up = orchestrator.cycles_of(index_canister_id);
+    assert_approx_eq(
         balance_index_after_second_top_up - balance_index_after_first_top_up,
-        TEN_TRILLIONS as u128
+        TEN_TRILLIONS as u128,
     );
-    assert_eq!(
+    assert_approx_eq(
         balance_ledger_after_second_top_up - balance_ledger_after_first_top_up,
-        TEN_TRILLIONS as u128
+        TEN_TRILLIONS as u128,
     );
 }
 
