@@ -42,26 +42,29 @@ impl StateMachineBuilder {
         }
     }
 
-    // can be refactored into specifying the desired PocketIC subnet kind, e.g., II or fiduciary
-    pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_subnet_type(subnet_type),
-        }
-    }
-    pub fn with_subnet_size(self, subnet_size: usize) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_subnet_size(subnet_size),
-        }
-    }
-    pub fn with_extra_canister_range(self, id_range: std::ops::RangeInclusive<CanisterId>) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_extra_canister_range(id_range),
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             sm_builder: ic_state_machine_tests::StateMachineBuilder::new(),
+        }
+    }
+
+    pub fn with_ii_subnet(self) -> Self {
+        Self {
+            sm_builder: self
+                .sm_builder
+                .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+                    CanisterId::from_u64(0x2100000),
+                    CanisterId::from_u64(0x21FFFFE),
+                )),
+        }
+    }
+
+    pub fn with_fiduciary_subnet(self) -> Self {
+        Self {
+            sm_builder: self
+                .sm_builder
+                .with_subnet_type(SubnetType::Application)
+                .with_subnet_size(28),
         }
     }
 

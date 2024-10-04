@@ -89,10 +89,7 @@ use std::{convert::TryInto, env, time::Duration};
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     StateMachineBuilder::new()
         .with_current_time()
-        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
-            CanisterId::from_u64(0x2100000),
-            CanisterId::from_u64(0x21FFFFE),
-        ))
+        .with_ii_subnet()
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant

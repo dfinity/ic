@@ -9,7 +9,6 @@ use ic_icrc1_ledger_sm_tests::{
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
-use ic_registry_subnet_type::SubnetType;
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime};
 
@@ -24,10 +23,7 @@ const MAX_BLOCKS_FROM_ARCHIVE: u64 = 10;
 #[test]
 fn should_upgrade_and_downgrade_ledger_canister_suite() {
     let now = SystemTime::now();
-    let env = &StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
-        .with_subnet_size(28)
-        .build();
+    let env = &StateMachineBuilder::new().with_fiduciary_subnet().build();
     env.set_time(now);
 
     let ledger_id = install_ledger(
