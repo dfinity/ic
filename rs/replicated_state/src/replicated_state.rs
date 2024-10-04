@@ -284,7 +284,7 @@ impl StateError {
     }
 
     /// Creates a `StateError::CanisterNotFound` variant with the given error
-    /// mnessage for the given `Response`.
+    /// message for the given `Response`.
     pub fn non_matching_response(err_str: impl ToString, response: &Response) -> Self {
         Self::NonMatchingResponse {
             err_str: err_str.to_string(),

@@ -110,7 +110,7 @@ func main() {
 	log.Printf("Using dataset %s", dataset)
 
 	beeline.Init(beeline.Config{
-		WriteKey:    envVarOrDie("HONEYCOMB_API_TOKEN"),
+		WriteKey:    envVarOrDie("BUILDEVENT_APIKEY"),
 		Dataset:     dataset,
 		ServiceName: "exporter",
 	})

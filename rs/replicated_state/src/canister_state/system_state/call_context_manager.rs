@@ -275,7 +275,7 @@ impl CallContextManagerStats {
 
     /// Calculates the stats for the given call contexts and callbacks.
     ///
-    /// Time complexity: `O(|call_contexts| + |callbacks|)`.
+    /// Time complexity: `O(n)`.
     pub(crate) fn calculate_stats(
         call_contexts: &BTreeMap<CallContextId, CallContext>,
         callbacks: &BTreeMap<CallbackId, Arc<Callback>>,
@@ -787,7 +787,6 @@ impl CallContextManager {
     /// current time.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    #[allow(dead_code)]
     pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 

@@ -385,13 +385,14 @@ pub fn load_canister_state(
             Some(ExecutionState {
                 canister_root,
                 wasm_binary,
+                exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
                 exported_globals: execution_state_bits.exported_globals,
-                exports: execution_state_bits.exports,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
                 next_scheduled_method: execution_state_bits.next_scheduled_method,
+                is_wasm64: execution_state_bits.is_wasm64,
             })
         }
         None => None,
