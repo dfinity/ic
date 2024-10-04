@@ -466,7 +466,7 @@ fn time_out_callbacks() {
     fixture
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution {
+        .enqueue(ExecutionTask::PausedExecution {
             id: PausedExecutionId(1),
             input: CanisterMessageOrTask::Message(response1),
         });

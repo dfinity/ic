@@ -181,7 +181,7 @@ impl CanisterStateFixture {
         self.canister_state
             .system_state
             .task_queue
-            .push_front(ExecutionTask::PausedExecution {
+            .enqueue(ExecutionTask::PausedExecution {
                 id: PausedExecutionId(13),
                 input: CanisterMessageOrTask::Message(response.clone().into()),
             });
@@ -465,7 +465,7 @@ fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_pause
         .canister_state
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution {
+        .enqueue(ExecutionTask::PausedExecution {
             id: PausedExecutionId(13),
             input: CanisterMessageOrTask::Message(response_canister_message),
         });
