@@ -21,6 +21,8 @@ fn should_display_metadata() {
         btc_network,
         outcall_capacity,
         cached_entries,
+        tx_table_page_size: 10,
+        tx_table_page_index: 0,
         oldest_entry_time: Some(oldest_entry_time),
         latest_entry_time: Some(latest_entry_time),
         fetch_tx_status: Vec::new(),
@@ -70,6 +72,8 @@ fn should_display_statuses() {
         btc_network: BtcNetwork::Mainnet,
         outcall_capacity: 50,
         cached_entries: 6,
+        tx_table_page_size: 10,
+        tx_table_page_index: 0,
         oldest_entry_time: None,
         latest_entry_time: None,
         fetch_tx_status: vec![

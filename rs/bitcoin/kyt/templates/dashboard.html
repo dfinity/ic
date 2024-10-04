@@ -188,6 +188,18 @@
                     {% endfor %}
                 </tbody>
             </table>
+            {% if cached_entries >= tx_table_page_size %}
+            <table style="border: none"><tbody><tr><td colspan="3" style="background: none; text-align: right">
+                Pages:
+                {% for page in 0..((cached_entries / tx_table_page_size) + 1) %}
+                    {% if page == tx_table_page_index %}
+                    &nbsp;{{ page }}
+                    {% else %}
+                    &nbsp;<a href='?page={{ page }}'>{{ page }}</a>
+                    {% endif %}
+                {% endfor %}
+            </td></tr></tbody></table>
+            {% endif %}
         </div>
     </div>
     <body>

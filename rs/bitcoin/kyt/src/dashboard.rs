@@ -28,6 +28,8 @@ pub struct DashboardTemplate {
     btc_network: BtcNetwork,
     outcall_capacity: u32,
     cached_entries: usize,
+    tx_table_page_size: usize,
+    tx_table_page_index: usize,
     oldest_entry_time: Option<Timestamp>,
     latest_entry_time: Option<Timestamp>,
     fetch_tx_status: Vec<(Txid, Timestamp, Status)>,
@@ -72,11 +74,17 @@ impl Status {
     }
 }
 
-pub fn dashboard() -> DashboardTemplate {
+// Default number of transactions to display per page is 500.
+const DEFAULT_TX_TABLE_PAGE_SIZE: usize = 500;
+
+pub fn dashboard(page_index: usize) -> DashboardTemplate {
+    let tx_table_page_size = DEFAULT_TX_TABLE_PAGE_SIZE;
     DashboardTemplate {
         btc_network: state::get_config().btc_network,
         outcall_capacity: state::OUTCALL_CAPACITY.with(|capacity| *capacity.borrow()),
         cached_entries: state::FETCH_TX_CACHE.with(|cache| cache.borrow().iter().count()),
+        tx_table_page_size,
+        tx_table_page_index: page_index,
         oldest_entry_time: state::FETCH_TX_CACHE.with(|cache| {
             cache
                 .borrow()
@@ -96,6 +104,7 @@ pub fn dashboard() -> DashboardTemplate {
                 .borrow()
                 .iter()
                 .rev()
+                .skip(page_index * tx_table_page_size)
                 .map(|(txid, timestamp, status)| {
                     (
                         txid,
@@ -117,6 +126,7 @@ pub fn dashboard() -> DashboardTemplate {
                         },
                     )
                 })
+                .take(tx_table_page_size)
                 .collect::<Vec<_>>()
         }),
     }

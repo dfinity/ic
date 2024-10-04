@@ -102,7 +102,20 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         unimplemented!()
     } else if req.path() == "/dashboard" {
         use askama::Template;
-        let dashboard = dashboard::dashboard().render().unwrap();
+        let page_index = match req.raw_query_param("page") {
+            Some(arg) => match usize::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return http::HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length(
+                            "failed to parse the 'page' parameter",
+                        )
+                        .build()
+                }
+            },
+            None => 0,
+        };
+        let dashboard = dashboard::dashboard(page_index).render().unwrap();
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)
