@@ -48,6 +48,8 @@ impl fmt::Display for GovernanceError {
     }
 }
 
+impl std::error::Error for GovernanceError {}
+
 impl NeuronsFundEconomics {
     /// The default values for network economics (until we initialize it).
     /// Can't implement Default since it conflicts with Prost's.
