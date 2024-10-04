@@ -3,11 +3,11 @@
 set -o nounset
 set -o pipefail
 
-source /opt/ic/bin/config.sh
-source /opt/ic/bin/functions.sh
-
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
+
+source /opt/ic/bin/config.sh
+source /opt/ic/bin/functions.sh
 
 function read_config_variables() {
     ipv6_prefix=$(get_config_value '.network_settings.ipv6_config.Deterministic.prefix')

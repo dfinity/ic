@@ -3,10 +3,10 @@
 set -o nounset
 set -o pipefail
 
-source /opt/ic/bin/functions.sh
-
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
+
+source /opt/ic/bin/functions.sh
 
 function install_hostos() {
     echo "* Installing HostOS disk-image..."
