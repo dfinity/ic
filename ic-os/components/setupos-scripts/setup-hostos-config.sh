@@ -21,6 +21,7 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
+    # todo: remove copying of config.ini:
     echo "* Copying 'config.ini' to hostOS config partition..."
     if [ -f "${CONFIG_DIR}/config.ini" ]; then
         cp ${CONFIG_DIR}/config.ini /media/
@@ -53,6 +54,7 @@ function copy_config_files() {
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
     fi
 
+    # todo: remove copying of config.ini:
     echo "* Copying deployment.json to config partition..."
     cp /data/deployment.json /media/
     log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
