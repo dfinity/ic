@@ -707,6 +707,13 @@ type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
 
+type GetUpgradeJournalRequest = record {};
+
+type GetUpgradeJournalResponse = record {
+  upgrade_steps : opt Versions;
+  response_timestamp_seconds : opt nat64;
+};
+
 service : (Governance) -> {
   claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
   fail_stuck_upgrade_in_progress : (record {}) -> (record {});
@@ -723,6 +730,7 @@ service : (Governance) -> {
   get_sns_initialization_parameters : (record {}) -> (
       GetSnsInitializationParametersResponse,
     ) query;
+  get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
   list_nervous_system_functions : () -> (
       ListNervousSystemFunctionsResponse,
     ) query;

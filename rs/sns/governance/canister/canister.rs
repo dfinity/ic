@@ -47,9 +47,10 @@ use ic_sns_governance::{
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
+        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
+        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+        RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -724,6 +725,26 @@ fn add_maturity() {
 #[candid_method(update, rename = "add_maturity")]
 fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
     governance_mut().add_maturity(request)
+}
+
+#[export_name = "canister_query get_upgrade_journal"]
+fn get_upgrade_journal() {
+    over_async(candid_one, get_upgrade_journal_)
+}
+
+#[candid_method(query, rename = "get_upgrade_journal")]
+async fn get_upgrade_journal_(_arg: GetUpgradeJournalRequest) -> GetUpgradeJournalResponse {
+    let cached_upgrade_steps = governance().proto.cached_upgrade_steps.clone();
+    match cached_upgrade_steps {
+        Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+            upgrade_steps: cached_upgrade_steps.upgrade_steps,
+            response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+        },
+        None => GetUpgradeJournalResponse {
+            upgrade_steps: None,
+            response_timestamp_seconds: None,
+        },
+    }
 }
 
 /// Mints tokens for testing
