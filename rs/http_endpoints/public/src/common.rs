@@ -251,9 +251,16 @@ pub(crate) fn validation_error_to_http_error(
     err: RequestValidationError,
     log: &ReplicaLogger,
 ) -> HttpError {
+    info!(log, "{err}");
     match err {
-        RequestValidationError::InvalidRequestExpiry(message)
-        | RequestValidationError::InvalidDelegationExpiry(message) => HttpError {
+        RequestValidationError::InvalidRequestExpiry(err) => {
+            info!(log, "{err}");
+            HttpError {
+                status: StatusCode::BAD_REQUEST,
+                message: err,
+            }
+        }
+        RequestValidationError::InvalidDelegationExpiry(message) => HttpError {
             status: StatusCode::BAD_REQUEST,
             message,
         },
