@@ -30,8 +30,8 @@ rust_proc_macro(
 rust_test(
     name = "instruction_stats_update_attribute_test",
     srcs = glob(["tests/*.rs"]),
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
     proc_macro_deps = [
         ":instruction_stats_update_attribute",
     ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
