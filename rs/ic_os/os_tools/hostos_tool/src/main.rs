@@ -158,11 +158,13 @@ pub fn main() -> Result<()> {
                 }
                 None => get_ipmi_mac()?,
             };
+            eprintln!("mgmt_mac: {:?}", mgmt_mac);
             let generated_mac = generate_mac_address(
                 &mgmt_mac,
                 deployment_settings.deployment.name.as_str(),
                 &node_type,
             )?;
+            eprintln!("unformatted mac: {:?}", generated_mac);
 
             let generated_mac = FormattedMacAddress::from(&generated_mac);
             println!("{}", generated_mac);
