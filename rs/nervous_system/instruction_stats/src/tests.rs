@@ -2,7 +2,7 @@ use super::*;
 
 thread_local! {
     static CALL_CONTEXT_INSTRUCTION_COUNTER_RESULTS: RefCell<Vec<u64>> =
-        RefCell::new(vec![40_000_000_001, 2_760_000_000, 1_500_000, 123_456]);
+        RefCell::new(vec![40_000_000_001, 0, 2_760_000_000, 0, 1_500_000, 0, 123_456, 0]);
 }
 
 pub(crate) fn call_context_instruction_counter() -> u64 {

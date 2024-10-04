@@ -81,6 +81,7 @@ pub fn encode_instruction_metrics<MyWrite: std::io::Write>(
 /// encode_instruction_metrics.
 pub struct UpdateInstructionStatsOnDrop {
     metric_labels: BTreeMap<String, String>,
+    original_instruction_count: u64,
 }
 
 impl UpdateInstructionStatsOnDrop {
@@ -95,13 +96,26 @@ impl UpdateInstructionStatsOnDrop {
     pub fn new(operation_name: &str, additional_labels: BTreeMap<String, String>) -> Self {
         let mut metric_labels = additional_labels;
         metric_labels.insert("operation_name".to_string(), operation_name.to_string());
-        Self { metric_labels }
+
+        let original_instruction_count = call_context_instruction_counter();
+
+        Self {
+            metric_labels,
+            original_instruction_count,
+        }
     }
 }
 
 impl Drop for UpdateInstructionStatsOnDrop {
     fn drop(&mut self) {
-        let instruction_count = call_context_instruction_counter().min(i64::MAX as u64) as i64;
+        let instruction_count =
+            call_context_instruction_counter().saturating_sub(self.original_instruction_count);
+
+        // Convert to i64, the type that Histogram wants.
+        let instruction_count = i64::try_from(instruction_count)
+            // As best as I can tell, the only reason try_from would return Err
+            // is overflow. If so, then it seems justified that we saturate.
+            .unwrap_or(i64::MAX);
 
         STATS.with(|stats| {
             stats
