@@ -930,7 +930,9 @@ impl ReplicatedState {
     }
 
     /// Times out all callbacks with expired deadlines (given the state time) that
-    /// have not already been timed out. Returns the number of timed out callbacks.
+    /// have not already been timed out. Returns the number of timed out callbacks
+    /// and any errors that prevented a `DeadlineExpired` response from being
+    /// enqueued (which would signal a bug).
     ///
     /// See `CanisterQueues::time_out_callbacks` for further details.
     pub fn time_out_callbacks(&mut self) -> (usize, Vec<StateError>) {
