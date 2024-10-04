@@ -302,21 +302,21 @@ impl WasmExecutor for WasmExecutorImpl {
         )?;
 
         // Create the execution state.
-        let execution_state = ExecutionState::new(
+        let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(exported_functions),
-            Memory::new(wasm_page_map, wasm_memory_size),
-            Memory::new(
+            exports: ExportedFunctions::new(exported_functions),
+            wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
+            stable_memory: Memory::new(
                 stable_memory_page_map,
                 ic_replicated_state::NumWasmPages::from(0),
             ),
-            globals,
-            wasm_metadata,
-            ExecutionRound::from(0),
-            NextScheduledMethod::default(),
-            serialized_module.is_wasm64,
-        );
+            exported_globals: globals,
+            metadata: wasm_metadata,
+            last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: serialized_module.is_wasm64,
+        };
 
         Ok((
             execution_state,

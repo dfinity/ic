@@ -7850,11 +7850,7 @@ fn ic0_mint_cycles_u64() {
 }
 
 fn check_correct_execution_state(is_wasm64: bool) {
-    let mut test = if is_wasm64 {
-        ExecutionTestBuilder::new().with_wasm64().build()
-    } else {
-        ExecutionTestBuilder::new().build()
-    };
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
     let memory_size = if is_wasm64 { "i64" } else { "" };
     let wat = format!(
         r#"

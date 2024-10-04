@@ -148,7 +148,7 @@ fn setup_execution_state(
     wasm_methods: BTreeSet<WasmMethod>,
     persisted_globals: Vec<Global>,
 ) -> ExecutionState {
-    ExecutionState::new_for_testing(
+    ExecutionState::new(
         PathBuf::new(),
         wasm_binary,
         ExportedFunctions::new(wasm_methods),

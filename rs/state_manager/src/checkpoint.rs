@@ -382,18 +382,18 @@ pub fn load_canister_state(
                 CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
                     .canister(canister_id)?
                     .raw_path();
-            Some(ExecutionState::new(
+            Some(ExecutionState {
                 canister_root,
                 wasm_binary,
-                execution_state_bits.exports,
+                exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
-                execution_state_bits.exported_globals,
-                execution_state_bits.metadata,
-                execution_state_bits.last_executed_round,
-                execution_state_bits.next_scheduled_method,
-                execution_state_bits.is_wasm64,
-            ))
+                exported_globals: execution_state_bits.exported_globals,
+                metadata: execution_state_bits.metadata,
+                last_executed_round: execution_state_bits.last_executed_round,
+                next_scheduled_method: execution_state_bits.next_scheduled_method,
+                is_wasm64: execution_state_bits.is_wasm64,
+            })
         }
         None => None,
     };

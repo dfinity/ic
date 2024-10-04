@@ -474,7 +474,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     // Tiny explicit allocation, not enough for a request.
     canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
     // And an execution state with non-zero size.
-    canister_state.execution_state = Some(ExecutionState::new_for_testing(
+    canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
@@ -848,7 +848,7 @@ fn canister_state_canister_log_record_round_trip() {
 
 #[test]
 fn execution_state_test_partial_eq() {
-    let state_1 = ExecutionState::new_for_testing(
+    let state_1 = ExecutionState::new(
         Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),

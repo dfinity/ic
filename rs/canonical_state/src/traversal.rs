@@ -246,7 +246,7 @@ mod tests {
             String::from("dummy3") => CustomSection::new(CustomSectionType::Public, vec![8, 9]),
         };
 
-        let execution_state = ExecutionState::new_for_testing(
+        let execution_state = ExecutionState::new(
             "NOT_USED".into(),
             wasm_binary,
             ExportedFunctions::new(BTreeSet::new()),
