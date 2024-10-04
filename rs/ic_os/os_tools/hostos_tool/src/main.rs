@@ -172,6 +172,8 @@ pub fn main() -> Result<()> {
                 generate_mac_address(&mgmt_mac, &hostos_config.icos_settings.hostname, &node_type)?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
+            let generated_mac = FormattedMacAddress::from(&generated_mac);
+
             println!("{}", generated_mac);
             Ok(())
         }
