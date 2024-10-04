@@ -13,12 +13,12 @@ rust_library(
     ],
     deps = [
         # Keep sorted.
+        "//rs/ethereum/evm-rpc-types:evm_rpc_types",
         "@crate_index//:candid",
         "@crate_index//:ic-canister-log",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
         "@crate_index//:thiserror",
-        "//rs/ethereum/evm-rpc-types:evm_rpc_types",
     ],
 )
 
