@@ -290,18 +290,15 @@ impl TaskQueue {
     ) -> Self {
         let mut mut_queue = queue;
 
-        let paused_or_aborted_task = if let Some(task) = mut_queue.front() {
-            match task {
-                ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::PausedExecution { .. }
-                | ExecutionTask::PausedInstallCode(_)
-                | ExecutionTask::AbortedExecution { .. } => mut_queue.pop_front(),
-                ExecutionTask::OnLowWasmMemory(_)
-                | ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer => None,
-            }
-        } else {
-            None
+        let paused_or_aborted_task = match mut_queue.front() {
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedExecution { .. })
+            | Some(ExecutionTask::PausedInstallCode(_))
+            | Some(ExecutionTask::AbortedExecution { .. }) => mut_queue.pop_front(),
+            Some(ExecutionTask::OnLowWasmMemory(_))
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | None => None,
         };
 
         let queue = TaskQueue {
@@ -353,7 +350,7 @@ impl TaskQueue {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.paused_or_aborted_task.is_none() && self.queue.is_empty()
     }
 
     pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
@@ -361,7 +358,7 @@ impl TaskQueue {
     }
 
     pub fn len(&self) -> usize {
-        self.queue.len()
+        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
     }
 
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
