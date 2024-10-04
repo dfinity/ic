@@ -1,17 +1,24 @@
 type Version = nat64;
 
+type Timestamp = nat64;
+
 type RuleId = text;
 
+type InitArg = record {
+  registry_polling_period: nat64;
+};
+
 type InputRule = record {
-  id: text;
+  id: RuleId;
   rule_raw: blob;
   description: text;
 };
 
 type OutputRule = record {
-  id: text;
+  id: RuleId;
   rule_raw: opt blob;
   description: opt text;
+  disclosed_at: opt Timestamp;
 };
 
 type InputConfig = record {
@@ -28,8 +35,8 @@ type OverwriteConfigResponse = variant {
 };
 
 type ConfigResponse = record {
-    version: nat64;
-    active_since: nat64;
+    version: Version;
+    active_since: Timestamp;
     config: OutputConfig;
 };
 
@@ -43,7 +50,7 @@ type DisclosesRulesResponse = variant {
   Err: text;
 }
 
-service : (nat64) -> {
+service : (InitArg) -> {
     overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
     get_config: (opt Version) -> (GetConfigResponse);
     disclose_rules: (vec RuleId) -> (DisclosesRulesResponse);
