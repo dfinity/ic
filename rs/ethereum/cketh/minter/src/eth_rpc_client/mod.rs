@@ -56,7 +56,7 @@ impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
-            const MIN_ATTACHED_CYCLES: u128 = 300_000_000_000;
+            const MIN_ATTACHED_CYCLES: u128 = 400_000_000_000;
 
             let providers = match client.chain {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
