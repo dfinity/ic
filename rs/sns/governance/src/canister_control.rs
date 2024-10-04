@@ -31,7 +31,7 @@ pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, 
 }
 
 /// Upgrades a canister controlled by governance.
-pub async fn upgrade_canister_directly(
+pub async fn upgrade_canister_directly_legacy(
     env: &dyn Environment,
     canister_id: CanisterId,
     wasm: Vec<u8>,
@@ -79,6 +79,70 @@ pub async fn upgrade_canister_directly(
     );
 
     install_result
+}
+
+// TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+// TODO: Store audit data.
+pub async fn upgrade_canister_directly(
+    env: &dyn Environment,
+    canister_id: CanisterId,
+    wasm: Vec<u8>,
+    arg: Vec<u8>,
+) {
+    {
+        log!(
+            INFO,
+            "{}Begin: Stop canister {}.",
+            log_prefix(),
+            canister_id,
+        );
+        let stop_result = stop_canister(env, canister_id).await;
+        log!(
+            INFO,
+            "{}End: Stop canister {} (result = {:?})",
+            log_prefix(),
+            canister_id,
+            stop_result
+        );
+    }
+
+    {
+        log!(
+            INFO,
+            "{}Begin: Install code into canister {}",
+            log_prefix(),
+            canister_id,
+        );
+        let install_result = install_code(env, canister_id, wasm, arg)
+            // No question mark operator here, because we always want to re-start
+            // the canister after attempting install_code, even if install_code
+            // fails.
+            .await;
+        log!(
+            INFO,
+            "{}End: Install code into canister {} (result = {:?})",
+            log_prefix(),
+            canister_id,
+            install_result,
+        );
+    }
+
+    {
+        log!(
+            INFO,
+            "{}Begin: Restart canister {}",
+            log_prefix(),
+            canister_id,
+        );
+        let restart_result = start_canister(env, canister_id).await;
+        log!(
+            INFO,
+            "{}End: Restart canister {} (result = {:?})",
+            log_prefix(),
+            canister_id,
+            restart_result,
+        );
+    }
 }
 
 /// Installs a new wasm to a canister id (target canister must be controlled by governance).

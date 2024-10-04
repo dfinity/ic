@@ -174,7 +174,7 @@ async fn get_canisters_to_upgrade(
         .collect()
 }
 
-pub fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {

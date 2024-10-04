@@ -1,7 +1,7 @@
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        upgrade_canister_directly,
+        upgrade_canister_directly, upgrade_canister_directly_legacy,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -64,8 +64,8 @@ use crate::{
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
-        get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
-        UpgradeSnsParams, canister_type_and_wasm_hash_for_upgrade,
+        canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_running_version,
+        get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
     types::{
         function_id_to_proposal_criticality, is_registered_function_id, Environment,
@@ -2570,7 +2570,7 @@ impl Governance {
         let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
 
         if target_is_root {
-            upgrade_canister_directly(
+            upgrade_canister_directly_legacy(
                 &*self.env,
                 root_canister_id,
                 target_wasm,
@@ -4676,85 +4676,90 @@ impl Governance {
 
         // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
         {
-            let now_timestamp_seconds = self.env.now();
-            if self.try_acquire_upgrade_to_next_version_lock(now_timestamp_seconds) {
-                self.upgrade_to_next_version(now_timestamp_seconds)
-                    .await;
+            if self.try_acquire_upgrade_to_next_version_lock() {
+                self.upgrade_to_next_version().await;
             }
         }
     }
 
-    pub async fn upgrade_to_next_version(&self, now_timestamp_seconds: u64) {
-        let Some(ref upgrade_lock) = self.proto.upgrade_lock else {
-            log!(ERROR, "Found bug in the code: Upgrade lock if expected to be present before upgrade is initiated.");
+    pub async fn upgrade_to_next_version(&self) {
+        let Some(UpgradeLock {
+            starting_version: Some(ref starting_version),
+            expected_version: Some(ref expected_version),
+            ..
+        }) = self.proto.upgrade_lock
+        else {
+            log!(
+                ERROR,
+                "{}Upgrade lock and its starting_version and expected_version fields must be \
+                 set before upgrade is initiated (this is a bug).",
+                log_prefix(),
+            );
             return;
         };
 
-        let (canister_type_to_upgrade, new_wasm_hash) =
-            match canister_type_and_wasm_hash_for_upgrade(current_version, &next_version)
-        {
-            Ok((canister_type_to_upgrade, new_wasm_hash)) => (canister_type_to_upgrade, new_wasm_hash),
-            Err(e) => log!(ERROR, "Could not get canister types and wasm hashes for upgrade: {e}"),
-        };
-
-        // perform the upgrade
-        {
-            // SNS Swap is controlled by NNS Governance, so this SNS instance cannot upgrade it.
-            // Simply set `deployed_version` to `next_version` version so that other SNS upgrades can
-            // be executed, and let the Swap upgrade occur externally (e.g. by someone submitting an
-            // NNS proposal).
-            if canister_type_to_upgrade == SnsCanisterType::Swap {
-                self.proto.deployed_version = Some(next_version);
-                return Ok(true);
-            }
-
-            let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
-                .await
-                .map_err(|e| {
-                    GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!("Could not execute proposal: {}", e),
-                    )
-                })?
-                .wasm;
-
-            let canister_ids_to_upgrade =
-                get_canisters_to_upgrade(env, root_canister_id, canister_type_to_upgrade).await?;
-    
-
-            let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
-
-            if target_is_root {
-                upgrade_canister_directly(
-                    &*self.env,
-                    root_canister_id,
-                    target_wasm,
-                    Encode!().unwrap(),
-                )
-                .await?;
-            } else {
-                for target_canister_id in canister_ids_to_upgrade {
-                    self.upgrade_non_root_canister(
-                        target_canister_id,
-                        target_wasm.clone(),
-                        Encode!().unwrap(),
-                        CanisterInstallMode::Upgrade,
-                    )
-                    .await?;
+        let (canister_type_to_upgrade, wasm_hash) =
+            match canister_type_and_wasm_hash_for_upgrade(starting_version, expected_version) {
+                Ok((canister_type_to_upgrade, wasm_hash)) => (canister_type_to_upgrade, wasm_hash),
+                Err(e) => {
+                    log!(
+                        ERROR,
+                        "{}Could not get canister types and wasm hashes for upgrade: {e}",
+                        log_prefix(),
+                    );
+                    return;
                 }
-            }
+            };
+
+        if canister_type_to_upgrade != SnsCanisterType::Root {
+            // FIXME: DO NOT MERGE
+            log!(
+                ERROR,
+                "{}Only Root can be upgraded right now.",
+                log_prefix()
+            );
+            return;
         }
 
+        let get_wasm_result = get_wasm(&*self.env, wasm_hash, canister_type_to_upgrade).await;
 
-        let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
-        .await
-        .map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!("Could not execute proposal: {}", e),
-            )
-        })?
-        .wasm;
+        let wasm = match get_wasm_result {
+            Ok(sns_wasm) => sns_wasm.wasm,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "{}Failed to get WASM from SNS-W: {}",
+                    log_prefix(),
+                    err
+                );
+                return;
+            }
+        };
+
+        let Some(root_canister_id) = self.proto.root_canister_id else {
+            log!(
+                ERROR,
+                "{}Root canister ID is not set! Believe it or not, this is a bug.",
+                log_prefix(),
+            );
+            return;
+        };
+        let root_canister_id = CanisterId::unchecked_from_principal(root_canister_id);
+
+        let arg = match Encode!() {
+            Ok(arg) => arg,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "{}Encoding upgrade argument failed: {}",
+                    log_prefix(),
+                    err
+                );
+                return;
+            }
+        };
+
+        upgrade_canister_directly(&*self.env, root_canister_id, wasm, arg).await;
     }
 
     // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
@@ -4763,7 +4768,9 @@ impl Governance {
     // TODO: Currently, this function does not use the target, rather assuming that the SNS always
     // TODO: wants to upgrade to the next available version. This should be changed before merging.
     // TODO: --- DO NOT MERGE ---
-    pub fn try_acquire_upgrade_to_next_version_lock(&mut self, now_timestamp_seconds: u64) -> bool {
+    pub fn try_acquire_upgrade_to_next_version_lock(&mut self) -> bool {
+        let now_timestamp_seconds = self.env.now();
+
         let Some(CachedUpgradeSteps {
             upgrade_steps: Some(ref upgrade_steps),
             ..
@@ -4777,7 +4784,7 @@ impl Governance {
             [current_version] => (current_version, None),
             [current_version, next_version, ..] => (current_version, Some(next_version)),
             _ => {
-                log!(ERROR, "upgrade_steps is empty.");
+                log!(ERROR, "{}upgrade_steps is empty.", log_prefix());
                 return false;
             }
         };
@@ -4787,7 +4794,8 @@ impl Governance {
             let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
                 log!(
                     ERROR,
-                    "Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set."
+                    "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                    log_prefix(),
                 );
                 return false;
             };
@@ -4806,7 +4814,9 @@ impl Governance {
                     upgrade_lock.released_timestamp_seconds = Some(now_timestamp_seconds);
                     // Continue (this upgrade succeeded; maybe there are more upgrades to be done).
                 } else {
-                    if let Some(acquired_timestamp_seconds) = upgrade_lock.acquired_timestamp_seconds {
+                    if let Some(acquired_timestamp_seconds) =
+                        upgrade_lock.acquired_timestamp_seconds
+                    {
                         if now_timestamp_seconds - acquired_timestamp_seconds
                             < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
                         {
@@ -4817,8 +4827,9 @@ impl Governance {
                     } else {
                         log!(
                             ERROR,
-                            "Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
+                            "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
                              lock to None.",
+                            log_prefix(),
                             upgrade_lock
                         );
                         self.proto.upgrade_lock = None;
@@ -4828,8 +4839,9 @@ impl Governance {
             } else {
                 log!(
                     ERROR,
-                    "Inconsistent {:?} (expected_version not set); resetting the lock to None.",
-                    upgrade_lock
+                    "{}Inconsistent {:?} (expected_version not set); resetting the lock to None.",
+                    log_prefix(),
+                    upgrade_lock,
                 );
                 self.proto.upgrade_lock = None;
                 return false;
@@ -4885,7 +4897,8 @@ impl Governance {
         let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
             log!(
                 ERROR,
-                "Cannot refresh cached_upgrade_steps: deployed_version not set."
+                "{}Cannot refresh cached_upgrade_steps: deployed_version not set.",
+                log_prefix(),
             );
             return;
         };
@@ -4904,8 +4917,9 @@ impl Governance {
             Err(err) => {
                 log!(
                     ERROR,
-                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
-                    err
+                    "{}Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    log_prefix(),
+                    err,
                 );
                 return;
             }
