@@ -273,6 +273,12 @@ type GetSnsInitializationParametersResponse = record {
   sns_initialization_parameters : text;
 };
 
+type CachedUpgradeSteps = record {
+  upgrade_steps : opt Versions;
+  requested_timestamp_seconds : opt nat64;
+  response_timestamp_seconds : opt nat64;
+};
+
 type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
@@ -282,6 +288,7 @@ type Governance = record {
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
+  cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
   pending_version : opt UpgradeInProgress;
@@ -700,6 +707,8 @@ type Version = record {
   governance_wasm_hash : blob;
   index_wasm_hash : blob;
 };
+
+type Versions = record { versions : vec Version };
 
 type VotingRewardsParameters = record {
   final_reward_rate_basis_points : opt nat64;
