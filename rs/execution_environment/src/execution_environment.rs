@@ -3189,8 +3189,8 @@ impl ExecutionEnvironment {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!("Function abort_paused_executions_and_return_tasks is only called after 
-                    the paused tasks are returned from TaskQueue, hence no other task than PausedExecution 
-                    and PausedInstallCode should not appear in paused_tasks except there a bug.")
+                    the paused tasks are returned from TaskQueue, hence no task other than PausedExecution 
+                    and PausedInstallCode should appear in paused_tasks except if there is a bug.")
                 }
             })
             .collect()
