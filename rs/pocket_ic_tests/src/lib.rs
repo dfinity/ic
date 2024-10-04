@@ -3,11 +3,14 @@ pub use ic_state_machine_tests::{
     StateMachineStateDir, SubmitIngressError, Time, UserError, WasmResult,
 };
 
-use ic_registry_routing_table::RoutingTable;
+use ic_config::execution_environment::Config;
+use ic_config::flag_status::FlagStatus;
+use ic_config::subnet_config::SubnetConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, MessageId, SubnetId,
 };
+use pocket_ic::common::rest::SubnetKind;
 use std::time::{Duration, SystemTime};
 
 #[derive(Default)]
@@ -21,27 +24,6 @@ pub struct StateMachineBuilder {
 }
 
 impl StateMachineBuilder {
-    // Tricky!!!
-    // subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE
-    // rate_limiting_of_instructions: FlagStatus::Disabled
-    pub fn with_config(self, config: Option<StateMachineConfig>) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_config(config),
-        }
-    }
-    // need to make subnet IDs configurable for all subnet kinds in PocketIC
-    pub fn with_routing_table(self, routing_table: RoutingTable) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_routing_table(routing_table),
-        }
-    }
-    // need to support loading state dir for all subnet kinds in PocketIC
-    pub fn with_state_machine_state_dir(self, state_dir: Box<dyn StateMachineStateDir>) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_state_machine_state_dir(state_dir),
-        }
-    }
-
     pub fn new() -> Self {
         Self {
             sm_builder: ic_state_machine_tests::StateMachineBuilder::new(),
@@ -65,6 +47,54 @@ impl StateMachineBuilder {
                 .sm_builder
                 .with_subnet_type(SubnetType::Application)
                 .with_subnet_size(28),
+        }
+    }
+
+    pub fn with_state_machine_state_dir(
+        self,
+        subnet_kind: SubnetKind,
+        subnet_id: SubnetId,
+        state_dir: Box<dyn StateMachineStateDir>,
+        nonmainnet_features: bool,
+    ) -> Self {
+        let subnet_type = match subnet_kind {
+            SubnetKind::Fiduciary => SubnetType::Application,
+            SubnetKind::SNS => SubnetType::Application,
+            SubnetKind::NNS => SubnetType::System,
+            _ => panic!("Unexpected subnet_kind: {:?}", subnet_kind),
+        };
+        let config = if nonmainnet_features {
+            Some(StateMachineConfig::new(
+                SubnetConfig::new(subnet_type),
+                Config {
+                    rate_limiting_of_instructions: FlagStatus::Disabled,
+                    ..Config::default()
+                },
+            ))
+        } else {
+            None
+        };
+        Self {
+            sm_builder: self
+                .sm_builder
+                .with_state_machine_state_dir(state_dir)
+                .with_subnet_id(subnet_id)
+                .with_extra_canister_range(match subnet_kind {
+                    SubnetKind::Fiduciary => std::ops::RangeInclusive::<CanisterId>::new(
+                        CanisterId::from_u64(0x2300000),
+                        CanisterId::from_u64(0x23FFFFE),
+                    ),
+                    SubnetKind::SNS => std::ops::RangeInclusive::<CanisterId>::new(
+                        CanisterId::from_u64(0x2000000),
+                        CanisterId::from_u64(0x20FFFFE),
+                    ),
+                    SubnetKind::NNS => std::ops::RangeInclusive::<CanisterId>::new(
+                        CanisterId::from_u64(0x2100000),
+                        CanisterId::from_u64(0x21FFFFE),
+                    ),
+                    _ => panic!("Unexpected subnet_kind: {:?}", subnet_kind),
+                })
+                .with_config(config),
         }
     }
 
@@ -97,6 +127,7 @@ impl StateMachine {
     pub fn run_until_completion(&self, max_ticks: usize) {
         self.sm.run_until_completion(max_ticks)
     }
+
     // TODO: replace by num_canisters in NNS integration tests
     pub fn num_running_canisters(&self) -> u64 {
         self.sm.num_running_canisters()
