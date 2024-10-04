@@ -224,7 +224,7 @@ fn validate_request_target<C: HasCanisterId>(
 /// Error in validating an [HttpRequest].
 #[derive(PartialEq, Debug, Error)]
 pub enum RequestValidationError {
-    #[error("Invalid ingress expiry: {0}")]
+    #[error("Invalid request expiry: {0}")]
     InvalidRequestExpiry(String),
     #[error("Invalid delegation expiry: {0}")]
     InvalidDelegationExpiry(String),
