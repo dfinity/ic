@@ -5774,6 +5774,7 @@ dependencies = [
 name = "ic-btc-kyt"
 version = "0.9.0"
 dependencies = [
+ "askama",
  "bitcoin 0.32.2",
  "candid",
  "candid_parser",
@@ -5781,13 +5782,16 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-canisters-http-types",
  "ic-cdk 0.13.5",
  "ic-stable-structures",
  "ic-test-utilities-load-wasm",
  "ic-types",
  "ic-universal-canister",
  "pocket-ic",
+ "scraper",
  "serde",
+ "time",
  "tokio",
 ]
 
@@ -7889,7 +7893,7 @@ dependencies = [
 name = "ic-drun"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "futures",
  "hex",
  "ic-canister-sandbox-backend-lib",
@@ -8623,6 +8627,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
+ "lazy_static",
  "leb128",
  "num-bigint 0.4.6",
  "num-traits",
@@ -14347,6 +14352,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-log 0.2.0",
+ "ic-cdk 0.13.5",
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
@@ -14356,6 +14362,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-limits",
  "ic-metrics-encoder",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icp-ledger",

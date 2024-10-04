@@ -256,37 +256,37 @@ members = [
     "rs/replica",
     "rs/replica_tests",
     "rs/replicated_state",
-    "rs/rosetta-api",
-    "rs/rosetta-api/rosetta_core",
-    "rs/rosetta-api/runner",
-    "rs/rosetta-api/client",
+    "rs/rosetta-api/icp",
+    "rs/rosetta-api/common/rosetta_core",
+    "rs/rosetta-api/icp/runner",
+    "rs/rosetta-api/icp/client",
     "rs/ledger_suite/icp",
     "rs/ledger_suite/icp/archive",
     "rs/ledger_suite/icp/ledger",
     "rs/ledger_suite/icp/protobuf_generator",
     "rs/ledger_suite/icp/index",
-    "rs/ledger_suite/icp/rosetta-integration-tests",
+    "rs/rosetta-api/icp/tests/integration_tests",
     "rs/ledger_suite/icp/test_utils",
     "rs/ledger_suite/common/ledger_core",
     "rs/ledger_suite/common/ledger_canister_core",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "rs/ledger_suite/icrc1",
     "rs/ledger_suite/icrc1/benchmark/generator",
     "rs/ledger_suite/icrc1/benchmark/worker",
     "rs/ledger_suite/icrc1/index",
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
-    "rs/ledger_suite/icrc1/rosetta",
-    "rs/ledger_suite/icrc1/rosetta/client",
-    "rs/ledger_suite/icrc1/rosetta/runner",
     "rs/ledger_suite/tests/sm-tests",
     "rs/ledger_suite/icrc1/archive",
     "rs/ledger_suite/icrc1/test_utils",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/icrc1/tokens_u256",
-    "rs/rosetta-api/test_utils",
-    "rs/rosetta-api/test_utils/sender_canister",
+    "rs/ledger_suite/icp/test_utils",
+    "rs/rosetta-api/icp/test_utils/sender_canister",
+    "rs/rosetta-api/icrc1",
+    "rs/rosetta-api/icrc1/client",
+    "rs/rosetta-api/icrc1/runner",
     "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
@@ -655,8 +655,8 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.2", features = ["derive"] }
-strum_macros = "0.26.2"
+strum = { version = "0.26.3", default-features = false }
+strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
 tar = "=0.4.39"

@@ -477,6 +477,9 @@ pub struct ExecutionState {
 
     /// Round-robin across canister method types.
     pub next_scheduled_method: NextScheduledMethod,
+
+    /// Checks if execution is in Wasm64 mode.
+    pub is_wasm64: bool,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -496,6 +499,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         } = rhs;
 
         (
@@ -507,6 +511,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
+            &self.is_wasm64,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -516,6 +521,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         )
     }
 }
@@ -524,6 +530,9 @@ impl ExecutionState {
     /// Initializes a new execution state for a canister.
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
+    /// The state will be created with last_executed_round = 0, a
+    /// default next_scheduled_method, and is_wasm64 = false.
+    /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
         wasm_binary: Arc<WasmBinary>,
@@ -543,6 +552,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: false,
         }
     }
 
