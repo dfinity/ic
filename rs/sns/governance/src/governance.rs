@@ -4676,9 +4676,12 @@ impl Governance {
 
         // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
         {
+            dfn_core::println!("{}AAA", log_prefix());
             if self.try_acquire_upgrade_to_next_version_lock() {
+                dfn_core::println!("{}BBB", log_prefix());
                 self.upgrade_to_next_version().await;
             }
+            dfn_core::println!("{}CCC", log_prefix());
         }
     }
 
@@ -4689,6 +4692,11 @@ impl Governance {
             ..
         }) = self.proto.upgrade_lock
         else {
+            dfn_core::println!(
+                "{}Upgrade lock and its starting_version and expected_version fields must be \
+                 set before upgrade is initiated (this is a bug).",
+                log_prefix(),
+            );
             log!(
                 ERROR,
                 "{}Upgrade lock and its starting_version and expected_version fields must be \
@@ -4702,6 +4710,10 @@ impl Governance {
             match canister_type_and_wasm_hash_for_upgrade(starting_version, expected_version) {
                 Ok((canister_type_to_upgrade, wasm_hash)) => (canister_type_to_upgrade, wasm_hash),
                 Err(e) => {
+                    dfn_core::println!(
+                        "{}Could not get canister types and wasm hashes for upgrade: {e}",
+                        log_prefix(),
+                    );
                     log!(
                         ERROR,
                         "{}Could not get canister types and wasm hashes for upgrade: {e}",
@@ -4713,19 +4725,27 @@ impl Governance {
 
         if canister_type_to_upgrade != SnsCanisterType::Root {
             // FIXME: DO NOT MERGE
+            dfn_core::println!(
+                "{}Only Root can be upgraded right now; requested {:?}.",
+                log_prefix(),
+                canister_type_to_upgrade
+            );
             log!(
                 ERROR,
-                "{}Only Root can be upgraded right now.",
-                log_prefix()
+                "{}Only Root can be upgraded right now; requested {:?}.",
+                log_prefix(),
+                canister_type_to_upgrade
             );
             return;
         }
 
+        dfn_core::println!("{}wasm_hash = {:?}", log_prefix(), wasm_hash); // DO NOT MERGE
         let get_wasm_result = get_wasm(&*self.env, wasm_hash, canister_type_to_upgrade).await;
 
         let wasm = match get_wasm_result {
             Ok(sns_wasm) => sns_wasm.wasm,
             Err(err) => {
+                dfn_core::println!("{}Failed to get WASM from SNS-W: {}", log_prefix(), err);
                 log!(
                     ERROR,
                     "{}Failed to get WASM from SNS-W: {}",
@@ -4737,6 +4757,10 @@ impl Governance {
         };
 
         let Some(root_canister_id) = self.proto.root_canister_id else {
+            dfn_core::println!(
+                "{}Root canister ID is not set! Believe it or not, this is a bug.",
+                log_prefix(),
+            );
             log!(
                 ERROR,
                 "{}Root canister ID is not set! Believe it or not, this is a bug.",
@@ -4749,6 +4773,7 @@ impl Governance {
         let arg = match Encode!() {
             Ok(arg) => arg,
             Err(err) => {
+                dfn_core::println!("{}Encoding upgrade argument failed: {}", log_prefix(), err);
                 log!(
                     ERROR,
                     "{}Encoding upgrade argument failed: {}",
@@ -4776,6 +4801,7 @@ impl Governance {
             ..
         }) = self.proto.cached_upgrade_steps
         else {
+            dfn_core::println!("{}DDD", log_prefix());
             return false;
         };
 
@@ -4784,6 +4810,7 @@ impl Governance {
             [current_version] => (current_version, None),
             [current_version, next_version, ..] => (current_version, Some(next_version)),
             _ => {
+                dfn_core::println!("{}upgrade_steps is empty.", log_prefix());
                 log!(ERROR, "{}upgrade_steps is empty.", log_prefix());
                 return false;
             }
@@ -4792,6 +4819,10 @@ impl Governance {
         {
             // TODO: Remove this condition after obsoleting the legacy upgrade feature.
             let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+                dfn_core::println!(
+                    "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                    log_prefix(),
+                );
                 log!(
                     ERROR,
                     "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
@@ -4803,6 +4834,7 @@ impl Governance {
             // This is where we check that the information is consistent from the p.o.v. of the new
             // and the legacy SNS upgrade feature.
             if current_version != deployed_version {
+                dfn_core::println!("{}EEE", log_prefix());
                 return false;
             }
         }
@@ -4821,10 +4853,17 @@ impl Governance {
                             < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
                         {
                             // Upgrade in progress.
+                            dfn_core::println!("{}FFF", log_prefix());
                             return false;
                         }
                         // Continue (this upgrade has timed out).
                     } else {
+                        dfn_core::println!(
+                            "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
+                             lock to None.",
+                            log_prefix(),
+                            upgrade_lock
+                        );
                         log!(
                             ERROR,
                             "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
@@ -4833,10 +4872,16 @@ impl Governance {
                             upgrade_lock
                         );
                         self.proto.upgrade_lock = None;
+                        dfn_core::println!("{}GGG", log_prefix());
                         return false;
                     }
                 }
             } else {
+                dfn_core::println!(
+                    "{}Inconsistent {:?} (expected_version not set); resetting the lock to None.",
+                    log_prefix(),
+                    upgrade_lock,
+                );
                 log!(
                     ERROR,
                     "{}Inconsistent {:?} (expected_version not set); resetting the lock to None.",
@@ -4849,6 +4894,7 @@ impl Governance {
         }
 
         let Some(next_version) = next_version else {
+            dfn_core::println!("{}HHH", log_prefix());
             return false;
         };
 
