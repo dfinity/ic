@@ -62,7 +62,7 @@ function read_config_variables() {
     domain=$(get_config_value '.network_settings.ipv4_config.domain')
     elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
     nns_public_key=$(get_config_value '.icos_settings.nns_public_key_path')
-    nns_url=$(get_config_value '.icos_settings.nns_url')
+    nns_url=$(get_config_value '.icos_settings.nns_url | join(",")')
     node_operator_private_key=$(get_config_value '.icos_settings.node_operator_private_key_path')
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
