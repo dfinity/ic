@@ -10,6 +10,7 @@ The collected debug information can be downloaded from the GitLab Web UI or usin
 
 ${REPO_ROOT}/ci/src/artifacts/gitlab_artifacts_download.py --job-id <gitlab-job-id>
 """
+
 import argparse
 import json
 import logging
