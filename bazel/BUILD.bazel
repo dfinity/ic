@@ -150,17 +150,6 @@ sh_test(
     ],
 )
 
-genrule(
-    name = "volatile_status_file",
-    outs = ["volatile_status_output.txt"],
-    cmd = "cp bazel-out/volatile-status.txt $@",
-    stamp = True,
-    tags = ["no-cache"],
-    visibility = [
-        "//rs/tests:__subpackages__",
-    ],
-)
-
 sh_binary(
     name = "sha256sum2url_sh",
     srcs = ["sha256sum2url.sh"],
