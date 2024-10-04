@@ -279,6 +279,13 @@ type CachedUpgradeSteps = record {
   response_timestamp_seconds : opt nat64;
 };
 
+type UpgradeLock = record {
+  starting_version : opt Version;
+  expected_version : opt Version;
+  acquired_timestamp_seconds : opt nat64;
+  released_timestamp_seconds : opt nat64;
+};
+
 type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
@@ -299,6 +306,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  upgrade_lock : opt UpgradeLock;
 };
 
 type GovernanceCachedMetrics = record {
