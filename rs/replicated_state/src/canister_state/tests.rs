@@ -181,7 +181,7 @@ impl CanisterStateFixture {
         self.canister_state
             .system_state
             .task_queue
-            .push_front(ExecutionTask::PausedExecution {
+            .enqueue(ExecutionTask::PausedExecution {
                 id: PausedExecutionId(13),
                 input: CanisterMessageOrTask::Message(response.clone().into()),
             });
@@ -465,7 +465,7 @@ fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_pause
         .canister_state
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution {
+        .enqueue(ExecutionTask::PausedExecution {
             id: PausedExecutionId(13),
             input: CanisterMessageOrTask::Message(response_canister_message),
         });
@@ -1201,12 +1201,12 @@ fn drops_aborted_canister_install_after_split() {
     canister_state
         .system_state
         .task_queue
-        .push_back(ExecutionTask::Heartbeat);
+        .enqueue(ExecutionTask::Heartbeat);
 
     canister_state
         .system_state
         .task_queue
-        .push_back(ExecutionTask::AbortedInstallCode {
+        .enqueue(ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
             call_id: InstallCodeCallId::new(0),
             prepaid_execution_cycles: Cycles::from(0u128),
@@ -1214,7 +1214,7 @@ fn drops_aborted_canister_install_after_split() {
 
     // Expected canister state is identical, minus the `AbortedInstallCode` task.
     let mut expected_state = canister_state.clone();
-    expected_state.system_state.task_queue.pop_back();
+    expected_state.system_state.task_queue.pop_front();
 
     canister_state.drop_in_progress_management_calls_after_split();
 

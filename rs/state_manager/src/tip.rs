@@ -1051,6 +1051,7 @@ fn serialize_canister_to_tip(
             task_queue: canister_state
                 .system_state
                 .task_queue
+                .get_queue()
                 .clone()
                 .into_iter()
                 .collect(),
@@ -1078,7 +1079,8 @@ fn serialize_canister_to_tip(
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             on_low_wasm_memory_hook_status: canister_state
                 .system_state
-                .get_on_low_wasm_memory_hook_status(),
+                .task_queue
+                .peek_hook_status(),
         }
         .into(),
     )?;
