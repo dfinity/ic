@@ -323,7 +323,7 @@ fn should_reject_update_calls_to_http_request() {
         .env
         .update_call(
             orchestrator.ledger_suite_orchestrator_id,
-            Principal::from_slice(&[0; 42]),
+            Principal::from_slice(&[0, 42]),
             "http_request",
             Encode!(&request).expect("failed to encode HTTP request"),
         )
@@ -834,6 +834,7 @@ mod upgrade {
 
         orchestrator.advance_time_for_upgrade();
         orchestrator.advance_time_for_upgrade();
+        orchestrator.advance_time_for_upgrade();
 
         let mut orchestrator = orchestrator;
         for erc20_contract in [usdc_erc20_contract(), usdt_erc20_contract()] {
@@ -1050,6 +1051,7 @@ mod upgrade {
             .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
             .setup;
 
+        orchestrator.env.tick();
         orchestrator.env.tick();
         orchestrator.env.tick();
         orchestrator.env.tick();
