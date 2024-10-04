@@ -340,6 +340,10 @@ impl TaskQueue {
         self.on_low_wasm_memory_hook_status
     }
 
+    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
+        &self.queue
+    }
+
     /// `check_dts_invariants` should only be called after round execution.
     ///
     /// It checks that the following properties are satisfied:
