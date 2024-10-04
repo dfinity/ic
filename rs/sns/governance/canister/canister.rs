@@ -729,22 +729,13 @@ fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
 
 #[export_name = "canister_query get_upgrade_journal"]
 fn get_upgrade_journal() {
-    over_async(candid_one, get_upgrade_journal_)
+    over(candid_one, get_upgrade_journal_)
 }
 
 #[candid_method(query, rename = "get_upgrade_journal")]
-async fn get_upgrade_journal_(_arg: GetUpgradeJournalRequest) -> GetUpgradeJournalResponse {
-    let cached_upgrade_steps = governance().proto.cached_upgrade_steps.clone();
-    match cached_upgrade_steps {
-        Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
-            upgrade_steps: cached_upgrade_steps.upgrade_steps,
-            response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
-        },
-        None => GetUpgradeJournalResponse {
-            upgrade_steps: None,
-            response_timestamp_seconds: None,
-        },
-    }
+fn get_upgrade_journal_(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalResponse {
+    let GetUpgradeJournalRequest {} = arg;
+    governance().get_upgrade_journal()
 }
 
 /// Mints tokens for testing
