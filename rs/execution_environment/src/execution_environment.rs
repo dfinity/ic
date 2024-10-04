@@ -3086,7 +3086,7 @@ impl ExecutionEnvironment {
         match task {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory(..)
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
@@ -3187,7 +3187,7 @@ impl ExecutionEnvironment {
                 | ExecutionTask::AbortedInstallCode { .. }
                 | ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory(..) => {
+                | ExecutionTask::OnLowWasmMemory => {
                     unreachable!("Function abort_paused_executions_and_return_tasks is only called after 
                     the paused tasks are returned from TaskQueue, hence no other task than PausedExecution 
                     and PausedInstallCode should not appear in paused_tasks except there a bug.")
@@ -3770,7 +3770,7 @@ pub fn execute_canister(
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
                 (task, None)
             }
-            ExecutionTask::OnLowWasmMemory(..) => {
+            ExecutionTask::OnLowWasmMemory => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
                 (task, None)
             }

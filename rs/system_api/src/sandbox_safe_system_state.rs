@@ -303,11 +303,19 @@ impl SystemStateChanges {
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        system_state
-            .task_queue
-            .enqueue(ExecutionTask::OnLowWasmMemory(
-                self.on_low_wasm_memory_hook_condition_check_result,
-            ));
+        if let Some(hook_condition_check_result) =
+            self.on_low_wasm_memory_hook_condition_check_result
+        {
+            if hook_condition_check_result {
+                system_state
+                    .task_queue
+                    .enqueue(ExecutionTask::OnLowWasmMemory);
+            } else {
+                system_state
+                    .task_queue
+                    .remove(ExecutionTask::OnLowWasmMemory);
+            }
+        }
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.

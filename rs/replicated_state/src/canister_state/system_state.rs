@@ -311,13 +311,26 @@ impl TaskQueue {
         self.queue.pop_front()
     }
 
+    pub fn remove(&mut self, task: ExecutionTask) {
+        match task {
+            ExecutionTask::OnLowWasmMemory => {
+                self.on_low_wasm_memory_hook_status.update(false);
+            }
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => unreachable!(
+                "Removal of task from TaskQueue is only supported for OnLowWasmMemory type."
+            ),
+        };
+    }
+
     pub fn enqueue(&mut self, task: ExecutionTask) {
         match task {
-            ExecutionTask::OnLowWasmMemory(hook_condition_check_result) => {
-                if let Some(is_hook_condition_satisfied) = hook_condition_check_result {
-                    self.on_low_wasm_memory_hook_status
-                        .update(is_hook_condition_satisfied);
-                }
+            ExecutionTask::OnLowWasmMemory => {
+                self.on_low_wasm_memory_hook_status.update(true);
             }
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
@@ -381,7 +394,7 @@ impl TaskQueue {
                         id
                     );
                 }
-                ExecutionTask::OnLowWasmMemory(..) => {
+                ExecutionTask::OnLowWasmMemory => {
                     panic!(
                         "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
                         id
@@ -414,7 +427,7 @@ impl TaskQueue {
             ExecutionTask::AbortedInstallCode { .. } => false,
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory(..)
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => true,
@@ -429,7 +442,7 @@ impl TaskQueue {
             | ExecutionTask::PausedInstallCode(..)
             | ExecutionTask::AbortedExecution { .. }
             | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::OnLowWasmMemory(..) => true,
+            | ExecutionTask::OnLowWasmMemory => true,
         });
     }
 
@@ -445,7 +458,7 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::AbortedExecution { .. }
                 | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::OnLowWasmMemory(..) => (),
+                | ExecutionTask::OnLowWasmMemory => (),
             }
         }
         res
@@ -466,7 +479,7 @@ impl TaskQueue {
                 | ExecutionTask::AbortedInstallCode { .. }
                 | ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory(..) => task,
+                | ExecutionTask::OnLowWasmMemory => task,
                 ExecutionTask::PausedExecution { id, .. } => {
                     let aborted = aborted_tasks.remove(&id).unwrap();
                     debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
@@ -746,10 +759,7 @@ pub enum ExecutionTask {
 
     /// On low Wasm memory hook.
     /// The task exists only within an execution round, it never gets serialized.
-    /// If the encapsulated field is `None` that represents that hook condition was
-    /// not checked. Otherwise, the value inside `Some` represents the outcome of
-    /// the checking for hook condition.
-    OnLowWasmMemory(Option<bool>),
+    OnLowWasmMemory,
 
     /// A paused execution task exists only within an epoch (between
     /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
@@ -796,7 +806,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
         match item {
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory(..)
+            | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);

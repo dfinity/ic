@@ -2153,7 +2153,7 @@ fn observe_replicated_state_metrics(
             }
             Some(&ExecutionTask::Heartbeat)
             | Some(&ExecutionTask::GlobalTimer)
-            | Some(&ExecutionTask::OnLowWasmMemory(..))
+            | Some(&ExecutionTask::OnLowWasmMemory)
             | None => {}
         }
         consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
@@ -2342,7 +2342,7 @@ fn can_execute_subnet_msg(
             None
             | Some(ExecutionTask::Heartbeat)
             | Some(ExecutionTask::GlobalTimer)
-            | Some(ExecutionTask::OnLowWasmMemory(..)) => (false, false),
+            | Some(ExecutionTask::OnLowWasmMemory) => (false, false),
             Some(ExecutionTask::PausedExecution { .. })
             | Some(ExecutionTask::PausedInstallCode(_)) => (true, false),
             Some(ExecutionTask::AbortedExecution { .. })
