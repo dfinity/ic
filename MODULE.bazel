@@ -187,7 +187,7 @@ use_repo(oci, "minica", "minica_linux_amd64")
 # used by rosetta image
 oci.pull(
     name = "rust_base",
-    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
+    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "rust_base", "rust_base_linux_amd64")
