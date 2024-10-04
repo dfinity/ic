@@ -277,7 +277,7 @@ mod ingress_expiry {
 
 mod read_state_request {
     use super::*;
-    use crate::RequestValidationError::{PathTooLongError, TooManyPaths};
+    use crate::RequestValidationError::{PathTooLongError, TooManyPathsError};
     use ic_crypto_tree_hash::{Label, Path};
     use rand::prelude::SliceRandom;
     use std::ops::RangeInclusive;
@@ -405,7 +405,7 @@ mod read_state_request {
 
             assert_eq!(
                 result,
-                Err(TooManyPaths {
+                Err(TooManyPathsError {
                     length: paths.len(),
                     maximum: MAXIMUM_NUMBER_OF_PATHS
                 })
