@@ -148,7 +148,6 @@ rust_test(
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
-            "//rs/nns/test_utils",
             "//rs/nns/test_utils/golden_nns_state",
             "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_core",
