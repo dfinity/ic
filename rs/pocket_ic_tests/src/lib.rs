@@ -109,12 +109,6 @@ impl StateMachineBuilder {
         self.with_time(time)
     }
 
-    pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
-        Self {
-            sm_builder: self.sm_builder.with_nns_subnet_id(nns_subnet_id),
-        }
-    }
-
     pub fn build(self) -> StateMachine {
         StateMachine {
             sm: self.sm_builder.build(),
