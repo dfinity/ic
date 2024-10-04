@@ -45,8 +45,8 @@ fuzz_target!(|content: AnonymousContent| -> Corpus {
                 &validation_query_request,
             );
             match validation_read_request {
-                Err(RequestValidationError::PathTooLongError { .. })
-                | Err(RequestValidationError::TooManyPathsError { .. }) => Corpus::Reject,
+                Err(RequestValidationError::PathTooLong { .. })
+                | Err(RequestValidationError::TooManyPaths { .. }) => Corpus::Reject,
                 _ => {
                     assert_eq_ignoring_timestamps_in_error_messages(
                         &validation_call_request,

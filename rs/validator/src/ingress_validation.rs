@@ -168,14 +168,14 @@ where
 
 fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidationError> {
     if paths.len() > MAXIMUM_NUMBER_OF_PATHS {
-        return Err(TooManyPathsError {
+        return Err(TooManyPaths {
             maximum: MAXIMUM_NUMBER_OF_PATHS,
             length: paths.len(),
         });
     }
     for path in paths {
         if path.len() > MAXIMUM_NUMBER_OF_LABELS_PER_PATH {
-            return Err(PathTooLongError {
+            return Err(PathTooLong {
                 maximum: MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
                 length: path.len(),
             });
@@ -241,13 +241,13 @@ pub enum RequestValidationError {
     #[error("Canister '{0}' is not one of the delegation targets.")]
     CanisterNotInDelegationTargets(CanisterId),
     #[error("Too many paths in read state request: got {length} paths, but at most {maximum} are allowed.")]
-    TooManyPathsError { length: usize, maximum: usize },
+    TooManyPaths { length: usize, maximum: usize },
     #[error("At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed.")]
-    PathTooLongError { length: usize, maximum: usize },
+    PathTooLong { length: usize, maximum: usize },
     #[error(
         "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."
     )]
-    NonceTooBigError { num_bytes: usize, maximum: usize },
+    NonceTooBig { num_bytes: usize, maximum: usize },
 }
 
 /// Error in verifying the signature or authentication part of a request.
@@ -405,7 +405,7 @@ fn validate_nonce<C: HttpRequestContent>(
     request: &HttpRequest<C>,
 ) -> Result<(), RequestValidationError> {
     match request.nonce() {
-        Some(nonce) if nonce.len() > MAXIMUM_NUMBER_OF_BYTES_IN_NONCE => Err(NonceTooBigError {
+        Some(nonce) if nonce.len() > MAXIMUM_NUMBER_OF_BYTES_IN_NONCE => Err(NonceTooBig {
             num_bytes: nonce.len(),
             maximum: MAXIMUM_NUMBER_OF_BYTES_IN_NONCE,
         }),
