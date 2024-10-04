@@ -10,9 +10,9 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
-        Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
-        SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        verify, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
+        PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
+        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     test_utils::{base_only_storage_layout, ShardedTestStorageLayout, TestStorageLayout},
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
@@ -1372,22 +1372,22 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(Storage::verify(Arc::new(ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    }))
+    })
     .is_ok());
     std::fs::copy(
         tempdir.path().join("000000_010_vmemory_0.overlay"),
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(Storage::verify(Arc::new(ShardedTestStorageLayout {
+    assert!(verify(&ShardedTestStorageLayout {
         dir_path: tempdir.path().to_path_buf(),
         base: tempdir.path().join("vmemory_0.bin"),
         overlay_suffix: "vmemory_0.overlay".to_owned(),
-    }))
+    })
     .is_err());
 }
 
@@ -1409,7 +1409,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match Storage::verify(Arc::new(base_only_storage_layout(heap_file.to_path_buf()))) {
+    match verify(&base_only_storage_layout(heap_file.to_path_buf())) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",

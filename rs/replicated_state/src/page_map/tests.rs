@@ -14,11 +14,8 @@ use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::{
-    fs::OpenOptions,
-    path::{Path, PathBuf},
-};
 use tempfile::Builder;
 
 fn persist_delta_to_base(

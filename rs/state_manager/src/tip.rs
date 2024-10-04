@@ -20,7 +20,7 @@ use ic_replicated_state::{
     page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
 };
 use ic_replicated_state::{
-    page_map::{storage::verify, StorageLayout, PAGE_SIZE},
+    page_map::{StorageLayout, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
@@ -460,17 +460,16 @@ pub(crate) fn spawn_tip_thread(
                                 checkpointed_state,
                                 execution_state,
                             );
-                            match crate::checkpoint::validate_checkpoint(
+                            if let Err(err) = crate::checkpoint::validate_checkpoint(
                                 &checkpoint_layout,
                                 Some(&mut thread_pool),
                             ) {
-                                Err(err) => fatal!(
+                                fatal!(
                                     &log,
                                     "Checkpoint validation for {} has failed: {:#}",
                                     checkpoint_layout.raw_path().display(),
                                     err
-                                ),
-                                Ok(()) => (),
+                                )
                             }
                         }
 

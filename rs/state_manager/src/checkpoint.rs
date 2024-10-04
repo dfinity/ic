@@ -7,9 +7,7 @@ use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
-use ic_replicated_state::page_map::{
-    storage::verify, PageAllocatorFileDescriptor, PersistenceError,
-};
+use ic_replicated_state::page_map::{storage::verify, PageAllocatorFileDescriptor};
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -160,25 +158,6 @@ pub(crate) fn validate_checkpoint(
         .remove_unverified_checkpoint_marker()
         .map_err(CheckpointError::from)?;
     Ok(())
-}
-
-/// Calls [load_checkpoint] with a newly created thread pool.
-/// See [load_checkpoint] for further details.
-fn load_checkpoint_parallel(
-    checkpoint_layout: &CheckpointLayout<ReadOnly>,
-    own_subnet_type: SubnetType,
-    metrics: &CheckpointMetrics,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<ReplicatedState, CheckpointError> {
-    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-
-    load_checkpoint(
-        checkpoint_layout,
-        own_subnet_type,
-        metrics,
-        Some(&mut thread_pool),
-        Arc::clone(&fd_factory),
-    )
 }
 
 /// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.

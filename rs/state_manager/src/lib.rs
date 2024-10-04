@@ -195,6 +195,8 @@ pub struct CheckpointMetrics {
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
+    page_maps_loaded: IntGauge,
+    page_maps_not_loaded: IntGauge,
     log: ReplicaLogger,
 }
 
@@ -246,6 +248,14 @@ impl CheckpointMetrics {
             "Amount of FlushPageMap requests that were skipped.",
         );
 
+        let page_maps_loaded = metrics_registry.int_gauge(
+            "state_manager_page_maps_loaded",
+            "Amount of PageMaps loaded at the end of checkpoint interval.",
+        );
+        let page_maps_not_loaded = metrics_registry.int_gauge(
+            "state_manager_page_maps_not_loaded",
+            "Amount of PageMaps not loaded at the end of checkpoint interval.",
+        );
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
@@ -255,6 +265,8 @@ impl CheckpointMetrics {
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
+            page_maps_loaded,
+            page_maps_not_loaded,
             log: replica_logger,
         }
     }
@@ -1441,27 +1453,14 @@ struct CreateCheckpointResult {
     tip_requests: Vec<TipRequest>,
 }
 
-fn num_loaded_and_total_pagemaps(state: &ReplicatedState) -> (usize, usize) {
-    let mut loaded = 0;
-    let mut total = 0;
-    for entry in PageMapType::list_all_including_snapshots(&state) {
-        if let Some(page_map) = entry.get(&state) {
-            total += 1;
-            if page_map.is_loaded() {
-                loaded += 1;
-            }
-        }
-    }
-    (loaded, total)
-}
 impl StateManagerImpl {
     pub fn num_loaded_pagemaps(&self) -> usize {
         let states = self.states.read();
         let (_tip_height, state) = states.tip.as_ref().expect("failed to get TIP");
-        PageMapType::list_all_including_snapshots(&state)
+        PageMapType::list_all_including_snapshots(state)
             .into_iter()
             .map(|entry| {
-                if let Some(page_map) = entry.get(&state) {
+                if let Some(page_map) = entry.get(state) {
                     if page_map.is_loaded() {
                         1
                     } else {
@@ -1795,6 +1794,27 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
+    }
+
+    /// Populate `page_maps_loaded` and `page_maps_not_loaded` in the metrics with their actual
+    /// values in provided state.
+    fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
+        let mut loaded = 0;
+        let mut not_loaded = 0;
+        for entry in PageMapType::list_all_including_snapshots(state) {
+            if let Some(page_map) = entry.get(state) {
+                if page_map.is_loaded() {
+                    loaded += 1;
+                } else {
+                    not_loaded += 1;
+                }
+            }
+        }
+        self.metrics.checkpoint_metrics.page_maps_loaded.set(loaded);
+        self.metrics
+            .checkpoint_metrics
+            .page_maps_not_loaded
+            .set(not_loaded);
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.
@@ -2486,11 +2506,7 @@ impl StateManagerImpl {
         state: &mut ReplicatedState,
         height: Height,
     ) -> CreateCheckpointResult {
-        info!(
-            self.log,
-            "Num loaded and total pagemaps: {:#?}",
-            num_loaded_and_total_pagemaps(state),
-        );
+        self.observe_num_loaded_pagemaps(state);
         struct PreviousCheckpointInfo {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,

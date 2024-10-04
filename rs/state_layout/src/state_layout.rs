@@ -773,17 +773,6 @@ impl StateLayout {
         Ok(cp.is_checkpoint_verified())
     }
 
-    fn increment_checkpoint_ref_counter(&self, height: Height) {
-        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
-        checkpoint_ref_registry
-            .entry(height)
-            .or_insert(CheckpointRefData {
-                checkpoint_layout_counter: 0,
-                mark_deleted: false,
-            })
-            .checkpoint_layout_counter += 1;
-    }
-
     fn remove_checkpoint_ref(&self, height: Height) {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {

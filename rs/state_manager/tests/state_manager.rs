@@ -466,66 +466,34 @@ fn skipping_flushing_is_invisible_for_state() {
 
 #[test]
 fn lazy_pagemaps() {
-    fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
-        let mut size = 0.0;
-        for canister_id in checkpoint.canister_ids().unwrap() {
-            let canister = checkpoint.canister(&canister_id).unwrap();
-            for entry in std::fs::read_dir(canister.raw_path()).unwrap() {
-                size += std::fs::metadata(entry.unwrap().path()).unwrap().len() as f64;
-            }
-        }
-        size
-    }
-    fn last_checkpoint_size(env: &StateMachine) -> f64 {
-        let state_layout = env.state_manager.state_layout();
-        let checkpoint_heights = state_layout.checkpoint_heights().unwrap();
-        if checkpoint_heights.is_empty() {
-            return 0.0;
-        }
-        let last_height = *checkpoint_heights.last().unwrap();
-        checkpoint_size(&state_layout.checkpoint_verified(last_height).unwrap())
-    }
-    fn tip_size(env: &StateMachine) -> f64 {
-        checkpoint_size(
-            &CheckpointLayout::new_untracked(
-                env.state_manager.state_layout().raw_path().join("tip"),
-                height(0),
-            )
-            .unwrap(),
-        )
-    }
-    fn state_in_memory(env: &StateMachine) -> f64 {
+    fn int_metric_by_name(name: &str, env: &StateMachine) -> i64 {
         env.metrics_registry()
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|x| x.get_name() == "canister_memory_usage_bytes")
+            .filter(|x| x.get_name() == name)
             .map(|x| x.get_metric()[0].get_gauge().get_value())
             .next()
-            .unwrap()
+            .unwrap() as i64
     }
 
     let env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
+    env.set_checkpoints_enabled(true);
 
-    let canister_ids = (0..1)
-        .map(|_| env.install_canister_wat(TEST_CANISTER, vec![], None))
-        .collect::<Vec<_>>();
-    for i in 0..2 {
-        env.set_checkpoints_enabled(false);
-        //        for canister_id in &canister_ids {
-        //            env.execute_ingress(*canister_id, "write_heap_64k", vec![])
-        //                .unwrap();
-        //        }
-        env.set_checkpoints_enabled(true);
-        env.tick();
-        env.state_manager.flush_tip_channel();
-        // We should merge when overhead reaches 2.5 and stop merging the moment we go under 2.5.
-        if (i >= 1) {
-            assert_eq!(env.state_manager.num_loaded_pagemaps(), 0);
-        }
-    }
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.tick();
+    assert_eq!(
+        int_metric_by_name("state_manager_page_maps_loaded", &env),
+        0
+    );
+    assert!(int_metric_by_name("state_manager_page_maps_not_loaded", &env) > 0);
+
+    env.execute_ingress(canister_id, "write_heap_64k", vec![])
+        .unwrap();
+    assert!(int_metric_by_name("state_manager_page_maps_loaded", &env) > 0);
 }
 
 #[test]

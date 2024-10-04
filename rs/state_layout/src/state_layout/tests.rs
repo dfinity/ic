@@ -330,12 +330,6 @@ fn test_removal_when_last_dropped() {
             vec![Height::new(3)],
             state_layout.checkpoint_heights().unwrap(),
         );
-        let start = Instant::now();
-        let mut clones = Vec::new();
-        for _ in 0..1000000 {
-            clones.push(_cp3.clone());
-        }
-        panic!("Elapsed: {:#?}", start.elapsed()); // Benchmark
     });
 }
 
