@@ -1,3 +1,7 @@
+type Version = nat64;
+
+type RuleId = text;
+
 type InputRule = record {
   id: text;
   rule_raw: blob;
@@ -22,14 +26,24 @@ type OverwriteConfigResponse = record {
   result: bool;
 };
 
-type GetConfigResponse = record {
-  config: OutputConfig
+type ConfigResponse = record {
+    version: nat64;
+    active_since: nat64;
+    config: OutputConfig;
 };
 
-type Version = nat64;
+type GetConfigResponse = variant {
+  Ok: ConfigResponse;
+  Err: text;
+};
+
+type DisclosesRulesResponse = record {
+  result: bool;
+}
 
 service : (nat64) -> {
     get_api_boundary_nodes_count : () -> (nat64) query;
     overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
     get_config: (opt Version) -> (GetConfigResponse);
+    disclose_rules: (vec RuleId) -> (DisclosesRulesResponse);
 }
