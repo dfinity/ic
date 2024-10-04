@@ -8,7 +8,9 @@ use ic_nervous_system_integration_tests::{
     },
 };
 use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
-use ic_sns_governance::pb::v1 as sns_pb;
+use ic_sns_governance::{
+    governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS, pb::v1 as sns_pb,
+};
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 use pocket_ic::PocketIcBuilder;
@@ -91,7 +93,7 @@ fn test_get_upgrade_journal() {
         assert_eq!(response_timestamp_seconds, Some(1620501459));
     }
 
-    wait_for_next_periodic_task(6 * 60); // 6 min
+    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
 
     // State B: after the first periodic task's completion. No changes expected yet.
     {
@@ -135,7 +137,7 @@ fn test_get_upgrade_journal() {
         (new_sns_version_1, new_sns_version_2)
     };
 
-    wait_for_next_periodic_task(6 * 60); // 6 min
+    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
 
     // State C: after the second periodic task's completion.
     {

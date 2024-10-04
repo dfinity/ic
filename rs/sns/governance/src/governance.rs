@@ -153,7 +153,7 @@ pub fn log_prefix() -> String {
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
 // How frequently the canister should attempt to refresh the cached_upgrade_steps
-pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 5 * 60; // 5 minutes
+pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
