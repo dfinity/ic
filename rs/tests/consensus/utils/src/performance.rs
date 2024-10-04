@@ -11,7 +11,7 @@ use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
 };
-use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsFetcher};
+use ic_system_test_driver::util::{assert_canister_counter_with_retries, get_app_subnet_and_node, MetricsFetcher};
 
 use futures::future::join_all;
 use slog::{error, info, Logger};
@@ -32,6 +32,8 @@ const INGRESS_MESSAGE_E2E_LATENCY_METRICS: &str =
     "replica_http_ingress_watcher_wait_for_certification_duration_seconds";
 const TIME_TO_RECEIVE_BLOCK_METRICS: &str = "consensus_time_to_receive_block";
 
+const CANISTER_COUNT: usize = 4;
+
 pub fn test_with_rt_handle(
     env: TestEnv,
     message_size: usize,
@@ -41,21 +43,11 @@ pub fn test_with_rt_handle(
 ) -> anyhow::Result<TestMetrics> {
     let log = env.logger();
 
-    let canister_count: usize = 4;
-
-    let subnet = env
-        .topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
-        .ok_or(anyhow::anyhow!("Failed to find an application subnet"))?;
-    let app_node = subnet
-        .nodes()
-        .next()
-        .ok_or(anyhow::anyhow!("Subnet doesn't have any hodes"))?;
+    let (subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
 
     info!(
         log,
-        "Step 1: Install {} canisters on the subnet..", canister_count
+        "Step 1: Install {} canisters on the subnet..", CANISTER_COUNT
     );
     let mut canisters = Vec::new();
     let agent = rt.block_on(app_node.build_canister_agent());
@@ -71,7 +63,7 @@ pub fn test_with_rt_handle(
         .await
     });
 
-    for _ in 0..canister_count {
+    for _ in 0..CANISTER_COUNT{
         canisters.push(
             app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, /*arg=*/ None),
         );
@@ -142,12 +134,12 @@ pub fn test_with_rt_handle(
         metrics.failure_calls()
     );
 
-    let min_expected_canister_counter = min_expected_success_calls / canister_count;
+    let min_expected_canister_counter = min_expected_success_calls / CANISTER_COUNT;
     info!(
         log,
         "Minimal expected counter value on canisters {}", min_expected_canister_counter
     );
-    for canister in canisters.iter() {
+    for canister in &canisters {
         rt.block_on(assert_canister_counter_with_retries(
             &log,
             &agent.get(),

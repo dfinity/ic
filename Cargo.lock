@@ -13323,6 +13323,7 @@ dependencies = [
  "ic-backup",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-limits",
  "ic-management-canister-types",
  "ic-nns-constants",
  "ic-nns-governance-api",

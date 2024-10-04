@@ -48,7 +48,9 @@
 use ic_consensus_system_test_utils::performance::persist_metrics;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::dsl::TestFunction;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
 use ic_system_test_driver::driver::test_env_api::read_dependency_from_env_to_string;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -58,7 +60,6 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
-use ic_system_test_driver::systest;
 use ic_system_test_driver::util::get_app_subnet_and_node;
 use ic_types::Height;
 
@@ -73,11 +74,13 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 const NODES_COUNT: usize = 13;
 const DKG_INTERVAL: u64 = 999;
 // Network parameters
+const PRODUCTION_SUBNET_TO_SIMULATE: ProductionSubnetTopology = ProductionSubnetTopology::LHG73;
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(200); // artificial added latency
-const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
+const FIXED_NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
+const USE_FIXED_NETWORK_SIMULATION: bool = true;
 
 fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -103,6 +106,10 @@ fn setup(env: TestEnv) {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                // Force to use [`ic_limits::INITIAL_NOTARY_DELAY_APP_SUBNET`], otherwise for
+                // subnets of size larger than [`ic_limits::SMALL_APP_SUBNET_MAX_SIZE`] we would
+                // use [`ic_limits::INITIAL_NOTARY_DELAY_NNS_SUBNET].
+                .with_initial_notary_delay(ic_limits::INITIAL_NOTARY_DELAY_APP_SUBNET)
                 .add_nodes(NODES_COUNT),
         )
         .setup_and_start(&env)
@@ -116,7 +123,11 @@ fn setup(env: TestEnv) {
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
-    app_subnet.apply_network_settings(NETWORK_SIMULATION);
+    if USE_FIXED_NETWORK_SIMULATION {
+        app_subnet.apply_network_settings(FIXED_NETWORK_SIMULATION);
+    } else {
+        app_subnet.apply_network_settings(PRODUCTION_SUBNET_TO_SIMULATE);
+    }
 }
 
 fn test(env: TestEnv, message_size: usize, rps: f64) {
@@ -158,16 +169,16 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
-fn test_few_small_messages(env: TestEnv) {
-    test(env, 1, 1.0)
+fn test_case(ingress_message_size: usize, rps: f64) -> TestFunction {
+    TestFunction::new(
+        &format!("message size: {}, rps: {}", ingress_message_size, rps),
+        move |env| test(env, ingress_message_size, rps),
+    )
 }
 
-fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0)
-}
-
-fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0)
+#[allow(dead_code)]
+fn download_prometheus_data(env: TestEnv) {
+    env.download_prometheus_data_dir_if_exists();
 }
 
 fn main() -> Result<()> {
@@ -176,9 +187,13 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(systest!(test_few_small_messages))
-        .add_test(systest!(test_small_messages))
-        .add_test(systest!(test_large_messages))
+        .add_test(test_case(1, 1.0))
+        .add_test(test_case(4_000, 500.0))
+        .add_test(test_case(950_000, 4.0))
+        // Uncomment this to download the prometheus data.
+        // To see the grafana dashboard first locate the `prometheus-data-dir.tar.zst` file in the
+        // test output directory and then run the `/ic/rs/tests/run-p8s.sh` script.
+        //.add_test(systest!(download_prometheus_data))
         .execute_from_args()?;
     Ok(())
 }
