@@ -10,6 +10,7 @@ Example usage:
 Find changed files in the `rs` directory:
   python git_changes.py --changed-files-in-dirs rs
 """
+
 import argparse
 import functools
 import logging

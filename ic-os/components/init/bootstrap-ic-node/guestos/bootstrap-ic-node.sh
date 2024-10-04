@@ -12,7 +12,6 @@
 set -eo pipefail
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"

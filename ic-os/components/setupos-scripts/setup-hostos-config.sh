@@ -10,6 +10,8 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 CONFIG_DIR="/config"
 
+source /opt/ic/bin/functions.sh
+
 function mount_config_partition() {
     echo "* Mounting hostOS config partition..."
 

@@ -36,15 +36,13 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
-    AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
-    MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
-    MAX_WASM_MEMORY_IN_BYTES,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes,
+    NumInstructions, NumSlices, Randomness, SubnetId, Time, MAX_WASM_MEMORY_IN_BYTES,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
 use std::{
     cell::RefCell,
-    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     str::FromStr,
     sync::Arc,
@@ -54,7 +52,6 @@ use strum::IntoEnumIterator;
 mod scheduler_metrics;
 use scheduler_metrics::*;
 mod round_schedule;
-use crate::util::debug_assert_or_critical_error;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
 mod threshold_signatures;
@@ -147,248 +144,6 @@ pub(crate) struct SchedulerImpl {
 }
 
 impl SchedulerImpl {
-    /// Returns scheduler compute capacity in percent.
-    /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
-    pub fn compute_capacity_percent(scheduler_cores: usize) -> usize {
-        // Note: the DTS scheduler requires at least 2 scheduler cores
-        if scheduler_cores >= 2 {
-            (scheduler_cores - 1) * 100
-        } else {
-            0
-        }
-    }
-
-    /// Orders canister round states according to the scheduling strategy.
-    /// The function is to keep in sync `apply_scheduling_strategy()` and
-    /// `abort_paused_executions_above_limit()`
-    fn order_canister_round_states(&self, round_states: &mut [CanisterRoundState]) {
-        round_states.sort_by_key(|rs| {
-            (
-                Reverse(rs.long_execution_mode),
-                Reverse(rs.has_aborted_or_paused_execution),
-                Reverse(rs.accumulated_priority),
-                rs.canister_id,
-            )
-        });
-    }
-
-    /// Orders the canisters and updates their accumulated priorities according to
-    /// the strategy described in RUN-58.
-    ///
-    /// A shorter description of the scheduling strategy is available in the note
-    /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
-    fn apply_scheduling_strategy(
-        &self,
-        logger: &ReplicaLogger,
-        scheduler_cores: usize,
-        current_round: ExecutionRound,
-        accumulated_priority_reset_interval: ExecutionRound,
-        canister_states: &mut BTreeMap<CanisterId, CanisterState>,
-    ) -> RoundSchedule {
-        let number_of_canisters = canister_states.len();
-
-        // Total allocatable compute capacity in percent.
-        // As one scheduler core is reserved to guarantee long executions progress,
-        // compute capacity is `(scheduler_cores - 1) * 100`
-        let compute_capacity_percent = Self::compute_capacity_percent(scheduler_cores) as i64;
-
-        // Sum of all canisters compute allocation in percent.
-        // It's guaranteed to be less than `compute_capacity_percent`
-        // by `validate_compute_allocation()`.
-        // This corresponds to |a| in Scheduler Analysis.
-        let mut total_compute_allocation_percent: i64 = 0;
-
-        // Use this multiplier to achieve the following two:
-        // 1) The sum of all the values we add to accumulated priorities
-        //    to calculate the round priorities must be divisible by the number
-        //    of canisters that are given top priority in this round.
-        // 2) The free capacity (the difference between `compute_capacity_percent`
-        //    and `total_compute_allocation_percent`) can be distributed to all
-        //    the canisters evenly.
-        // The `max(1)` is the corner case when there are no Canisters.
-        let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
-
-        // This corresponds to the vector p in the Scheduler Analysis document.
-        let mut round_states = Vec::with_capacity(number_of_canisters);
-
-        // Reset the accumulated priorities periodically.
-        // We want to reset the scheduler regularly to safely support changes in the set
-        // of canisters and their compute allocations.
-        let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
-
-        // Compute the priority of the canisters for this round.
-        let mut accumulated_priority_invariant = AccumulatedPriority::default();
-        let mut accumulated_priority_deviation = 0;
-        for (&canister_id, canister) in canister_states.iter_mut() {
-            if is_reset_round {
-                canister.scheduler_state.accumulated_priority = Default::default();
-                canister.scheduler_state.priority_credit = Default::default();
-            }
-
-            let has_aborted_or_paused_execution =
-                canister.has_aborted_execution() || canister.has_paused_execution();
-            if !has_aborted_or_paused_execution {
-                canister.apply_priority_credit();
-            }
-
-            let compute_allocation = canister.scheduler_state.compute_allocation;
-            let accumulated_priority = canister.scheduler_state.accumulated_priority;
-            round_states.push(CanisterRoundState {
-                canister_id,
-                accumulated_priority,
-                compute_allocation,
-                long_execution_mode: canister.scheduler_state.long_execution_mode,
-                has_aborted_or_paused_execution,
-            });
-
-            total_compute_allocation_percent += compute_allocation.as_percent() as i64;
-            accumulated_priority_invariant += accumulated_priority;
-            accumulated_priority_deviation +=
-                accumulated_priority.get() * accumulated_priority.get();
-        }
-        // Assert there is at least `1%` of free capacity to distribute across canisters.
-        // It's guaranteed by `validate_compute_allocation()`
-        debug_assert_or_critical_error!(
-            total_compute_allocation_percent < compute_capacity_percent,
-            self.metrics.scheduler_compute_allocation_invariant_broken,
-            logger,
-            "{}: Total compute allocation {}% must be less than compute capacity {}%",
-            SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
-            total_compute_allocation_percent,
-            compute_capacity_percent
-        );
-        // Observe accumulated priority metrics
-        self.metrics
-            .scheduler_accumulated_priority_invariant
-            .set(accumulated_priority_invariant.get());
-        self.metrics
-            .scheduler_accumulated_priority_deviation
-            .set((accumulated_priority_deviation as f64 / number_of_canisters as f64).sqrt());
-
-        // Free capacity per canister in multiplied percent.
-        // Note, to avoid division by zero when there are no canisters
-        // and having `multiplier == number_of_canisters * scheduler_cores`, the
-        // `(compute_capacity - total_compute_allocation) * multiplier / number_of_canisters`
-        // can be simplified to just
-        // `(compute_capacity - total_compute_allocation) * scheduler_cores`
-        let free_capacity_per_canister = compute_capacity_percent
-            .saturating_sub(total_compute_allocation_percent)
-            * scheduler_cores as i64;
-
-        // Fully divide the free allocation across all canisters.
-        let mut long_executions_compute_allocation = 0;
-        let mut number_of_long_executions = 0;
-        for rs in round_states.iter_mut() {
-            // De-facto compute allocation includes bonus allocation
-            let factual =
-                rs.compute_allocation.as_percent() as i64 * multiplier + free_capacity_per_canister;
-            // Increase accumulated priority by de-facto compute allocation.
-            rs.accumulated_priority += factual.into();
-            // Count long executions and sum up their compute allocation.
-            if rs.has_aborted_or_paused_execution {
-                // Note: factual compute allocation is multiplied by `multiplier`
-                long_executions_compute_allocation += factual;
-                number_of_long_executions += 1;
-            }
-        }
-
-        // Optimization that makes use of accessing a canister state without an extra canister id lookup.
-        // IMPORTANT! Optimization relies on the fact that elements in `canister_states` and `round_states` follow in the same order.
-        for ((&_, canister), rs) in canister_states.iter_mut().zip(round_states.iter()) {
-            debug_assert!(
-                canister.canister_id() == rs.canister_id,
-                "Elements in canister_states and round_states must follow in the same order",
-            );
-            // Update canister state with a new accumulated_priority.
-            canister.scheduler_state.accumulated_priority = rs.accumulated_priority;
-
-            // Record a canister metric.
-            if !canister.has_input() {
-                canister
-                    .system_state
-                    .canister_metrics
-                    .skipped_round_due_to_no_messages += 1;
-            }
-        }
-
-        // Count long execution cores by dividing `long_execution_compute_allocation`
-        // by `100%` and rounding up (as one scheduler core is reserved to guarantee
-        // long executions progress).
-        // Note, the `long_execution_compute_allocation` is in percent multiplied
-        // by the `multiplier`.
-        let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
-            / (100 * multiplier)) as usize;
-        // If there are long executions, the `long_execution_cores` must be non-zero.
-        debug_assert_or_critical_error!(
-            number_of_long_executions == 0 || long_execution_cores > 0,
-            self.metrics.scheduler_cores_invariant_broken,
-            logger,
-            "{}: Number of long execution cores {} must be more than 0",
-            SCHEDULER_CORES_INVARIANT_BROKEN,
-            long_execution_cores,
-        );
-        // As one scheduler core is reserved, the `long_execution_cores` is always
-        // less than `scheduler_cores`
-        debug_assert_or_critical_error!(
-            long_execution_cores < scheduler_cores,
-            self.metrics.scheduler_cores_invariant_broken,
-            logger,
-            "{}: Number of long execution cores {} must be less than scheduler cores {}",
-            SCHEDULER_CORES_INVARIANT_BROKEN,
-            long_execution_cores,
-            scheduler_cores
-        );
-
-        self.order_canister_round_states(&mut round_states);
-
-        let round_schedule = RoundSchedule::new(
-            scheduler_cores,
-            long_execution_cores,
-            total_compute_allocation_percent,
-            round_states
-                .iter()
-                .skip(number_of_long_executions)
-                .map(|rs| rs.canister_id)
-                .collect(),
-            round_states
-                .iter()
-                .take(number_of_long_executions)
-                .map(|rs| rs.canister_id)
-                .collect(),
-        );
-
-        {
-            let scheduling_order = round_schedule.scheduling_order();
-            let scheduling_order = scheduling_order
-                .prioritized_long_canister_ids
-                .chain(scheduling_order.new_canister_ids)
-                .chain(scheduling_order.opportunistic_long_canister_ids);
-            // The number of active scheduler cores is limited by the number
-            // of canisters to schedule.
-            let active_cores = scheduler_cores.min(number_of_canisters);
-            for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
-                let canister_state = canister_states.get_mut(canister_id).unwrap();
-                // As top `scheduler_cores` canisters are guaranteed to be scheduled
-                // this round, their accumulated priorities must be decreased here
-                // by `capacity * multiplier / scheduler_cores`. But instead this
-                // value is accumulated in the `priority_credit`, and applied later:
-                // * For short executions, the `priority_credit` is deducted from
-                //   the `accumulated_priority` at the end of the round.
-                // * For long executions, the `priority_credit` is accumulated
-                //   for a few rounds, and deducted from the `accumulated_priority`
-                //   at the end of the long execution.
-                canister_state.scheduler_state.priority_credit +=
-                    (compute_capacity_percent * multiplier / active_cores as i64).into();
-                if i < round_schedule.long_execution_cores {
-                    canister_state.scheduler_state.long_execution_mode =
-                        LongExecutionMode::Prioritized;
-                }
-            }
-        }
-
-        round_schedule
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: SchedulerConfig,
@@ -1317,7 +1072,7 @@ impl SchedulerImpl {
             })
             .collect::<Vec<_>>();
 
-        self.order_canister_round_states(&mut paused_round_states);
+        RoundSchedule::order_canister_round_states(&mut paused_round_states);
 
         paused_round_states
             .iter()
@@ -1717,12 +1472,13 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
             let mut canisters = state.take_canister_states();
-            let round_schedule_candidate = self.apply_scheduling_strategy(
+            let round_schedule_candidate = RoundSchedule::apply_scheduling_strategy(
                 &round_log,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
                 &mut canisters,
+                &self.metrics,
             );
             state.put_canister_states(canisters);
             round_schedule_candidate
