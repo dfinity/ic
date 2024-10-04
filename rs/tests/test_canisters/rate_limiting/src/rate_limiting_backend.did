@@ -22,8 +22,9 @@ type OutputConfig = record {
   rules: vec OutputRule; 
 };
 
-type OverwriteConfigResponse = record {
-  result: bool;
+type OverwriteConfigResponse = variant {
+  Ok;
+  Err: text;
 };
 
 type ConfigResponse = record {
@@ -37,8 +38,9 @@ type GetConfigResponse = variant {
   Err: text;
 };
 
-type DisclosesRulesResponse = record {
-  result: bool;
+type DisclosesRulesResponse = variant {
+  Ok;
+  Err: text;
 }
 
 service : (nat64) -> {

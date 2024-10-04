@@ -19,11 +19,6 @@ static API_BNS_COUNT: AtomicU64 = AtomicU64::new(0);
 pub struct GetApiBoundaryNodeIdsRequest {}
 
 #[derive(CandidType, candid::Deserialize)]
-struct OverwriteConfigResponse {
-    result: bool,
-}
-
-#[derive(CandidType, candid::Deserialize)]
 struct ConfigResponse {
     version: Version,
     active_since: Timestamp,
@@ -31,6 +26,8 @@ struct ConfigResponse {
 }
 
 type GetConfigResponse = Result<ConfigResponse, String>;
+type OverwriteConfigResponse = Result<(), String>;
+type DisclosesRulesResponse = Result<(), String>;
 
 #[derive(Clone)]
 struct StoredConfig {
@@ -95,8 +92,7 @@ fn overwrite_config(config: InputConfig) -> OverwriteConfigResponse {
         configs.insert(version, new_config);
     });
 
-    let result = OverwriteConfigResponse { result: true };
-    result
+    Ok(())
 }
 
 #[ic_cdk_macros::update]
