@@ -1952,6 +1952,7 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
         metadata: _,
         last_executed_round: _,
         next_scheduled_method: _,
+        is_wasm64: _,
     } = execution_state.unwrap();
 
     //

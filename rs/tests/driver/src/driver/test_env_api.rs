@@ -1238,7 +1238,6 @@ impl HasGroupSetup for TestEnv {
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                        self,
                     )
                     .unwrap();
                 }
