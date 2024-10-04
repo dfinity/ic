@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
+    common::{build_validator, Cbor, WithTimeout},
     ReplicaHealthStatus,
 };
 
@@ -194,8 +194,8 @@ pub(crate) async fn query(
     {
         Ok(Ok(_)) => {}
         Ok(Err(err)) => {
-            let http_err = validation_error_to_http_error(request.id(), err, &log);
-            return (http_err.status, http_err.message).into_response();
+            let msg = format!("{err}");
+            return (StatusCode::BAD_REQUEST, msg).into_response();
         }
         Err(_) => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();

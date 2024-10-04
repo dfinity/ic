@@ -1,6 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
+    common::{build_validator, into_cbor, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -169,8 +169,8 @@ pub(crate) async fn canister_read_state(
             match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
                 Ok(targets) => targets,
                 Err(err) => {
-                    let http_err = validation_error_to_http_error(request.id(), err, &log);
-                    return (http_err.status, http_err.message).into_response();
+                    let msg = format!("{err}");
+                    return (StatusCode::BAD_REQUEST, msg).into_response();
                 }
             };
 
