@@ -62,7 +62,7 @@ function read_config_variables() {
     domain=$(get_config_value '.network_settings.ipv4_config.domain')
     elasticsearch_hosts=$(get_config_value '.icos_settings.logging.elasticsearch_hosts')
     nns_public_key=$(get_config_value '.icos_settings.nns_public_key_path')
-    nns_urls=$(get_config_value '.icos_settings.nns_urls')
+    nns_url=$(get_config_value '.icos_settings.nns_url')
     node_operator_private_key=$(get_config_value '.icos_settings.node_operator_private_key_path')
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
@@ -81,7 +81,7 @@ function assemble_config_media() {
     fi
     # todo: can I use the fetch-mgmt-mac in hostos tool?
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
-    cmd+=(--nns_urls "$nns_urls")
+    cmd+=(--nns_url "$nns_url")
     if [ -f "$node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "$node_operator_private_key")
     fi
