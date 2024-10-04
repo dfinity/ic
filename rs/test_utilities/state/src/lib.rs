@@ -9,9 +9,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{
-            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
-        },
+        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus},
         testing::new_canister_output_queues_for_test,
     },
@@ -41,8 +39,8 @@ use ic_types::{
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
-    PrincipalId, SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -578,17 +576,15 @@ impl Default for ExecutionStateBuilder {
         let wasm_metadata = WasmMetadata::new(metadata);
 
         ExecutionStateBuilder {
-            execution_state: ExecutionState {
-                canister_root: "NOT_USED".into(),
-                wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
-                wasm_memory: Memory::new_for_testing(),
-                stable_memory: Memory::new_for_testing(),
-                exported_globals: vec![],
-                exports: ExportedFunctions::new(BTreeSet::new()),
-                metadata: wasm_metadata,
-                last_executed_round: ExecutionRound::from(0),
-                next_scheduled_method: NextScheduledMethod::default(),
-            },
+            execution_state: ExecutionState::new(
+                "NOT_USED".into(),
+                WasmBinary::new(CanisterModule::new(vec![])),
+                ExportedFunctions::new(BTreeSet::new()),
+                Memory::new_for_testing(),
+                Memory::new_for_testing(),
+                vec![],
+                wasm_metadata,
+            ),
         }
     }
 }
