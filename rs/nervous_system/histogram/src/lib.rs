@@ -1,3 +1,19 @@
+//! An "event" has some real number associated with it. For example, a request
+//! takes 123 ms to process.
+//!
+//! The Histogram struct in this crate does two things:
+//!
+//! 1. Groups events based on
+//!     a) the real number associated with the event
+//!     b) binning scheme
+//! 2. Counts how many events there are in each group.
+//!
+//! This is designed to plug into ic_metrics_encoder::MetricsEncoder::histogram_vec.
+//!
+//! A limitation of this is that instead of being able to use f64 for the real
+//! value associated with an event, you must use i64. You can usually work with
+//! this by picking a sufficiently small unit.
+
 use ic_metrics_encoder::LabeledHistogramBuilder;
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -55,21 +71,6 @@ lazy_static! {
     };
 }
 
-/// An "event" has some real number associated with it. For example, a request takes 123 ms to
-/// process.
-///
-/// This does two things:
-///
-/// 1. Groups events based on
-///     a) the real number associated with the event
-///     b) bucketing scheme (more on this later)
-/// 2. Counts how many events there are in each group.
-///
-/// This is designed to plug into ic_metrics_encoder::MetricsEncoder::histogram_vec.
-///
-/// A limitation of this is that instead of being able to use f64 for the real
-/// value associated with an event, you must use i64. You can usually work with
-/// this by picking a sufficiently small unit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Histogram {
     bin_inclusive_upper_bound_to_count: BTreeMap<i64, u64>,
