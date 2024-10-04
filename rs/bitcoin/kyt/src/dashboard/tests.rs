@@ -142,6 +142,7 @@ fn test_pagination() {
         .iter()
         .flat_map(|page| {
             let rendered_html = page.render().unwrap();
+            assert!(rendered_html.len() < 2_000_000);
             let parsed = Html::parse_document(&rendered_html);
             (1..=DEFAULT_TX_TABLE_PAGE_SIZE).flat_map(move |i| {
                 let selector = Selector::parse(&format!(
