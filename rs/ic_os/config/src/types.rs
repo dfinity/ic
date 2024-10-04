@@ -87,7 +87,7 @@ pub struct ICOSSettings {
     /// This file must be a text file containing the public key of the NNS to be used.
     pub nns_public_key_path: PathBuf,
     /// The URL (HTTP) of the NNS node(s).
-    pub nns_urls: Vec<Url>,
+    pub nns_url: Vec<Url>,
     pub hostname: String,
     /// This file contains the Node Operator private key,
     /// which is registered with the NNS and used to sign the IC join request.
