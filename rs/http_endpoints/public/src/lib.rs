@@ -386,7 +386,6 @@ pub fn start_server(
     .build_router();
 
     let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
-        log.clone(),
         state_reader.clone(),
         registry_client.clone(),
         ingress_verifier,

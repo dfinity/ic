@@ -17,7 +17,6 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::ReplicaLogger;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
@@ -39,7 +38,6 @@ use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
-    log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -48,7 +46,6 @@ pub struct CanisterReadStateService {
 }
 
 pub struct CanisterReadStateServiceBuilder {
-    log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
     delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
@@ -65,14 +62,12 @@ impl CanisterReadStateService {
 
 impl CanisterReadStateServiceBuilder {
     pub fn builder(
-        log: ReplicaLogger,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ) -> Self {
         Self {
-            log,
             health_status: None,
             malicious_flags: None,
             delegation_from_nns,
@@ -97,7 +92,6 @@ impl CanisterReadStateServiceBuilder {
 
     pub(crate) fn build_router(self) -> Router {
         let state = CanisterReadStateService {
-            log: self.log,
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
@@ -123,7 +117,6 @@ impl CanisterReadStateServiceBuilder {
 pub(crate) async fn canister_read_state(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(CanisterReadStateService {
-        log,
         health_status,
         delegation_from_nns,
         state_reader,
