@@ -109,6 +109,7 @@ propose_upgrade_canister_wasm_file_pem() {
     local CANISTER_ID=$4
     local WASM_FILE=$5
     local ENCODED_ARGS_FILE=${6:-}
+    local ENCODED_ARGS_SHA=${7:-}
 
     # See note at variable declaration
     PROPOSAL="$MY_DOWNLOAD_DIR"/testnet_upgrade_proposal.txt
@@ -125,6 +126,7 @@ propose_upgrade_canister_wasm_file_pem() {
         --proposer "$NEURON_ID" \
         $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
         $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
+        $([ -z "$ENCODED_ARGS_SHA" ] || echo "--arg-sha256 $ENCODED_ARGS_SHA")
 
     rm -rf $PROPOSAL
 }
