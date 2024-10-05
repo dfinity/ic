@@ -4,6 +4,7 @@ use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::http_request;
 
 pub mod blocklist;
+pub mod dashboard;
 mod fetch;
 mod providers;
 mod state;
