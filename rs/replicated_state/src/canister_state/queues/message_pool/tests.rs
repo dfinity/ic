@@ -630,43 +630,31 @@ fn test_is_outbound_guaranteed_request() {
 
 #[test]
 fn test_reference_roundtrip_encode() {
-    fn queue_item(id: Id) -> pb_queues::canister_queue::QueueItem {
-        pb_queues::canister_queue::QueueItem {
-            r: Some(pb_queues::canister_queue::queue_item::R::Reference(id.0)),
-        }
-    }
-
     for kind in [Kind::Request, Kind::Response] {
         for class in [Class::GuaranteedResponse, Class::BestEffort] {
             // Inbound.
-            let id = Id::from(InboundReference::new(class, kind, 13));
-            let item = queue_item(id);
-            // Can be converted to an `InboundReference`.
-            let reference = InboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
+            let reference = InboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
+            // Can be converted back to the same `InboundReference`.
+            let decoded = InboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
             // Fails to convert to an `OutboundReference`.
             assert_matches!(
-                OutboundReference::try_from(item),
+                OutboundReference::try_from(encoded),
                 Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
             );
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
 
             // Outbound.
-            let id = Id::from(OutboundReference::new(class, kind, 13));
-            let item = queue_item(id);
+            let reference = OutboundReference::new(class, kind, 13);
+            let encoded = u64::from(&reference);
             // Fails to convert to an `InboundReference`.
             assert_matches!(
-                InboundReference::try_from(item),
+                InboundReference::try_from(encoded),
                 Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
             );
-            // Can be converted to an `OutboundReference`.
-            let reference = OutboundReference::try_from(item).unwrap();
-            assert_eq!(reference.0, id.0);
-            assert_eq!(id, reference.into());
-            // Roundtrip encode produces the same item.
-            assert_eq!(item, (&reference).into());
+            // Can be converted back to the same `OutboundReference`.
+            let decoded = OutboundReference::try_from(encoded).unwrap();
+            assert_eq!(reference, decoded);
         }
     }
 }
