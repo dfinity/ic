@@ -5,7 +5,10 @@ use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -59,6 +62,7 @@ fn test_wasmtime_system_api() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_cap as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
@@ -80,6 +84,7 @@ fn test_wasmtime_system_api() {
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_callback_quota: HypervisorConfig::default().canister_callback_quota as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
