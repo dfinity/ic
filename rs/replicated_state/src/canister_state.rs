@@ -5,7 +5,7 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
+use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
@@ -497,11 +497,7 @@ impl CanisterState {
     }
 
     pub fn status(&self) -> CanisterStatusType {
-        match self.system_state.status {
-            CanisterStatus::Running { .. } => CanisterStatusType::Running,
-            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
-        }
+        self.system_state.status()
     }
 
     /// Returns next scheduled method.
@@ -541,23 +537,7 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        // Remove aborted install code task.
-        system_state.task_queue.remove_aborted_install_code_task();
-
-        // Roll back `Stopping` canister states to `Running` and drop all their stop
-        // contexts (the calls corresponding to the dropped stop contexts will be
-        // rejected by subnet A').
-        match &system_state.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => {
-                system_state.status = CanisterStatus::Running {
-                    call_context_manager: call_context_manager.clone(),
-                }
-            }
-        }
+        system_state.drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.

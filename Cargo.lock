@@ -5923,6 +5923,7 @@ dependencies = [
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
+ "ic-management-canister-types",
  "ic-metrics",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
