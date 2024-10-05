@@ -4,7 +4,7 @@ set -euo pipefail
 set -x
 
 function help {
-    echo >&2 "Usage: $0 <commit_id> (icp-ledger-archive|icp-ledger-archive-1|ledger) <arg>?"
+    echo >&2 "Usage: $0 <commit_id> (icp-ledger-archive|icp-ledger-archive-1|icp-ledger-archive-2|ledger) <arg>?"
 }
 
 if (($# != 2)) && (($# != 3)); then
@@ -12,7 +12,7 @@ if (($# != 2)) && (($# != 3)); then
     exit 1
 fi
 
-if [ "$2" != "icp-ledger-archive" ] && [ "$2" != "icp-ledger-archive-1" ] && [ "$2" != "ledger" ]; then
+if [ "$2" != "icp-ledger-archive" ] && [ "$2" != "icp-ledger-archive-1" ] && [ "$2" != "icp-ledger-archive-2" ] && [ "$2" != "ledger" ]; then
     help
     exit 2
 fi

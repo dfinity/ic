@@ -18,10 +18,15 @@ propose_upgrade_canister_to_version_pem() {
     local CANISTER_NAME=$4
     local VERSION=$5
     local ENCODED_ARGS_FILE=${6:-}
+    local ENCODED_ARGS_SHA=""
 
     WASM_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
+    if [ -f "$ENCODED_ARGS_FILE" ]; then
+        local ENCODED_ARGS_SHA=$(sha_256 "$ENCODED_ARGS_FILE")
+    fi
+
+    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE" "$ENCODED_ARGS_SHA"
 }
 
 build_canister_and_propose_upgrade_pem() {
