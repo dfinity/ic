@@ -98,6 +98,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_cap as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         api_type.caller(),
         api_type.call_context_id(),
