@@ -144,12 +144,6 @@ impl CanisterState {
         }
     }
 
-    /// Apply priority credit
-    pub fn apply_priority_credit(&mut self) {
-        self.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut self.scheduler_state.priority_credit);
-    }
-
     pub fn canister_id(&self) -> CanisterId {
         self.system_state.canister_id()
     }

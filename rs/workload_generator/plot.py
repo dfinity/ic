@@ -18,7 +18,6 @@ def get_numbers(filename):
 
 
 def plot(results, title, outname):
-
     fig, ax = plt.subplots()
     ax.plot([x for x, _ in results], [y for _, y in results], label=title, marker="o")
 

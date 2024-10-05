@@ -64,6 +64,20 @@ load("@focal//:packages.bzl", "focal_packages")
 
 focal_packages()
 
+# Packageset based on an Ubuntu noble snapshot, see manifest file
+# for details
+# To update, comment out the `lock` field below and run:
+#   bazel run @noble//:lock
+deb_index(
+    name = "noble",
+    lock = "//bazel:noble.lock.json",
+    manifest = "//bazel:noble.yaml",
+)
+
+load("@noble//:packages.bzl", "noble_packages")
+
+noble_packages()
+
 # OCI (docker, podman) container support
 http_archive(
     name = "rules_oci",
@@ -137,6 +151,13 @@ oci_pull(
 oci_pull(
     name = "ubuntu_base",
     image = "docker.io/library/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    platforms = ["linux/amd64"],
+)
+
+# used in various places as base
+oci_pull(
+    name = "ubuntu_noble_base",
+    image = "docker.io/library/ubuntu@sha256:77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a",
     platforms = ["linux/amd64"],
 )
 
@@ -684,9 +705,9 @@ http_file(
 
 http_archive(
     name = "rules_haskell",
-    sha256 = "cf5e0a00275f3ed974a3e961db0d6923390f85ba83f7d7f5d89ebe7c5a1c2b6b",
-    strip_prefix = "rules_haskell-220503b4c7403d02d8e3537eb57c722fe1f14c7a",
-    url = "https://github.com/tweag/rules_haskell/archive/220503b4c7403d02d8e3537eb57c722fe1f14c7a.tar.gz",
+    sha256 = "4cae22bc84f327bf3cb7605021c3663160ff6bc8a0b7b6266062366bcbd19e79",
+    strip_prefix = "rules_haskell-1.0",
+    urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],
 )
 
 # Load the rules_haskell dependencies necessary for loading the toolchains

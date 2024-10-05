@@ -7836,3 +7836,32 @@ fn ic0_mint_cycles_u64() {
             >= 2 * (1 << 64) - 10_000_000
     );
 }
+
+fn check_correct_execution_state(is_wasm64: bool) {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let memory_size = if is_wasm64 { "i64" } else { "" };
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_update test")
+                (drop (i64.const 0))
+            )
+            (memory {memory_size} 12)
+        )"#,
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    let execution_state = test.execution_state(canister_id);
+    assert_eq!(execution_state.is_wasm64, is_wasm64);
+}
+
+#[test]
+fn wasm64_correct_execution_state() {
+    check_correct_execution_state(true);
+}
+
+#[test]
+fn wasm32_correct_execution_state() {
+    check_correct_execution_state(false);
+}

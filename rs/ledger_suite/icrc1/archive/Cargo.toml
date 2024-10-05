@@ -1,0 +1,35 @@
+[package]
+name = "ic-icrc1-archive"
+description = "An archive canister for the ICRC-1 ledger"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-icrc1 = { path = "../" }
+ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
+ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-metrics-encoder = "1"
+ic-stable-structures = { workspace = true }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+serde = { workspace = true }
+
+[dev-dependencies]
+candid_parser = { workspace = true }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]

@@ -20,9 +20,9 @@ ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ethereum-types = { path = "../types" }
-ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
-ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
+ic-ethereum-types = { path = "../../../packages/ic-ethereum-types" }
+ic-icrc1-index-ng = { path = "../../ledger_suite/icrc1/index-ng" }
+ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }

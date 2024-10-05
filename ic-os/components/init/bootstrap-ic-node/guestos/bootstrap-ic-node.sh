@@ -14,7 +14,6 @@
 set -eo pipefail
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -175,7 +174,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     fi
 
     # Fix up permissions. This is actually the wrong place.
-    chown ic-replica.nogroup -R /var/lib/ic/data
+    chown ic-replica:nogroup -R /var/lib/ic/data
 
     if [ "${DEV}" != "" ]; then
         umount /mnt

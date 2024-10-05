@@ -9,8 +9,7 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{StableBTreeMap, Storable};
+use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;

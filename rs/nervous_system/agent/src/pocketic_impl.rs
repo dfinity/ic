@@ -17,6 +17,8 @@ pub enum PocketIcCallError {
     CandidDecode(candid::Error),
 }
 
+impl crate::sealed::Sealed for PocketIc {}
+
 impl CallCanisters for PocketIc {
     type Error = PocketIcCallError;
     async fn call<R: Request>(
