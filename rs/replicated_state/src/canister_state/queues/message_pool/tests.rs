@@ -641,7 +641,7 @@ fn test_reference_roundtrip_encode() {
             // Fails to convert to an `OutboundReference`.
             assert_matches!(
                 OutboundReference::try_from(encoded),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an outbound reference"
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
 
             // Outbound.
@@ -650,7 +650,7 @@ fn test_reference_roundtrip_encode() {
             // Fails to convert to an `InboundReference`.
             assert_matches!(
                 InboundReference::try_from(encoded),
-                Err(ProxyDecodeError::Other(msg)) if msg == "Not an inbound reference"
+                Err(ProxyDecodeError::Other(msg)) if msg.contains("Mismatched reference context")
             );
             // Can be converted back to the same `OutboundReference`.
             let decoded = OutboundReference::try_from(encoded).unwrap();
