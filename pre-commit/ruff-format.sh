@@ -7,3 +7,4 @@ REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 cd "$REPO_PATH"
 
 "$RUFF_PATH" check . --fix
+"$RUFF_PATH" format .
