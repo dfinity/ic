@@ -1,6 +1,7 @@
 use crate::ic_wasm::ICWasmModule;
 use ic_config::{
     embedders::{Config, FeatureFlags},
+    execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
 };
@@ -116,6 +117,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         canister_memory_limit: NumBytes::from(4 << 30),
         wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
+        canister_callback_quota: HypervisorConfig::default().canister_callback_quota as u64,
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
