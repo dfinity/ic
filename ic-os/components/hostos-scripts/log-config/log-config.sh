@@ -1,7 +1,7 @@
 #!/bin/bash
 
 CONFIG_DIR="/boot/config"
-CONFIG="/boot/config/config.ini"
+CONFIG="/boot/config/config.json"
 
 log_directory_structure() {
     local dir=$1
