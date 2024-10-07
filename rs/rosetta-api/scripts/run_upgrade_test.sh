@@ -13,38 +13,35 @@ if (($# != 2)) && (($# != 3)); then
 fi
 
 if [ "$2" != "icp-ledger-archive" ] \
-  && [ "$2" != "icp-ledger-archive-1" ] \
-  && [ "$2" != "icp-ledger-archive-2" ] \
-  && [ "$2" != "icp-index" ] \
-  && [ "$2" != "ledger" ]
-  then
+    && [ "$2" != "icp-ledger-archive-1" ] \
+    && [ "$2" != "icp-ledger-archive-2" ] \
+    && [ "$2" != "icp-index" ] \
+    && [ "$2" != "ledger" ]; then
     help
     exit 2
 fi
 
 function check_index() {
-  set +e
-  INDEX_CANISTER_ID="qhbym-qaaaa-aaaaa-aaafq-cai"
-  CANISTER_STATUS=100
-  for i in {1..20}; do
-    DFX_DISABLE_QUERY_VERIFICATION=1 dfx canister call --network $NNS_URL \
-      --candid "$SCRIPT_DIR/../../ledger_suite/icp/index/index.did" $INDEX_CANISTER_ID get_blocks \
-      '(record { start=0; length=1; }, )'
-    CANISTER_STATUS=$?
-    if [ "$CANISTER_STATUS" == "0" ]
-    then
-      break
+    set +e
+    INDEX_CANISTER_ID="qhbym-qaaaa-aaaaa-aaafq-cai"
+    CANISTER_STATUS=100
+    for i in {1..20}; do
+        DFX_DISABLE_QUERY_VERIFICATION=1 dfx canister call --network $NNS_URL \
+            --candid "$SCRIPT_DIR/../../ledger_suite/icp/index/index.did" $INDEX_CANISTER_ID get_blocks \
+            '(record { start=0; length=1; }, )'
+        CANISTER_STATUS=$?
+        if [ "$CANISTER_STATUS" == "0" ]; then
+            break
+        fi
+        sleep 3
+    done
+    if [ "$CANISTER_STATUS" == "0" ]; then
+        echo "Index canister is up and running"
+    else
+        echo "Index canister is not up and running"
+        exit 1
     fi
-    sleep 3
-  done
-  if [ "$CANISTER_STATUS" == "0" ]
-  then
-    echo "Index canister is up and running"
-  else
-    echo "Index canister is not up and running"
-    exit 1
-  fi
-  set -e
+    set -e
 }
 
 sudo apt update && sudo apt install sqlite3 containernetworking-plugins
