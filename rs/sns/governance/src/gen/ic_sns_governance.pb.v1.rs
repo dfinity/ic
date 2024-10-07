@@ -1953,6 +1953,8 @@ pub mod governance {
         pub acquired_timestamp_seconds: ::core::option::Option<u64>,
         #[prost(uint64, optional, tag = "4")]
         pub released_timestamp_seconds: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "5")]
+        pub refresh_deployed_version_attempts: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
