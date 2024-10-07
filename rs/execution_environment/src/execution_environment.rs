@@ -3183,7 +3183,9 @@ impl ExecutionEnvironment {
             | ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
             | ExecutionTask::OnLowWasmMemory => {
-                unreachable!("Here must be a paused task.")
+                unreachable!("Function abort_paused_execution_and_return_task is only called after 
+                the paused task is returned from TaskQueue, hence no task other than PausedExecution 
+                and PausedInstallCode should appear in paused_task except if there is a bug.")
             }
         }
     }

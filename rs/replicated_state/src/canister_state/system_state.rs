@@ -282,13 +282,15 @@ impl CanisterHistory {
 /// 3. All other tasks will be returned based on the order in which they are added to the queue.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
+    /// Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+    /// or `AbortedInstallCode` task if there is one.
     paused_or_aborted_task: Option<ExecutionTask>,
-
-    /// Queue of tasks.
-    queue: VecDeque<ExecutionTask>,
 
     /// Status of low_on_wasm_memory hook execution.
     on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+
+    /// Queue of `Heartbeat` and `GlobalTimer` tasks.
+    queue: VecDeque<ExecutionTask>,
 }
 
 impl TaskQueue {
@@ -312,8 +314,8 @@ impl TaskQueue {
 
         let queue = TaskQueue {
             paused_or_aborted_task,
-            queue: mut_queue,
             on_low_wasm_memory_hook_status,
+            queue: mut_queue,
         };
 
         // Because paused tasks are not allowed in checkpoint rounds when
