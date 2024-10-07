@@ -4,6 +4,7 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
     pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
+    sns_upgrade::ListUpgradeStepsRequest,
     types::{Environment, HeapGrowthPotential},
 };
 use rand::{rngs::StdRng, RngCore};
@@ -17,6 +18,7 @@ pub enum CanisterCallRequest {
     RegisterDappCanisters(RegisterDappCanistersRequest),
     SetDappControllers(SetDappControllersRequest),
     UpdateSettings(CanisterSettings),
+    ListUpgradeSteps(ListUpgradeStepsRequest),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -74,6 +76,9 @@ impl EnvironmentFixture {
             }
             "update_settings" => {
                 CanisterCallRequest::UpdateSettings(Decode!(&args, CanisterSettings)?)
+            }
+            "list_upgrade_steps" => {
+                CanisterCallRequest::ListUpgradeSteps(Decode!(&args, ListUpgradeStepsRequest)?)
             }
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };

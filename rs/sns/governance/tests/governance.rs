@@ -3,6 +3,7 @@ use crate::fixtures::{
     GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
 };
 use assert_matches::assert_matches;
+use fixtures::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -10,7 +11,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::{
-    governance::MATURITY_DISBURSEMENT_DELAY_SECONDS,
+    governance::{
+        MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
+    },
     neuron::NeuronState,
     pb::{
         sns_root_types::{
@@ -23,6 +26,7 @@ use ic_sns_governance::{
                 NeuronRecipe, NeuronRecipes,
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            governance::Version,
             governance_error::ErrorType,
             manage_neuron::{
                 self, claim_or_refresh, configure::Operation, AddNeuronPermissions, ClaimOrRefresh,
@@ -43,6 +47,7 @@ use ic_sns_governance::{
             Proposal, ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
+    sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
     types::native_action_ids,
 };
 use maplit::btreemap;
@@ -2855,6 +2860,159 @@ async fn test_mint_tokens() {
         .get_account_balance(&(account.clone().try_into().unwrap()), TargetLedger::Sns);
 
     assert_eq!(balance_original + E8S_TO_MINT, balance_new);
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_noop_if_deployed_version_none() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Check that the initial state is None
+    {
+        let original_cached_upgrade_steps = canister_fixture
+            .governance
+            .proto
+            .cached_upgrade_steps
+            .clone();
+        assert_eq!(original_cached_upgrade_steps, None);
+    }
+
+    // Check that the canister wants to refresh the cached_upgrade_steps
+    {
+        let should_refresh = canister_fixture
+            .governance
+            .should_refresh_cached_upgrade_steps();
+        assert!(should_refresh);
+    }
+
+    {
+        canister_fixture.governance.proto.deployed_version = None;
+        canister_fixture
+            .governance
+            .refresh_cached_upgrade_steps()
+            .await;
+    }
+
+    // Check that the state is still None
+    {
+        let original_cached_upgrade_steps = canister_fixture
+            .governance
+            .proto
+            .cached_upgrade_steps
+            .clone();
+        assert_eq!(original_cached_upgrade_steps, None);
+    }
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps() {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    let expected_upgrade_steps = vec![Version::default(), Version::default(), Version::default()];
+
+    // Set up the fixture state
+    {
+        let steps = expected_upgrade_steps
+            .iter()
+            .map(|v| ListUpgradeStep {
+                version: Some(SnsVersion::from(v.clone())),
+            })
+            .collect();
+        canister_fixture
+            .environment_fixture
+            .push_mocked_canister_reply(ListUpgradeStepsResponse { steps });
+        canister_fixture.governance.proto.deployed_version = Some(Version::default());
+    }
+
+    // Check that the initial state is None
+    {
+        let original_cached_upgrade_steps = canister_fixture
+            .governance
+            .proto
+            .cached_upgrade_steps
+            .clone();
+        assert_eq!(original_cached_upgrade_steps, None);
+    }
+
+    // Check that the canister wants to refresh the cached_upgrade_steps
+    {
+        let should_refresh = canister_fixture
+            .governance
+            .should_refresh_cached_upgrade_steps();
+        assert!(should_refresh);
+    }
+
+    canister_fixture
+        .governance
+        .temporarily_lock_refresh_cached_upgrade_steps();
+
+    // Check that the lock has been set
+    {
+        let cached_upgrade_steps = canister_fixture
+            .governance
+            .proto
+            .cached_upgrade_steps
+            .clone()
+            .unwrap();
+        assert_eq!(
+            cached_upgrade_steps.requested_timestamp_seconds,
+            Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+        );
+    }
+
+    canister_fixture.advance_time_by(1);
+    // Refresh the upgrade steps
+    canister_fixture
+        .governance
+        .refresh_cached_upgrade_steps()
+        .await;
+
+    // Check that the state has been updated
+    {
+        let cached_upgrade_steps = canister_fixture
+            .governance
+            .proto
+            .cached_upgrade_steps
+            .clone()
+            .unwrap();
+        assert_eq!(
+            cached_upgrade_steps.upgrade_steps.unwrap().versions,
+            expected_upgrade_steps
+        );
+        assert_eq!(
+            cached_upgrade_steps.requested_timestamp_seconds,
+            Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+        );
+        assert_eq!(
+            cached_upgrade_steps.response_timestamp_seconds,
+            Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS + 1),
+        )
+    }
+
+    // Check that the canister no longer wants to refresh the cached_upgrade_steps
+    {
+        let should_refresh = canister_fixture
+            .governance
+            .should_refresh_cached_upgrade_steps();
+        assert!(!should_refresh);
+    }
+
+    // It still should not want to after less than UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+    {
+        canister_fixture.advance_time_by(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS - 2);
+        let should_refresh = canister_fixture
+            .governance
+            .should_refresh_cached_upgrade_steps();
+        assert!(!should_refresh);
+    }
+
+    // Check that the canister wants to refresh the cached_upgrade_steps after a while
+    {
+        canister_fixture.advance_time_by(1);
+        let should_refresh = canister_fixture
+            .governance
+            .should_refresh_cached_upgrade_steps();
+        assert!(should_refresh);
+    }
 }
 
 #[tokio::test]
