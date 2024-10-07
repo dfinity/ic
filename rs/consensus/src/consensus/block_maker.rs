@@ -226,7 +226,7 @@ impl BlockMaker {
             &*self.registry_client,
             self.replica_config.subnet_id,
             registry_version,
-        )?
+        )
         .initial_notary_delay
             + Duration::from_nanos(1);
 
@@ -560,7 +560,7 @@ pub(super) fn get_block_maker_delay(
     metrics: Option<&BlockMakerMetrics>,
 ) -> Option<Duration> {
     let settings =
-        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version)?;
+        get_notarization_delay_settings(log, registry_client, subnet_id, registry_version);
     // If this is not a Rank-0 block maker, check how many non-rank-0 blocks have been notarized in
     // the past, and increase the delay if there have been too many.
     let dynamic_delay = if rank > Rank(0)

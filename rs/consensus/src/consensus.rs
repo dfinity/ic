@@ -506,8 +506,7 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
             &*self.registry_client,
             self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
-        )
-        .unwrap_or_default();
+        );
         let unit_delay = settings.unit_delay;
         let current_time = self.time_source.get_relative_time();
         for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
