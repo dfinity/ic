@@ -12,7 +12,7 @@ rust_library(
     srcs = glob(
         ["src/**"],
     ),
-    proc_macro = [
+    proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
     deps = [
