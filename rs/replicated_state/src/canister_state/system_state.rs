@@ -332,15 +332,23 @@ impl TaskQueue {
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
-        self.paused_or_aborted_task
-            .as_ref()
-            .or_else(|| self.queue.front())
+        self.paused_or_aborted_task.as_ref().or_else(|| {
+            if self.on_low_wasm_memory_hook_status == OnLowWasmMemoryHookStatus::Ready {
+                Some(&ExecutionTask::OnLowWasmMemory)
+            } else {
+                self.queue.front()
+            }
+        })
     }
 
     pub fn pop_front(&mut self) -> Option<ExecutionTask> {
-        self.paused_or_aborted_task
-            .take()
-            .or_else(|| self.queue.pop_front())
+        self.paused_or_aborted_task.take().or_else(|| {
+            if self.on_low_wasm_memory_hook_status.execute_if_ready() {
+                Some(ExecutionTask::OnLowWasmMemory)
+            } else {
+                self.queue.pop_front()
+            }
+        })
     }
 
     pub fn remove(&mut self, task: ExecutionTask) {
@@ -376,11 +384,15 @@ impl TaskQueue {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.paused_or_aborted_task.is_none() && self.queue.is_empty()
+        self.paused_or_aborted_task.is_none()
+            && !self.on_low_wasm_memory_hook_status.is_ready()
+            && self.queue.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
+        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1)
+            + self.on_low_wasm_memory_hook_status.is_ready() as usize
+            + self.queue.len()
     }
 
     /// peek_hook_status will be removed in the follow-up EXC-1752.
@@ -681,6 +693,19 @@ impl OnLowWasmMemoryHookStatus {
             Self::ConditionNotSatisfied
         };
     }
+
+    fn is_ready(&self) -> bool {
+        *self == Self::Ready
+    }
+
+    fn execute_if_ready(&mut self) -> bool {
+        if self.is_ready() {
+            *self = Self::Executed;
+            return true;
+        }
+
+        false
+    }
 }
 
 impl From<&OnLowWasmMemoryHookStatus> for pb::OnLowWasmMemoryHookStatus {
@@ -855,6 +880,20 @@ pub enum ExecutionTask {
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
+}
+
+impl ExecutionTask {
+    pub fn is_hook(&self) -> bool {
+        match self {
+            Self::OnLowWasmMemory => true,
+            Self::Heartbeat
+            | Self::GlobalTimer
+            | Self::PausedExecution { .. }
+            | Self::PausedInstallCode(_)
+            | Self::AbortedExecution { .. }
+            | Self::AbortedInstallCode { .. } => false,
+        }
+    }
 }
 
 impl From<&ExecutionTask> for pb::ExecutionTask {
