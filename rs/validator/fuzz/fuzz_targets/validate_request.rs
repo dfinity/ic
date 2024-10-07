@@ -45,8 +45,8 @@ fuzz_target!(|content: AnonymousContent| -> Corpus {
                 &validation_query_request,
             );
             match validation_read_request {
-                Err(RequestValidationError::PathToo { .. })
-                | Err(RequestValidationError::TooMany { .. }) => Corpus::Reject,
+                Err(RequestValidationError::PathTooLongError { .. })
+                | Err(RequestValidationError::TooManyPathsError { .. }) => Corpus::Reject,
                 _ => {
                     assert_eq_ignoring_timestamps_in_error_messages(
                         &validation_call_request,
@@ -77,8 +77,8 @@ fn assert_eq_ignoring_timestamps_in_error_messages(
 ) {
     match (result, other) {
         (
-            Err(RequestValidationError::InvalidRequestExpiry(_msg1)), //contains output of chrono::Utc::now()
-            Err(RequestValidationError::InvalidRequestExpiry(_msg2)),
+            Err(RequestValidationError::InvalidIngressExpiry(_msg1)), //contains output of chrono::Utc::now()
+            Err(RequestValidationError::InvalidIngressExpiry(_msg2)),
         ) => {}
         (
             Err(RequestValidationError::InvalidDelegationExpiry(_msg1)), //contains output of chrono::Utc::now()
