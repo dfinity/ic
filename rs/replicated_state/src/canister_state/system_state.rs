@@ -475,19 +475,22 @@ impl TaskQueue {
 
     /// Returns `PausedExecution` or `PausedInstallCode` task.
     pub fn get_paused_task(&self) -> Option<&ExecutionTask> {
-        self.paused_or_aborted_task.as_ref().map(|task| match task {
-            ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                Some(task)
+        if let Some(task) = &self.paused_or_aborted_task {
+            match task {
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                    Some(task)
+                }
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. } => None,
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => unreachable!(
+                    "Unexpected on task type in the in TaskQueue::paused_or_aborted_task."
+                ),
             }
-            ExecutionTask::AbortedExecution { .. } | ExecutionTask::AbortedInstallCode { .. } => {
-                None
-            }
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory => {
-                unreachable!("Unexpected on task type in the in TaskQueue::paused_or_aborted_task.")
-            }
-        })
+        } else {
+            None
+        }
     }
 
     /// Replace `PausedExecution` or `PausedInstallCode` with corresponding
