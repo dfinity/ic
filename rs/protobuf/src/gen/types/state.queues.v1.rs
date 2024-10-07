@@ -216,6 +216,8 @@ pub struct CanisterQueues {
     pub canister_queues: ::prost::alloc::vec::Vec<canister_queues::CanisterQueuePair>,
     #[prost(message, optional, tag = "10")]
     pub pool: ::core::option::Option<MessagePool>,
+    #[prost(message, repeated, tag = "13")]
+    pub expired_callbacks: ::prost::alloc::vec::Vec<canister_queues::CallbackReference>,
     #[prost(message, repeated, tag = "12")]
     pub shed_responses: ::prost::alloc::vec::Vec<canister_queues::CallbackReference>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]

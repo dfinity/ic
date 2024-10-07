@@ -1,5 +1,5 @@
 {
-  "checksum": "874fa386d66d661633ac1c273fe3aaaa081e0bbc7286f437f9ab34c70e34bc11",
+  "checksum": "7295128199d29b23db34b6d58023a8c42def2d7c72cff8aa8bb89a16b7841d95",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -47021,6 +47021,7 @@
         "crate_features": {
           "common": [
             "_protobuf",
+            "criterion",
             "flamegraph",
             "inferno",
             "prost",
@@ -47040,6 +47041,10 @@
             {
               "id": "cfg-if 1.0.0",
               "target": "cfg_if"
+            },
+            {
+              "id": "criterion 0.5.1",
+              "target": "criterion"
             },
             {
               "id": "findshlibs 0.10.2",

@@ -1,6 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("//bazel:status.bzl", "FAKE_IC_VERSION", "ic_version_or_git_sha", "version_file_path")
+load("//bazel:status.bzl", "FAKE_IC_VERSION", "ic_version_or_git_sha")
 
 bool_flag(
     name = "enable_malicious_code",
@@ -147,16 +147,6 @@ sh_test(
     tags = [
         "external",  # force test to be unconditionally executed.
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-    ],
-)
-
-# Returns the file containing the full path to the volatile status file.
-# It can be used to read the volatile status directly, not as a bazel dependency, and therefore not causing the cache invalidation.
-# WARNING! It has to be used carefully: never use it the way that may affect results as this will make your rule nonhermetic and cached results invalid!
-version_file_path(
-    name = "version_file_path",
-    visibility = [
-        "//rs/tests:__subpackages__",
     ],
 )
 
