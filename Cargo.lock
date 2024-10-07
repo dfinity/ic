@@ -15834,7 +15834,7 @@ dependencies = [
  "async-trait",
  "backoff",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "exec",
  "get_if_addrs",
  "hex",
