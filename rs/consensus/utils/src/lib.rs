@@ -269,9 +269,11 @@ pub fn get_notarization_delay_settings(
 ) -> NotarizationDelaySettings {
     match registry_client.get_notarization_delay_settings(subnet_id, registry_version) {
         Ok(None) => {
-            error!(log, 
+            error!(
+                log,
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version, subnet_id,
+                registry_version,
+                subnet_id,
             );
             NotarizationDelaySettings::default()
         }
