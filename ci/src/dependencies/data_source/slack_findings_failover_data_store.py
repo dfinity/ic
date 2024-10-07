@@ -23,7 +23,7 @@ SLACK_CHANNEL_CONFIG_BY_TEAM = {
 }
 SLACK_TEAM_RISK_ASSESSOR = {
     Team.NODE_TEAM: SlackRiskAssessor(name="<!subteam^S05FTRNRC5A>", wants_assessment_reminder=True),
-    Team.BOUNDARY_NODE_TEAM: SlackRiskAssessor(name="<!subteam^S0313LYB9FZ>", wants_assessment_reminder=False),
+    Team.BOUNDARY_NODE_TEAM: SlackRiskAssessor(name="<!subteam^S0313LYB9FZ>", wants_assessment_reminder=True),
 }
 
 SLACK_LOG_TO_CONSOLE = False
