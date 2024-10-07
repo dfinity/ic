@@ -7,11 +7,11 @@ extern crate slog_scope;
 // extern crate tokio;
 use byte_unit::Byte;
 use chrono::Utc;
-use clap::{Arg, ArgEnum};
+use clap::{Arg, value_parser, ValueEnum};
 use slog::Drain;
 use std::{
     fs, 
-    ffi::{OsString},
+    ffi::OsString,
     io,
     path::{Path, PathBuf},
     process::Command,
@@ -70,7 +70,7 @@ fn write_output_json(filename: &str, summaries: &[Summary]) -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Copy, Clone, Debug, ArgEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 #[clap(rename_all = "camel")]
 pub enum RequestType {
     // Needs to expose "read"
@@ -87,7 +87,7 @@ pub enum RequestType {
     Query,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ArgEnum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
 #[clap(rename_all = "camel")]
 pub enum ChartSize {
     None,
@@ -145,7 +145,7 @@ async fn main() {
             Arg::new("canister")
                 .long("canister")
                 .num_args(1)
-                .allow_invalid_utf8(true)
+                .value_parser(value_parser!(PathBuf))
                 .help("Path to the canister code. Needs to match selected --method. If --canister-id is also given then the code will be installed on the existing canister, otherwise a new canister will be created."),
         )
         .arg(
@@ -163,8 +163,8 @@ async fn main() {
         )
         .arg(
             Arg::new("method")
-                .short('m')
-                .possible_values(RequestType::value_variants().iter().filter_map(|a| a.to_possible_value()))
+                .short('m')                
+                .value_parser(value_parser!(RequestType))                
                 .ignore_case(true)
                 .default_value("QueryCounter")
                 .help("What method to issue"),
@@ -204,7 +204,7 @@ async fn main() {
                 .num_args(1)
                 .ignore_case(true)
                 .default_value("None")
-                .possible_values(ChartSize::value_variants().iter().filter_map(|a| a.to_possible_value()))
+                .value_parser(value_parser!(ChartSize))
                 .help("Size of chart to render"),
         )
         .arg(
@@ -217,7 +217,7 @@ async fn main() {
         .arg(
             Arg::new("periodic-output")
                 .long("periodic-output")
-                .takes_value(false)
+                .num_args(0)
                 .help("Periodically print output instead of using a progress bar."),
         )
         .arg(
@@ -273,7 +273,7 @@ async fn main() {
         .arg(
             Arg::new("random-query-payload")
                 .long("random-query-payload")
-                .takes_value(false)
+                .num_args(0)
                 .help("If specified, each query gets a random payload to prevent caching on the boundary nodes."),
         )
 
@@ -342,10 +342,10 @@ async fn main() {
 
     let random_query_payload = matches.contains_id("random-query-payload");
 
-    let call_payload_size = Byte::from_str(matches.get_one::<String>("payload-size").unwrap_or("0").trim())
+    let call_payload_size = Byte::from_str(matches.get_one::<String>("payload-size").map_or("0", |v| v).trim())
         .expect("Could not parse the value of --payload-size");
 
-    let call_payload = hex::decode(matches.get_one::<String>("payload").unwrap_or(""))
+    let call_payload = hex::decode(matches.get_one::<String>("payload").map_or("", |v| v))
         .expect("Payload must be in hex format");
 
     if call_payload_size.get_bytes() > 0 && !call_payload.is_empty() {
@@ -449,7 +449,7 @@ async fn main() {
                 )
                 .expect("Failed to parse method option.")
             };
-            let canister_method_name = matches.get_one::<String>("call-method").unwrap_or("").to_string();
+            let canister_method_name = matches.get_one::<String>("call-method").map_or("", |v| v).to_string();
             match request_type {
                 RequestType::Update | RequestType::Query => {
                     assert!(

@@ -13090,7 +13090,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.18",
  "console 0.11.3",
  "futures",
  "hex",
