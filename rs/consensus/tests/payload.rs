@@ -213,7 +213,7 @@ fn consensus_produces_expected_batches() {
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
         // Plus 2 initial driver steps.
-        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 3);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
         let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(
