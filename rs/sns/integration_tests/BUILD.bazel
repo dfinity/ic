@@ -60,10 +60,12 @@ MACRO_DEPENDENCIES = [
 
 BASE_DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
     "//rs/canister_client/sender",
     "//rs/crypto",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/common",
@@ -148,11 +150,13 @@ DATA_DEPS = [
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "//rs/nervous_system/common/test_canister",
     "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/nns/governance:governance-canister",
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
     "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/integration_tests:unstoppable-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/pocket_ic_server:pocket-ic-server",
     "//rs/registry/canister:registry-canister",
     "//rs/sns/governance:sns-governance-canister-test.wasm.gz",
     "//rs/sns/root:sns-root-canister",
@@ -164,6 +168,7 @@ ENV = {
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
     "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+    "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
     "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister)",
     "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index:index_canister)",
     "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
@@ -180,6 +185,7 @@ ENV = {
     "SNS_TEST_DAPP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-test-dapp-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "UNSTOPPABLE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-canister)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
 }
 
 rust_ic_test_suite_with_extra_srcs(
