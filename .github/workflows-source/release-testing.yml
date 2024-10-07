@@ -96,7 +96,6 @@ jobs:
 
   bazel-system-test-staging:
     name: Bazel System Test Staging
-    continue-on-error: True
     <<: *dind-large-setup
     steps:
       - <<: *checkout

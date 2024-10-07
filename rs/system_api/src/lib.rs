@@ -872,7 +872,7 @@ impl MemoryUsage {
 
                         self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                        sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
+                        sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
                             None,
                             self.wasm_memory_limit,
                             self.stable_memory_usage,
@@ -899,7 +899,7 @@ impl MemoryUsage {
                 self.current_usage = NumBytes::from(new_usage);
                 self.add_execution_memory(execution_bytes, execution_memory_type)?;
 
-                sandbox_safe_system_state.update_on_low_wasm_memory_hook_status(
+                sandbox_safe_system_state.check_on_low_wasm_memory_hook_condition(
                     Some(reserved_bytes),
                     self.wasm_memory_limit,
                     self.stable_memory_usage,

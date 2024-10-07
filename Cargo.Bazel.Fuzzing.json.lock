@@ -1,5 +1,5 @@
 {
-  "checksum": "9ef6df4a9a9699fa60c0deb0f30df0446a5aaa79555f9225b15f48ccb5afca4d",
+  "checksum": "f9de0eba7b78694e281b6119eeafefcae4146eaf6b0b79f0806736aefc3b0d99",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18648,7 +18648,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "strum 0.26.2",
+              "id": "strum 0.26.3",
               "target": "strum"
             },
             {
@@ -18958,7 +18958,7 @@
               "target": "rustversion"
             },
             {
-              "id": "strum_macros 0.26.2",
+              "id": "strum_macros 0.26.4",
               "target": "strum_macros"
             },
             {
@@ -28639,7 +28639,7 @@
               "target": "sha1"
             },
             {
-              "id": "strum 0.26.2",
+              "id": "strum 0.26.3",
               "target": "strum"
             },
             {
@@ -28705,7 +28705,7 @@
               "target": "derive_new"
             },
             {
-              "id": "strum_macros 0.26.2",
+              "id": "strum_macros 0.26.4",
               "target": "strum_macros"
             }
           ],
@@ -30450,7 +30450,7 @@
               "target": "sha2"
             },
             {
-              "id": "strum 0.26.2",
+              "id": "strum 0.26.3",
               "target": "strum"
             },
             {
@@ -30476,7 +30476,7 @@
               "target": "async_trait"
             },
             {
-              "id": "strum_macros 0.26.2",
+              "id": "strum_macros 0.26.4",
               "target": "strum_macros"
             }
           ],
@@ -40282,7 +40282,7 @@
               "target": "serde_path_to_error"
             },
             {
-              "id": "strum 0.26.2",
+              "id": "strum 0.26.3",
               "target": "strum"
             },
             {
@@ -40296,7 +40296,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "strum_macros 0.26.2",
+              "id": "strum_macros 0.26.4",
               "target": "strum_macros"
             }
           ],
@@ -47085,6 +47085,7 @@
         "crate_features": {
           "common": [
             "_protobuf",
+            "criterion",
             "flamegraph",
             "inferno",
             "prost",
@@ -47104,6 +47105,10 @@
             {
               "id": "cfg-if 1.0.0",
               "target": "cfg_if"
+            },
+            {
+              "id": "criterion 0.5.1",
+              "target": "criterion"
             },
             {
               "id": "findshlibs 0.10.2",
@@ -62705,14 +62710,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "strum 0.26.2": {
+    "strum 0.26.3": {
       "name": "strum",
-      "version": "0.26.2",
+      "version": "0.26.3",
       "package_url": "https://github.com/Peternator7/strum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/strum/0.26.2/download",
-          "sha256": "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+          "url": "https://static.crates.io/crates/strum/0.26.3/download",
+          "sha256": "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
         }
       },
       "targets": [
@@ -62747,13 +62752,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "strum_macros 0.26.2",
+              "id": "strum_macros 0.26.4",
               "target": "strum_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.26.2"
+        "version": "0.26.3"
       },
       "license": "MIT",
       "license_ids": [
@@ -62829,14 +62834,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "strum_macros 0.26.2": {
+    "strum_macros 0.26.4": {
       "name": "strum_macros",
-      "version": "0.26.2",
+      "version": "0.26.4",
       "package_url": "https://github.com/Peternator7/strum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/strum_macros/0.26.2/download",
-          "sha256": "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
+          "url": "https://static.crates.io/crates/strum_macros/0.26.4/download",
+          "sha256": "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
         }
       },
       "targets": [
@@ -62861,7 +62866,7 @@
         "deps": {
           "common": [
             {
-              "id": "heck 0.4.1",
+              "id": "heck 0.5.0",
               "target": "heck"
             },
             {
@@ -62889,7 +62894,7 @@
           ],
           "selects": {}
         },
-        "version": "0.26.2"
+        "version": "0.26.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -79354,8 +79359,8 @@
     "socket2 0.5.7",
     "ssh2 0.9.4",
     "static_assertions 1.1.0",
-    "strum 0.26.2",
-    "strum_macros 0.26.2",
+    "strum 0.26.3",
+    "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
     "substring 1.4.5",
     "subtle 2.5.0",
