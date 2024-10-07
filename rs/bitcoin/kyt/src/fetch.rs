@@ -3,7 +3,7 @@ use crate::types::{
     CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
 };
-use crate::{blocklist_contains, providers::Provider, state};
+use crate::{blocklist_contains, providers::Provider, state, BtcNetwork};
 use bitcoin::{address::FromScriptError, Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -57,10 +57,12 @@ pub enum TryFetchResult<F> {
 pub trait FetchEnv {
     type FetchGuard;
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
+    fn btc_network(&self) -> BtcNetwork;
+
     async fn http_get_tx(
         &self,
+        provider: Provider,
         txid: Txid,
-        previous_provider: Option<Provider>,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
     fn cycles_accept(&self, cycles: u128) -> u128;
@@ -75,16 +77,20 @@ pub trait FetchEnv {
         &self,
         txid: Txid,
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let (previous_provider, max_response_bytes) = match state::get_fetch_status(txid) {
-            None => (None, INITIAL_MAX_RESPONSE_BYTES),
+        let default_provider = Provider::new_with_default(self.btc_network());
+        let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
+            None => (default_provider, INITIAL_MAX_RESPONSE_BYTES),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => (None, max_response_bytes),
+            }) => (default_provider, max_response_bytes),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
             Some(FetchTxStatus::Error(err)) => {
                 if err.is_retriable() {
-                    // TODO: rotate provider
-                    (err.get_provider(), INITIAL_MAX_RESPONSE_BYTES)
+                    (
+                        err.get_provider()
+                            .map_or(default_provider, |provider| provider.next()),
+                        INITIAL_MAX_RESPONSE_BYTES,
+                    )
                 } else {
                     return TryFetchResult::Error(err);
                 }
@@ -99,12 +105,7 @@ pub trait FetchEnv {
         if self.cycles_accept(cycle_cost) < cycle_cost {
             TryFetchResult::NotEnoughCycles
         } else {
-            TryFetchResult::ToFetch(self.fetch_tx(
-                guard,
-                txid,
-                previous_provider,
-                max_response_bytes,
-            ))
+            TryFetchResult::ToFetch(self.fetch_tx(guard, provider, txid, max_response_bytes))
         }
     }
 
@@ -120,14 +121,11 @@ pub trait FetchEnv {
     async fn fetch_tx(
         &self,
         _guard: Self::FetchGuard,
+        provider: Provider,
         txid: Txid,
-        previous_provider: Option<Provider>,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self
-            .http_get_tx(txid, previous_provider, max_response_bytes)
-            .await
-        {
+        match self.http_get_tx(provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
                 let fetched = FetchedTx {
@@ -200,7 +198,7 @@ pub trait FetchEnv {
                     }
                     Fetched(fetched) => {
                         let vout = input.previous_output.vout;
-                        match transaction_output_address(&fetched.tx, vout) {
+                        match transaction_output_address(self.btc_network(), &fetched.tx, vout) {
                             Ok(address) => state::set_fetched_address(txid, index, address),
                             Err(err) => {
                                 return CheckTransactionIrrecoverableError::InvalidTransaction(
@@ -234,7 +232,7 @@ pub trait FetchEnv {
             let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    match transaction_output_address(&fetched.tx, vout) {
+                    match transaction_output_address(self.btc_network(), &fetched.tx, vout) {
                         Ok(address) => state::set_fetched_address(txid, index, address),
                         Err(err) => {
                             error = Some(
@@ -265,10 +263,11 @@ pub trait FetchEnv {
     }
 }
 
-fn transaction_output_address(tx: &Transaction, vout: u32) -> Result<Address, FromScriptError> {
+fn transaction_output_address(
+    network: BtcNetwork,
+    tx: &Transaction,
+    vout: u32,
+) -> Result<Address, FromScriptError> {
     let output = &tx.output[vout as usize];
-    Address::from_script(
-        &output.script_pubkey,
-        bitcoin::Network::from(state::get_config().btc_network),
-    )
+    Address::from_script(&output.script_pubkey, bitcoin::Network::from(network))
 }

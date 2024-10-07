@@ -58,19 +58,18 @@ impl FetchEnv for KytCanisterEnv {
         state::FetchGuard::new(txid)
     }
 
+    fn btc_network(&self) -> BtcNetwork {
+        get_config().btc_network
+    }
+
     async fn http_get_tx(
         &self,
+        provider: providers::Provider,
         txid: Txid,
-        previous_provider: Option<providers::Provider>,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
-        let (provider, request) = providers::create_request(
-            get_config().btc_network,
-            txid,
-            previous_provider,
-            max_response_bytes,
-        );
+        let request = provider.create_request(txid, max_response_bytes);
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
