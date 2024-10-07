@@ -79,6 +79,17 @@ ic_version_or_git_sha(
     visibility = ["//visibility:public"],
 )
 
+genrule(
+    name = "commit_timestamp_txt",
+    outs = ["commit_timestamp.txt"],
+    cmd = "git show -s --format=%ct > $@",
+    tags = [
+        "local",
+        "no-cache",
+    ],
+    visibility = ["//visibility:public"],
+)
+
 sh_binary(
     name = "ic_version_or_git_sha_sh",
     srcs = ["ic_version_or_git_sha.sh"],
