@@ -31,12 +31,13 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
 
     canbench_bin = "$(location @crate_index//:canbench__canbench)"
     wasm_path = "$(location :{name}_wasm)".format(name = name)
-    pocket_ic_bin = "$(rootpath //rs/pocket_ic_server:pocket-ic-server)"
+    pocket_ic_bin = "$(rootpath @pocket_ic_server_v6//file)"
     data = [
         ":{name}_wasm".format(name = name),
         "@crate_index//:canbench__canbench",
         results_file,
         "//:WORKSPACE.bazel",
+        "@pocket_ic_server_v6//file",
     ]
     canbench_results_path = "$(rootpath {results_file})".format(results_file = results_file)
     env = {

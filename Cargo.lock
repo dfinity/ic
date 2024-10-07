@@ -1724,9 +1724,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74799b36a6c2bd4493a52e18d6130de06590ddd0aef4d2b5fae49ea0c918a244"
+checksum = "e85a8f1ee95044a770b3d5166a12f55814283cb3aed71b81439dc59960ab76c1"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1736,9 +1736,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d774a421d3ce35bc6957d5611cba7e3ba66cd455a915d2ccf5b0e69d746299b1"
+checksum = "37aa9dbb190b03569ab14aadf669884a331712d54462c5a6c5b86c9867fe4e65"
 dependencies = [
  "proc-macro2",
  "quote",

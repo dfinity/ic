@@ -1,5 +1,5 @@
 {
-  "checksum": "e85bc8bdc5e8c132abaa3d64bfa9f41fc4360acd15ca521b684ac8e17be0de16",
+  "checksum": "8b2b4e61dce4f02730eade862bbd06e109cd138d5a9f86cddaa09911b848b9bd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -10098,14 +10098,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.1.6": {
+    "canbench 0.1.7": {
       "name": "canbench",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.1.6/download",
-          "sha256": "aecd4be2f49ce16c76bccb351a639cf32fd396039dd3c8e20dc156c66ff6752f"
+          "url": "https://static.crates.io/crates/canbench/0.1.7/download",
+          "sha256": "bf010ed5b327776525d545cef0fd17ffec73af71eb1b304ca11df3494ed65c31"
         }
       },
       "targets": [
@@ -10142,7 +10142,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.1.6",
+              "id": "canbench-rs 0.1.7",
               "target": "canbench_rs"
             },
             {
@@ -10166,7 +10166,7 @@
               "target": "hex"
             },
             {
-              "id": "pocket-ic 4.0.0",
+              "id": "pocket-ic 5.0.0",
               "target": "pocket_ic"
             },
             {
@@ -10201,7 +10201,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10209,14 +10209,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.1.6": {
+    "canbench-rs 0.1.7": {
       "name": "canbench-rs",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.1.6/download",
-          "sha256": "74799b36a6c2bd4493a52e18d6130de06590ddd0aef4d2b5fae49ea0c918a244"
+          "url": "https://static.crates.io/crates/canbench-rs/0.1.7/download",
+          "sha256": "e85a8f1ee95044a770b3d5166a12f55814283cb3aed71b81439dc59960ab76c1"
         }
       },
       "targets": [
@@ -10259,13 +10259,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.1.6",
+              "id": "canbench-rs-macros 0.1.7",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10273,14 +10273,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.1.6": {
+    "canbench-rs-macros 0.1.7": {
       "name": "canbench-rs-macros",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.6/download",
-          "sha256": "d774a421d3ce35bc6957d5611cba7e3ba66cd455a915d2ccf5b0e69d746299b1"
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.1.7/download",
+          "sha256": "37aa9dbb190b03569ab14aadf669884a331712d54462c5a6c5b86c9867fe4e65"
         }
       },
       "targets": [
@@ -10320,7 +10320,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.6"
+        "version": "0.1.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -17549,11 +17549,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.1.6",
+              "id": "canbench 0.1.7",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.1.6",
+              "id": "canbench-rs 0.1.7",
               "target": "canbench_rs"
             },
             {
@@ -36553,56 +36553,112 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
-            "if_ether",
             "ioctl",
-            "net",
-            "netlink",
-            "no_std",
-            "prctl",
-            "xdp"
+            "no_std"
           ],
           "selects": {
+            "aarch64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
+            ],
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "armv7-linux-androideabi": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "i686-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "powerpc-unknown-linux-gnu": [
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "s390x-unknown-linux-gnu": [
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
+            ],
+            "x86_64-linux-android": [
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "xdp"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
-              "system"
+              "if_ether",
+              "net",
+              "netlink",
+              "prctl",
+              "system",
+              "xdp"
             ]
           }
         },
@@ -46559,14 +46615,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pocket-ic 4.0.0": {
+    "pocket-ic 5.0.0": {
       "name": "pocket-ic",
-      "version": "4.0.0",
+      "version": "5.0.0",
       "package_url": "https://github.com/dfinity/ic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pocket-ic/4.0.0/download",
-          "sha256": "629f46b7ab8a8d2fee02220ef8e99ae552c7e220117efa1ce0882ff09c8fb038"
+          "url": "https://static.crates.io/crates/pocket-ic/5.0.0/download",
+          "sha256": "beff607d4dbebff8d003453ced669d2645e905de496ca93713f3d47633357e6c"
         }
       },
       "targets": [
@@ -46631,6 +46687,10 @@
               "target": "sha2"
             },
             {
+              "id": "slog 2.7.0",
+              "target": "slog"
+            },
+            {
               "id": "tokio 1.40.0",
               "target": "tokio"
             },
@@ -46650,7 +46710,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.0.0"
+        "version": "5.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -78189,7 +78249,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.1.6",
+    "canbench 0.1.7",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -79292,8 +79352,8 @@
     "byteorder 1.5.0",
     "bytes 1.7.1",
     "cached 0.49.2",
-    "canbench 0.1.6",
-    "canbench-rs 0.1.6",
+    "canbench 0.1.7",
+    "canbench-rs 0.1.7",
     "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",

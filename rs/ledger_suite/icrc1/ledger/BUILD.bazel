@@ -277,14 +277,14 @@ rust_test(
 
 # Usage:
 # Benchmarking:
-# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u64 for legder using u64 tokens.
-# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u256 for legder using u256 tokens.
+# * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64 for legder using u64 tokens.
+# * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256 for legder using u256 tokens.
 # Testing:
-# * bazel test //rs/rosetta-api/icrc1/ledger:canbench_u64_test for legder using u64 tokens.
-# * bazel test //rs/rosetta-api/icrc1/ledger:canbench_u256_test for legder using u256 tokens.
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u64_test for legder using u64 tokens.
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u256_test for legder using u256 tokens.
 # Updating the results file:
-# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u64_update for updating the results file.
-# * bazel run //rs/rosetta-api/icrc1/ledger:canbench_u256_update for updating the results file.
+# * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64_update for updating the results file.
+# * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256_update for updating the results file.
 #  If the performance change is expected, run these targets to save the updated benchmark results.
 [
     rust_canbench(
