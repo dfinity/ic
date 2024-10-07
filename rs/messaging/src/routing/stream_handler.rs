@@ -774,6 +774,7 @@ impl StreamHandlerImpl {
                         StateError::CanisterStopping(_) => RejectReason::CanisterStopping,
                         StateError::QueueFull { .. } => RejectReason::QueueFull,
                         StateError::OutOfMemory { .. } => RejectReason::OutOfMemory,
+                        // Unreachable.
                         StateError::NonMatchingResponse { .. }
                         | StateError::BitcoinNonMatchingResponse { .. } => RejectReason::Unknown,
                     };
@@ -807,10 +808,11 @@ impl StreamHandlerImpl {
         }
     }
 
-    /// Inducts a message into `state`. This may fail and log an error for cases where there is
-    /// nothing we can do about it; for other cases it may return `(StateError, RequestOrResponse)`
-    /// as it is returned by `ReplicatedState::push_input()` upon failure such that we may generate
-    /// a reject response or push a reject signal.
+    /// Inducts a message into `state`. There are 3 possible outcomes:
+    /// - `msg` successfully inducted, returns `None`.
+    /// - `msg` silently dropped (e.g. late best-effort response), `returns None`.
+    /// - Failed to induct `msg` (error or canister migrating), returns `(StateError, RequestOrResponse)`.
+    ///   Caller is expected to produce a reject response or a reject signal.
     ///
     /// The return type is `Option<_>` rather than `Result<_, _>` because not returning an error
     /// does not always mean the message was inducted successfully.
