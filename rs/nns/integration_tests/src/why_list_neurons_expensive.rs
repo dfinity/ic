@@ -88,6 +88,7 @@ fn test_why_list_neurons_expensive() {
     println!("  page_limit = {}", page_limit);
     println!("");
 
+    /*
     let principal_to_neuron_count = state_machine.execute_ingress(
         GOVERNANCE_CANISTER_ID,
         "principal_to_neuron_count",
@@ -109,6 +110,7 @@ fn test_why_list_neurons_expensive() {
     println!("{:#?}", principal_to_neuron_count);
     println!();
     println!();
+    */
 
     // DO NOT MERGE: THIS IS A HACK
     let page_limit = page_limit / 2;
@@ -138,11 +140,13 @@ fn test_why_list_neurons_expensive() {
         BTreeMap<u16, String>
     )
     .unwrap();
+    /*
     println!("");
     println!(
         "custom section 'name' payload:\n{:#?}",
         name_custom_section_payload
     );
+    */
 
     // Step 1.2.2.3: Install modified governance WASM.
     println!("");
