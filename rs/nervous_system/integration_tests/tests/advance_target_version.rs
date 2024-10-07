@@ -85,7 +85,9 @@ fn test_get_upgrade_journal() {
         assert_eq!(response_timestamp_seconds, Some(1620501459));
     }
 
+    assert_eq!(pocket_ic.get_time().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(), 1620501459);
     wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
+    assert_eq!(pocket_ic.get_time().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(), 1620501459 + UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
 
     // State B: after the first periodic task's completion. No changes expected yet.
     {

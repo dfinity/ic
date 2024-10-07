@@ -1002,6 +1002,9 @@ pub struct GetTime;
 impl Operation for GetTime {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         // Time is kept in sync across subnets, so one can take any subnet.
+        for (subnet_id, sm) in pic.subnets.read().unwrap().iter() {
+          println!("subnet_id: {}; time: {:?}", subnet_id, sm.time());
+        }
         let nanos = systemtime_to_unix_epoch_nanos(pic.any_subnet().time());
         OpOut::Time(nanos)
     }

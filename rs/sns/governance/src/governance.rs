@@ -4717,6 +4717,7 @@ impl Governance {
 
         // The following code must remain after the async call.
         if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            dfn_core::api::print(format!("setting time to now: {:?}", self.env.now()));
             cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
             cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
         }
@@ -4725,6 +4726,7 @@ impl Governance {
         // and that requires cached_upgrade_steps != None.
         // However, we handle it just in case.
         else {
+            dfn_core::api::print(format!("setting time to now: {:?}", self.env.now()));
             self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
                 response_timestamp_seconds: Some(self.env.now()),
                 upgrade_steps: Some(upgrade_steps),
@@ -4734,6 +4736,7 @@ impl Governance {
     }
 
     pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+        dfn_core::api::print(format!("current time: {:?}", self.env.now()));
         let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
         match cached_upgrade_steps {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {

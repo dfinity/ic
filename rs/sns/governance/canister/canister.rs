@@ -121,6 +121,7 @@ impl CanisterEnv {
 #[async_trait]
 impl Environment for CanisterEnv {
     fn now(&self) -> u64 {
+        dfn_core::api::print(format!("time_warp: {:?}; now: {:?}", self.time_warp, now()));
         self.time_warp.apply(
             now()
                 .duration_since(SystemTime::UNIX_EPOCH)
