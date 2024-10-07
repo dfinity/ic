@@ -2458,7 +2458,7 @@ icTests my_sub other_sub =
                                                                                              badSubmit cid req dels = do
                                                                                                req <- addExpiry req
                                                                                                -- sign request with delegations (should fail)
-                                                                                               delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code403
+                                                                                               delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code400
 
                                                                                              badRead cid req dels = do
                                                                                                req <- addExpiry req
@@ -2475,12 +2475,12 @@ icTests my_sub other_sub =
                                                                                                        "sender" =: GBlob defaultUser,
                                                                                                        "paths" =: GList [GList [GBlob "request_status", GBlob rid]]
                                                                                                      ]
-                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code403
+                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code400
 
                                                                                              badQuery cid req dels = do
                                                                                                req <- addExpiry req
                                                                                                -- sign request with delegations (should fail)
-                                                                                               delegationEnv defaultSK dels req >>= postQueryCBOR cid >>= code403
+                                                                                               delegationEnv defaultSK dels req >>= postQueryCBOR cid >>= code400
 
                                                                                              goodTestCase name mkReq mkDels =
                                                                                                simpleTestCase name ecid $ \cid -> good cid (fst $ mkReq cid) (snd $ mkReq cid) (mkDels cid)

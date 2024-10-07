@@ -60,7 +60,7 @@ module IC.Test.Agent
     code202_or_4xx,
     code2xx,
     code4xx,
-    code403,
+    code400,
     decodeCert',
     defaultSK,
     defaultUser,
@@ -780,8 +780,7 @@ code2xx, code202, code4xx, code202_or_4xx :: (HasCallStack) => Response BS.ByteS
 code2xx = codePred "2xx" $ \c -> 200 <= c && c < 300
 code202 = codePred "202" $ \c -> c == 202
 code4xx = codePred "4xx" $ \c -> 400 <= c && c < 500
-
-code403 = codePred "403" $ \c -> c == 403
+code400 = codePred "400" $ \c -> c == 400
 
 code202_or_4xx = codePred "202 or 4xx" $ \c -> c == 202 || 400 <= c && c < 500
 
