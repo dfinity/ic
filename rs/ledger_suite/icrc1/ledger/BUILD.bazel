@@ -48,7 +48,7 @@ package(default_visibility = ["//visibility:public"])
             "",
             [],
             [
-                "//rs/rosetta-api/icrc1/tokens_u64",
+                "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
         (
@@ -56,7 +56,7 @@ package(default_visibility = ["//visibility:public"])
             "_u256",
             ["u256-tokens"],
             [
-                "//rs/rosetta-api/icrc1/tokens_u256",
+                "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
         (
@@ -64,7 +64,7 @@ package(default_visibility = ["//visibility:public"])
             "",
             ["canbench-rs"],
             [
-                "//rs/rosetta-api/icrc1/tokens_u64",
+                "//rs/ledger_suite/icrc1/tokens_u64",
                 "@crate_index//:canbench-rs",
             ],
         ),
@@ -76,7 +76,7 @@ package(default_visibility = ["//visibility:public"])
                 "u256-tokens",
             ],
             [
-                "//rs/rosetta-api/icrc1/tokens_u256",
+                "//rs/ledger_suite/icrc1/tokens_u256",
                 "@crate_index//:canbench-rs",
             ],
         ),

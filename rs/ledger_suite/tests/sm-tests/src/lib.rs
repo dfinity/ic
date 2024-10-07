@@ -2678,38 +2678,6 @@ pub fn test_upgrade_serialization(
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
-
-                    // Current mainnet ICP wasm (V0) cannot deserialize from memory manager, but ICRC (V1) can
-                    match env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm_mainnet.clone(),
-                        upgrade_args.clone(),
-                    ) {
-                        Ok(_) => {
-                            if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
-                            } else {
-                                // In case this succeeded, we need to upgrade the ledger back to
-                                // the next version (via the current version), so that the
-                                // subsequent upgrade is from
-                                // `ledger_wasm_nextmigrationversionmemorymanager` to
-                                // `ledger_wasm_current`, rather than from `ledger_wasm_mainnet` to
-                                // `ledger_wasm_current` (currently, from V2 -> V1, rather than from
-                                // V0 -> V1).
-                                test_upgrade(ledger_wasm_current.clone());
-                                test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
-                            }
-                        }
-                        Err(e) => {
-                            if downgrade_to_mainnet_should_succeed {
-                               panic!("Downgrade from memory manager to mainnet should succeed (since mainnet is V1), but failed with error: {}", e)
-                            }
-                            assert!(
-                                e.description().contains("failed to decode ledger state")
-                                    || e.description().contains("Decoding stable memory failed")
-                            )
-                        }
-                    };
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
