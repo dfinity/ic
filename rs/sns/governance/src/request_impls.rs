@@ -71,3 +71,9 @@ impl Request for crate::pb::v1::GetRunningSnsVersionRequest {
     const METHOD: &'static str = "get_running_sns_version";
     const UPDATE: bool = false;
 }
+
+impl Request for crate::pb::v1::GetUpgradeJournalRequest {
+    type Response = crate::pb::v1::GetUpgradeJournalResponse;
+    const METHOD: &'static str = "get_upgrade_journal";
+    const UPDATE: bool = false;
+}

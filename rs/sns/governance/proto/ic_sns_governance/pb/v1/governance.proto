@@ -2129,6 +2129,13 @@ message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
 }
 
+message GetUpgradeJournalRequest {}
+
+message GetUpgradeJournalResponse {
+  Governance.Versions upgrade_steps = 1;
+  optional uint64 response_timestamp_seconds = 2;
+}
+
 // A request to mint tokens for a particular principal. The associated endpoint
 // is only available on SNS governance, and only then when SNS governance is
 // compiled with the `test` feature enabled.
