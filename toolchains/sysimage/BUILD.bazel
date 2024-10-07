@@ -45,3 +45,8 @@ sh_binary(
     name = "proc_wrapper",
     srcs = ["proc_wrapper.sh"],
 )
+
+sh_binary(
+    name = "run_in_namespace",
+    srcs = ["run_in_namespace.sh"],
+)
