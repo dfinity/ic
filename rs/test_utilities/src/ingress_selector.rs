@@ -77,7 +77,7 @@ impl IngressSelector for FakeIngressSelector {
         match payload_idx {
             Some(idx) => queue
                 .remove(idx)
-                .map(|payload| payload.iter().collect::<Vec<_>>().into())
+                .map(|payload| payload.into())
                 .unwrap_or_default(),
             None => IngressPayload::default(),
         }

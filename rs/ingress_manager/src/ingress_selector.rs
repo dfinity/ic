@@ -92,9 +92,7 @@ impl IngressSelector for IngressManager {
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
-        let mut accumulated_size = 0;
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
-        let mut num_messages = 0;
 
         let ingress_pool = self.ingress_pool.read().unwrap();
 
@@ -146,7 +144,7 @@ impl IngressSelector for IngressManager {
             canister_count => byte_limit.get() as usize / canister_count,
         };
 
-        let mut messages_in_payload = vec![];
+        let mut payload = IngressPayload::default();
 
         let mut canisters: Vec<_> = canister_queues.keys().cloned().collect();
 
@@ -170,7 +168,7 @@ impl IngressSelector for IngressManager {
                         context,
                         &settings,
                         &past_ingress_set,
-                        num_messages,
+                        payload.message_count(),
                         &mut cycles_needed,
                     );
                     // Any message that generates validation errors gets removed from
@@ -189,7 +187,7 @@ impl IngressSelector for IngressManager {
                     let ingress_size = ingress.count_bytes();
 
                     // Break criterion #1: global byte limit
-                    if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
+                    if (payload.count_bytes() + ingress_size) as u64 > byte_limit.get() {
                         break 'outer;
                     }
 
@@ -207,14 +205,12 @@ impl IngressSelector for IngressManager {
                         break;
                     }
 
-                    num_messages += 1;
-                    accumulated_size += ingress_size;
                     queue.msgs_included += 1;
                     queue.bytes_included += ingress_size;
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
-                    messages_in_payload.push(ingress);
+                    payload.push(ingress);
                     queue.msgs.pop();
                 }
 
@@ -227,7 +223,7 @@ impl IngressSelector for IngressManager {
                 }
             }
 
-            if byte_limit.get() as usize <= accumulated_size {
+            if byte_limit.get() as usize <= payload.count_bytes() {
                 // No remaining quota means the block is full. No more iterations needed.
                 break;
             } else {
@@ -235,7 +231,8 @@ impl IngressSelector for IngressManager {
                 match canisters.len() {
                     0 => break,
                     canister_count => {
-                        quota += (byte_limit.get() as usize - accumulated_size) / canister_count;
+                        quota +=
+                            (byte_limit.get() as usize - payload.count_bytes()) / canister_count;
                     }
                 };
             }
@@ -245,28 +242,19 @@ impl IngressSelector for IngressManager {
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
-        let mut payload = IngressPayload::from(messages_in_payload);
-        loop {
-            let payload_size = payload.count_bytes();
-            if payload_size < byte_limit.get() as usize {
-                break;
-            }
-
+        while !payload.is_empty() && payload.count_bytes() < byte_limit.get() as usize {
             warn!(
                 self.log,
                 "Serialized form of ingress (was {} bytes) did not pass \
                 size restriction ({} bytes), reducing ingress and trying again",
-                payload_size,
+                payload.count_bytes(),
                 byte_limit.get()
             );
-            payload.pop();
-            if payload.is_empty() {
-                break;
-            }
-        };
 
-        let payload_size = payload.count_bytes();
-        debug_assert!(payload_size <= byte_limit.get() as usize);
+            payload.pop();
+        }
+
+        debug_assert!(payload.count_bytes() <= byte_limit.get() as usize);
 
         payload
     }
