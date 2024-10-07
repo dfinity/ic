@@ -106,7 +106,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::sync::Arc;
-use strum::EnumIter;
+use strum_macros::EnumIter;
 use thousands::Separable;
 
 pub struct UserTag {}
