@@ -14,7 +14,7 @@ use itertools::Itertools;
 use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
 use strum::IntoEnumIterator;
-use strum_::{self, EnumIter};
+use strum::{self, EnumIter};
 use strum::{Display, EnumString};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
