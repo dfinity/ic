@@ -333,7 +333,7 @@ impl TaskQueue {
 
     pub fn front(&self) -> Option<&ExecutionTask> {
         self.paused_or_aborted_task.as_ref().or_else(|| {
-            if self.on_low_wasm_memory_hook_status == OnLowWasmMemoryHookStatus::Ready {
+            if self.on_low_wasm_memory_hook_status.is_ready() {
                 Some(&ExecutionTask::OnLowWasmMemory)
             } else {
                 self.queue.front()
