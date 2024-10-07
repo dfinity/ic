@@ -46,6 +46,7 @@ else
     echo "CANBENCH_BIN: "${CANBENCH_BIN}
     echo "POCKET_IC_BIN: "${POCKET_IC_BIN}
     echo "pocket ic version:"
+    ${POCKET_IC_BIN} --version
     # Runs the benchmark test that fails if the diffs are new or above the threshold.
     ${CANBENCH_BIN} --runtime-path ${POCKET_IC_BIN} >$CANBENCH_OUTPUT
     if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then

@@ -989,8 +989,7 @@ http_file(
 )
 
 http_file(
-    name = "pocket_ic_server_v6",
-    downloaded_file_path = "pocket-ic-x86_64-linux.gz",
+    name = "pocket-ic-server-v6",
     sha256 = "9fdf7040696c26c8fd8d3f12b3fbbf4e4b9da1e0d873fe2cb4ab2735e0fd8289",
     url = "https://github.com/dfinity/pocketic/releases/download/6.0.0/pocket-ic-x86_64-linux.gz",
 )
