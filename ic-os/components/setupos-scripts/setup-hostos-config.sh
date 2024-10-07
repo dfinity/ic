@@ -21,15 +21,6 @@ function mount_config_partition() {
 }
 
 function copy_config_files() {
-    # todo: remove copying of config.ini:
-    echo "* Copying 'config.ini' to hostOS config partition..."
-    if [ -f "${CONFIG_DIR}/config.ini" ]; then
-        cp ${CONFIG_DIR}/config.ini /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy 'config.ini' to hostOS config partition."
-    else
-        log_and_halt_installation_on_error "1" "Configuration file 'config.ini' does not exist."
-    fi
-
     echo "* Copying SSH authorized keys..."
     ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
     if [ -n "${ssh_authorized_keys}" ] && [ "${ssh_authorized_keys}" != "null" ]; then
@@ -53,11 +44,6 @@ function copy_config_files() {
     else
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
     fi
-
-    # todo: remove copying of config.ini:
-    echo "* Copying deployment.json to config partition..."
-    cp /data/deployment.json /media/
-    log_and_halt_installation_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
 
     echo "* Copying NNS public key to hostOS config partition..."
     nns_public_key_path=$(get_config_value '.icos_settings.nns_public_key_path')
