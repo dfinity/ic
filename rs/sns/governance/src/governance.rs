@@ -4665,7 +4665,7 @@ impl Governance {
         }
 
         // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
-        self.try_refresh_deployed_version().await;
+        self.try_release_upgrade_to_next_version_lock().await;
 
         // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
         {
@@ -4683,7 +4683,9 @@ impl Governance {
     // TODO: Currently, only SNS Root can be upgraded using the new feature. So we currently only
     // TODO: check for that canister's version. This needs to be generalized to detect arbitrary SNS
     // TODO: canister version changes.
-    pub async fn try_refresh_deployed_version(&mut self) {
+    pub async fn try_release_upgrade_to_next_version_lock(&mut self) {
+        let now_timestamp_seconds = self.env.now();
+
         // Assume delta(starting_version, expected_version) == Root
         let root_canister_id = match self.proto.root_canister_id_or_err() {
             Err(err) => {
@@ -4696,6 +4698,8 @@ impl Governance {
 
         let Some(UpgradeLock {
             expected_version,
+            acquired_timestamp_seconds,
+            released_timestamp_seconds,
             refresh_deployed_version_attempts,
             ..
         }) = &mut self.proto.upgrade_lock
@@ -4715,6 +4719,30 @@ impl Governance {
             );
             return;
         };
+
+        let Some(acquired_timestamp_seconds) = acquired_timestamp_seconds else {
+            dfn_core::println!(
+                "{}UpgradeLock.acquired_timestamp_seconds must be specified.",
+                log_prefix()
+            );
+            log!(
+                ERROR,
+                "{}UpgradeLock.acquired_timestamp_seconds must be specified.",
+                log_prefix()
+            );
+            return;
+        };
+
+        if released_timestamp_seconds.is_some() {
+            // The lock has already been released.
+            return;
+        }
+
+        // Check if the lock needs to be released due to a timeout
+        if now_timestamp_seconds - *acquired_timestamp_seconds >= UPGRADE_ATTEMPT_TIMEOUT_SECONDS {
+            *released_timestamp_seconds = Some(now_timestamp_seconds);
+            return;
+        }
 
         if refresh_deployed_version_attempts.is_some() {
             *refresh_deployed_version_attempts = refresh_deployed_version_attempts
@@ -4809,6 +4837,11 @@ impl Governance {
                 refresh_deployed_version_attempts
             );
             self.proto.deployed_version = Some(expected_version.clone());
+            self.proto.cached_upgrade_steps.as_mut().map(|cached_upgrade_steps| {
+                cached_upgrade_steps.upgrade_steps.as_mut().map(|upgrade_steps| upgrade_steps.versions.remove(0));
+            });
+            // TODO: check invariant cached_upgrade_steps[0] == expected_version
+            *released_timestamp_seconds = Some(self.env.now());
         } else {
             dfn_core::println!(
                 "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
@@ -4932,6 +4965,20 @@ impl Governance {
     pub fn try_acquire_upgrade_to_next_version_lock(&mut self) -> bool {
         let now_timestamp_seconds = self.env.now();
 
+        // TODO: Remove this condition after obsoleting the legacy upgrade feature.
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            dfn_core::println!(
+                "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                log_prefix(),
+            );
+            log!(
+                ERROR,
+                "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                log_prefix(),
+            );
+            return false;
+        };
+
         let Some(CachedUpgradeSteps {
             upgrade_steps: Some(ref upgrade_steps),
             ..
@@ -4941,13 +4988,10 @@ impl Governance {
             return false;
         };
 
-        let upgrade_steps_2 = upgrade_steps.clone();
-
         // In this function, we're interested in just the first two version (current and next).
         let (current_version, next_version) = match &upgrade_steps.versions[..] {
             [current_version] => (current_version, None),
             [current_version, next_version, ..] => {
-                dfn_core::println!("{}HHH upgrade_steps (len={}) = {:?}", log_prefix(), upgrade_steps_2.versions.len(), upgrade_steps_2);
                 (current_version, Some(next_version))
             },
             _ => {
@@ -4957,80 +5001,13 @@ impl Governance {
             }
         };
 
-        {
-            // TODO: Remove this condition after obsoleting the legacy upgrade feature.
-            let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
-                dfn_core::println!(
-                    "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
-                    log_prefix(),
-                );
-                log!(
-                    ERROR,
-                    "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
-                    log_prefix(),
-                );
-                return false;
-            };
-
-            // This is where we check that the information is consistent from the p.o.v. of the new
-            // and the legacy SNS upgrade feature.
-            if current_version != deployed_version {
-                dfn_core::println!("{}EEE", log_prefix());
-                return false;
-            }
-        }
-
-        if let Some(ref mut upgrade_lock) = self.proto.upgrade_lock {
-            // Check if an ongoing upgrade has succeeded.
-            if let Some(ref expected_version) = upgrade_lock.expected_version {
-                if expected_version == current_version {
-                    upgrade_lock.released_timestamp_seconds = Some(now_timestamp_seconds);
-                    self.proto.deployed_version = Some(expected_version.clone());
-                    // Continue (this upgrade succeeded; maybe there are more upgrades to be done).
-                } else if let Some(acquired_timestamp_seconds) =
-                    upgrade_lock.acquired_timestamp_seconds
-                {
-                    if now_timestamp_seconds - acquired_timestamp_seconds
-                        < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
-                    {
-                        // Upgrade in progress.
-                        dfn_core::println!("{}FFF", log_prefix());
-                        return false;
-                    }
-                    // Continue (this upgrade has timed out).
-                } else {
-                    dfn_core::println!(
-                        "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
-                             lock to None.",
-                        log_prefix(),
-                        upgrade_lock
-                    );
-                    log!(
-                        ERROR,
-                        "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
-                             lock to None.",
-                        log_prefix(),
-                        upgrade_lock
-                    );
-                    self.proto.upgrade_lock = None;
-                    dfn_core::println!("{}GGG", log_prefix());
-                    return false;
-                }
-            } else {
-                dfn_core::println!(
-                    "{}Inconsistent {:?} (expected_version not set); resetting the lock to None.",
-                    log_prefix(),
-                    upgrade_lock,
-                );
-                log!(
-                    ERROR,
-                    "{}Inconsistent {:?} (expected_version not set); resetting the lock to None.",
-                    log_prefix(),
-                    upgrade_lock,
-                );
-                self.proto.upgrade_lock = None;
-                return false;
-            }
+        // This is where we check that the information is consistent from the p.o.v. of the new
+        // and the legacy SNS upgrade feature.
+        //
+        // TODO: Maintain this invariant.
+        if current_version != deployed_version {
+            dfn_core::println!("{}EEE", log_prefix());
+            return false;
         }
 
         let Some(next_version) = next_version else {
