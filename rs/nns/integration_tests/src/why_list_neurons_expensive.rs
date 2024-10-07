@@ -88,6 +88,28 @@ fn test_why_list_neurons_expensive() {
     println!("  page_limit = {}", page_limit);
     println!("");
 
+    let principal_to_neuron_count = state_machine.execute_ingress(
+        GOVERNANCE_CANISTER_ID,
+        "principal_to_neuron_count",
+        Encode!().unwrap(),
+    )
+    .unwrap();
+    let principal_to_neuron_count = match principal_to_neuron_count {
+        ic_types::ingress::WasmResult::Reply(ok) => ok,
+        doh => panic!("{:?}", doh),
+    };
+    let principal_to_neuron_count = Decode!(
+        &principal_to_neuron_count,
+        Vec<(PrincipalId, u64)>
+    )
+    .unwrap();
+    println!();
+    println!();
+    println!("principal_to_neuron_count:");
+    println!("{:#?}", principal_to_neuron_count);
+    println!();
+    println!();
+
     // DO NOT MERGE: THIS IS A HACK
     let page_limit = page_limit / 2;
 

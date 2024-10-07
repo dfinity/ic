@@ -644,6 +644,38 @@ async fn claim_or_refresh_neuron_from_account(
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
+/// What "principal P 'has' neuron N" means precisely is that P is either a
+/// controller of N, a hotkey (or both).
+use std::collections::HashMap;
+#[update]
+fn principal_to_neuron_count() // DO NOT MERGE
+    -> Vec<(PrincipalId, /* neuron_count */ u64)>
+{
+    use ic_nns_governance::storage::with_stable_neuron_indexes;
+
+    let mut result = HashMap::new();
+
+    with_stable_neuron_indexes(|neuron_indexes| {
+        for ((principal_id, _neuron_id), ()) in
+            neuron_indexes
+                .principal()
+                .principal_and_neuron_id_set
+                .iter()
+        {
+            let principal_id = PrincipalId::from(principal_id);
+            let count = result.entry(principal_id).or_default();
+            *count += 1;
+        }
+    });
+
+    let mut result = result.into_iter().collect::<Vec<_>>();
+    result.sort_by_key(|(_principal_id, count)| *count);
+    result.reverse();
+
+    result.truncate(1000);
+    result
+}
+
 #[update]
 fn claim_gtc_neurons(
     new_controller: PrincipalId,

@@ -283,7 +283,7 @@ pub(crate) fn with_stable_neuron_store_mut<R>(
     })
 }
 
-pub(crate) fn with_stable_neuron_indexes<R>(
+pub /* DO NOT MERGE (crate */ fn with_stable_neuron_indexes<R>(
     f: impl FnOnce(&neuron_indexes::StableNeuronIndexes<VM>) -> R,
 ) -> R {
     STATE.with(|state| {
