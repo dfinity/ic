@@ -66,7 +66,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
-    timeout-minutes: 120
+    timeout-minutes: 240
     runs-on:
       group: zh1
       labels: dind-large
