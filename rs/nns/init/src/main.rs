@@ -32,13 +32,13 @@ struct CliArgs {
     /// canister.
     ///
     /// Optional: defaults to the current directory.
-    #[clap(long, value_parser)]
+    #[clap(long)]
     wasm_dir: Option<PathBuf>,
 
     /// Path to a .csv file for initialising the `neurons` canister.
     ///
     /// Optional: defaults to creating canisters with test neurons.
-    #[clap(long, value_parser)]
+    #[clap(long)]
     initial_neurons: Option<PathBuf>,
 
     /// Path to the file containing the initial registry required for NNS
