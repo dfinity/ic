@@ -405,7 +405,7 @@ compare_hashes() {
     local ci_hash_value=${!ci_hash_var}
 
     if [ "$local_hash_value" != "$ci_hash_value" ]; then
-        log_stderr "Error! The sha256 sum from the proposal/CDN does not match the one we just built for $os_type. \n\tThe sha256 sum we just built:\t\t$local_hash_value\n\tThe sha256 sum from the CDN:\t\t $ci_hash_value."
+        log_stderr "Error! The sha256 sum from the proposal/CDN does not match the one we just built for $os_type. \n\tThe sha256 sum we just built:\t\t$local_hash_value\n\tThe sha256 sum from the CDN:\t\t$ci_hash_value."
     else
         log_success "Verification successful for $os_type!"
         log_success "The shasum for $os_type from the artifact built locally and the one fetched from the proposal/CDN match:\n\t\t\t\t\t\tLocal = $local_hash_value\n\t\t\t\t\t\tCDN   = $ci_hash_value\n\n"
