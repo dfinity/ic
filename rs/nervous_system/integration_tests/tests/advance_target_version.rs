@@ -9,10 +9,36 @@ use ic_nns_test_utils::sns_wasm::create_modified_sns_wasm;
 use ic_sns_governance::pb::v1 as sns_pb;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIc, PocketIcBuilder};
 use std::time::Duration;
 
-const TICKS_PER_TASK: u64 = 10;
+fn await_with_timeout<T>(
+    pocket_ic: &PocketIc,
+    timeout_seconds: u64,
+    decompose: impl Fn(&PocketIc) -> T,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+{
+    let mut counter = 0;
+    loop {
+        pocket_ic.advance_time(Duration::from_secs(1));
+        pocket_ic.tick();
+
+        let observed = decompose(pocket_ic);
+        if observed == *expected {
+            return Ok(());
+        }
+        if counter == timeout_seconds {
+            return Err(format!(
+                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
+                observed, expected, timeout_seconds,
+            ));
+        }
+        counter += 1;
+    }
+}
 
 #[test]
 fn test_get_upgrade_journal() {
@@ -20,19 +46,6 @@ fn test_get_upgrade_journal() {
         .with_nns_subnet()
         .with_sns_subnet()
         .build();
-
-    let wait_for_next_periodic_task = |sleep_duration_seconds| {
-        let now = pocket_ic.get_time();
-        pocket_ic.advance_time(Duration::from_secs(sleep_duration_seconds));
-        for _ in 0..TICKS_PER_TASK {
-            pocket_ic.tick();
-        }
-        assert_eq!(
-            pocket_ic.get_time(),
-            now + Duration::from_secs(sleep_duration_seconds)
-                + Duration::from_nanos(TICKS_PER_TASK)
-        );
-    };
 
     // Install the NNS canisters.
     let with_mainnet_nns_canisters = false;
@@ -68,32 +81,22 @@ fn test_get_upgrade_journal() {
         sns
     };
 
-    // State A: right after SNS creation.
-    {
-        let sns_pb::GetUpgradeJournalResponse {
-            upgrade_steps,
-            response_timestamp_seconds,
-        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
-        let upgrade_steps = upgrade_steps
-            .expect("upgrade_steps should be Some")
-            .versions;
-        assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-        assert_eq!(response_timestamp_seconds, Some(1620501459));
-    }
+    // State A: after SNS creation.
+    await_with_timeout(
+        &pocket_ic,
+        1,
+        |pocket_ic| {
+            let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
+                sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
+            upgrade_steps
+                .expect("cached_upgrade_steps should be Some")
+                .versions
+        },
+        &vec![initial_sns_version.clone()],
+    )
+    .unwrap();
 
-    wait_for_next_periodic_task(6 * 60); // 6 min
-
-    // State B: after the first periodic task's completion. No changes expected yet.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
-        let upgrade_steps = upgrade_steps
-            .expect("upgrade_steps should be Some")
-            .versions;
-        assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-    }
-
-    // Publish a new SNS version.
+    // State B: published a new SNS version.
     let (new_sns_version_1, new_sns_version_2) = {
         let (_, original_root_wasm) = deployed_sns_starting_info
             .get(&SnsCanisterType::Root)
@@ -125,24 +128,6 @@ fn test_get_upgrade_journal() {
         (new_sns_version_1, new_sns_version_2)
     };
 
-    wait_for_next_periodic_task(6 * 60); // 6 min
-
-    // State C: after the second periodic task's completion.
-    {
-        let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
-        let upgrade_steps = upgrade_steps.expect("cached_upgrade_steps should be Some");
-
-        assert_eq!(
-            upgrade_steps.versions,
-            vec![
-                initial_sns_version.clone(),
-                new_sns_version_1.clone(),
-                new_sns_version_2.clone()
-            ]
-        );
-    }
-
     println!(
         "initial_sns_version.root_wasm_hash = {:?}",
         initial_sns_version.root_wasm_hash
@@ -156,17 +141,50 @@ fn test_get_upgrade_journal() {
         new_sns_version_2.root_wasm_hash
     );
 
-    wait_for_next_periodic_task(10);
-    wait_for_next_periodic_task(10);
-    wait_for_next_periodic_task(10);
-    wait_for_next_periodic_task(10);
-    wait_for_next_periodic_task(10);
+    // State C: after the second periodic task's completion (+6 min).
+    await_with_timeout(
+        &pocket_ic,
+        599,
+        |pocket_ic| {
+            let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
+                sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
+            upgrade_steps
+                .expect("cached_upgrade_steps should be Some")
+                .versions
+        },
+        &vec![
+            initial_sns_version.clone(),
+            new_sns_version_1.clone(),
+            new_sns_version_2.clone(),
+        ],
+    )
+    .unwrap();
 
-    {
-        let sns_pb::GetRunningSnsVersionResponse {
-            deployed_version, ..
-        } = sns::governance::get_running_sns_version(&pocket_ic, sns.governance.canister_id);
-        let deployed_version = deployed_version.unwrap();
-        assert_eq!(deployed_version, new_sns_version_2);
-    }
+    // State D: deployed_version is now new_sns_version_1.
+    await_with_timeout(
+        &pocket_ic,
+        17,
+        |pocket_ic| {
+            let sns_pb::GetRunningSnsVersionResponse {
+                deployed_version, ..
+            } = sns::governance::get_running_sns_version(&pocket_ic, sns.governance.canister_id);
+            deployed_version.expect("deployed_version should be Some")
+        },
+        &new_sns_version_1,
+    )
+    .unwrap();
+
+    // State D: deployed_version is now new_sns_version_2.
+    await_with_timeout(
+        &pocket_ic,
+        17,
+        |pocket_ic| {
+            let sns_pb::GetRunningSnsVersionResponse {
+                deployed_version, ..
+            } = sns::governance::get_running_sns_version(&pocket_ic, sns.governance.canister_id);
+            deployed_version.expect("deployed_version should be Some")
+        },
+        &new_sns_version_2,
+    )
+    .unwrap();
 }
