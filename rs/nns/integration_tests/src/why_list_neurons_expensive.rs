@@ -183,7 +183,7 @@ fn test_why_list_neurons_expensive() {
     let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
 
     // Step 3.2: Visualize. Output is at list_neurons.svg.
-    let lol_idk = render_profiling(
+    let _lol_idk = render_profiling( // DO NOT MERGE
         profiling,
         &name_custom_section_payload,
         "list_neurons", // title
@@ -192,6 +192,7 @@ fn test_why_list_neurons_expensive() {
     .unwrap();
 }
 
+#[allow(unused)]
 enum CostValue {
     Complete(u64),
     StartCost(u64),
