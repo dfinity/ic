@@ -350,7 +350,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 500 error is retriable
     assert!(matches!(
-        dbg!(decode::<CheckTransactionResponse>(&result)),
+        decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
             CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 500")
@@ -390,7 +390,7 @@ fn test_check_transaction_error() {
         .expect("the fetch request didn't finish");
     // 404 error is irrecoverable (i.e. transaction is not found)
     assert!(matches!(
-        dbg!(decode::<CheckTransactionResponse>(&result)),
+        decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
             CheckTransactionIrrecoverableError::InvalidTransaction(msg)
         )) if msg.contains("received code 404")
