@@ -14,7 +14,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin-0-32",
+        "@crate_index//:bitcoin_0_32",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:k256",
         "@crate_index//:p256",
