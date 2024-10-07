@@ -27,7 +27,7 @@ type OutputConfig = record {
 // Response structure for returning the requested configuration and associated metadata
 type OutputConfigResponse = record {
     version: Version;         // Version of the configuration
-    active_since: Timestamp;  // Time when this configuration became added (became active)
+    active_since: Timestamp;  // Time when this configuration was added (became active)
     config: OutputConfig;     // Contains the list of rules
 };
 
