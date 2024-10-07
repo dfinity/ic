@@ -418,8 +418,6 @@ compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" 
 compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
 compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
 
-log_success "All images are validated successfully"
-
 log "Total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
 
 exit 0
