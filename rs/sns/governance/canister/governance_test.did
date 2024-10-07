@@ -284,6 +284,7 @@ type UpgradeLock = record {
   expected_version : opt Version;
   acquired_timestamp_seconds : opt nat64;
   released_timestamp_seconds : opt nat64;
+  refresh_deployed_version_attempts : opt nat64;
 };
 
 type Governance = record {

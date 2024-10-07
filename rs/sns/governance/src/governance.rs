@@ -384,12 +384,15 @@ impl GovernanceProto {
     }
 
     pub fn root_canister_id_or_panic(&self) -> CanisterId {
-        self.root_canister_id().expect("No root_canister_id.")
+        self.root_canister_id_or_err()
+            .expect("No root_canister_id.")
     }
 
     pub fn root_canister_id_or_err(&self) -> Result<CanisterId, String> {
-        let Some(root_canister_id) = self.proto.root_canister_id else {
-            return Err("Root canister ID is not set! Believe it or not, this is a bug.".to_string());
+        let Some(root_canister_id) = self.root_canister_id else {
+            return Err(
+                "Root canister ID is not set! Believe it or not, this is a bug.".to_string(),
+            );
         };
         Ok(CanisterId::unchecked_from_principal(root_canister_id))
     }
@@ -4681,27 +4684,8 @@ impl Governance {
     // TODO: check for that canister's version. This needs to be generalized to detect arbitrary SNS
     // TODO: canister version changes.
     pub async fn try_refresh_deployed_version(&mut self) {
-        let Some(upgrade_lock @ UpgradeLock {
-            expected_version,
-            ..
-        }) = self.proto.upgrade_lock else {
-            return;
-        };
-
-        let Some(expected_version) = expected_version else {
-            dfn_core::println!("{}UpgradeLock.expected_version must be specified.", log_prefix());
-            log!(ERROR, "{}UpgradeLock.expected_version must be specified.", log_prefix());
-            return;
-        };
-
-        if upgrade_lock.refresh_deployed_version_attempts.is_some() {
-            upgrade_lock.refresh_deployed_version_attempts.map(|refresh_deployed_version_attempts| refresh_deployed_version_attempts + 1);
-        } else {
-            upgrade_lock.refresh_deployed_version_attempts = Some(1);
-        }
-        
         // Assume delta(starting_version, expected_version) == Root
-        let Some(root_canister_id) = match self.proto.root_canister_id_or_err() {
+        let root_canister_id = match self.proto.root_canister_id_or_err() {
             Err(err) => {
                 dfn_core::println!("{}{}", log_prefix(), err);
                 log!(ERROR, "{}{}", log_prefix(), err);
@@ -4710,51 +4694,135 @@ impl Governance {
             Ok(root_canister_id) => root_canister_id,
         };
 
-        let canister_info_arg = match Encode!(&CanisterInfoRequest::new(
-            root_canister_id,
-            Some(1),
-        )) {
+        let Some(UpgradeLock {
+            expected_version,
+            refresh_deployed_version_attempts,
+            ..
+        }) = &mut self.proto.upgrade_lock
+        else {
+            return;
+        };
+
+        let Some(expected_version) = expected_version else {
+            dfn_core::println!(
+                "{}UpgradeLock.expected_version must be specified.",
+                log_prefix()
+            );
+            log!(
+                ERROR,
+                "{}UpgradeLock.expected_version must be specified.",
+                log_prefix()
+            );
+            return;
+        };
+
+        if refresh_deployed_version_attempts.is_some() {
+            *refresh_deployed_version_attempts = refresh_deployed_version_attempts
+                .map(|refresh_deployed_version_attempts| refresh_deployed_version_attempts + 1);
+        } else {
+            *refresh_deployed_version_attempts = Some(1);
+        }
+
+        let canister_info_arg = match Encode!(&CanisterInfoRequest::new(root_canister_id, Some(1),))
+        {
             Ok(canister_info_arg) => canister_info_arg,
             Err(err) => {
-                dfn_core::println!("{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
-                log!(ERROR, "{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                dfn_core::println!(
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
+                log!(
+                    ERROR,
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
                 return;
             }
         };
 
-        let root_canister_info = self.env
+        let root_canister_info = self
+            .env
             .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
             .await;
 
         let root_canister_info = match root_canister_info {
             Ok(root_canister_info) => root_canister_info,
             Err((_, err)) => {
-                dfn_core::println!("{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
-                log!(ERROR, "{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                dfn_core::println!(
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
+                log!(
+                    ERROR,
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
                 return;
             }
         };
 
-        let CanisterInfoResponse {
-            module_hash: Some(module_hash),
-            ..
-        } = match Decode!(&root_canister_info[..], CanisterInfoResponse) {
-            Ok(canister_info_response) => canister_info_response,
-            Err(err) => {
-                dfn_core::println!("{}Cannot decode canister info from the management canister: {}", log_prefix(), err);
-                log!(ERROR, "{}Cannot decode canister info from the management canister: {}", log_prefix(), err);
+        let module_hash = {
+            let canister_info_response =
+                match Decode!(&root_canister_info[..], CanisterInfoResponse) {
+                    Ok(canister_info_response) => canister_info_response,
+                    Err(err) => {
+                        dfn_core::println!(
+                            "{}Cannot decode canister info from the management canister: {}",
+                            log_prefix(),
+                            err
+                        );
+                        log!(
+                            ERROR,
+                            "{}Cannot decode canister info from the management canister: {}",
+                            log_prefix(),
+                            err
+                        );
+                        return;
+                    }
+                };
+
+            let Some(module_hash) = canister_info_response.module_hash() else {
+                dfn_core::println!("{}Module hash is None", log_prefix());
+                log!(ERROR, "{}Module hash is None", log_prefix());
                 return;
-            }
+            };
+
+            module_hash
         };
-        
 
         if expected_version.root_wasm_hash == module_hash {
-            dfn_core::println!("{}Upgrading Root to {:?} succeeded after {:?} attempts!", log_prefix(), module_hash, refresh_deployed_version_attempts);
-            log!(ERROR, "{}Upgrading Root to {:?} succeeded after {:?} attempts!", log_prefix(), module_hash, refresh_deployed_version_attempts);
-            self.proto.deployed_version = expected_version.clone();
+            dfn_core::println!(
+                "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
+                log_prefix(),
+                module_hash,
+                refresh_deployed_version_attempts
+            );
+            log!(
+                ERROR,
+                "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
+                log_prefix(),
+                module_hash,
+                refresh_deployed_version_attempts
+            );
+            self.proto.deployed_version = Some(expected_version.clone());
         } else {
-            dfn_core::println!("{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...", log_prefix(), module_hash, refresh_deployed_version_attempts);
-            log!(ERROR, "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...", log_prefix(), module_hash, refresh_deployed_version_attempts);
+            dfn_core::println!(
+                "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
+                log_prefix(),
+                module_hash,
+                refresh_deployed_version_attempts
+            );
+            log!(
+                ERROR,
+                "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
+                log_prefix(),
+                module_hash,
+                refresh_deployed_version_attempts
+            );
         }
     }
 
@@ -4829,7 +4897,7 @@ impl Governance {
             }
         };
 
-        let Some(root_canister_id) = match self.self.root_canister_id() {
+        let root_canister_id = match self.proto.root_canister_id_or_err() {
             Err(err) => {
                 dfn_core::println!("{}{}", log_prefix(), err);
                 log!(ERROR, "{}{}", log_prefix(), err);
@@ -4914,36 +4982,34 @@ impl Governance {
                     upgrade_lock.released_timestamp_seconds = Some(now_timestamp_seconds);
                     self.proto.deployed_version = Some(expected_version.clone());
                     // Continue (this upgrade succeeded; maybe there are more upgrades to be done).
-                } else {
-                    if let Some(acquired_timestamp_seconds) =
-                        upgrade_lock.acquired_timestamp_seconds
+                } else if let Some(acquired_timestamp_seconds) =
+                    upgrade_lock.acquired_timestamp_seconds
+                {
+                    if now_timestamp_seconds - acquired_timestamp_seconds
+                        < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
                     {
-                        if now_timestamp_seconds - acquired_timestamp_seconds
-                            < UPGRADE_ATTEMPT_TIMEOUT_SECONDS
-                        {
-                            // Upgrade in progress.
-                            dfn_core::println!("{}FFF", log_prefix());
-                            return false;
-                        }
-                        // Continue (this upgrade has timed out).
-                    } else {
-                        dfn_core::println!(
-                            "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
-                             lock to None.",
-                            log_prefix(),
-                            upgrade_lock
-                        );
-                        log!(
-                            ERROR,
-                            "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
-                             lock to None.",
-                            log_prefix(),
-                            upgrade_lock
-                        );
-                        self.proto.upgrade_lock = None;
-                        dfn_core::println!("{}GGG", log_prefix());
+                        // Upgrade in progress.
+                        dfn_core::println!("{}FFF", log_prefix());
                         return false;
                     }
+                    // Continue (this upgrade has timed out).
+                } else {
+                    dfn_core::println!(
+                        "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
+                             lock to None.",
+                        log_prefix(),
+                        upgrade_lock
+                    );
+                    log!(
+                        ERROR,
+                        "{}Inconsistent {:?} (acquired_timestamp_seconds not set); resetting the \
+                             lock to None.",
+                        log_prefix(),
+                        upgrade_lock
+                    );
+                    self.proto.upgrade_lock = None;
+                    dfn_core::println!("{}GGG", log_prefix());
+                    return false;
                 }
             } else {
                 dfn_core::println!(
