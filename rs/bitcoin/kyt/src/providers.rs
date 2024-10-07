@@ -27,6 +27,7 @@ pub struct Provider {
 }
 
 impl Provider {
+    // Return the default provider for the given bitcoin network.
     pub fn new_with_default(btc_network: BtcNetwork) -> Self {
         let provider_id = match btc_network {
             BtcNetwork::Mainnet => ProviderId::BtcScan,
@@ -37,6 +38,8 @@ impl Provider {
             provider_id,
         }
     }
+
+    // Return the next provider by cycling through all available providers.
     pub fn next(&self) -> Self {
         let btc_network = self.btc_network;
         let provider_id = match (self.btc_network, self.provider_id) {
