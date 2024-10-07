@@ -15272,6 +15272,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.37.0",
+ "ic_consensus_system_test_utils",
  "proxy_canister",
  "reqwest 0.12.8",
  "slog",

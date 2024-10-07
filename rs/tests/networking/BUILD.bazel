@@ -245,8 +245,10 @@ system_test(
     deps = [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canisters:cloner_canister_types",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:slog",

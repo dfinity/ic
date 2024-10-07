@@ -20,6 +20,9 @@
 use anyhow::Result;
 use candid::Encode;
 use cloner_canister_types::SpinupCanistersArgs;
+use ic_consensus_system_test_utils::node::{
+    await_node_certified_height, get_node_certified_height,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
@@ -29,10 +32,11 @@ use ic_system_test_driver::{
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
-        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer},
     },
     systest,
 };
+use ic_types::Height;
 use slog::info;
 use std::time::Duration;
 
@@ -45,6 +49,8 @@ const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
+
+const DKG_INTERVAL: u64 = 150;
 
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
@@ -118,7 +124,17 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
-    let app_node = app_subnet.nodes().next().unwrap();
+
+    let mut healthy_nodes = app_subnet.nodes().collect::<Vec<_>>();
+
+    let node_to_kill = healthy_nodes.pop().unwrap();
+
+    let app_node = healthy_nodes[0].clone();
+    let app_agents: Vec<_> = healthy_nodes
+        .iter()
+        .map(|node| node.build_default_agent())
+        .collect();
+
     let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
 
     info!(
@@ -183,6 +199,43 @@ pub fn install_cloner_canisters(env: TestEnv) {
                 timer.elapsed()
             );
         });
+
+        // kill the node when halfway through
+        if i == AMOUNT_OF_CLONER_CANISTERS / 2 {
+            let topology = env.topology_snapshot();
+            let logger = logger.clone();
+            let slow_node_certified_height =
+                get_node_certified_height(&node_to_kill, logger.clone()).get();
+
+            let slow_node_shut_down_height =
+                DKG_INTERVAL * (1 + slow_node_certified_height / DKG_INTERVAL);
+            info!(
+                logger,
+                "Wait one DKG interval, then shut down the slow node"
+            );
+            await_node_certified_height(
+                &node_to_kill,
+                Height::from(slow_node_shut_down_height),
+                logger.clone(),
+            );
+            node_to_kill.vm().kill();
+            info!(logger, "Killed the slow node");
+
+            info!(
+                logger,
+                "Wait another DKG interval, then restart the slow node"
+            );
+
+            healthy_nodes.iter().for_each(|node| {
+                await_node_certified_height(
+                    &node,
+                    Height::from(slow_node_shut_down_height + DKG_INTERVAL),
+                    logger.clone(),
+                )
+            });
+            node_to_kill.vm().start();
+            info!(logger, "Restarted slow node");
+        };
     }
 
     // keep the workload running for a while
