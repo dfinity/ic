@@ -473,6 +473,14 @@ impl TaskQueue {
 
     /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
+        for task in self.queue.iter() {
+            debug_assert!(
+                *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer,
+                "Unexpected task type {:?} in TaskQueue::queue.",
+                task
+            );
+        }
+
         self.queue.clear();
     }
 
