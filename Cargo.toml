@@ -594,6 +594,7 @@ parking_lot = "0.12.3"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.13.0", default-features = false, features = [
+    "criterion",
     "flamegraph",
     "prost-codec",
 ] }
