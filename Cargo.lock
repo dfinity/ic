@@ -7266,7 +7266,7 @@ name = "ic-crypto-internal-threshold-sig-ecdsa-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "bitcoin 0.32.2",
+ "bitcoin 0.32.3",
  "ed25519-dalek",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-sha2",

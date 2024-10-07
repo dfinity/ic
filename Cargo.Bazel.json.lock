@@ -1,5 +1,5 @@
 {
-  "checksum": "0b3ea17c968956a9bf172b31f0d4f15bc9347326fecb83b91781451bc74f5308",
+  "checksum": "fed9aa750d876c260dc90d3d81b3b7307dec8b46318e4c103e95413845c291eb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5689,6 +5689,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -6121,7 +6127,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -7127,6 +7134,14 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "default",
+            "secp-recovery",
+            "std"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -7236,7 +7251,8 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default"
+            "default",
+            "std"
           ],
           "selects": {}
         },
@@ -7294,7 +7310,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -7410,7 +7427,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -7580,7 +7598,8 @@
           "common": [
             "alloc",
             "bitcoin-io",
-            "io"
+            "io",
+            "std"
           ],
           "selects": {}
         },
@@ -25605,7 +25624,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "std"
           ],
           "selects": {}
         },
@@ -57649,7 +57669,9 @@
         "crate_features": {
           "common": [
             "alloc",
-            "hashes"
+            "hashes",
+            "recovery",
+            "std"
           ],
           "selects": {}
         },
@@ -57956,7 +57978,9 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "recovery",
+            "std"
           ],
           "selects": {}
         },
