@@ -169,8 +169,11 @@ async fn test_get_upgrade_journal() {
         new_sns_version_2.root_wasm_hash
     );
 
-    wait_for_next_periodic_task(6 * 60); // 6 min
-    wait_for_next_periodic_task(6 * 60); // 6 min
+    wait_for_next_periodic_task(10);
+    wait_for_next_periodic_task(10);
+    wait_for_next_periodic_task(10);
+    wait_for_next_periodic_task(10);
+    wait_for_next_periodic_task(10);
 
     {
         let sns_pb::GetRunningSnsVersionResponse {

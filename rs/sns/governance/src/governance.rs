@@ -4818,14 +4818,14 @@ impl Governance {
             dfn_core::println!(
                 "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
                 log_prefix(),
-                module_hash,
+                expected_version.root_wasm_hash,
                 refresh_deployed_version_attempts
             );
             log!(
                 ERROR,
                 "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
                 log_prefix(),
-                module_hash,
+                expected_version.root_wasm_hash,
                 refresh_deployed_version_attempts
             );
             self.proto.deployed_version = Some(expected_version.clone());
@@ -4833,14 +4833,14 @@ impl Governance {
             dfn_core::println!(
                 "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
                 log_prefix(),
-                module_hash,
+                expected_version.root_wasm_hash,
                 refresh_deployed_version_attempts
             );
             log!(
                 ERROR,
                 "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
                 log_prefix(),
-                module_hash,
+                expected_version.root_wasm_hash,
                 refresh_deployed_version_attempts
             );
         }
@@ -4900,7 +4900,7 @@ impl Governance {
             return;
         }
 
-        dfn_core::println!("{}wasm_hash = {:?}", log_prefix(), wasm_hash); // DO NOT MERGE
+        dfn_core::println!("{}expected_version = {:#?}, wasm_hash = {:?}", log_prefix(), expected_version, wasm_hash); // DO NOT MERGE
         let get_wasm_result = get_wasm(&*self.env, wasm_hash, canister_type_to_upgrade).await;
 
         let wasm = match get_wasm_result {
@@ -4961,10 +4961,15 @@ impl Governance {
             return false;
         };
 
+        let upgrade_steps_2 = upgrade_steps.clone();
+
         // In this function, we're interested in just the first two version (current and next).
         let (current_version, next_version) = match &upgrade_steps.versions[..] {
             [current_version] => (current_version, None),
-            [current_version, next_version, ..] => (current_version, Some(next_version)),
+            [current_version, next_version, ..] => {
+                dfn_core::println!("{}HHH upgrade_steps (len={}) = {:?}", log_prefix(), upgrade_steps_2.versions.len(), upgrade_steps_2);
+                (current_version, Some(next_version))
+            },
             _ => {
                 dfn_core::println!("{}upgrade_steps is empty.", log_prefix());
                 log!(ERROR, "{}upgrade_steps is empty.", log_prefix());
@@ -5049,7 +5054,7 @@ impl Governance {
         }
 
         let Some(next_version) = next_version else {
-            dfn_core::println!("{}HHH", log_prefix());
+            dfn_core::println!("{}HHH upgrade_steps = {:?}", log_prefix(), upgrade_steps);
             return false;
         };
 
