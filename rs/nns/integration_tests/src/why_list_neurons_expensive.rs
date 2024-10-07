@@ -12,6 +12,7 @@ use std::{
     collections::BTreeMap,
     io::Read, // For flate2.
     path::PathBuf,
+    str::FromStr,
 };
 // TODO: Figure out how to implement read_custom_sections using the walrus
 // library so that we are not using two WASM libraries.
@@ -166,37 +167,61 @@ fn test_why_list_neurons_expensive() {
 
     // Step 2: Run the code under test (while profiling is enabled).
 
-    let caller = PrincipalId::new_user_test_id(42); // DO NOT MERGE
-    let result = list_neurons(
-        &state_machine,
-        caller,
-        ListNeurons {
-            include_neurons_readable_by_caller: true,
-            include_public_neurons_in_full_neurons: Some(false),
-            include_empty_neurons_readable_by_caller: Some(false),
-            neuron_ids: vec![],
-        },
-    );
-    println!("");
-    println!("list_neurons result:\n{:#?}", result);
-    println!("");
+    let principal_id_to_neuron_count = [
+        // ("dies2-up6x4-i42et-avcop-xvl3v-it2mm-hqeuj-j4hyu-vz7wl-ewndz-dae", 31124),
+        // ("2powo-ziaaa-aaaar-qaila-cai",                                     9860),
+        ("yg4om-dyme7-bfyk3-oml66-io7th-et4ge-kl3a2-wrfau-f23ey-vwzpy-hae", 3705),
+        ("rdwk2-noc2n-qaxh6-3alc4-uvhgt-dupge-kkoq3-v3brf-6afky-mui7j-lqe", 1942),
+        ("nr7uw-233ak-fgdr4-mtcnn-fegim-mbk7p-xxamc-m3s3v-dzwu7-ewwmc-pae", 1739),
+        ("v7cc2-wbjf7-dloyx-43km2-ive2v-qcyno-edull-b4c73-jdllb-haoqj-7ae", 1491),
+        // ("renrk-eyaaa-aaaaa-aaada-cai",                                     1612),
+        ("4cq75-vnrtb-dwgfn-spa6f-27iu7-5qoym-ocqz3-53f3d-tljg6-boy7f-5ae", 1197),
+        ("6o3wy-ohbtk-76hn6-5krk3-2v7k5-mktcw-fhkiy-4vmzv-5hxgy-hvlzv-uae", 1032),
+        ("i5jir-ikjp5-zwuff-4kb7x-y6y33-gxuii-cuayu-q5qk2-mte6c-mjnqj-tae", 755),
+        ("ekj3w-neq4s-443k7-3kfdw-5p3u6-zfbnb-7wwdq-rnf32-gy2xh-r642y-cae", 517),
+        ("h7xzl-caqsp-rfheb-tgdbv-ixxpl-k7a2s-vkln5-a24mk-dctlt-upp6j-nqe", 252),
+        ("hspgb-7iuxb-yrqnc-eib3g-trgbr-diqyt-miu5i-pjsgn-fu57w-hwf7j-zae", 202),
+        ("zv4kb-45wuz-qvpxc-ignbt-uuwzn-xggbt-bx2hx-kelhr-miohk-yrxk3-cae", 150),
+        ("7dr7q-wg6te-xgu7a-mxs7e-ehv3s-rtvkj-wdkmx-sjzsc-ajl47-gr3z2-7ae", 100),
+    ];
+    for (caller, neuron_count) in principal_id_to_neuron_count {
+        let caller = PrincipalId::from_str(caller).unwrap();
 
-    // Step 3: Inspect results. In particular, generate flame graph.
+        let result = list_neurons(
+            &state_machine,
+            caller,
+            ListNeurons {
+                include_neurons_readable_by_caller: true,
+                include_public_neurons_in_full_neurons: Some(false),
+                include_empty_neurons_readable_by_caller: Some(true),
+                neuron_ids: vec![],
+            },
+        );
 
-    // Step 3.1: Fetch measurement.
-    let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
+        // Step 3: Inspect results. In particular, generate flame graph.
 
-    // Step 3.2: Visualize. Output is at list_neurons.svg.
-    let _lol_idk = render_profiling( // DO NOT MERGE
-        profiling,
-        &name_custom_section_payload,
-        "list_neurons", // title
-        PathBuf::from("list_neurons.svg"),
-    )
-    .unwrap();
+        // Step 3.1: Fetch measurement.
+        let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
+
+        // Step 3.2: Visualize. Output is at list_neurons.svg.
+        let cost = render_profiling( // DO NOT MERGE
+            profiling,
+            &name_custom_section_payload,
+            &format!("{} neurons ({})", neuron_count, caller), // title
+            PathBuf::from(format!("list_neurons_{}_neurons_{}.svg", neuron_count, caller)),
+        )
+        .unwrap();
+
+        println!("");
+        println!("caller = {}", caller);
+        println!("    neuron_count = {}", neuron_count);
+        println!("    cost = {:?}", cost);
+        println!("");
+    }
 }
 
 #[allow(unused)]
+#[derive(Debug)]
 enum CostValue {
     Complete(u64),
     StartCost(u64),

@@ -899,10 +899,11 @@ fn get_network_economics_parameters() -> NetworkEconomics {
     NetworkEconomics::from(response)
 }
 
-#[heartbeat]
+/* DO NOT MERGE #[heartbeat]
 async fn heartbeat() {
     governance_mut().run_periodic_tasks().await
 }
+*/
 
 // Protobuf interface.
 
