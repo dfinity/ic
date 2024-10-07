@@ -178,7 +178,7 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 
 /// Runs a state machine test with two subnets, a local subnet with 2 canisters installed and a
 /// remote subnet with 5 canisters installed. All canisters, except one local canister referred to
-/// as `migrating_canister` is stopped.
+/// as `migrating_canister`, are stopped.
 ///
 /// In the first phase a number of rounds are executed on both subnets, including XNet traffic with
 /// the `migrating_canister` making random calls to all installed canisters (since all calls are
@@ -186,10 +186,10 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 ///
 /// For the second phase, `migrating_canister` stops making calls and is then migrated to the
 /// remote subnet. Since all other canisters are stopped, there are bound to be a number of reject
-/// signals for requests in the reverse stream to the local_subnet. But since we migrated the
-/// `migrating_canister` to the remote subnet, the locally generated reject responses fail to
-/// induct and are rerouted into the stream to the remote subnet. The remote subnet eventually picks
-/// them up and inducts them into `migrating_canister` leaving no hanging calls after some more rounds.
+/// signals for requests in the stream to the local_subnet. But since we migrated thec`migrating_canister`
+/// to the remote subnet, the locally generated reject responses fail tocinduct and are rerouted into the
+/// stream to the remote subnet. The remote subnet eventually pickscthem up and inducts them into
+/// `migrating_canister` leaving no hanging calls after some more rounds.
 ///
 /// If there are hanging calls after a threshold number of rounds, there is most likely a bug
 /// connected to reject signals for requests, specifically with the corresponding exceptions due to
@@ -242,7 +242,7 @@ fn check_calls_conclude_with_migrating_canister() {
         .unwrap();
     fixture.migrate_canister(migrating_canister);
 
-    // Tick until all calls or concluded.
+    // Tick until all calls have concluded.
     for counter in 0.. {
         fixture.tick();
         if fixture.open_call_contexts_count().values().sum::<usize>() == 0 {
@@ -251,7 +251,7 @@ fn check_calls_conclude_with_migrating_canister() {
         assert!(counter < SHUTDOWN_PHASE_MAX_ROUNDS);
     }
 
-    // Check the records agree on 'no hanging calls'.
+    // Check that the records agree on 'no hanging calls'.
     assert_eq!(
         0,
         extract_metrics(&fixture.force_query_records(migrating_canister)).hanging_calls
@@ -485,8 +485,8 @@ impl Fixture {
         Ok(candid::Decode!(&reply.bytes(), Vec<CanisterRecord>).unwrap())
     }
 
-    /// Force Queries the records from `canister` by attempting to query them; if it fails start
-    /// the canister and query them again.
+    /// Force queries the records from `canister` by first attempting to query them; if it fails, start
+    /// the canister and try querying them again.
     ///
     /// Panics if `canister` is not installed in `Self`.
     pub fn force_query_records(&self, canister: CanisterId) -> Vec<CanisterRecord> {
@@ -580,7 +580,7 @@ impl Fixture {
         }
     }
 
-    /// Migrates `canister` from the `local_env` (`remote_env)  to `remote_env` (`local_env`).
+    /// Migrates `canister` between `local_env` and `remote_env` (either direction).
     ///
     /// Panics if no such canister exists.
     pub fn migrate_canister(&mut self, canister: CanisterId) {
