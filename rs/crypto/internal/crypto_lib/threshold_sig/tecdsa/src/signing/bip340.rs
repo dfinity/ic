@@ -83,6 +83,7 @@ impl RerandomizedPresignature {
         message: &[u8],
         randomness: &Randomness,
         derivation_path: &DerivationPath,
+        taproot_tree_root: Option<&[u8]>,
         key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
     ) -> CanisterThresholdResult<Self> {
@@ -112,6 +113,11 @@ impl RerandomizedPresignature {
         ro.add_point("pre_sig", &pre_sig)?;
         ro.add_point("key_transcript", &idkg_key)?;
         ro.add_scalar("key_tweak", &key_tweak)?;
+
+        if let Some(ttr) = taproot_tree_root {
+            ro.add_bytestring("taproot_tree_root", ttr)?;
+        }
+
         let presig_randomizer = ro.output_scalar(curve)?;
 
         let randomized_pre_sig =
@@ -193,6 +199,7 @@ impl ThresholdBip340SignatureShareInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
@@ -264,6 +271,7 @@ impl ThresholdBip340SignatureShareInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
@@ -378,7 +386,7 @@ impl ThresholdBip340CombinedSignatureInternal {
     pub fn new(
         derivation_path: &DerivationPath,
         message: &[u8],
-        _taproot_tree_root: Option<&[u8]>,
+        taproot_tree_root: Option<&[u8]>,
         randomness: Randomness,
         key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
@@ -394,6 +402,7 @@ impl ThresholdBip340CombinedSignatureInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
@@ -439,6 +448,7 @@ impl ThresholdBip340CombinedSignatureInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
