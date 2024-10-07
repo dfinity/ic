@@ -95,10 +95,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
-[How to verify] this proposal (and others like it).
-
-[How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
-
 ## New Commits
 
 \`\`\`
@@ -123,7 +119,15 @@ $CANDID_ARGS
 - Current Wasm Hash: $LAST_WASM_HASH
 
 
-## WASM Verification
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+
+### WASM Verification
 
 See ["Building the code"][prereqs] for prerequisites.
 
@@ -148,7 +152,7 @@ This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CAND
             echo "
 
 
-## Upgrade Arguments Verification
+### Upgrade Arguments Verification
 
 [\`didc\`][latest-didc] is required.
 
@@ -203,10 +207,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
-[How to verify] this proposal (and others like it).
-
-[How to verify]: https://github.com/dfinity/ic/tree/master/rs/nervous_system/docs/proposal_verification.md
-
 
 ## New Commits
 
@@ -217,6 +217,11 @@ $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_
 
 
 ## Wasm Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
 
 See ["Building the code"][prereqs] for prerequisites.
 
