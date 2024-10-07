@@ -4,18 +4,31 @@ use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum Provider {
+    BtcScan,
+    MempoolSpace,
+}
+
 pub fn create_request(
     btc_network: BtcNetwork,
     txid: Txid,
+    previous_provider: Option<Provider>,
     max_response_bytes: u32,
-) -> CanisterHttpRequestArgument {
-    match btc_network {
-        BtcNetwork::Mainnet => btcscan_request(txid, max_response_bytes),
-        BtcNetwork::Testnet => mempool_space_testnet_request(txid, max_response_bytes),
+) -> (Provider, CanisterHttpRequestArgument) {
+    match (btc_network, previous_provider) {
+        (BtcNetwork::Mainnet, None) => btcscan_request(txid, max_response_bytes),
+        (BtcNetwork::Mainnet, Some(Provider::BtcScan)) => {
+            mempool_space_request(btc_network, txid, max_response_bytes)
+        }
+        (BtcNetwork::Mainnet, Some(Provider::MempoolSpace)) => {
+            btcscan_request(txid, max_response_bytes)
+        }
+        (BtcNetwork::Testnet, _) => mempool_space_request(btc_network, txid, max_response_bytes),
     }
 }
 
-fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestArgument {
+fn btcscan_request(txid: Txid, max_response_bytes: u32) -> (Provider, CanisterHttpRequestArgument) {
     let host = "btcscan.org";
     let url = format!("https://{}/api/tx/{}/raw", host, txid);
     let request_headers = vec![
@@ -28,34 +41,44 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestAr
             value: "bitcoin_inputs_collector".to_string(),
         },
     ];
-    CanisterHttpRequestArgument {
-        url: url.to_string(),
-        method: HttpMethod::GET,
-        body: None,
-        max_response_bytes: Some(max_response_bytes as u64),
-        transform: param_transform(),
-        headers: request_headers,
-    }
+    (
+        Provider::BtcScan,
+        CanisterHttpRequestArgument {
+            url: url.to_string(),
+            method: HttpMethod::GET,
+            body: None,
+            max_response_bytes: Some(max_response_bytes as u64),
+            transform: param_transform(),
+            headers: request_headers,
+        },
+    )
 }
 
-fn mempool_space_testnet_request(
+fn mempool_space_request(
+    network: BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
-) -> CanisterHttpRequestArgument {
+) -> (Provider, CanisterHttpRequestArgument) {
     let host = "mempool.space";
-    let url = format!("https://{}/testnet/api/tx/{}/raw", host, txid);
+    let url = match network {
+        BtcNetwork::Mainnet => format!("https://{}/api/tx/{}/raw", host, txid),
+        BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
+    };
     let request_headers = vec![HttpHeader {
         name: "Host".to_string(),
         value: format!("{host}:443"),
     }];
-    CanisterHttpRequestArgument {
-        url: url.to_string(),
-        method: HttpMethod::GET,
-        body: None,
-        max_response_bytes: Some(max_response_bytes as u64),
-        transform: param_transform(),
-        headers: request_headers,
-    }
+    (
+        Provider::MempoolSpace,
+        CanisterHttpRequestArgument {
+            url: url.to_string(),
+            method: HttpMethod::GET,
+            body: None,
+            max_response_bytes: Some(max_response_bytes as u64),
+            transform: param_transform(),
+            headers: request_headers,
+        },
+    )
 }
 
 fn param_transform() -> Option<TransformContext> {

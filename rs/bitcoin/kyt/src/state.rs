@@ -1,4 +1,4 @@
-use crate::types::BtcNetwork;
+use crate::{providers::Provider, types::BtcNetwork};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -24,6 +24,7 @@ pub enum HttpGetTxError {
     Rejected {
         code: RejectionCode,
         message: String,
+        provider: Provider,
     },
 }
 
@@ -32,6 +33,12 @@ impl HttpGetTxError {
         match self {
             HttpGetTxError::Rejected { code, .. } => matches!(code, RejectionCode::SysTransient),
             _ => false,
+        }
+    }
+    pub fn get_provider(&self) -> Option<Provider> {
+        match self {
+            HttpGetTxError::Rejected { provider, .. } => Some(*provider),
+            _ => None,
         }
     }
 }

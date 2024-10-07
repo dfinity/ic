@@ -23,9 +23,11 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
     fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
-            HttpGetTxError::Rejected { message, code } if code == RejectionCode::SysTransient => {
-                CheckTransactionRetriable::TransientInternalError(message).into()
-            }
+            HttpGetTxError::Rejected {
+                message,
+                code: RejectionCode::SysTransient,
+                ..
+            } => CheckTransactionRetriable::TransientInternalError(message).into(),
             HttpGetTxError::ResponseTooLarge => {
                 (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
             }
@@ -59,10 +61,16 @@ impl FetchEnv for KytCanisterEnv {
     async fn http_get_tx(
         &self,
         txid: Txid,
+        previous_provider: Option<providers::Provider>,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         // TODO(XC-159): Support multiple providers
-        let request = providers::create_request(get_config().btc_network, txid, max_response_bytes);
+        let (provider, request) = providers::create_request(
+            get_config().btc_network,
+            txid,
+            previous_provider,
+            max_response_bytes,
+        );
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
@@ -76,6 +84,7 @@ impl FetchEnv for KytCanisterEnv {
                     };
                     return Err(HttpGetTxError::Rejected {
                         code,
+                        provider,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
                 }
@@ -96,6 +105,7 @@ impl FetchEnv for KytCanisterEnv {
                 // TODO(XC-158): maybe try other providers and also log the error.
                 println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
                 Err(HttpGetTxError::Rejected {
+                    provider,
                     code: r,
                     message: m,
                 })

@@ -1,6 +1,5 @@
 use super::*;
-use crate::blocklist;
-use crate::types::BtcNetwork;
+use crate::{blocklist, providers::Provider, types::BtcNetwork};
 use bitcoin::{
     absolute::LockTime, hashes::Hash, transaction::Version, Amount, OutPoint, PubkeyHash,
     ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
@@ -18,6 +17,7 @@ struct MockEnv {
     replies: RefCell<VecDeque<Result<Transaction, HttpGetTxError>>>,
     available_cycles: RefCell<u128>,
     accepted_cycles: RefCell<u128>,
+    called_provider: RefCell<Option<Provider>>,
 }
 
 impl FetchEnv for MockEnv {
@@ -33,17 +33,25 @@ impl FetchEnv for MockEnv {
     async fn http_get_tx(
         &self,
         txid: Txid,
+        previous_provider: Option<Provider>,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
+        let provider = match previous_provider {
+            None => Provider::BtcScan,
+            Some(Provider::BtcScan) => Provider::MempoolSpace,
+            Some(Provider::MempoolSpace) => Provider::BtcScan,
+        };
+        *self.called_provider.borrow_mut() = Some(provider);
         self.replies
             .borrow_mut()
             .pop_front()
             .unwrap_or(Err(HttpGetTxError::Rejected {
-                code: RejectionCode::from(0),
+                code: RejectionCode::SysTransient,
                 message: "no more reply".to_string(),
+                provider,
             }))
     }
     fn cycles_accept(&self, cycles: u128) -> u128 {
@@ -67,6 +75,7 @@ impl MockEnv {
             replies: RefCell::new(VecDeque::new()),
             available_cycles: RefCell::new(available_cycles),
             accepted_cycles: RefCell::new(0),
+            called_provider: RefCell::new(None),
         }
     }
     fn assert_get_tx_call(&self, txid: Txid, max_response_bytes: u32) {
@@ -155,7 +164,9 @@ async fn test_mock_env() {
     let env = MockEnv::new(0);
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
-    let result = env.http_get_tx(txid, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .http_get_tx(txid, None, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
     env.assert_no_more_get_tx_call();
@@ -218,7 +229,9 @@ async fn test_fetch_tx() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
-    let result = env.fetch_tx((), txid_0, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), txid_0, None, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
         state::get_fetch_status(txid_0),
@@ -233,7 +246,9 @@ async fn test_fetch_tx() {
 
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
-    let result = env.fetch_tx((), txid_1, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), txid_1, None, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
                 state::get_fetch_status(txid_1),
@@ -243,7 +258,9 @@ async fn test_fetch_tx() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::TxEncoding(
         "failed to decode tx".to_string(),
     )));
-    let result = env.fetch_tx((), txid_2, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), txid_2, None, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(
         result,
         Ok(FetchResult::Error(HttpGetTxError::TxEncoding(_)))
@@ -461,4 +478,23 @@ async fn test_check_fetched() {
             - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
             - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
+
+    // case TransientInternalError can be retried.
+    state::clear_fetch_status(txid_2);
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(_)
+        ))
+    ));
+    let called_provider = *env.called_provider.borrow();
+    // call again
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(_)
+        ))
+    ));
+    // check if provider has been rotated
+    assert!(*env.called_provider.borrow() != called_provider);
 }
