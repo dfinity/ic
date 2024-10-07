@@ -3306,6 +3306,30 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalResponse {
+    #[prost(message, optional, tag = "1")]
+    pub upgrade_steps: ::core::option::Option<governance::Versions>,
+    #[prost(uint64, optional, tag = "2")]
+    pub response_timestamp_seconds: ::core::option::Option<u64>,
+}
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
 /// compiled with the `test` feature enabled.
