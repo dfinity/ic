@@ -5,13 +5,16 @@ mod ingress_watcher;
 
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
-use crate::{common::build_validator, HttpError, IngressFilterService};
+use crate::{
+    common::{build_validator, validation_error_to_http_error},
+    HttpError, IngressFilterService,
+};
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -248,11 +251,7 @@ impl IngressValidator {
             message: "".into(),
         })?
         .map_err(|validation_error| {
-            info!(log, "{validation_error}");
-            HttpError {
-                status: StatusCode::BAD_REQUEST,
-                message: format!("{validation_error}"),
-            }
+            validation_error_to_http_error(message_id, validation_error, &log)
         })?;
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();

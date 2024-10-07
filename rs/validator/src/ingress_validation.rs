@@ -232,7 +232,7 @@ pub enum RequestValidationError {
     UserIdDoesNotMatchPublicKey(UserId, Vec<u8>),
     #[error("Invalid signature: {0}")]
     InvalidSignature(AuthenticationError),
-    #[error("Authentication error: {0}")]
+    #[error("Invalid delegation: {0}")]
     InvalidDelegation(AuthenticationError),
     #[error("Missing signature from user: {0}")]
     MissingSignature(UserId),

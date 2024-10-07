@@ -1,6 +1,6 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{build_validator, into_cbor, Cbor, WithTimeout},
+    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -17,7 +17,7 @@ use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
@@ -169,9 +169,8 @@ pub(crate) async fn canister_read_state(
             match validator.validate_request(&request_c, current_time(), &root_of_trust_provider) {
                 Ok(targets) => targets,
                 Err(err) => {
-                    info!(log, "{err}");
-                    let msg = format!("{err}");
-                    return (StatusCode::BAD_REQUEST, msg).into_response();
+                    let http_err = validation_error_to_http_error(request.id(), err, &log);
+                    return (http_err.status, http_err.message).into_response();
                 }
             };
 

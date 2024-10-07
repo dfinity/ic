@@ -1,3 +1,4 @@
+use crate::HttpError;
 use axum::{body::Body, extract::FromRequest, response::IntoResponse};
 use bytes::Bytes;
 use http::{
@@ -11,7 +12,7 @@ use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPa
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::crypto::{
     root_of_trust::RegistryRootOfTrustProvider, CryptoRegistry,
 };
@@ -19,7 +20,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey,
     malicious_flags::MaliciousFlags,
-    messages::{HttpRequest, HttpRequestContent},
+    messages::{HttpRequest, HttpRequestContent, MessageId},
     RegistryVersion, SubnetId, Time,
 };
 use ic_validator::{
@@ -242,6 +243,18 @@ impl IntoResponse for CborUserError {
             ),
         ]));
         Cbor(reject_response).into_response()
+    }
+}
+
+pub(crate) fn validation_error_to_http_error(
+    message_id: MessageId,
+    err: RequestValidationError,
+    log: &ReplicaLogger,
+) -> HttpError {
+    info!(log, "msg_id: {}, err: {}", message_id, err);
+    HttpError {
+        status: StatusCode::BAD_REQUEST,
+        message: format!("{err}"),
     }
 }
 

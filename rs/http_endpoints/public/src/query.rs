@@ -1,7 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, Cbor, WithTimeout},
+    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
 };
 
@@ -21,7 +21,7 @@ use ic_interfaces::{
     execution_environment::{QueryExecutionError, QueryExecutionService},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
     ingress::WasmResult,
@@ -194,9 +194,8 @@ pub(crate) async fn query(
     {
         Ok(Ok(_)) => {}
         Ok(Err(err)) => {
-            info!(log, "{err}");
-            let msg = format!("{err}");
-            return (StatusCode::BAD_REQUEST, msg).into_response();
+            let http_err = validation_error_to_http_error(request.id(), err, &log);
+            return (http_err.status, http_err.message).into_response();
         }
         Err(_) => {
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
