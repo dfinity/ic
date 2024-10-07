@@ -27,6 +27,15 @@ pub enum HttpGetTxError {
     },
 }
 
+impl HttpGetTxError {
+    pub fn is_retriable(&self) -> bool {
+        match self {
+            HttpGetTxError::Rejected { code, .. } => matches!(code, RejectionCode::SysTransient),
+            _ => false,
+        }
+    }
+}
+
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
 /// It transitions from `PendingOutcall` to any one of the three
 /// possible outcomes: `PendingRetry`, `Error`, or `Fetched`.

@@ -80,7 +80,14 @@ pub trait FetchEnv {
                 max_response_bytes, ..
             }) => max_response_bytes,
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(msg)) => return TryFetchResult::Error(msg),
+            Some(FetchTxStatus::Error(err)) => {
+                if err.is_retriable() {
+                    // TODO: rotate provider
+                    INITIAL_MAX_RESPONSE_BYTES
+                } else {
+                    return TryFetchResult::Error(err);
+                }
+            }
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
         };
         let guard = match self.new_fetch_guard(txid) {

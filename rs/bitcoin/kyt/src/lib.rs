@@ -23,7 +23,7 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
     fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
-            HttpGetTxError::Rejected { message, .. } => {
+            HttpGetTxError::Rejected { message, code } if code == RejectionCode::SysTransient => {
                 CheckTransactionRetriable::TransientInternalError(message).into()
             }
             HttpGetTxError::ResponseTooLarge => {
@@ -69,7 +69,7 @@ impl FetchEnv for KytCanisterEnv {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
-                    let code = if response.status == 429u32 {
+                    let code = if response.status == 429u32 || response.status == 500u32 {
                         RejectionCode::SysTransient
                     } else {
                         RejectionCode::SysFatal
