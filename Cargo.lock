@@ -12649,6 +12649,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-interfaces-registry",
+ "ic-limits",
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",

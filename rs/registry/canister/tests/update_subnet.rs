@@ -2,6 +2,7 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
@@ -369,7 +370,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_block_payload_size: 4 * 1024 * 1024,
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
-                initial_notary_delay_millis: 1500,
+                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
@@ -423,7 +424,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly_legacy() {
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
+            initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
@@ -672,7 +673,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
-            initial_notary_delay_millis: 1500,
+            initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,

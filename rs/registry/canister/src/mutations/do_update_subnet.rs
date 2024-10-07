@@ -611,6 +611,7 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
+    use ic_limits::INITIAL_NOTARY_DELAY;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::{

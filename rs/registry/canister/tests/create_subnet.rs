@@ -10,6 +10,7 @@ use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_interfaces_registry::RegistryClient;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_management_canister_types::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
