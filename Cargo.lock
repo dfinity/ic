@@ -10136,7 +10136,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
- "clap 3.2.25",
+ "clap 4.5.18",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",
@@ -13402,7 +13402,7 @@ dependencies = [
 name = "icp-config"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.18",
  "eyre",
  "ic-config",
  "ic-replicated-state",
