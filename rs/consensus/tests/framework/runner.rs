@@ -178,7 +178,7 @@ impl<'a> ConsensusRunner<'a> {
             Arc::clone(&consensus_crypto),
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
-            deps.metrics_registry.clone(),
+            &deps.metrics_registry,
             replica_logger.clone(),
         );
         let idkg = idkg::IDkgImpl::new(

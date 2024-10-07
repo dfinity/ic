@@ -39,18 +39,14 @@ pub struct CanisterHttpPoolImpl {
 }
 
 impl CanisterHttpPoolImpl {
-    pub fn new(metrics: MetricsRegistry, log: ReplicaLogger) -> Self {
+    pub fn new(metrics: &MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
             invalidated_artifacts: metrics.int_counter(
                 "canister_http_invalidated_artifacts",
                 "The number of invalidated canister http artifacts",
             ),
-            validated: PoolSection::new(metrics.clone(), POOL_CANISTER_HTTP, POOL_TYPE_VALIDATED),
-            unvalidated: PoolSection::new(
-                metrics.clone(),
-                POOL_CANISTER_HTTP,
-                POOL_TYPE_UNVALIDATED,
-            ),
+            validated: PoolSection::new(metrics, POOL_CANISTER_HTTP, POOL_TYPE_VALIDATED),
+            unvalidated: PoolSection::new(metrics, POOL_CANISTER_HTTP, POOL_TYPE_UNVALIDATED),
             content: ContentCanisterHttpPoolSection::new(
                 metrics,
                 POOL_CANISTER_HTTP_CONTENT,
@@ -222,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_canister_http_pool_insert_and_remove() {
-        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = CanisterHttpPoolImpl::new(&MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
         let id = share.clone();
 
@@ -237,7 +233,7 @@ mod tests {
 
     #[test]
     fn test_canister_http_pool_add_and_remove_validated() {
-        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = CanisterHttpPoolImpl::new(&MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
         let id = share.clone();
         let response = fake_response(123);
@@ -277,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_canister_http_pool_move_to_validated() {
-        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = CanisterHttpPoolImpl::new(&MetricsRegistry::new(), no_op_logger());
         let share1 = fake_share(123);
         let id1 = share1.clone();
         let share2 = fake_share(456);
@@ -301,7 +297,7 @@ mod tests {
 
     #[test]
     fn test_canister_http_pool_remove_unvalidated() {
-        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = CanisterHttpPoolImpl::new(&MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
         let id = share.clone();
 
@@ -319,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_canister_http_pool_handle_invalid() {
-        let mut pool = CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+        let mut pool = CanisterHttpPoolImpl::new(&MetricsRegistry::new(), no_op_logger());
         let share = fake_share(123);
         let id = share.clone();
 

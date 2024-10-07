@@ -192,7 +192,7 @@ impl IngressPoolImpl {
     pub fn new(
         node_id: NodeId,
         config: ArtifactPoolConfig,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
     ) -> IngressPoolImpl {
         IngressPoolImpl {
@@ -204,7 +204,7 @@ impl IngressPoolImpl {
             ),
             validated: IngressPoolSection::new(
                 log.clone(),
-                PoolMetrics::new(metrics_registry.clone(), POOL_INGRESS, POOL_TYPE_VALIDATED),
+                PoolMetrics::new(metrics_registry, POOL_INGRESS, POOL_TYPE_VALIDATED),
             ),
             unvalidated: IngressPoolSection::new(
                 log.clone(),
@@ -373,7 +373,7 @@ mod tests {
         with_test_replica_logger(|_log| {
             let mut ingress_pool = IngressPoolSection::new(
                 no_op_logger(),
-                PoolMetrics::new(MetricsRegistry::new(), POOL_INGRESS, "default"),
+                PoolMetrics::new(&MetricsRegistry::new(), POOL_INGRESS, "default"),
             );
             let ingress_msg = SignedIngressBuilder::new().build();
             let message_id = IngressMessageId::from(&ingress_msg);
@@ -397,7 +397,7 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg,
@@ -426,7 +426,7 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg,
@@ -461,7 +461,7 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
 
                 let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
                 let message_id = IngressMessageId::from(&ingress_msg);
@@ -487,7 +487,7 @@ mod tests {
                 let time = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
 
                 let max_seconds = 10;
                 let range_min = 3;
@@ -527,7 +527,7 @@ mod tests {
                 let time_0 = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
 
@@ -594,7 +594,7 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 let nodes = 10;
                 let mut changeset = Mutations::new();
                 let ingress_size = 10;
@@ -659,7 +659,7 @@ mod tests {
                 pool_config.ingress_pool_max_count = 3;
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
@@ -687,7 +687,7 @@ mod tests {
                 pool_config.ingress_pool_max_count = 5;
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
@@ -715,7 +715,7 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
 
                 assert!(!ingress_pool.exceeds_threshold());
 

@@ -1584,7 +1584,7 @@ impl StateMachine {
         let registry_client = Arc::new(registry_client);
 
         let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
-            metrics_registry.clone(),
+            &metrics_registry,
             replica_logger.clone(),
         )));
         let consensus_pool_cache = Arc::new(FakeConsensusPoolCache::new(cup_proto));

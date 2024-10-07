@@ -190,28 +190,24 @@ struct PoolMetrics {
 }
 
 impl PoolMetrics {
-    fn new(registry: ic_metrics::MetricsRegistry, pool_portion: &str) -> Self {
+    fn new(registry: &ic_metrics::MetricsRegistry, pool_portion: &str) -> Self {
         Self {
-            random_beacon: PerTypeMetrics::new(&registry, pool_portion, "random_beacon"),
-            random_tape: PerTypeMetrics::new(&registry, pool_portion, "random_tape"),
-            finalization: PerTypeMetrics::new(&registry, pool_portion, "finalization"),
-            notarization: PerTypeMetrics::new(&registry, pool_portion, "notarization"),
-            catch_up_package: PerTypeMetrics::new(&registry, pool_portion, "catch_up_package"),
-            block_proposal: PerTypeMetrics::new(&registry, pool_portion, "block_proposal"),
-            random_beacon_share: PerTypeMetrics::new(
-                &registry,
-                pool_portion,
-                "random_beacon_share",
-            ),
-            random_tape_share: PerTypeMetrics::new(&registry, pool_portion, "random_tape_share"),
-            notarization_share: PerTypeMetrics::new(&registry, pool_portion, "notarization_share"),
-            finalization_share: PerTypeMetrics::new(&registry, pool_portion, "finalization_share"),
+            random_beacon: PerTypeMetrics::new(registry, pool_portion, "random_beacon"),
+            random_tape: PerTypeMetrics::new(registry, pool_portion, "random_tape"),
+            finalization: PerTypeMetrics::new(registry, pool_portion, "finalization"),
+            notarization: PerTypeMetrics::new(registry, pool_portion, "notarization"),
+            catch_up_package: PerTypeMetrics::new(registry, pool_portion, "catch_up_package"),
+            block_proposal: PerTypeMetrics::new(registry, pool_portion, "block_proposal"),
+            random_beacon_share: PerTypeMetrics::new(registry, pool_portion, "random_beacon_share"),
+            random_tape_share: PerTypeMetrics::new(registry, pool_portion, "random_tape_share"),
+            notarization_share: PerTypeMetrics::new(registry, pool_portion, "notarization_share"),
+            finalization_share: PerTypeMetrics::new(registry, pool_portion, "finalization_share"),
             catch_up_package_share: PerTypeMetrics::new(
-                &registry,
+                registry,
                 pool_portion,
                 "catch_up_package_share",
             ),
-            equivocation_proof: PerTypeMetrics::new(&registry, pool_portion, "equivocation_proof"),
+            equivocation_proof: PerTypeMetrics::new(registry, pool_portion, "equivocation_proof"),
         }
     }
 
@@ -417,19 +413,14 @@ impl ConsensusPoolImpl {
         subnet_id: SubnetId,
         cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
-        registry: ic_metrics::MetricsRegistry,
+        registry: &ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
-        let mut pool = Self::from_uncached(
-            node_id,
-            pool,
-            registry.clone(),
-            log.clone(),
-            time_source.clone(),
-        );
+        let mut pool =
+            Self::from_uncached(node_id, pool, registry, log.clone(), time_source.clone());
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
         pool.backup = config.backup_config.map(|config| {
@@ -481,7 +472,7 @@ impl ConsensusPoolImpl {
     pub fn from_uncached(
         node_id: NodeId,
         uncached: UncachedConsensusPoolImpl,
-        registry: ic_metrics::MetricsRegistry,
+        registry: &ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
@@ -494,7 +485,7 @@ impl ConsensusPoolImpl {
                 "consensus_invalidated_artifacts",
                 "The number of invalidated consensus artifacts",
             ),
-            validated_metrics: PoolMetrics::new(registry.clone(), POOL_TYPE_VALIDATED),
+            validated_metrics: PoolMetrics::new(registry, POOL_TYPE_VALIDATED),
             unvalidated_metrics: PoolMetrics::new(registry, POOL_TYPE_UNVALIDATED),
             block_instants: HeightIndexedInstants::default(),
             message_instants: HeightIndexedInstants::default(),
@@ -1073,7 +1064,7 @@ mod tests {
             subnet_id,
             (&catch_up_package).into(),
             config,
-            registry,
+            &registry,
             log,
             time_source,
         )
@@ -1647,7 +1638,7 @@ mod tests {
                 Duration::from_millis(100),
                 // We purge every 5 milliseconds.
                 purging_interval,
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
                 no_op_logger(),
                 time_source.clone(),
             ));
@@ -2020,7 +2011,7 @@ mod tests {
                 // Artifact retention time
                 Duration::from_millis(2700),
                 purging_interval,
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
                 no_op_logger(),
                 Box::new(FakeAge { map: map.clone() }),
                 time_source.clone(),

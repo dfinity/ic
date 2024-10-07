@@ -859,7 +859,7 @@ mod tests {
                 ],
             );
             let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
                 no_op_logger(),
             )));
             let idkg_pool = Arc::new(RwLock::new(create_idkg_pool(

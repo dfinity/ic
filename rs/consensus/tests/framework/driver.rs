@@ -48,7 +48,7 @@ impl<'a> ConsensusDriver<'a> {
             node_id,
             pool_config,
             logger.clone(),
-            metrics_registry,
+            &metrics_registry,
         )));
         let consensus_priority =
             BouncerState::new(&consensus_bouncer, &*consensus_pool.read().unwrap());

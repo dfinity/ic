@@ -22,7 +22,7 @@ pub(crate) struct PoolSection<K, V> {
 }
 
 impl<K: Ord, V: HasLabel> PoolSection<K, V> {
-    pub(crate) fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         Self {
             messages: Default::default(),
             metrics: PoolMetrics::new(metrics_registry, pool, pool_type),

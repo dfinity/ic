@@ -35,7 +35,7 @@ where
             subnet_test_id(0),
             (&make_genesis(ic_types::consensus::dkg::Summary::fake())).into(),
             pool_config,
-            ic_metrics::MetricsRegistry::new(),
+            &ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
             std::sync::Arc::new(SysTimeSource::new()),
         );

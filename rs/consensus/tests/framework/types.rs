@@ -199,19 +199,19 @@ impl ConsensusDependencies {
             replica_config.subnet_id,
             (&cup).into(),
             pool_config.clone(),
-            metrics_registry.clone(),
+            &metrics_registry,
             no_op_logger(),
             time_source,
         )));
-        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
+        let dkg_pool = dkg_pool::DkgPoolImpl::new(&metrics_registry, no_op_logger());
         let idkg_pool = idkg_pool::IDkgPoolImpl::new(
             pool_config,
             no_op_logger(),
-            metrics_registry.clone(),
+            &metrics_registry,
             Box::new(IDkgStatsNoOp {}),
         );
         let canister_http_pool =
-            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
+            canister_http_pool::CanisterHttpPoolImpl::new(&metrics_registry, no_op_logger());
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
 
         ConsensusDependencies {

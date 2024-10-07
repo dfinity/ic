@@ -138,7 +138,7 @@ struct InMemoryIDkgPoolSection {
 }
 
 impl InMemoryIDkgPoolSection {
-    fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
+    fn new(metrics_registry: &MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         let metrics = IDkgPoolMetrics::new(metrics_registry, pool, pool_type);
         // Set up the per message type object pools
         let mut object_pools = Vec::new();
@@ -324,7 +324,7 @@ impl IDkgPoolImpl {
     pub fn new(
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         stats: Box<dyn IDkgStats>,
     ) -> Self {
         let validated = match config.persistent_pool_backend {
@@ -333,13 +333,13 @@ impl IDkgPoolImpl {
                     lmdb_config,
                     config.persistent_pool_read_only,
                     log.clone(),
-                    metrics_registry.clone(),
+                    metrics_registry,
                     POOL_IDKG,
                     POOL_TYPE_VALIDATED,
                 )) as Box<_>
             }
             _ => Box::new(InMemoryIDkgPoolSection::new(
-                metrics_registry.clone(),
+                metrics_registry,
                 POOL_IDKG,
                 POOL_TYPE_VALIDATED,
             )) as Box<_>,
@@ -509,7 +509,7 @@ mod tests {
         IDkgPoolImpl::new(
             config,
             log,
-            MetricsRegistry::new(),
+            &MetricsRegistry::new(),
             Box::new(IDkgStatsNoOp {}),
         )
     }
@@ -724,7 +724,7 @@ mod tests {
     #[test]
     fn test_idkg_object_pool() {
         let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
+        let metrics = IDkgPoolMetrics::new(&metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
         let mut object_pool = IDkgObjectPool::new(IDkgMessageType::Dealing, metrics);
 
         let key_1 = {
@@ -781,7 +781,7 @@ mod tests {
     #[should_panic]
     fn test_idkg_object_pool_panic_on_wrong_type() {
         let metrics_registry = MetricsRegistry::new();
-        let metrics = IDkgPoolMetrics::new(metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
+        let metrics = IDkgPoolMetrics::new(&metrics_registry, POOL_IDKG, POOL_TYPE_VALIDATED);
         let mut object_pool = IDkgObjectPool::new(IDkgMessageType::DealingSupport, metrics);
 
         let dealing =

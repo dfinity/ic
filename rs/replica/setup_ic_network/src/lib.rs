@@ -424,7 +424,7 @@ fn start_consensus(
                 Arc::clone(&consensus_crypto),
                 Arc::clone(&consensus_pool_cache),
                 dkg_key_manager,
-                metrics_registry.clone(),
+                metrics_registry,
                 log.clone(),
             ),
             Arc::clone(&time_source) as Arc<_>,
@@ -545,14 +545,14 @@ fn init_artifact_pools(
     let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
         node_id,
         config.clone(),
-        metrics_registry.clone(),
+        metrics_registry,
         log.clone(),
     )));
 
     let mut idkg_pool = IDkgPoolImpl::new(
         config.clone(),
         log.clone(),
-        metrics_registry.clone(),
+        metrics_registry,
         Box::new(idkg::IDkgStatsImpl::new(metrics_registry.clone())),
     );
     idkg_pool.add_initial_dealings(&catch_up_package, time_source);
@@ -562,14 +562,11 @@ fn init_artifact_pools(
         node_id,
         config,
         log.clone(),
-        metrics_registry.clone(),
+        metrics_registry,
     )));
-    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
-        metrics_registry.clone(),
-        log.clone(),
-    )));
+    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(metrics_registry, log.clone())));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
-        metrics_registry.clone(),
+        metrics_registry,
         log.clone(),
     )));
     ArtifactPools {

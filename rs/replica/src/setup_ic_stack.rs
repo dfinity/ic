@@ -183,7 +183,7 @@ pub fn construct_ic_stack(
         // the proto.
         catch_up_package_proto,
         artifact_pool_config.clone(),
-        metrics_registry.clone(),
+        metrics_registry,
         log.clone(),
         // TODO: use a builder pattern and remove the time source implementation from the constructor.
         Arc::new(SysTimeSource::new()),

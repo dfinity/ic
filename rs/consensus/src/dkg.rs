@@ -90,7 +90,7 @@ impl DkgImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_cache: Arc<dyn ConsensusPoolCache>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
-        metrics_registry: ic_metrics::MetricsRegistry,
+        metrics_registry: &ic_metrics::MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -658,7 +658,7 @@ mod tests {
                     crypto.clone(),
                     pool.get_cache(),
                     dkg_key_manager.clone(),
-                    MetricsRegistry::new(),
+                    &MetricsRegistry::new(),
                     logger.clone(),
                 );
 
@@ -725,10 +725,10 @@ mod tests {
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager_2.clone(),
-                    MetricsRegistry::new(),
+                    &MetricsRegistry::new(),
                     logger.clone(),
                 );
-                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                let dkg_pool_2 = DkgPoolImpl::new(&MetricsRegistry::new(), logger);
                 sync_dkg_key_manager(&dkg_key_manager_2, &pool);
                 match &dkg_2.on_state_change(&dkg_pool_2).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
@@ -785,7 +785,7 @@ mod tests {
                 let Dependencies {
                     mut pool, crypto, ..
                 } = dependencies(pool_config.clone(), 2);
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                let mut dkg_pool = DkgPoolImpl::new(&MetricsRegistry::new(), logger.clone());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
@@ -794,7 +794,7 @@ mod tests {
                     crypto.clone(),
                     pool.get_cache(),
                     dkg_key_manager,
-                    MetricsRegistry::new(),
+                    &MetricsRegistry::new(),
                     logger.clone(),
                 );
                 assert!(dkg.on_state_change(&dkg_pool).is_empty());
@@ -807,7 +807,7 @@ mod tests {
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager.clone(),
-                    MetricsRegistry::new(),
+                    &MetricsRegistry::new(),
                     logger,
                 );
 
@@ -895,14 +895,14 @@ mod tests {
                     crypto,
                     pool.get_cache(),
                     dkg_key_manager.clone(),
-                    MetricsRegistry::new(),
+                    &MetricsRegistry::new(),
                     logger.clone(),
                 );
 
                 // We did not advance the consensus pool yet. The configs for remote transcripts
                 // are not added to a summary block yet. That's why we see two dealings for
                 // local thresholds.
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                let mut dkg_pool = DkgPoolImpl::new(&MetricsRegistry::new(), logger);
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
@@ -1059,8 +1059,8 @@ mod tests {
                 let consensus_pool_2 = dependencies(pool_config_2, 2).pool;
 
                 with_test_replica_logger(|logger| {
-                    let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                    let dkg_pool_1 = DkgPoolImpl::new(&MetricsRegistry::new(), logger.clone());
+                    let dkg_pool_2 = DkgPoolImpl::new(&MetricsRegistry::new(), logger.clone());
 
                     // We instantiate the DKG component for node Id = 1 and Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
@@ -1073,7 +1073,7 @@ mod tests {
                         crypto.clone(),
                         consensus_pool_1.get_cache(),
                         dkg_key_manager_1.clone(),
-                        MetricsRegistry::new(),
+                        &MetricsRegistry::new(),
                         logger.clone(),
                     );
 
@@ -1087,7 +1087,7 @@ mod tests {
                         crypto.clone(),
                         consensus_pool_2.get_cache(),
                         dkg_key_manager_2.clone(),
-                        MetricsRegistry::new(),
+                        &MetricsRegistry::new(),
                         logger,
                     );
                     f(
@@ -1539,7 +1539,7 @@ mod tests {
                         crypto_1,
                         pool_1.get_cache(),
                         dgk_key_manager_1.clone(),
-                        MetricsRegistry::new(),
+                        &MetricsRegistry::new(),
                         logger.clone(),
                     );
 
@@ -1548,11 +1548,11 @@ mod tests {
                         crypto_2.clone(),
                         pool_2.get_cache(),
                         new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
-                        MetricsRegistry::new(),
+                        &MetricsRegistry::new(),
                         logger.clone(),
                     );
-                    let mut dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
-                    let mut dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
+                    let mut dkg_pool_1 = DkgPoolImpl::new(&MetricsRegistry::new(), logger.clone());
+                    let mut dkg_pool_2 = DkgPoolImpl::new(&MetricsRegistry::new(), logger);
 
                     // First we expect a new purge.
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);

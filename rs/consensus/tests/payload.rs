@@ -96,13 +96,13 @@ fn consensus_produces_expected_batches() {
         let metrics_registry = MetricsRegistry::new();
         let time_source = FastForwardTimeSource::new();
         let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
-            metrics_registry.clone(),
+            &metrics_registry,
             no_op_logger(),
         )));
         let idkg_pool = Arc::new(RwLock::new(idkg_pool::IDkgPoolImpl::new(
             pool_config.clone(),
             no_op_logger(),
-            metrics_registry.clone(),
+            &metrics_registry,
             Box::new(IDkgStatsNoOp {}),
         )));
 
@@ -121,7 +121,7 @@ fn consensus_produces_expected_batches() {
             subnet_id,
             (&make_genesis(summary)).into(),
             pool_config.clone(),
-            MetricsRegistry::new(),
+            &metrics_registry,
             no_op_logger(),
             time_source.clone(),
         )));
@@ -162,7 +162,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&consensus_cache),
             dkg_key_manager,
-            metrics_registry.clone(),
+            &metrics_registry,
             no_op_logger(),
         );
         let idkg = idkg::IDkgImpl::new(

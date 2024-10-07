@@ -700,7 +700,7 @@ mod tests {
                     replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
+                    &metrics_registry,
                 );
                 let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
@@ -766,7 +766,7 @@ mod tests {
                     replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
+                    &metrics_registry,
                 );
                 let certifier = CertifierImpl::new(
                     replica_config,
@@ -898,7 +898,7 @@ mod tests {
                 replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
-                metrics_registry.clone(),
+                &metrics_registry,
             );
             let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
@@ -977,7 +977,7 @@ mod tests {
                 replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
-                metrics_registry.clone(),
+                &metrics_registry,
             );
             let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
@@ -1048,7 +1048,7 @@ mod tests {
                 replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
-                metrics_registry.clone(),
+                &metrics_registry,
             );
             let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
@@ -1133,7 +1133,7 @@ mod tests {
                     replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry,
+                    &metrics_registry,
                 );
 
                 // we generate 3 valid, but different full certifications
@@ -1241,7 +1241,7 @@ mod tests {
                 replica_config.node_id,
                 pool_config,
                 ic_logger::replica_logger::no_op_logger(),
-                metrics_registry.clone(),
+                &metrics_registry,
             );
             let (max_certified_height_tx, _) = watch::channel(Height::from(0));
 
@@ -1341,7 +1341,7 @@ mod tests {
                     replica_config.node_id,
                     pool_config,
                     ic_logger::replica_logger::no_op_logger(),
-                    metrics_registry.clone(),
+                    &metrics_registry,
                 );
 
                 for height in 1..=4 {
