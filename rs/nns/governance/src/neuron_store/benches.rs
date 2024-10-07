@@ -202,23 +202,24 @@ fn range_neurons_performance() -> BenchResult {
     })
 }
 
-// #[bench(raw)]
-// fn neuron_metrics_calculation_heap() -> BenchResult {
-//     let _ = temporarily_disable_active_neurons_in_stable_memory();
-//     let mut rng = new_rng();
-//     let neuron_store = set_up_neuron_store(&mut rng);
-//
-//     bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), 1 * E8))
-// }
-//
-// #[bench(raw)]
-// fn neuron_metrics_calculation_stable() -> BenchResult {
-//     let _ = temporarily_enable_active_neurons_in_stable_memory();
-//     let mut rng = new_rng();
-//     let neuron_store = set_up_neuron_store(&mut rng);
-//
-//     bench_fn(|| {
-//         let _ = temporarily_enable_active_neurons_in_stable_memory();
-//         neuron_store.compute_neuron_metrics(now_seconds(), 1 * E8)
-//     })
-// }
+#[bench(raw)]
+fn neuron_metrics_calculation_heap() -> BenchResult {
+    let _ = temporarily_disable_active_neurons_in_stable_memory();
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng);
+
+    bench_fn(|| neuron_store.compute_neuron_metrics(now_seconds(), 1 * E8))
+}
+
+#[bench(raw)]
+fn neuron_metrics_calculation_stable() -> BenchResult {
+    let _f = temporarily_enable_active_neurons_in_stable_memory();
+
+    let mut rng = new_rng();
+    let neuron_store = set_up_neuron_store(&mut rng);
+
+    bench_fn(|| {
+        let _ = temporarily_enable_active_neurons_in_stable_memory();
+        neuron_store.compute_neuron_metrics(now_seconds(), 1 * E8)
+    })
+}
