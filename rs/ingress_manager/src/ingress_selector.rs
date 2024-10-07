@@ -162,7 +162,7 @@ impl IngressSelector for IngressManager {
                 while let Some(msg) = queue.msgs.last() {
                     let ingress = &msg.msg.signed_ingress;
                     let result = self.validate_ingress(
-                        IngressMessageId::from(ingress),
+                        &IngressMessageId::from(ingress),
                         ingress,
                         &state,
                         context,
@@ -326,7 +326,7 @@ impl IngressSelector for IngressManager {
                 .map_err(InvalidIngressPayloadReason::IngressPayloadError)?;
 
             self.validate_ingress(
-                ingress_id.clone(),
+                &ingress_id,
                 &ingress,
                 &state,
                 context,
@@ -415,7 +415,7 @@ impl IngressManager {
     #[allow(clippy::too_many_arguments)]
     fn validate_ingress(
         &self,
-        ingress_id: IngressMessageId,
+        ingress_id: &IngressMessageId,
         signed_ingress: &SignedIngress,
         state: &ReplicatedState,
         context: &ValidationContext,
@@ -424,6 +424,7 @@ impl IngressManager {
         num_messages: usize,
         cycles_needed: &mut BTreeMap<CanisterId, Cycles>,
     ) -> ValidationResult<IngressPayloadValidationError> {
+        let message_id = MessageId::from(ingress_id);
         let ingress_message_size = signed_ingress.count_bytes();
         // The message is invalid if its size is larger than the configured maximum.
         if ingress_message_size > settings.max_ingress_bytes_per_message {
@@ -445,8 +446,7 @@ impl IngressManager {
         }
 
         // Do not include the message if it's a duplicate.
-        if past_ingress_set.contains(&ingress_id) {
-            let message_id = MessageId::from(&ingress_id);
+        if past_ingress_set.contains(ingress_id) {
             return Err(ValidationError::InvalidArtifact(
                 InvalidIngressPayloadReason::DuplicatedIngressMessage(message_id),
             ));
@@ -533,7 +533,6 @@ impl IngressManager {
             context.time,
             &self.registry_root_of_trust_provider(context.registry_version),
         ) {
-            let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::InvalidArtifact(match err {
                 RequestValidationError::InvalidIngressExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
