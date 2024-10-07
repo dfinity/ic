@@ -12,6 +12,9 @@ rust_library(
     srcs = glob(
         ["src/**"],
     ),
+    proc_macro = [
+        "@crate_index//:strum_macros",
+    ],
     deps = [
         # Keep sorted.
         "@crate_index//:base32",
@@ -26,7 +29,6 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:sha2",
         "@crate_index//:strum",
-        "@crate_index//:strum_macros",
         "@crate_index//:time",
     ],
 )
