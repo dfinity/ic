@@ -453,9 +453,9 @@ pub mod transfer_sns_treasury_funds {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                TransferFrom::Unspecified => "TRANSFER_FROM_UNSPECIFIED",
-                TransferFrom::IcpTreasury => "TRANSFER_FROM_ICP_TREASURY",
-                TransferFrom::SnsTokenTreasury => "TRANSFER_FROM_SNS_TOKEN_TREASURY",
+                Self::Unspecified => "TRANSFER_FROM_UNSPECIFIED",
+                Self::IcpTreasury => "TRANSFER_FROM_ICP_TREASURY",
+                Self::SnsTokenTreasury => "TRANSFER_FROM_SNS_TOKEN_TREASURY",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -837,25 +837,25 @@ pub mod governance_error {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
-                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
-                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
-                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
-                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
-                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
-                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
-                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
-                ErrorType::AccessControlList => "ERROR_TYPE_ACCESS_CONTROL_LIST",
-                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
-                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
-                ErrorType::External => "ERROR_TYPE_EXTERNAL",
-                ErrorType::NeuronLocked => "ERROR_TYPE_NEURON_LOCKED",
-                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
-                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
-                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
-                ErrorType::InvalidNeuronId => "ERROR_TYPE_INVALID_NEURON_ID",
-                ErrorType::InconsistentInternalData => "ERROR_TYPE_INCONSISTENT_INTERNAL_DATA",
-                ErrorType::UnreachableCode => "ERROR_TYPE_UNREACHABLE_CODE",
+                Self::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                Self::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                Self::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                Self::NotFound => "ERROR_TYPE_NOT_FOUND",
+                Self::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                Self::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                Self::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                Self::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                Self::AccessControlList => "ERROR_TYPE_ACCESS_CONTROL_LIST",
+                Self::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                Self::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                Self::External => "ERROR_TYPE_EXTERNAL",
+                Self::NeuronLocked => "ERROR_TYPE_NEURON_LOCKED",
+                Self::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                Self::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                Self::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                Self::InvalidNeuronId => "ERROR_TYPE_INVALID_NEURON_ID",
+                Self::InconsistentInternalData => "ERROR_TYPE_INCONSISTENT_INTERNAL_DATA",
+                Self::UnreachableCode => "ERROR_TYPE_UNREACHABLE_CODE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1209,9 +1209,9 @@ pub mod valuation {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Token::Unspecified => "TOKEN_UNSPECIFIED",
-                Token::Icp => "TOKEN_ICP",
-                Token::SnsToken => "TOKEN_SNS_TOKEN",
+                Self::Unspecified => "TOKEN_UNSPECIFIED",
+                Self::Icp => "TOKEN_ICP",
+                Self::SnsToken => "TOKEN_SNS_TOKEN",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1644,6 +1644,8 @@ pub struct Governance {
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "26")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
+    #[prost(message, optional, tag = "29")]
+    pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1857,6 +1859,18 @@ pub mod governance {
         #[serde(with = "serde_bytes")]
         pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Versions {
+        #[prost(message, repeated, tag = "1")]
+        pub versions: ::prost::alloc::vec::Vec<Version>,
+    }
     /// An upgrade in progress, defined as a version target and a time at which it is considered failed.
     #[derive(
         candid::CandidType,
@@ -1904,6 +1918,32 @@ pub mod governance {
         #[prost(uint64, optional, tag = "2")]
         pub updated_at_timestamp_seconds: ::core::option::Option<u64>,
     }
+    /// The sns's local cache of the upgrade steps recieved from SNS-W.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct CachedUpgradeSteps {
+        /// The upgrade steps that have been returned from SNS-W the last time we
+        /// called list_upgrade_steps.
+        #[prost(message, optional, tag = "1")]
+        pub upgrade_steps: ::core::option::Option<Versions>,
+        /// The timestamp of the request we sent to list_upgrade_steps.
+        /// It's possible that this is greater than the response_timestamp_seconds, because
+        /// we update it as soon as we send the request, and only update the
+        /// response_timestamp and the upgrade_steps when we receive the response.
+        /// The primary use of this is that we can avoid calling list_upgrade_steps
+        /// more frequently than necessary.
+        #[prost(uint64, optional, tag = "2")]
+        pub requested_timestamp_seconds: ::core::option::Option<u64>,
+        /// The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+        #[prost(uint64, optional, tag = "3")]
+        pub response_timestamp_seconds: ::core::option::Option<u64>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1936,9 +1976,9 @@ pub mod governance {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Mode::Unspecified => "MODE_UNSPECIFIED",
-                Mode::Normal => "MODE_NORMAL",
-                Mode::PreInitializationSwap => "MODE_PRE_INITIALIZATION_SWAP",
+                Self::Unspecified => "MODE_UNSPECIFIED",
+                Self::Normal => "MODE_NORMAL",
+                Self::PreInitializationSwap => "MODE_PRE_INITIALIZATION_SWAP",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3266,6 +3306,30 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalResponse {
+    #[prost(message, optional, tag = "1")]
+    pub upgrade_steps: ::core::option::Option<governance::Versions>,
+    #[prost(uint64, optional, tag = "2")]
+    pub response_timestamp_seconds: ::core::option::Option<u64>,
+}
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
 /// compiled with the `test` feature enabled.
@@ -3389,21 +3453,17 @@ impl NeuronPermissionType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NeuronPermissionType::Unspecified => "NEURON_PERMISSION_TYPE_UNSPECIFIED",
-            NeuronPermissionType::ConfigureDissolveState => {
-                "NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE"
-            }
-            NeuronPermissionType::ManagePrincipals => "NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS",
-            NeuronPermissionType::SubmitProposal => "NEURON_PERMISSION_TYPE_SUBMIT_PROPOSAL",
-            NeuronPermissionType::Vote => "NEURON_PERMISSION_TYPE_VOTE",
-            NeuronPermissionType::Disburse => "NEURON_PERMISSION_TYPE_DISBURSE",
-            NeuronPermissionType::Split => "NEURON_PERMISSION_TYPE_SPLIT",
-            NeuronPermissionType::MergeMaturity => "NEURON_PERMISSION_TYPE_MERGE_MATURITY",
-            NeuronPermissionType::DisburseMaturity => "NEURON_PERMISSION_TYPE_DISBURSE_MATURITY",
-            NeuronPermissionType::StakeMaturity => "NEURON_PERMISSION_TYPE_STAKE_MATURITY",
-            NeuronPermissionType::ManageVotingPermission => {
-                "NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION"
-            }
+            Self::Unspecified => "NEURON_PERMISSION_TYPE_UNSPECIFIED",
+            Self::ConfigureDissolveState => "NEURON_PERMISSION_TYPE_CONFIGURE_DISSOLVE_STATE",
+            Self::ManagePrincipals => "NEURON_PERMISSION_TYPE_MANAGE_PRINCIPALS",
+            Self::SubmitProposal => "NEURON_PERMISSION_TYPE_SUBMIT_PROPOSAL",
+            Self::Vote => "NEURON_PERMISSION_TYPE_VOTE",
+            Self::Disburse => "NEURON_PERMISSION_TYPE_DISBURSE",
+            Self::Split => "NEURON_PERMISSION_TYPE_SPLIT",
+            Self::MergeMaturity => "NEURON_PERMISSION_TYPE_MERGE_MATURITY",
+            Self::DisburseMaturity => "NEURON_PERMISSION_TYPE_DISBURSE_MATURITY",
+            Self::StakeMaturity => "NEURON_PERMISSION_TYPE_STAKE_MATURITY",
+            Self::ManageVotingPermission => "NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3457,9 +3517,9 @@ impl Vote {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Vote::Unspecified => "VOTE_UNSPECIFIED",
-            Vote::Yes => "VOTE_YES",
-            Vote::No => "VOTE_NO",
+            Self::Unspecified => "VOTE_UNSPECIFIED",
+            Self::Yes => "VOTE_YES",
+            Self::No => "VOTE_NO",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3501,9 +3561,9 @@ impl LogVisibility {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
+            Self::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+            Self::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+            Self::Public => "LOG_VISIBILITY_PUBLIC",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3552,12 +3612,12 @@ impl ProposalDecisionStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ProposalDecisionStatus::Unspecified => "PROPOSAL_DECISION_STATUS_UNSPECIFIED",
-            ProposalDecisionStatus::Open => "PROPOSAL_DECISION_STATUS_OPEN",
-            ProposalDecisionStatus::Rejected => "PROPOSAL_DECISION_STATUS_REJECTED",
-            ProposalDecisionStatus::Adopted => "PROPOSAL_DECISION_STATUS_ADOPTED",
-            ProposalDecisionStatus::Executed => "PROPOSAL_DECISION_STATUS_EXECUTED",
-            ProposalDecisionStatus::Failed => "PROPOSAL_DECISION_STATUS_FAILED",
+            Self::Unspecified => "PROPOSAL_DECISION_STATUS_UNSPECIFIED",
+            Self::Open => "PROPOSAL_DECISION_STATUS_OPEN",
+            Self::Rejected => "PROPOSAL_DECISION_STATUS_REJECTED",
+            Self::Adopted => "PROPOSAL_DECISION_STATUS_ADOPTED",
+            Self::Executed => "PROPOSAL_DECISION_STATUS_EXECUTED",
+            Self::Failed => "PROPOSAL_DECISION_STATUS_FAILED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3611,10 +3671,10 @@ impl ProposalRewardStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ProposalRewardStatus::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
-            ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
-            ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
-            ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+            Self::Unspecified => "PROPOSAL_REWARD_STATUS_UNSPECIFIED",
+            Self::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
+            Self::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
+            Self::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3676,13 +3736,11 @@ impl ClaimedSwapNeuronStatus {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ClaimedSwapNeuronStatus::Unspecified => "CLAIMED_SWAP_NEURON_STATUS_UNSPECIFIED",
-            ClaimedSwapNeuronStatus::Success => "CLAIMED_SWAP_NEURON_STATUS_SUCCESS",
-            ClaimedSwapNeuronStatus::Invalid => "CLAIMED_SWAP_NEURON_STATUS_INVALID",
-            ClaimedSwapNeuronStatus::AlreadyExists => "CLAIMED_SWAP_NEURON_STATUS_ALREADY_EXISTS",
-            ClaimedSwapNeuronStatus::MemoryExhausted => {
-                "CLAIMED_SWAP_NEURON_STATUS_MEMORY_EXHAUSTED"
-            }
+            Self::Unspecified => "CLAIMED_SWAP_NEURON_STATUS_UNSPECIFIED",
+            Self::Success => "CLAIMED_SWAP_NEURON_STATUS_SUCCESS",
+            Self::Invalid => "CLAIMED_SWAP_NEURON_STATUS_INVALID",
+            Self::AlreadyExists => "CLAIMED_SWAP_NEURON_STATUS_ALREADY_EXISTS",
+            Self::MemoryExhausted => "CLAIMED_SWAP_NEURON_STATUS_MEMORY_EXHAUSTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3732,9 +3790,9 @@ impl ClaimSwapNeuronsError {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            ClaimSwapNeuronsError::Unspecified => "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED",
-            ClaimSwapNeuronsError::Unauthorized => "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED",
-            ClaimSwapNeuronsError::Internal => "CLAIM_SWAP_NEURONS_ERROR_INTERNAL",
+            Self::Unspecified => "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED",
+            Self::Unauthorized => "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED",
+            Self::Internal => "CLAIM_SWAP_NEURONS_ERROR_INTERNAL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

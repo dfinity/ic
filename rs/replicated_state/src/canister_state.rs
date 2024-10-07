@@ -5,7 +5,7 @@ pub mod system_state;
 mod tests;
 
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
+use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_management_canister_types::{CanisterStatusType, LogVisibilityV2};
@@ -142,16 +142,6 @@ impl CanisterState {
             execution_state,
             scheduler_state,
         }
-    }
-
-    /// Applies priority credit and resets long execution mode.
-    pub fn apply_priority_credit(&mut self) {
-        self.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut self.scheduler_state.priority_credit);
-        // Aborting a long-running execution moves the canister to the
-        // default execution mode because the canister does not have a
-        // pending execution anymore.
-        self.scheduler_state.long_execution_mode = LongExecutionMode::default();
     }
 
     pub fn canister_id(&self) -> CanisterId {
@@ -507,11 +497,7 @@ impl CanisterState {
     }
 
     pub fn status(&self) -> CanisterStatusType {
-        match self.system_state.status {
-            CanisterStatus::Running { .. } => CanisterStatusType::Running,
-            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
-            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
-        }
+        self.system_state.status()
     }
 
     /// Returns next scheduled method.
@@ -551,31 +537,7 @@ impl CanisterState {
             scheduler_state: _,
         } = self;
 
-        // Remove aborted install code task.
-        system_state.task_queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
-
-        // Roll back `Stopping` canister states to `Running` and drop all their stop
-        // contexts (the calls corresponding to the dropped stop contexts will be
-        // rejected by subnet A').
-        match &system_state.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => {
-                system_state.status = CanisterStatus::Running {
-                    call_context_manager: call_context_manager.clone(),
-                }
-            }
-        }
+        system_state.drop_in_progress_management_calls_after_split();
     }
 
     /// Appends the given log to the canister log.

@@ -72,10 +72,10 @@ impl FirewallAction {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            FirewallAction::Unspecified => "FIREWALL_ACTION_UNSPECIFIED",
-            FirewallAction::Allow => "FIREWALL_ACTION_ALLOW",
-            FirewallAction::Deny => "FIREWALL_ACTION_DENY",
-            FirewallAction::Reject => "FIREWALL_ACTION_REJECT",
+            Self::Unspecified => "FIREWALL_ACTION_UNSPECIFIED",
+            Self::Allow => "FIREWALL_ACTION_ALLOW",
+            Self::Deny => "FIREWALL_ACTION_DENY",
+            Self::Reject => "FIREWALL_ACTION_REJECT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -116,9 +116,9 @@ impl FirewallRuleDirection {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            FirewallRuleDirection::Unspecified => "FIREWALL_RULE_DIRECTION_UNSPECIFIED",
-            FirewallRuleDirection::Inbound => "FIREWALL_RULE_DIRECTION_INBOUND",
-            FirewallRuleDirection::Outbound => "FIREWALL_RULE_DIRECTION_OUTBOUND",
+            Self::Unspecified => "FIREWALL_RULE_DIRECTION_UNSPECIFIED",
+            Self::Inbound => "FIREWALL_RULE_DIRECTION_INBOUND",
+            Self::Outbound => "FIREWALL_RULE_DIRECTION_OUTBOUND",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

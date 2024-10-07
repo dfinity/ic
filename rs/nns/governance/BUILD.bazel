@@ -19,6 +19,8 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/governance",
@@ -37,8 +39,6 @@ DEPENDENCIES = [
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/http_types",
     "//rs/rust_canisters/on_wire",
@@ -227,9 +227,9 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
+        "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
-        "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
         "//rs/types/base_types:protos",
@@ -298,9 +298,9 @@ rust_bench(
     deps = [
         # Keep sorted.
         ":governance",
+        "//rs/ledger_suite/icp:icp_ledger",
         "//rs/nervous_system/common",
         "//rs/nns/common",
-        "//rs/rosetta-api/icp_ledger",
         "//rs/types/base_types",
         "@crate_index//:criterion",
         "@crate_index//:futures",
