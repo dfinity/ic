@@ -847,7 +847,7 @@ pub struct StateMachine {
     /// A drop guard to gracefully cancel the ingress watcher task.
     _ingress_watcher_drop_guard: tokio_util::sync::DropGuard,
     query_stats_payload_builder: Arc<PocketQueryStatsPayloadBuilderImpl>,
-    time_of_last_round: RwLock<Option<SystemTime>>,
+    time_of_last_round: RwLock<SystemTime>,
     // This field must be the last one so that the temporary directory is deleted at the very end.
     state_dir: Box<dyn StateMachineStateDir>,
     // DO NOT PUT ANY FIELDS AFTER `state_dir`!!!
@@ -1833,7 +1833,7 @@ impl StateMachine {
             canister_http_pool,
             canister_http_payload_builder,
             query_stats_payload_builder: pocket_query_stats_payload_builder,
-            time_of_last_round: RwLock::new(None),
+            time_of_last_round: RwLock::new(time.into()),
         }
     }
 
@@ -2354,8 +2354,8 @@ impl StateMachine {
         self.check_critical_errors();
 
         let time_of_next_round = self.time_of_next_round();
-        *self.time_of_last_round.write().unwrap() = Some(time_of_next_round);
         self.set_time(time_of_next_round);
+        *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
     }
@@ -2449,12 +2449,8 @@ impl StateMachine {
     /// Returns the state machine time at the beginning of next round.
     pub fn time_of_next_round(&self) -> SystemTime {
         let time = self.time();
-        if let Some(time_of_last_round) = *self.time_of_last_round.read().unwrap() {
-            if time == time_of_last_round {
-                time + Self::EXECUTE_ROUND_TIME_INCREMENT
-            } else {
-                time
-            }
+        if time == *self.time_of_last_round.read().unwrap() {
+            time + Self::EXECUTE_ROUND_TIME_INCREMENT
         } else {
             time
         }
