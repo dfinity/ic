@@ -6,7 +6,7 @@ use ic_cdk::api::management_canister::http_request::{
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum ProviderId {
+enum ProviderId {
     BtcScan,
     MempoolSpace,
 }
