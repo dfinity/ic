@@ -221,7 +221,7 @@ where
             let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
                 node_test_id(VALIDATOR_NODE_ID),
                 pool_config.clone(),
-                metrics_registry.clone(),
+                &metrics_registry,
                 no_op_logger(),
             )));
 
@@ -282,7 +282,7 @@ fn setup(
     let mut pool = IngressPoolImpl::new(
         node_test_id(VALIDATOR_NODE_ID),
         pool_config,
-        MetricsRegistry::new(),
+        &MetricsRegistry::new(),
         log,
     );
     let mut message_ids = BTreeMap::new();

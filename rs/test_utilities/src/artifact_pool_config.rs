@@ -69,7 +69,7 @@ mod tests {
             with_test_pool_config(|pool_config| {
                 let metrics_registry = MetricsRegistry::new();
                 let mut ingress_pool =
-                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                    IngressPoolImpl::new(node_test_id(0), pool_config, &metrics_registry, log);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 for _ in 1..1024u64 {
                     let ingress_msg = SignedIngressBuilder::new()
