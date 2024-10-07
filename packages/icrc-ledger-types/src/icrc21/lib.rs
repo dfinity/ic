@@ -13,9 +13,8 @@ use candid::{Nat, Principal};
 use itertools::Itertools;
 use num_traits::{Pow, ToPrimitive};
 use serde_bytes::ByteBuf;
-use strum::IntoEnumIterator;
-use strum::{self, EnumIter};
-use strum::{Display, EnumString};
+use strum::{self, IntoEnumIterator};
+use strum_macros::{Display, EnumIter, EnumString};
 
 // Maximum number of bytes that an argument to an ICRC-1 ledger function can have when passed to the ICRC-21 endpoint.
 pub const MAX_CONSENT_MESSAGE_ARG_SIZE_BYTES: u16 = 500;

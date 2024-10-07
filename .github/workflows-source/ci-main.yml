@@ -385,4 +385,4 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              cargo build --release
+              cargo build --release --locked
