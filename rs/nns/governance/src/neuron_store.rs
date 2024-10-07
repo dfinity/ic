@@ -347,10 +347,7 @@ impl NeuronStore {
             clock: Box::new(IcClock::new()),
             use_stable_memory_for_all_neurons: is_active_neurons_in_stable_memory_enabled(),
         };
-        println!(
-            "use_stable_memory_for_all_neurons: {}",
-            neuron_store.use_stable_memory_for_all_neurons
-        );
+
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
@@ -744,21 +741,26 @@ impl NeuronStore {
             .collect()
     }
 
+    fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
+        !neuron.is_inactive(now)
+            && neuron
+                .joined_community_fund_timestamp_seconds
+                .unwrap_or_default()
+                > 0
+    }
+
     /// List all neuron ids that are in the Neurons' Fund.
     pub fn list_active_neurons_fund_neurons(&self) -> Vec<NeuronsFundNeuron> {
         let now = self.now();
-        let filter = |n: &Neuron| {
-            !n.is_inactive(now)
-                && n.joined_community_fund_timestamp_seconds
-                    .unwrap_or_default()
-                    > 0
-        };
-        self.filter_map_active_neurons(filter, |n| NeuronsFundNeuron {
-            id: n.id(),
-            controller: n.controller(),
-            hotkeys: pick_most_important_hotkeys(&n.hot_keys),
-            maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
-        })
+        self.filter_map_active_neurons(
+            |n| Self::is_active_neurons_fund_neuron(n, now),
+            |n| NeuronsFundNeuron {
+                id: n.id(),
+                controller: n.controller(),
+                hotkeys: pick_most_important_hotkeys(&n.hot_keys),
+                maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
+            },
+        )
         .into_iter()
         .collect()
     }
