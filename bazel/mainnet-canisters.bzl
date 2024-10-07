@@ -1,7 +1,8 @@
 """Mainnet canister definitions.
 
-This creates a repository which exports 'canister_deps'. This macro can be
-called to create one repository for each canister in the mainnet canister list.
+This creates a Bazel repository which exports 'canister_deps'. This macro can be
+called to create one Bazel repository for each canister in the mainnet canister list.
+The repository contains the canister module.
 """
 
 def _canisters_impl(repository_ctx):
