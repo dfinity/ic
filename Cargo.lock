@@ -13576,6 +13576,7 @@ dependencies = [
  "serde_bytes",
  "sha2 0.10.8",
  "strum",
+ "strum_macros",
  "time",
 ]
 
