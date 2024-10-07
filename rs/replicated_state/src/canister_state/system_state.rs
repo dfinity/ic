@@ -15,22 +15,27 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::ExecutionRoundType;
+use ic_interfaces::execution_environment::{ExecutionRoundType, HypervisorError};
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibilityV2,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
+    LogVisibilityV2,
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
-    Payload, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
+    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+    StopCanisterContext, NO_DEADLINE,
 };
+use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -38,6 +43,7 @@ use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -275,6 +281,254 @@ impl CanisterHistory {
 pub struct TaskQueue {
     paused_or_aborted_task: Option<ExecutionTask>,
 
+    /// Queue of tasks.
+    queue: VecDeque<ExecutionTask>,
+
+    /// Status of low_on_wasm_memory hook execution.
+    on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+}
+
+impl TaskQueue {
+    pub fn from_checkpoint(
+        queue: VecDeque<ExecutionTask>,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+        canister_id: &CanisterId,
+    ) -> Self {
+        let mut mut_queue = queue;
+
+        let paused_or_aborted_task = match mut_queue.front() {
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedExecution { .. })
+            | Some(ExecutionTask::PausedInstallCode(_))
+            | Some(ExecutionTask::AbortedExecution { .. }) => mut_queue.pop_front(),
+            Some(ExecutionTask::OnLowWasmMemory(_))
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | None => None,
+        };
+
+        let queue = TaskQueue {
+            paused_or_aborted_task,
+            queue: mut_queue,
+            on_low_wasm_memory_hook_status,
+        };
+
+        // Because paused tasks are not allowed in checkpoint rounds when
+        // checking dts invariants that is equivalent to disabling dts.
+        queue.check_dts_invariants(
+            FlagStatus::Disabled,
+            ExecutionRoundType::CheckpointRound,
+            canister_id,
+        );
+
+        queue
+    }
+
+    pub fn front(&self) -> Option<&ExecutionTask> {
+        self.paused_or_aborted_task
+            .as_ref()
+            .or_else(|| self.queue.front())
+    }
+
+    pub fn pop_front(&mut self) -> Option<ExecutionTask> {
+        self.paused_or_aborted_task
+            .take()
+            .or_else(|| self.queue.pop_front())
+    }
+
+    pub fn remove(&mut self, task: ExecutionTask) {
+        match task {
+            ExecutionTask::OnLowWasmMemory => {
+                self.on_low_wasm_memory_hook_status.update(false);
+            }
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => unreachable!(
+                "Removal of task from TaskQueue is only supported for OnLowWasmMemory type."
+            ),
+        };
+    }
+
+    pub fn enqueue(&mut self, task: ExecutionTask) {
+        match task {
+            ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => {
+                debug_assert!(self.paused_or_aborted_task.is_none());
+                self.paused_or_aborted_task = Some(task);
+            }
+            ExecutionTask::OnLowWasmMemory => {
+                self.on_low_wasm_memory_hook_status.update(true);
+            }
+            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => self.queue.push_front(task),
+        };
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.paused_or_aborted_task.is_none() && self.queue.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
+    }
+
+    pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
+        self.on_low_wasm_memory_hook_status
+    }
+
+    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
+        &self.queue
+    }
+
+    /// `check_dts_invariants` should only be called after round execution.
+    ///
+    /// It checks that the following properties are satisfied:
+    /// 1. Heartbeat, GlobalTimer tasks exist only during the round and must not exist after the round.
+    /// 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
+    /// 3. If deterministic time slicing is disabled, then there are no paused tasks.
+    ///    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
+    pub fn check_dts_invariants(
+        &self,
+        deterministic_time_slicing: FlagStatus,
+        current_round_type: ExecutionRoundType,
+        id: &CanisterId,
+    ) {
+        // There should be at most one paused or aborted task left in the task queue.
+        assert!(
+            self.queue.len() <= 1,
+            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+            id,
+            self.queue
+        );
+
+        for task in self.queue.iter() {
+            match task {
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. } => {}
+                ExecutionTask::Heartbeat => {
+                    panic!(
+                        "Unexpected heartbeat task after a round in canister {:?}",
+                        id
+                    );
+                }
+                ExecutionTask::GlobalTimer => {
+                    panic!(
+                        "Unexpected global timer task after a round in canister {:?}",
+                        id
+                    );
+                }
+                ExecutionTask::OnLowWasmMemory => {
+                    panic!(
+                        "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
+                        id
+                    );
+                }
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                    assert_eq!(
+                        current_round_type,
+                        ExecutionRoundType::OrdinaryRound,
+                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                        task,
+                        id
+                    );
+
+                    assert_eq!(
+                        deterministic_time_slicing,
+                        FlagStatus::Enabled,
+                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
+                        task,
+                        id
+                    );
+                }
+            }
+        }
+    }
+
+    /// Removes aborted install code task.
+    pub fn remove_aborted_install_code_task(&mut self) {
+        self.queue.retain(|task| match task {
+            ExecutionTask::AbortedInstallCode { .. } => false,
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => true,
+        });
+    }
+
+    /// Removes `Heartbeat` and `GlobalTimer` tasks.
+    pub fn remove_heartbeat_and_global_timer(&mut self) {
+        self.queue.retain(|task| match task {
+            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
+            ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(..)
+            | ExecutionTask::AbortedExecution { .. }
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::OnLowWasmMemory => true,
+        });
+    }
+
+    /// Returns all `PausedExecution` and `PausedInstallCode` tasks.
+    pub fn get_all_paused_tasks(&self) -> Vec<&ExecutionTask> {
+        let mut res = Vec::new();
+        for task in self.queue.iter() {
+            match task {
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(..) => {
+                    res.push(task)
+                }
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::OnLowWasmMemory => (),
+            }
+        }
+        res
+    }
+
+    /// Replace all `PausedExecution` and `PausedInstallCode` with corresponding
+    /// `AbortedExecution` and `AbortedInstallCode` respectively.
+    pub fn replace_paused_with_aborted_tasks(
+        &mut self,
+        mut aborted_tasks: HashMap<PausedExecutionId, ExecutionTask>,
+    ) {
+        let task_queue = std::mem::take(&mut self.queue);
+
+        self.queue = task_queue
+            .into_iter()
+            .map(|task| match task {
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => task,
+                ExecutionTask::PausedExecution { id, .. } => {
+                    let aborted = aborted_tasks.remove(&id).unwrap();
+                    debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
+                    aborted
+                }
+                ExecutionTask::PausedInstallCode(id) => {
+                    let aborted = aborted_tasks.remove(&id).unwrap();
+                    debug_assert!(matches!(aborted, ExecutionTask::AbortedInstallCode { .. }));
+                    aborted
+                }
+            })
+            .collect();
+
+        debug_assert!(aborted_tasks.is_empty());
+    }
+}
+
+/// `TaskQueue` represents the implementation of a queue structure for tasks.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct TaskQueue {
+    paused_or_aborted_task: Option<ExecutionTask>,
+
     /// Queue of `Heartbeat` and `Global` tasks.
     queue: VecDeque<ExecutionTask>,
 
@@ -498,8 +752,12 @@ impl TaskQueue {
 pub struct SystemState {
     pub controllers: BTreeSet<PrincipalId>,
     pub canister_id: CanisterId,
-    // This must remain private, in order to properly enforce system states (running, stopping,
-    // stopped) when enqueuing inputs; and to ensure message memory reservations are accurate.
+    /// Input (canister and ingress) and output (canister) message queues.
+    ///
+    /// Must remain private, to ensure consistency with the `CallContextManager`; to
+    /// properly enforce system states (`Running`, `Stopping`, `Stopped`) when
+    /// enqueuing inputs; and to ensure accurate slot and message memory
+    /// reservations.
     #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
     /// The canister's memory allocation.
@@ -507,9 +765,12 @@ pub struct SystemState {
     /// Threshold used for activation of canister_on_low_wasm_memory hook.
     pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
-    /// The status of the canister: Running, Stopping, or Stopped.
-    /// Different statuses allow for different behaviors on the SystemState.
-    pub status: CanisterStatus,
+    /// The status of the canister: `Running`, `Stopping`, or `Stopped`.
+    /// Different statuses allow for different behaviors on the `SystemState`.
+    ///
+    /// Must remain private, to ensure that the `CallContextManager` is consistent
+    /// with `queues`.
+    status: CanisterStatus,
     /// Certified data blob allows canisters to certify parts of their state to
     /// securely answer queries from a single machine.
     ///
@@ -1274,6 +1535,8 @@ impl SystemState {
         }
     }
 
+    /// Returns a reference to the `CallContextManager` in a `Running` or `Stopping`
+    /// canister.
     pub fn call_context_manager(&self) -> Option<&CallContextManager> {
         match &self.status {
             CanisterStatus::Running {
@@ -1287,17 +1550,82 @@ impl SystemState {
         }
     }
 
-    pub fn call_context_manager_mut(&mut self) -> Option<&mut CallContextManager> {
-        match &mut self.status {
-            CanisterStatus::Running {
-                call_context_manager,
-            } => Some(call_context_manager),
-            CanisterStatus::Stopping {
-                call_context_manager,
-                ..
-            } => Some(call_context_manager),
-            CanisterStatus::Stopped => None,
-        }
+    /// Creates a new call context and returns its ID. Returns an error if the
+    /// canister is `Stopped`.
+    pub fn new_call_context(
+        &mut self,
+        call_origin: CallOrigin,
+        cycles: Cycles,
+        time: Time,
+        metadata: RequestMetadata,
+    ) -> Result<CallContextId, StateError> {
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
+            .new_call_context(call_origin, cycles, time, metadata))
+    }
+
+    /// Withdraws cycles from the call context with the given ID.
+    ///
+    /// Returns a reference to the `CallContext` if successful. Returns an error
+    /// message if the canister is `Stopped`; the call context does not exist; or
+    /// if the call context does not have enough cycles.
+    pub fn withdraw_cycles(
+        &mut self,
+        call_context_id: CallContextId,
+        cycles: Cycles,
+    ) -> Result<&CallContext, &str> {
+        call_context_manager_mut(&mut self.status)
+            .ok_or("Canister is stopped")?
+            .withdraw_cycles(call_context_id, cycles)
+    }
+
+    /// Accepts a canister result for the given `CallContext` and produces an action
+    /// that should be taken by the caller; and the call context, if completed.
+    pub fn on_canister_result(
+        &mut self,
+        call_context_id: CallContextId,
+        callback_id: Option<CallbackId>,
+        result: Result<Option<WasmResult>, HypervisorError>,
+        instructions_used: NumInstructions,
+    ) -> Result<(CallContextAction, Option<CallContext>), StateError> {
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
+            .on_canister_result(call_context_id, callback_id, result, instructions_used))
+    }
+
+    /// Marks all call contexts as deleted and produces reject responses for the
+    /// not yet responded ones. This is called as part of uninstalling a canister.
+    ///
+    /// Callbacks will be unregistered when responses are received.
+    pub fn delete_all_call_contexts<R>(
+        &mut self,
+        reject: impl Fn(&CallContext) -> Option<R>,
+    ) -> Vec<R> {
+        call_context_manager_mut(&mut self.status)
+            .map(|call_context_manager| call_context_manager.delete_all_call_contexts(reject))
+            .unwrap_or_default()
+    }
+
+    /// Registers a callback and returns its ID. Returns an error if the canister is
+    /// `Stopped`.
+    //
+    // TODO: Check whether this could be done implicitly, when pushing an outbound
+    // request.
+    pub fn register_callback(&mut self, callback: Callback) -> Result<CallbackId, StateError> {
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
+            .register_callback(callback))
+    }
+
+    /// Unregisters the callback with the given ID (when a response was received for
+    /// it) and returns the callback. Returns an error if the canister is `Stopped`.
+    pub fn unregister_callback(
+        &mut self,
+        callback_id: CallbackId,
+    ) -> Result<Option<Arc<Callback>>, StateError> {
+        Ok(call_context_manager_mut(&mut self.status)
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
+            .unregister_callback(callback_id))
     }
 
     /// Pushes a `Request` type message into the relevant output queue.
@@ -1495,9 +1823,12 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg {
-                    if !call_context_manager
-                        .should_enqueue(response)
-                        .map_err(|err| (err, msg.clone()))?
+                    if !should_enqueue_input(
+                        response,
+                        call_context_manager,
+                        self.aborted_or_paused_response(),
+                    )
+                    .map_err(|err| (err, msg.clone()))?
                     {
                         // Best effort response whose callback is gone. Silently drop it.
                         return Ok(());
@@ -1544,7 +1875,119 @@ impl SystemState {
         &self.queues
     }
 
-    /// Returns a boolean whether the system state is ready to be `Stopped`.
+    /// Transitions the canister into `Running` state. Returns the pending stop
+    /// contexts if the canister was previously in `Stopping` state.
+    pub fn start_canister(&mut self) -> Vec<StopCanisterContext> {
+        match &mut self.status {
+            CanisterStatus::Running { .. } => Vec::new(),
+
+            CanisterStatus::Stopping {
+                call_context_manager,
+                stop_contexts,
+            } => {
+                let stop_contexts = std::mem::take(stop_contexts);
+                self.status = CanisterStatus::Running {
+                    call_context_manager: std::mem::take(call_context_manager),
+                };
+                stop_contexts
+            }
+
+            CanisterStatus::Stopped => {
+                self.status = CanisterStatus::new_running();
+                Vec::new()
+            }
+        }
+    }
+
+    /// Transitions the canister into `Stopping` state.
+    ///
+    /// If the canister was `Running` or `Stopping`, remembers the stop context, so
+    /// that it can be responded to once the canister has fully stopped. If the
+    /// canister was already `Stopped`, returns the stop context.
+    pub fn begin_stopping(
+        &mut self,
+        stop_context: StopCanisterContext,
+    ) -> Option<StopCanisterContext> {
+        match &mut self.status {
+            // Return the stop context, nothing to do here.
+            CanisterStatus::Stopped => Some(stop_context),
+
+            CanisterStatus::Stopping {
+                ref mut stop_contexts,
+                ..
+            } => {
+                // Add the message so we can respond to it once the canister has fully stopped.
+                stop_contexts.push(stop_context);
+                None
+            }
+
+            CanisterStatus::Running {
+                call_context_manager,
+            } => {
+                // Transition the canister into the stopping state.
+                self.status = CanisterStatus::Stopping {
+                    call_context_manager: std::mem::take(call_context_manager),
+                    // Track the stop message to respond to it once the canister is fully stopped.
+                    stop_contexts: vec![stop_context],
+                };
+                None
+            }
+        }
+    }
+
+    /// Tries to transition a `Stopping` canister into the `Stopped` state. No-op if
+    /// the canister is `Running` or already `Stopped`.
+    ///
+    /// Returns a tuple of:
+    ///  * a boolean indicating whether the canister has stopped,
+    ///  * all stop contexts if the canister has stopped; or the expired stop
+    ///    contexts only if the canister is still stopping.
+    #[must_use]
+    pub fn try_stop_canister(
+        &mut self,
+        is_expired: impl Fn(&StopCanisterContext) -> bool,
+    ) -> (bool, Vec<StopCanisterContext>) {
+        match self.status {
+            // Canister is not stopping so we can skip it.
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped => (false, Vec::new()),
+
+            // Canister is ready to stop.
+            CanisterStatus::Stopping {
+                ref call_context_manager,
+                ref mut stop_contexts,
+            } if call_context_manager.callbacks().is_empty()
+                && call_context_manager.call_contexts().is_empty() =>
+            {
+                let stop_contexts = std::mem::take(stop_contexts);
+
+                // Transition the canister to "stopped".
+                self.status = CanisterStatus::Stopped;
+
+                // Reply to all pending stop_canister requests.
+                (true, stop_contexts)
+            }
+
+            // Canister is stopping, but not yet ready to stop.
+            CanisterStatus::Stopping {
+                ref mut stop_contexts,
+                ..
+            } => {
+                // Return any stop contexts that have timed out.
+                let mut expired_stop_contexts = Vec::new();
+                stop_contexts.retain(|stop_context| {
+                    if is_expired(stop_context) {
+                        expired_stop_contexts.push(stop_context.clone());
+                        false
+                    } else {
+                        true
+                    }
+                });
+                (false, expired_stop_contexts)
+            }
+        }
+    }
+
+    /// Tests whether the system state is ready to transition to `Stopped`.
     /// Only relevant for a `Stopping` system state.
     pub fn ready_to_stop(&self) -> bool {
         match &self.status {
@@ -1560,11 +2003,57 @@ impl SystemState {
         }
     }
 
+    /// Returns the canister status as a `CanisterStatusType`.
+    pub fn status(&self) -> CanisterStatusType {
+        match self.status {
+            CanisterStatus::Running { .. } => CanisterStatusType::Running,
+            CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
+            CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
+        }
+    }
+
+    /// Returns the canister status.
+    pub fn get_status(&self) -> &CanisterStatus {
+        &self.status
+    }
+
+    /// Returns the canister status as a string.
     pub fn status_string(&self) -> &'static str {
         match self.status {
             CanisterStatus::Running { .. } => "Running",
             CanisterStatus::Stopping { .. } => "Stopping",
             CanisterStatus::Stopped => "Stopped",
+        }
+    }
+
+    /// Silently discards in-progress subnet messages being executed by the
+    /// canister, in the second phase of a subnet split. This should only be called
+    /// on canisters that have migrated to a new subnet (*subnet B*), which does not
+    /// have a matching call context.
+    ///
+    /// The other subnet (which must be *subnet A'*), produces reject responses (for
+    /// calls originating from canisters); and fails ingress messages (for calls
+    /// originating from ingress messages); for the matching subnet calls. This is
+    /// the only way to ensure consistency for messages that would otherwise be
+    /// executing on one subnet, but for which a response may only be produced by
+    /// another subnet.
+    pub fn drop_in_progress_management_calls_after_split(&mut self) {
+        // Remove aborted install code task.
+        self.task_queue.remove_aborted_install_code_task();
+
+        // Roll back `Stopping` canister states to `Running` and drop all their stop
+        // contexts (the calls corresponding to the dropped stop contexts will be
+        // rejected by subnet A').
+        match self.status {
+            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {}
+            CanisterStatus::Stopping {
+                ref mut call_context_manager,
+                ..
+            } => {
+                self.status = CanisterStatus::Running {
+                    call_context_manager: std::mem::take(call_context_manager),
+                }
+            }
         }
     }
 
@@ -1593,15 +2082,6 @@ impl SystemState {
     pub(super) fn set_stream_guaranteed_responses_size_bytes(&mut self, size_bytes: usize) {
         self.queues
             .set_stream_guaranteed_responses_size_bytes(size_bytes);
-    }
-
-    pub fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
-        match &mut self.status {
-            CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
-                panic!("Should never add_stop_context to a non-stopping canister.")
-            }
-            CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
-        }
     }
 
     /// Method used only by the dashboard.
@@ -1641,8 +2121,20 @@ impl SystemState {
             if own_subnet_type != SubnetType::System
                 && can_push(msg, *subnet_available_memory).is_err()
             {
-                // Bail out if not enough memory available for message.
                 return;
+            }
+
+            // Protect against enqueuing a second response for the currently executing
+            // (aborted or paused) callback.
+            if let RequestOrResponse::Response(response) = &msg {
+                if let Some(aborted_or_paused_response) = self.aborted_or_paused_response() {
+                    if response.originator_reply_callback
+                        == aborted_or_paused_response.originator_reply_callback
+                    {
+                        // The callback is already executing, don't enqueue a second response for it.
+                        return;
+                    }
+                }
             }
 
             // Attempt inducting `msg`. May fail if the input queue is full.
@@ -1667,9 +2159,9 @@ impl SystemState {
         self.queues.garbage_collect();
     }
 
-    /// Queries whether any of the `OutputQueues` in `self.queues` have any expired
-    /// deadlines in them.
-    pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
+    /// Queries whether any of the `OutputQueues` in `self.queues` hold messages
+    /// with expired deadlines in them.
+    pub fn has_expired_message_deadlines(&self, current_time: Time) -> bool {
         self.queues.has_expired_deadlines(current_time)
     }
 
@@ -1685,6 +2177,81 @@ impl SystemState {
     ) -> usize {
         self.queues
             .time_out_messages(current_time, own_canister_id, local_canisters)
+    }
+
+    /// Queries whether the `CallContextManager` in `self.state` holds any not
+    /// previouosly expired (i.e. returned by `time_out_callbacks()`) callbacks with
+    /// deadlines `< current_time`.
+    pub fn has_expired_callbacks(&self, current_time: CoarseTime) -> bool {
+        self.call_context_manager()
+            .map(|ccm| ccm.has_expired_callbacks(current_time))
+            .unwrap_or(false)
+    }
+
+    /// Enqueues "deadline expired" references for all expired best-effort callbacks
+    /// without a response.
+    ///
+    /// Returns the number of expired callbacks; plus one `StateError` for every
+    /// instance where a `SystemState` internal inconsistency prevented a "deadline
+    /// expired" reference from being enqueued.
+    #[must_use]
+    pub fn time_out_callbacks(
+        &mut self,
+        current_time: CoarseTime,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) -> (usize, Vec<StateError>) {
+        if self.status == CanisterStatus::Stopped {
+            // Stopped canisters have no call context manager, so no callbacks.
+            return (0, Vec::new());
+        }
+
+        let aborted_or_paused_callback_id = self
+            .aborted_or_paused_response()
+            .map(|response| response.originator_reply_callback);
+
+        // Safe to unwrap because we just checked that the status is not `Stopped`.
+        let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+
+        let mut expired_callback_count = 0;
+        let mut errors = Vec::new();
+        let expired_callbacks = call_context_manager
+            .expire_callbacks(current_time)
+            .collect::<Vec<_>>();
+        for callback_id in expired_callbacks {
+            if Some(callback_id) == aborted_or_paused_callback_id {
+                // This callback is already executing, don't produce a second response for it.
+                continue;
+            }
+
+            // Safe to unwrap because this is a callback ID we just got from the
+            // `CallContextManager`.
+            let callback = call_context_manager.callbacks().get(&callback_id).unwrap();
+            self.queues
+                .try_push_deadline_expired_input(
+                    callback_id,
+                    &callback.respondent,
+                    own_canister_id,
+                    local_canisters,
+                )
+                .map(|pushed| {
+                    if pushed {
+                        expired_callback_count += 1;
+                    }
+                })
+                .unwrap_or_else(|err_str| {
+                    errors.push(StateError::NonMatchingResponse {
+                        err_str,
+                        originator: callback.originator,
+                        callback_id,
+                        respondent: callback.respondent,
+                        deadline: callback.deadline,
+                    });
+                    expired_callback_count += 1;
+                });
+        }
+
+        (expired_callback_count, errors)
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1946,8 +2513,81 @@ pub(crate) fn push_input(
     res
 }
 
+/// Tests whether the given response should be inducted or silently dropped.
+/// Verifies that the stored respondent and originator associated with the
+/// `callback_id`, as well as its deadline match those of the response.
+///
+/// Returns:
+///
+///  * `Ok(true)` if the response can be safely inducted.
+///  * `Ok(false)` (drop silently) when a matching `callback_id` was not found
+///    for a best-effort response (because the callback might have expired and
+///    been closed; or because the callback is executing -- aborted or paused).
+///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
+///    not found for a guaranteed response.
+///  * `Err(StateError::NonMatchingResponse)` if the response details do not
+///    match those of the callback.
+pub(crate) fn should_enqueue_input(
+    response: &Response,
+    call_context_manager: &CallContextManager,
+    aborted_or_paused_response: Option<&Response>,
+) -> Result<bool, StateError> {
+    let callback = match aborted_or_paused_response {
+        Some(aborted_or_paused_response)
+            if response.originator_reply_callback
+                == aborted_or_paused_response.originator_reply_callback =>
+        {
+            // A response for the same callback as `aborted_or_paused_response`. In other
+            // words, it does not match any unresponded callback.
+            None
+        }
+        _ => call_context_manager.callback(response.originator_reply_callback),
+    };
+
+    match callback {
+        Some(callback) if response.respondent != callback.respondent
+                || response.originator != callback.originator
+                || response.deadline != callback.deadline => {
+            Err(StateError::non_matching_response(format!(
+                    "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
+                    callback.originator, callback.respondent, Time::from(callback.deadline)
+                ), response))
+        }
+        Some(_) => Ok(true),
+        None => {
+            // Received an unknown callback ID.
+            if response.deadline == NO_DEADLINE {
+                // This is an error for a guaranteed response.
+                Err(StateError::non_matching_response("unknown callback ID", response))
+            } else {
+                // But should be ignored in the case of a best-effort response (as the callback
+                // may have expired and been dropped in the meantime).
+                Ok(false)
+            }
+        }
+    }
+}
+
+/// Helper function to get a mutable reference to the `CallContextManager` when
+/// `Running` or `Stopping`, `None` if `Stopped`.
+fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallContextManager> {
+    match status {
+        CanisterStatus::Running {
+            call_context_manager,
+        }
+        | CanisterStatus::Stopping {
+            call_context_manager,
+            ..
+        } => Some(call_context_manager),
+
+        CanisterStatus::Stopped => None,
+    }
+}
+
 pub mod testing {
+    pub use super::call_context_manager::testing::*;
     use super::*;
+    use ic_types::methods::WasmClosure;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
     pub trait SystemStateTesting {
@@ -1962,6 +2602,18 @@ pub mod testing {
 
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
+
+        fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
+
+        /// Registers a callback for the given respondent, with the given deadline.
+        fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId;
+
+        /// Testing only: sets the canister status.
+        fn set_status(&mut self, status: CanisterStatus);
+
+        /// Testing only: Adds a stop context to a stopping canister. Panics if the
+        /// canister is not `Stopping`.
+        fn add_stop_context(&mut self, stop_context: StopCanisterContext);
 
         /// Testing only: sets the value of 'cycles_balance'.
         fn set_balance(&mut self, balance: Cycles);
@@ -1990,6 +2642,49 @@ pub mod testing {
 
         fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
+        }
+
+        fn set_status(&mut self, status: CanisterStatus) {
+            self.status = status;
+        }
+
+        fn with_call_context(&mut self, call_context: CallContext) -> CallContextId {
+            call_context_manager_mut(&mut self.status)
+                .unwrap()
+                .with_call_context(call_context)
+        }
+
+        fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
+            let call_context_manager = call_context_manager_mut(&mut self.status).unwrap();
+            let time = Time::from_nanos_since_unix_epoch(1);
+            let call_context_id = call_context_manager.new_call_context(
+                CallOrigin::SystemTask,
+                Cycles::zero(),
+                time,
+                RequestMetadata::new(0, time),
+            );
+
+            call_context_manager.register_callback(Callback::new(
+                call_context_id,
+                self.canister_id,
+                respondent,
+                Cycles::zero(),
+                Cycles::new(42),
+                Cycles::new(84),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+                deadline,
+            ))
+        }
+
+        fn add_stop_context(&mut self, stop_context: StopCanisterContext) {
+            match &mut self.status {
+                CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
+                    panic!("Should never add_stop_context to a non-stopping canister.")
+                }
+                CanisterStatus::Stopping { stop_contexts, .. } => stop_contexts.push(stop_context),
+            }
         }
 
         fn set_balance(&mut self, balance: Cycles) {

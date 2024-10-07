@@ -36,7 +36,7 @@ use ic_types::{
     batch::ConsensusResponse,
     messages::{
         CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
-        StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+        StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::SystemMethod,
     time::{expiry_time_from_now, UNIX_EPOCH},
@@ -2742,12 +2742,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
     // Due to the open call context the canister cannot be stopped.
     assert!(!system_state.ready_to_stop());
 
-    match system_state.status {
-        CanisterStatus::Stopping { .. } => {}
-        CanisterStatus::Running { .. } | CanisterStatus::Stopped => {
-            unreachable!("Expected the canister to be in stopping mode");
-        }
-    }
+    assert_eq!(CanisterStatusType::Stopping, system_state.status());
 }
 
 #[test]
@@ -2885,7 +2880,7 @@ fn can_timeout_stop_canister_requests() {
     // Due to the open call context the canister cannot be stopped.
     assert!(!system_state.ready_to_stop());
 
-    match &system_state.status {
+    match system_state.get_status() {
         CanisterStatus::Stopping { stop_contexts, .. } => {
             // There are 3 associated stop_context due to the stop request that
             // was sent above.
@@ -2905,7 +2900,7 @@ fn can_timeout_stop_canister_requests() {
     // Due to the open call context the canister cannot be stopped.
     assert!(!system_state.ready_to_stop());
 
-    match &system_state.status {
+    match system_state.get_status() {
         CanisterStatus::Stopping { stop_contexts, .. } => {
             // The first two stop_contexts should have expired, 1 is still active.
             assert_eq!(stop_contexts.len(), 1);
@@ -4051,7 +4046,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = SchedulerImpl::compute_capacity_percent(scheduler_cores) as u64 - 1;
+    let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());

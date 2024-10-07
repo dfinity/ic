@@ -10,9 +10,9 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, LoadCanisterSnapshotArgs,
-    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    LoadCanisterSnapshotArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -41,11 +41,11 @@ pub enum CanisterStatusView {
 }
 
 impl CanisterStatusView {
-    pub fn from_full_status(full_status: &CanisterStatus) -> Self {
-        match full_status {
-            CanisterStatus::Running { .. } => Self::Running,
-            CanisterStatus::Stopping { .. } => Self::Stopping,
-            CanisterStatus::Stopped => Self::Stopped,
+    pub fn from_canister_status_type(status: CanisterStatusType) -> Self {
+        match status {
+            CanisterStatusType::Running { .. } => Self::Running,
+            CanisterStatusType::Stopping { .. } => Self::Stopping,
+            CanisterStatusType::Stopped => Self::Stopped,
         }
     }
 }
@@ -303,33 +303,29 @@ impl SystemStateChanges {
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
 
-        system_state
-            .task_queue
-            .enqueue(ExecutionTask::OnLowWasmMemory(
-                self.on_low_wasm_memory_hook_condition_check_result,
-            ));
+        if let Some(hook_condition_check_result) =
+            self.on_low_wasm_memory_hook_condition_check_result
+        {
+            if hook_condition_check_result {
+                system_state
+                    .task_queue
+                    .enqueue(ExecutionTask::OnLowWasmMemory);
+            } else {
+                system_state
+                    .task_queue
+                    .remove(ExecutionTask::OnLowWasmMemory);
+            }
+        }
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
         if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
             if call_context_balance_taken != Cycles::zero() {
                 let own_canister_id = system_state.canister_id;
-                let call_context_manager = system_state
-                    .call_context_manager_mut()
-                    .ok_or_else(|| Self::error("Call context manager does not exist"))?;
 
-                let call_context = call_context_manager
-                    .call_context_mut(context_id)
-                    .ok_or_else(|| {
-                        Self::error("Canister accepted cycles from invalid call context")
-                    })?;
-                call_context
-                    .withdraw_cycles(call_context_balance_taken)
-                    .map_err(|()| {
-                        Self::error(
-                            "Canister accepted more cycles than available from call context",
-                        )
-                    })?;
+                let call_context = system_state
+                    .withdraw_cycles(context_id, call_context_balance_taken)
+                    .map_err(Self::error)?;
                 if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
                         CallOrigin::CanisterUpdate(origin_canister_id, _, _)
@@ -437,25 +433,22 @@ impl SystemStateChanges {
 
         // Register and unregister callbacks.
         for update in self.callback_updates {
-            // Only retrieve the CCM if there are callbacks to register / unregister.
-            // `apply_changes` also gets called on stopped canisters (with no callbacks to
-            // register / unregister) and the call would fail in that case.
-            let call_context_manager = system_state
-                .call_context_manager_mut()
-                .ok_or_else(|| Self::error("Call context manager does not exist"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
                         callback.respondent = *receiver;
                     }
-                    let id = call_context_manager.register_callback(callback);
+                    let id = system_state
+                        .register_callback(callback)
+                        .map_err(|_| Self::error("Call context manager does not exist"))?;
                     if id != expected_id {
                         return Err(Self::error("Failed to register update callback"));
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
-                    call_context_manager
+                    system_state
                         .unregister_callback(callback_id)
+                        .map_err(|_| Self::error("Call context manager does not exist"))?
                         .ok_or_else(|| {
                             Self::error("Tried to unregister callback with an ID that isn't in use")
                         })?;
@@ -709,7 +702,7 @@ impl SandboxSafeSystemState {
 
         Self::new_internal(
             system_state.canister_id,
-            CanisterStatusView::from_full_status(&system_state.status),
+            CanisterStatusView::from_canister_status_type(system_state.status()),
             system_state.freeze_threshold,
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,

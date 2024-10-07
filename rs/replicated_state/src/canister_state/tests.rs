@@ -5,11 +5,13 @@ use super::*;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
+use crate::canister_state::system_state::testing::SystemStateTesting;
 use crate::canister_state::system_state::{
     CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
     MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use crate::CallContext;
 use crate::CallOrigin;
 use crate::Memory;
 use assert_matches::assert_matches;
@@ -20,25 +22,21 @@ use ic_management_canister_types::{
     CanisterLogRecord, LogVisibilityV2,
 };
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities_types::{
-    ids::canister_test_id,
-    ids::message_test_id,
-    ids::user_test_id,
-    messages::{RequestBuilder, ResponseBuilder},
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterCall, CanisterMessageOrTask, RequestMetadata,
+    StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
+use ic_types::methods::{Callback, WasmClosure};
+use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
-use ic_types::{
-    messages::{
-        CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
-        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
-    },
-    methods::{Callback, WasmClosure},
-    nominal_cycles::NominalCycles,
-    CountBytes, Cycles, Time,
-};
+use ic_types::{CountBytes, Cycles, Time};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
 use strum::IntoEnumIterator;
+use system_state::testing::CallContextManagerTesting;
+use system_state::PausedExecutionId;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
@@ -96,25 +94,26 @@ impl CanisterStateFixture {
     }
 
     fn make_callback(&mut self, deadline: CoarseTime) -> CallbackId {
+        self.make_callback_to(OTHER_CANISTER_ID, deadline)
+    }
+
+    fn make_callback_to(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId {
         let call_context_id = self
             .canister_state
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .new_call_context(
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 RequestMetadata::new(0, UNIX_EPOCH),
-            );
+            )
+            .unwrap();
         self.canister_state
             .system_state
-            .call_context_manager_mut()
-            .unwrap()
             .register_callback(Callback::new(
                 call_context_id,
                 CANISTER_ID,
-                OTHER_CANISTER_ID,
+                respondent,
                 Cycles::zero(),
                 Cycles::new(42),
                 Cycles::new(84),
@@ -123,6 +122,7 @@ impl CanisterStateFixture {
                 None,
                 deadline,
             ))
+            .unwrap()
     }
 
     fn push_input(
@@ -149,6 +149,38 @@ impl CanisterStateFixture {
             .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
         self.pop_output().unwrap();
+    }
+
+    fn with_paused_response_execution(&mut self, deadline: CoarseTime) -> RequestOrResponse {
+        // Reserve a slot in the input queue.
+        self.with_input_slot_reservation();
+
+        // Enqueue the response.
+        let response = RequestOrResponse::from(default_input_response(
+            self.make_callback(deadline),
+            deadline,
+        ));
+        self.push_input(
+            response.clone(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
+
+        // Pop the response and make it into a paused response execution task.
+        assert_eq!(
+            Some(response.clone().into()),
+            self.canister_state.pop_input()
+        );
+        self.canister_state
+            .system_state
+            .task_queue
+            .enqueue(ExecutionTask::PausedExecution {
+                id: PausedExecutionId(13),
+                input: CanisterMessageOrTask::Message(response.clone().into()),
+            });
+
+        response
     }
 }
 
@@ -315,34 +347,146 @@ fn canister_state_push_input_best_effort_response_mismatched_callback() {
 #[should_panic(expected = "Expected `RequestOrResponse` to be targeted to canister ID")]
 fn canister_state_push_input_request_mismatched_receiver() {
     let mut fixture = CanisterStateFixture::new();
-    fixture
-        .push_input(
-            RequestBuilder::default()
-                .sender(OTHER_CANISTER_ID)
-                .receiver(OTHER_CANISTER_ID)
-                .build()
-                .into(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
+    let _ = fixture.push_input(
+        RequestBuilder::default()
+            .sender(OTHER_CANISTER_ID)
+            .receiver(OTHER_CANISTER_ID)
+            .build()
+            .into(),
+        SubnetType::Application,
+        InputQueueType::RemoteSubnet,
+    );
 }
 
 #[test]
 #[should_panic(expected = "Expected `RequestOrResponse` to be targeted to canister ID")]
 fn canister_state_push_input_response_mismatched_originator() {
     let mut fixture = CanisterStateFixture::new();
-    fixture
-        .push_input(
-            ResponseBuilder::default()
-                .originator(OTHER_CANISTER_ID)
-                .respondent(OTHER_CANISTER_ID)
-                .build()
-                .into(),
+    let _ = fixture.push_input(
+        ResponseBuilder::default()
+            .originator(OTHER_CANISTER_ID)
+            .respondent(OTHER_CANISTER_ID)
+            .build()
+            .into(),
+        SubnetType::Application,
+        InputQueueType::RemoteSubnet,
+    );
+}
+
+#[test]
+fn canister_state_push_input_guaranteed_response_duplicate_of_paused_response() {
+    let mut fixture = CanisterStateFixture::new();
+
+    // Create a paused guaranteed response execution task.
+    let response = fixture.with_paused_response_execution(NO_DEADLINE);
+
+    // Enqueuing a duplicate response should fail with an error.
+    assert_matches!(
+        fixture.push_input(
+            response.clone(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        ),
+        Err((StateError::NonMatchingResponse { err_str, .. }, r))
+            if err_str == "unknown callback ID" && r == response
+    );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_push_input_best_effort_response_duplicate_of_paused_response() {
+    let mut fixture = CanisterStateFixture::new();
+
+    // Create a paused best-effort response execution task.
+    let response = fixture.with_paused_response_execution(SOME_DEADLINE);
+
+    // Enqueuing a duplicate response should fail silently.
+    assert_eq!(
+        Ok(()),
+        fixture.push_input(
+            response.clone(),
             SubnetType::Application,
             InputQueueType::RemoteSubnet,
         )
+    );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+}
+
+#[test]
+fn canister_state_induct_messages_to_self_guaranteed_response_duplicate_of_paused_response() {
+    let mut fixture = CanisterStateFixture::new();
+
+    // Pair of request and response to self.
+    let callback_id = fixture.make_callback_to(CANISTER_ID, SOME_DEADLINE);
+    let request = RequestBuilder::default()
+        .sender(CANISTER_ID)
+        .receiver(CANISTER_ID)
+        .sender_reply_callback(callback_id)
+        .deadline(SOME_DEADLINE)
+        .build();
+    let response = ResponseBuilder::default()
+        .originator(CANISTER_ID)
+        .respondent(CANISTER_ID)
+        .originator_reply_callback(callback_id)
+        .deadline(SOME_DEADLINE)
+        .build();
+
+    // Make an input queue slot reservation.
+    fixture
+        .canister_state
+        .push_output_request(request.clone().into(), UNIX_EPOCH)
         .unwrap();
+    fixture.pop_output().unwrap();
+
+    // Enqueue the inbound response.
+    fixture
+        .push_input(
+            response.clone().into(),
+            SubnetType::Application,
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+
+    // Pop the response and make it into a paused response execution task.
+    let response_canister_message = CanisterMessage::Response(response.clone().into());
+    assert_eq!(
+        Some(response_canister_message.clone()),
+        fixture.canister_state.pop_input()
+    );
+    fixture
+        .canister_state
+        .system_state
+        .task_queue
+        .enqueue(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(13),
+            input: CanisterMessageOrTask::Message(response_canister_message),
+        });
+
+    // Make an output queue slot reservation.
+    fixture
+        .push_input(
+            request.clone().into(),
+            SubnetType::Application,
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+    fixture.canister_state.pop_input().unwrap();
+
+    // Emqueue the response in the output queue.
+    fixture
+        .canister_state
+        .push_output_response(response.clone().into());
+
+    fixture.canister_state.induct_messages_to_self(
+        &mut SUBNET_AVAILABLE_MEMORY.clone(),
+        SubnetType::Application,
+    );
+    // Nothing was enqueued.
+    assert!(!fixture.canister_state.has_input());
+    // And the response is still in the output queue.
+    assert!(fixture.canister_state.has_output());
 }
 
 #[test]
@@ -1075,26 +1219,32 @@ fn drops_aborted_canister_install_after_split() {
 fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
-    call_context_manager.new_call_context(
+    call_context_manager.with_call_context(CallContext::new(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        false,
+        false,
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
-    );
-    canister_state.system_state.status = CanisterStatus::Stopping {
-        call_context_manager: call_context_manager.clone(),
-        stop_contexts: vec![StopCanisterContext::Ingress {
-            sender: user_test_id(1),
-            message_id: message_test_id(1),
-            call_id: Some(StopCanisterCallId::new(0)),
-        }],
-    };
+    ));
+    canister_state
+        .system_state
+        .set_status(CanisterStatus::Stopping {
+            call_context_manager: call_context_manager.clone(),
+            stop_contexts: vec![StopCanisterContext::Ingress {
+                sender: user_test_id(1),
+                message_id: message_test_id(1),
+                call_id: Some(StopCanisterCallId::new(0)),
+            }],
+        });
 
     // Expected canister state is identical, except it is `Running`.
     let mut expected_state = canister_state.clone();
-    expected_state.system_state.status = CanisterStatus::Running {
-        call_context_manager,
-    };
+    expected_state
+        .system_state
+        .set_status(CanisterStatus::Running {
+            call_context_manager,
+        });
 
     canister_state.drop_in_progress_management_calls_after_split();
 

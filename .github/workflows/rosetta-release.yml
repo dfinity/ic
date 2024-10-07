@@ -43,8 +43,8 @@ jobs:
         if: ${{ github.event.inputs.rosetta_release_version }}
         run: |
           # - Query the current rosetta version
-          bazel build //rs/rosetta-api:version
-          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api:version)")"
+          bazel build //rs/rosetta-api/icp:version
+          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api/icp:version)")"
 
           # Compare the current Rosetta version with the ROSETTA_RELEASE_VERSION
           if [ "$CURRENT_ROSETTA_VERSION" != "$ROSETTA_RELEASE_VERSION" ]; then
@@ -58,8 +58,8 @@ jobs:
         if: ${{ github.event.inputs.icrc_rosetta_release_version }}
         run: |
           # - Query the current rosetta version
-          bazel build //rs/ledger_suite/icrc1/rosetta:version
-          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/ledger_suite/icrc1/rosetta:version)")"
+          bazel build //rs/rosetta-api/icrc1:version
+          readonly CURRENT_ROSETTA_VERSION="$(cat "$(bazel cquery --output=files //rs/rosetta-api/icrc1:version)")"
 
           # Compare the current Rosetta version with the ICRC_ROSETTA_RELEASE_VERSION
           if [ "$CURRENT_ROSETTA_VERSION" != "${ICRC_ROSETTA_RELEASE_VERSION}" ]; then
@@ -76,7 +76,7 @@ jobs:
           set -euo pipefail
           ROSETTA_API_DATE=$(date +"%Y%m%d")
           for tag in "v${ROSETTA_RELEASE_VERSION}" "${{ github.sha }}" "$ROSETTA_API_DATE" latest; do
-            bazel run --stamp --embed_label="$tag" //rs/rosetta-api:push_rosetta_image
+            bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icp:push_rosetta_image
           done
           git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
           git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"
@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           for tag in "v${ROSETTA_RELEASE_VERSION}" latest; do
-            bazel run --stamp --embed_label="$tag" //rs/ledger_suite/icrc1/rosetta:push_ic_icrc_rosetta_image
+            bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1:push_ic_icrc_rosetta_image
           done
           git tag "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION" "${{ github.sha }}"
           git push origin "icrc-rosetta-release-$ICRC_ROSETTA_RELEASE_VERSION"
