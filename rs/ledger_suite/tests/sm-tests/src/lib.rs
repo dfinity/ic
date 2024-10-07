@@ -2622,12 +2622,7 @@ pub fn test_upgrade_serialization(
     const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 8 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
-            &(valid_transactions_strategy(
-                minter,
-                FEE,
-                TOTAL_TX_COUNT,
-                now,
-            ).no_shrink(),),
+            &(valid_transactions_strategy(minter, FEE, TOTAL_TX_COUNT, now).no_shrink(),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
