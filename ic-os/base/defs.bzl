@@ -5,8 +5,8 @@ CUSTOM_PACKAGE_DEFS_ = {
     "node_exporter": {
         "src": "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
         "install": """
-            mkdir -p $$container_dir/etc/node_exporter
-            tar --strip-components=1 -C $$container_dir/usr/local/bin/ \
+            mkdir -p $$CONTAINER_DIR/etc/node_exporter
+            tar --strip-components=1 -C $$CONTAINER_DIR/usr/local/bin/ \
               -zvxf $(location @node_exporter-1.8.1.linux-amd64.tar.gz//file) \
               node_exporter-1.8.1.linux-amd64/node_exporter
         """,
@@ -14,9 +14,9 @@ CUSTOM_PACKAGE_DEFS_ = {
     "filebeat": {
         "src": "@filebeat-oss-8.9.1-linux-x86_64.tar.gz//file",
         "install": """
-            mkdir -p $$container_dir/var/lib/filebeat \
-                     $$container_dir/var/log/filebeat
-            tar --strip-components=1 -C $$container_dir/usr/local/bin/ \
+            mkdir -p $$CONTAINER_DIR/var/lib/filebeat \
+                     $$CONTAINER_DIR/var/log/filebeat
+            tar --strip-components=1 -C $$CONTAINER_DIR/usr/local/bin/ \
                 -zvxf $(location @filebeat-oss-8.9.1-linux-x86_64.tar.gz//file) \
                 filebeat-8.9.1-linux-x86_64/filebeat
         """,
@@ -33,29 +33,29 @@ def icos_container_filesystem(name, apt_packages, component_files, build_args, c
             "//ic-os/components:networking/resolv.conf",
             "@ubuntu-base-24.04.1-base-amd64.tar.gz//file",
         ] + _custom_package_srcs(custom_packages),
-        tools = ["//toolchains/sysimage:ic_chroot"],
+        tools = ["//toolchains/sysimage:run_in_namespace"],
         cmd = """
             set -euo pipefail
 
             export SOURCE_DATE_EPOCH=0
 
             # Create container directory
-            container_dir=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
-            trap 'rm -rf $$container_dir' INT TERM EXIT
+            CONTAINER_DIR=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
+            trap 'rm -rf $$CONTAINER_DIR' INT TERM EXIT
 
             # Untar the Ubuntu base image
-            $(location //toolchains/sysimage:ic_chroot) -o $$container_dir /bin/bash -x << EOF
-                tar -xzf $(location @ubuntu-base-24.04.1-base-amd64.tar.gz//file) -C $$container_dir
+            $(location //toolchains/sysimage:run_in_namespace) /bin/bash -x << EOF
+                tar -xzf $(location @ubuntu-base-24.04.1-base-amd64.tar.gz//file) -C $$CONTAINER_DIR
 EOF
 
             # Set up networking
-            cp $(location //ic-os/components:networking/resolv.conf) $$container_dir/etc/resolv.conf
+            cp $(location //ic-os/components:networking/resolv.conf) $$CONTAINER_DIR/etc/resolv.conf
 
             {install_custom_packages_commands}
 
             export APT_SNAPSHOT=$$(<$(location //ic-os/base:apt_snapshot.txt))
             # Run setup from within the newly built environment
-            $(location //toolchains/sysimage:ic_chroot) $$container_dir /bin/bash -x << 'EOF'
+            $(location //toolchains/sysimage:run_in_namespace) --mount --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
                 set -euo pipefail
 
                 # Set timezone
@@ -71,14 +71,13 @@ EOF
 EOF
 
             # Export root
-            $(location //toolchains/sysimage:ic_chroot) -n $$container_dir /bin/bash -x << 'EOF'
-                tar  \
-                  --exclude=out.tar \
+            $(location //toolchains/sysimage:run_in_namespace) --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
+                tar -c \
                   --sort=name --mtime='UTC 1970-01-01' --sparse --hole-detection=raw \
-                  -cf out.tar /
+                  -f out.tar *
 EOF
 
-            mv $$container_dir/out.tar $@
+            mv $$CONTAINER_DIR/out.tar $@
         """.format(
             apt_packages = " ".join(apt_packages),
             install_custom_packages_commands = _install_custom_packages_commands(custom_packages),
@@ -92,44 +91,44 @@ EOF
             setup_script,
             "//ic-os/base:build_utils.sh",
         ] + component_files.keys(),
-        tools = ["//toolchains/sysimage:ic_chroot"],
+        tools = ["//toolchains/sysimage:run_in_namespace"],
         outs = [name],
         cmd = """
             # Create container directory
-            container_dir=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
-            trap 'rm -rf $$container_dir' INT TERM EXIT
+            export CONTAINER_DIR=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
+            trap 'rm -rf $$CONTAINER_DIR' INT TERM EXIT
 
-            # We put all shared files required in the setup into icos_build_dir
-            icos_build_dir="$$container_dir/icos_build"
-            mkdir $$icos_build_dir
-            cp -a $(location //ic-os/base:build_utils.sh) $$icos_build_dir
-            cp -a $(location {setup_script}) $$icos_build_dir/setup.sh
+            # We put all shared files required in the setup into ICOS_BUILD_DIR
+            export ICOS_BUILD_DIR="$$CONTAINER_DIR/icos_build"
+            mkdir $$ICOS_BUILD_DIR
+            cp -a $(location //ic-os/base:build_utils.sh) $$ICOS_BUILD_DIR
+            cp -a $(location {setup_script}) $$ICOS_BUILD_DIR/setup.sh
 
             # Untar the base image (see definition in the previous rule)
-            $(location //toolchains/sysimage:ic_chroot) -o $$container_dir /bin/bash -x << EOF
-                tar -xaf $(location {base_image_name}) -C $$container_dir
+            $(location //toolchains/sysimage:run_in_namespace) /bin/bash -x << EOF
+                tar -xaf $(location {base_image_name}) -C $$CONTAINER_DIR
 EOF
 
             # Copy components to icos build components directory
-            icos_components_dir="$$icos_build_dir/components"
+            icos_components_dir="$$ICOS_BUILD_DIR/components"
             mkdir $$icos_components_dir
             {copy_components_commands}
 
             export {build_args} > /dev/null
 
             # Run setup script in chroot
-            $(location //toolchains/sysimage:ic_chroot) $$container_dir /bin/bash /icos_build/setup.sh
+            $(location //toolchains/sysimage:run_in_namespace) --mount --chroot $$CONTAINER_DIR /bin/bash /icos_build/setup.sh
 
             # Export root
-            $(location //toolchains/sysimage:ic_chroot) -n $$container_dir /bin/bash -x << 'EOF'
-                tar  \
-                    --exclude=var/lib/dbus/machine-id --exclude=etc/nvme/hostnqn --exclude=etc/nvme/hostid \
-                    --exclude=icos_build --exclude=out.tar \
+            $(location //toolchains/sysimage:run_in_namespace) --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
+                tar -c \
+                    --exclude=var/* --exclude=etc/nvme/hostnqn --exclude=etc/nvme/hostid \
+                    --exclude=icos_build \
                     --sort=name --mtime='UTC 1970-01-01' --sparse --hole-detection=raw \
-                    -cf out.tar *
+                    -f out.tar *
 EOF
 
-            mv $$container_dir/out.tar $@
+            mv $$CONTAINER_DIR/out.tar $@
           """.format(
             copy_components_commands = _copy_components_commands(component_files),
             base_image_name = base_image_name,
