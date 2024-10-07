@@ -22,15 +22,14 @@ pub enum Commands {
         /// systemd-networkd output directory
         output_directory: String,
     },
-    GenerateIpv6Address {
-        #[arg(short, long, default_value = "HostOS")]
-        node_type: String,
-    },
     GenerateMacAddress {
         #[arg(short, long, default_value = "HostOS")]
         node_type: String,
     },
-    FetchMacAddress {},
+    GenerateIpv6Address {
+        #[arg(short, long, default_value = "HostOS")]
+        node_type: String,
+    },
 }
 
 #[derive(Parser)]
@@ -169,28 +168,6 @@ pub fn main() -> Result<()> {
 
             let generated_mac = FormattedMacAddress::from(&generated_mac);
             println!("{}", generated_mac);
-            Ok(())
-        }
-        Some(Commands::FetchMacAddress {}) => {
-            let deployment_settings = get_deployment_settings(Path::new(&opts.deployment_file))
-                .context(format!(
-                    "Failed to get deployment settings for file: {}",
-                    &opts.deployment_file
-                ))?;
-            eprintln!("Deployment config: {:?}", deployment_settings);
-
-            let mgmt_mac = match deployment_settings.deployment.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
-            println!("{}", mgmt_mac);
             Ok(())
         }
         None => Err(anyhow!(

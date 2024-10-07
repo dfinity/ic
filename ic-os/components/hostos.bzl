@@ -15,6 +15,7 @@ component_files = {
     Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
     Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
     Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
+    Label("hostos-scripts/misc/fetch-mgmt-mac.sh"): "/opt/ic/bin/fetch-mgmt-mac.sh",
     Label("hostos-scripts/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
