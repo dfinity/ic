@@ -416,7 +416,7 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
         .await
         .unwrap();
 
-    assert_eq!(res.status(), 403);
+    assert_eq!(res.status(), 400);
 
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
@@ -449,5 +449,5 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
         .await
         .unwrap();
 
-    assert_eq!(res.status(), 403);
+    assert_eq!(res.status(), 400);
 }
