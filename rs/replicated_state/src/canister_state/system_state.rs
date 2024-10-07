@@ -431,7 +431,7 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!(
-                        "Unexpected on task type in the in TaskQueue::paused_or_aborted_task in canister {:?} .", id
+                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .", paused_or_aborted_task, id
                     )
                 }
             }
@@ -457,8 +457,7 @@ impl TaskQueue {
                 | ExecutionTask::PausedExecution { .. }
                 | ExecutionTask::PausedInstallCode(_) => {
                     unreachable!(
-                        "Unexpected on task type in the TaskQueue::queue, after a round in canister {:?}",
-                        id
+                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}", task, id
                     );
                 }
             }
