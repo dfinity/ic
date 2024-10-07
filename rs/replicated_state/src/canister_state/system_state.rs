@@ -301,8 +301,8 @@ impl TaskQueue {
     ) -> Self {
         let mut mut_queue = queue;
 
-        /// Extraction of paused_or_aborted_task from queue will be removed in the follow-up EXC-1752 when
-        /// we introduce CanisterStateBits version of TaskQueue, so the conversion will be implicit.
+        // Extraction of paused_or_aborted_task from queue will be removed in the follow-up EXC-1752 when
+        // we introduce CanisterStateBits version of TaskQueue, so the conversion will be implicit.
         let paused_or_aborted_task = match mut_queue.front() {
             Some(ExecutionTask::AbortedInstallCode { .. })
             | Some(ExecutionTask::PausedExecution { .. })
