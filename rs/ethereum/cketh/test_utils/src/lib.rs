@@ -119,6 +119,7 @@ impl CkEthSetup {
                 ..CanisterSettings::default()
             }),
         );
+        env.add_cycles(ledger_id, u128::MAX);
 
         env.install_canister(
             ledger_id,
