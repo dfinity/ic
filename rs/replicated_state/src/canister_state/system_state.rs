@@ -499,22 +499,36 @@ impl TaskQueue {
     /// Replace `PausedExecution` or `PausedInstallCode` with corresponding
     /// `AbortedExecution` or `AbortedInstallCode` respectively.
     pub fn replace_paused_with_aborted_task(&mut self, aborted_task: ExecutionTask) {
-        debug_assert!(match &aborted_task {
-            ExecutionTask::AbortedExecution { .. } => matches!(
-                self.paused_or_aborted_task,
-                Some(ExecutionTask::PausedExecution { .. })
+        match &aborted_task {
+            ExecutionTask::AbortedExecution { .. } => assert!(
+                matches!(
+                    self.paused_or_aborted_task,
+                    Some(ExecutionTask::PausedExecution { .. })
+                ),
+                "Received aborted task {:?} is not compatible with paused task {:?}.",
+                aborted_task,
+                self.paused_or_aborted_task
             ),
-            ExecutionTask::AbortedInstallCode { .. } => matches!(
-                self.paused_or_aborted_task,
-                Some(ExecutionTask::PausedInstallCode(_))
+            ExecutionTask::AbortedInstallCode { .. } => assert!(
+                matches!(
+                    self.paused_or_aborted_task,
+                    Some(ExecutionTask::PausedInstallCode(_))
+                ),
+                "Received aborted task {:?} is not compatible with paused task {:?}.",
+                aborted_task,
+                self.paused_or_aborted_task
             ),
             ExecutionTask::Heartbeat
             | ExecutionTask::GlobalTimer
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_) =>
-                unreachable!("Unexpected task type of the aborted task."),
-        });
+            | ExecutionTask::PausedInstallCode(_) => {
+                unreachable!(
+                    "Unexpected task type {:?} of the aborted task.",
+                    aborted_task
+                )
+            }
+        };
 
         self.paused_or_aborted_task = Some(aborted_task);
     }
@@ -2520,11 +2534,20 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::canister_state::system_state::OnLowWasmMemoryHookStatus;
+    use std::sync::Arc;
+
+    use crate::{
+        canister_state::system_state::OnLowWasmMemoryHookStatus,
+        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
+    };
 
     use super::{PausedExecutionId, TaskQueue};
 
-    use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
+    use ic_test_utilities_types::messages::IngressBuilder;
+    use ic_types::{
+        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
+        Cycles,
+    };
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
         let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
@@ -2562,28 +2585,28 @@ mod tests {
     #[should_panic(expected = "Unexpected task type")]
     fn test_replace_paused_with_aborted_task_heartbeat() {
         let mut task_queue = TaskQueue::default();
-        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::Heartbeat);
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::Heartbeat);
     }
 
     #[test]
     #[should_panic(expected = "Unexpected task type")]
     fn test_replace_paused_with_aborted_task_global_timer() {
         let mut task_queue = TaskQueue::default();
-        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::GlobalTimer);
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::GlobalTimer);
     }
 
     #[test]
     #[should_panic(expected = "Unexpected task type")]
     fn test_replace_paused_with_aborted_task_on_low_wasm_memory() {
         let mut task_queue = TaskQueue::default();
-        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::OnLowWasmMemory);
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::OnLowWasmMemory);
     }
 
     #[test]
     #[should_panic(expected = "Unexpected task type")]
     fn test_replace_paused_with_aborted_task_on_paused_execution() {
         let mut task_queue = TaskQueue::default();
-        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::PausedExecution {
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::PausedExecution {
             id: PausedExecutionId(0),
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
         });
@@ -2593,8 +2616,40 @@ mod tests {
     #[should_panic(expected = "Unexpected task type")]
     fn test_replace_paused_with_aborted_task_on_paused_install_code() {
         let mut task_queue = TaskQueue::default();
-        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::PausedInstallCode(
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::PausedInstallCode(
             PausedExecutionId(0),
         ));
+    }
+
+    #[test]
+    #[should_panic(expected = "is not compatible with paused task")]
+    fn test_replace_paused_with_aborted_task_on_paused_install_code_aborted_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "is not compatible with paused task")]
+    fn test_replace_paused_with_aborted_task_on_paused_execution_aborted_install_code() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
+
+        let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
+
+        let aborted_install_code = ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Ingress(Arc::clone(&ingress)),
+            prepaid_execution_cycles: Cycles::new(1),
+            call_id: InstallCodeCallId::new(0),
+        };
+
+        task_queue.replace_paused_with_aborted_task(aborted_install_code);
     }
 }
