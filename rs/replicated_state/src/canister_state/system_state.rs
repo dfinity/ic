@@ -510,7 +510,7 @@ impl TaskQueue {
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) =>
-                unreachable!("Unexpected on task type of the aborted task."),
+                unreachable!("Unexpected task type of the aborted task."),
         });
 
         self.paused_or_aborted_task = Some(aborted_task);
@@ -2518,6 +2518,10 @@ pub mod testing {
 #[cfg(test)]
 mod tests {
     use crate::canister_state::system_state::OnLowWasmMemoryHookStatus;
+
+    use super::{PausedExecutionId, TaskQueue};
+
+    use ic_types::messages::{CanisterMessageOrTask, CanisterTask};
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
         let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
@@ -2549,5 +2553,45 @@ mod tests {
         let mut status = OnLowWasmMemoryHookStatus::Executed;
         status.update(true);
         assert_eq!(status, OnLowWasmMemoryHookStatus::Executed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_heartbeat() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::Heartbeat);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_global_timer() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::GlobalTimer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_low_wasm_memory() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::OnLowWasmMemory);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_paused_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_paused_install_code() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(crate::ExecutionTask::PausedInstallCode(
+            PausedExecutionId(0),
+        ));
     }
 }
