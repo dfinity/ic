@@ -196,10 +196,12 @@ pub fn propose_to_set_network_economics_and_wait(
     nns::governance::propose_and_wait(pocket_ic, proposal)
 }
 
+pub type DeployedSnsStartingInfo = BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>;
+
 pub fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
     with_mainnet_ledger_wasms: bool,
-) -> Result<BTreeMap<SnsCanisterType, (ProposalInfo, SnsWasm)>, String> {
+) -> Result<DeployedSnsStartingInfo, String> {
     let (root_wasm, governance_wasm, swap_wasm, index_wasm, ledger_wasm, archive_wasm) =
         if with_mainnet_ledger_wasms {
             (
@@ -1547,6 +1549,30 @@ pub mod sns {
             sns_pb::NeuronId {
                 id: subaccount.to_vec(),
             }
+        }
+
+        pub fn get_upgrade_journal(
+            pocket_ic: &PocketIc,
+            canister_id: PrincipalId,
+        ) -> sns_pb::GetUpgradeJournalResponse {
+            let result = pocket_ic
+                .query_call(
+                    canister_id.into(),
+                    Principal::from(PrincipalId::new_anonymous()),
+                    "get_upgrade_journal",
+                    Encode!(&sns_pb::GetUpgradeJournalRequest {}).unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(reply) => reply,
+                WasmResult::Reject(reject) => {
+                    panic!(
+                        "get_upgrade_journal rejected by SNS governance: {:#?}",
+                        reject
+                    )
+                }
+            };
+            Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
         }
     }
 
