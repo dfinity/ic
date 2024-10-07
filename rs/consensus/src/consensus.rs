@@ -602,7 +602,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     }
 
     fn refresh_period(&self) -> Duration {
-        Duration::from_secs(3)
+        Duration::from_secs(1)
     }
 }
 
