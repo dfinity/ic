@@ -3216,8 +3216,8 @@ impl ExecutionEnvironment {
         if !canister.system_state.task_queue.is_empty() {
             if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
                 self.metrics.executions_aborted.inc();
-                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
-                // we can abort all executions on it without `paused_tasks`.
+                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
+                // paused execution on the canister without requesting ID from TaskQueue.
                 let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
 
                 canister

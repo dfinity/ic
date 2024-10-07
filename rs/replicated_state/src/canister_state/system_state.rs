@@ -427,7 +427,7 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!(
-                        "Unexpected on task type in the in TaskQueue::paused_or_aborted_task."
+                        "Unexpected on task type in the in TaskQueue::paused_or_aborted_task in canister {:?} .", id
                     )
                 }
             }
@@ -453,7 +453,7 @@ impl TaskQueue {
                 | ExecutionTask::PausedExecution { .. }
                 | ExecutionTask::PausedInstallCode(_) => {
                     unreachable!(
-                        "Unexpected on task type in the queue part of struct TaskQueue, after a round in canister {:?}",
+                        "Unexpected on task type in the TaskQueue::queue, after a round in canister {:?}",
                         id
                     );
                 }
@@ -475,22 +475,19 @@ impl TaskQueue {
 
     /// Returns `PausedExecution` or `PausedInstallCode` task.
     pub fn get_paused_task(&self) -> Option<&ExecutionTask> {
-        if let Some(task) = &self.paused_or_aborted_task {
-            match task {
-                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                    Some(task)
-                }
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. } => None,
-                ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => unreachable!(
-                    "Unexpected on task type in the in TaskQueue::paused_or_aborted_task."
-                ),
+        self.paused_or_aborted_task.as_ref().map(|task| match task {
+            ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                Some(task)
             }
-        } else {
-            None
-        }
+            ExecutionTask::AbortedExecution { .. } | ExecutionTask::AbortedInstallCode { .. } => {
+                None
+            }
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory => {
+                unreachable!("Unexpected on task type in the in TaskQueue::paused_or_aborted_task.")
+            }
+        })
     }
 
     /// Replace `PausedExecution` or `PausedInstallCode` with corresponding
