@@ -9681,6 +9681,7 @@ dependencies = [
  "candid",
  "canister-test",
  "cycles-minting-canister",
+ "futures",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types",
@@ -9733,6 +9734,7 @@ dependencies = [
  "rust_decimal_macros",
  "rustc-hash 1.1.0",
  "serde",
+ "tokio",
  "xrc-mock",
 ]
 
