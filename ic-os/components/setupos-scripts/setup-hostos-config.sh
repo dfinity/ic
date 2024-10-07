@@ -7,6 +7,8 @@ SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 CONFIG_DIR="/var/ic/config"
 
+source /opt/ic/bin/functions.sh
+
 function mount_config_partition() {
     echo "* Mounting hostOS config partition..."
 
@@ -82,7 +84,6 @@ function unmount_config_partition() {
 
 # Establish run order
 main() {
-    source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
     mount_config_partition
     copy_config_files

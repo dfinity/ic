@@ -5,10 +5,6 @@ The Boundary Node has a number of specific components:
 - `ic-gateway` is used to proxy HTTP calls to `ic-boundary` using IC protocol
 - `ic-boundary` forwards the IC requests to replicas
 
-== Prober
-- Creates canisters that are probed
-- Performs dynamic probes and export the results to Prometheus
-
 == Socks proxy
 - A SOCKS proxy will be running on port 1443 and 1080 on the boundary nodes,
  only accessible from IPv6 netblock addresses.

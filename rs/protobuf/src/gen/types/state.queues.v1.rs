@@ -177,9 +177,13 @@ pub mod message_pool {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueue {
-    /// FIFO queue of references into the pool and reject response markers.
+    /// \[Deprecated\] FIFO queue of references into the pool and reject response
+    /// markers.
     #[prost(message, repeated, tag = "1")]
-    pub queue: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
+    pub deprecated_queue: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
+    /// FIFO queue of references into the pool or the compact reject response maps.
+    #[prost(uint64, repeated, tag = "4")]
+    pub queue: ::prost::alloc::vec::Vec<u64>,
     /// Maximum number of requests or responses that can be enqueued at any one time.
     #[prost(uint64, tag = "2")]
     pub capacity: u64,
@@ -212,6 +216,8 @@ pub struct CanisterQueues {
     pub canister_queues: ::prost::alloc::vec::Vec<canister_queues::CanisterQueuePair>,
     #[prost(message, optional, tag = "10")]
     pub pool: ::core::option::Option<MessagePool>,
+    #[prost(message, repeated, tag = "13")]
+    pub expired_callbacks: ::prost::alloc::vec::Vec<canister_queues::CallbackReference>,
     #[prost(message, repeated, tag = "12")]
     pub shed_responses: ::prost::alloc::vec::Vec<canister_queues::CallbackReference>,
     #[prost(enumeration = "canister_queues::NextInputQueue", tag = "6")]

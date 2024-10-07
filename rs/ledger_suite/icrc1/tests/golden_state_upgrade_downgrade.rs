@@ -10,11 +10,13 @@ use ic_icrc1_ledger_sm_tests::{
     send_transfer_from,
 };
 use ic_nns_test_utils::governance::bump_gzip_timestamp;
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use lazy_static::lazy_static;
 use std::str::FromStr;
 use std::time::{Instant, UNIX_EPOCH};
 
@@ -33,37 +35,113 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 #[cfg(feature = "u256-tokens")]
 type Tokens = ic_icrc1_tokens_u256::U256;
 
-struct CanisterConfig {
-    canister_id: &'static str,
+#[cfg(not(feature = "u256-tokens"))]
+lazy_static! {
+    pub static ref MAINNET_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+}
+
+#[cfg(feature = "u256-tokens")]
+lazy_static! {
+    pub static ref MAINNET_U256_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MAINNET_U64_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
+        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+    ));
+    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+}
+
+struct LedgerSuiteConfig {
+    ledger_id: &'static str,
     canister_name: &'static str,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     extended_testing: bool,
+    mainnet_wasm: &'static Wasm,
+    master_wasm: &'static Wasm,
 }
 
-impl CanisterConfig {
-    #[cfg(feature = "u256-tokens")]
-    fn new(canister_id_and_name: (&'static str, &'static str)) -> Self {
+impl LedgerSuiteConfig {
+    fn new(
+        canister_id_and_name: (&'static str, &'static str),
+        mainnet_wasm: &'static Wasm,
+        master_wasm: &'static Wasm,
+    ) -> Self {
         let (canister_id, canister_name) = canister_id_and_name;
         Self {
-            canister_id,
+            ledger_id: canister_id,
             canister_name,
             burns_without_spender: None,
             extended_testing: false,
+            mainnet_wasm,
+            master_wasm,
         }
     }
 
     fn new_with_params(
         canister_id_and_name: (&'static str, &'static str),
+        mainnet_wasm: &'static Wasm,
+        master_wasm: &'static Wasm,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         extended_testing: bool,
     ) -> Self {
-        let (canister_id, canister_name) = canister_id_and_name;
         Self {
-            canister_id,
-            canister_name,
             burns_without_spender,
             extended_testing,
+            ..Self::new(canister_id_and_name, mainnet_wasm, master_wasm)
         }
+    }
+
+    fn perform_upgrade_downgrade_testing(&self, state_machine: &StateMachine) {
+        println!(
+            "Processing {} ledger, id {}",
+            self.ledger_id, self.canister_name
+        );
+        let ledger_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let mut previous_ledger_state = None;
+        if self.extended_testing {
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
+                state_machine,
+                ledger_canister_id,
+                self.burns_without_spender.clone(),
+                None,
+            ));
+        }
+        self.upgrade_canister(state_machine, self.master_wasm.clone());
+        // Upgrade again with bumped wasm timestamp to test pre_upgrade
+        self.upgrade_canister(state_machine, bump_gzip_timestamp(self.master_wasm));
+        if self.extended_testing {
+            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
+                state_machine,
+                ledger_canister_id,
+                self.burns_without_spender.clone(),
+                previous_ledger_state,
+            ));
+        }
+        // Downgrade back to the mainnet ledger version
+        self.upgrade_canister(state_machine, self.mainnet_wasm.clone());
+        if self.extended_testing {
+            let _ = LedgerState::verify_state_and_generate_transactions(
+                state_machine,
+                ledger_canister_id,
+                self.burns_without_spender.clone(),
+                previous_ledger_state,
+            );
+        }
+    }
+
+    fn upgrade_canister(&self, state_machine: &StateMachine, wasm: Wasm) {
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
+        let args = Encode!(&args).unwrap();
+        state_machine
+            .upgrade_canister(canister_id, wasm.bytes(), args)
+            .expect("should successfully upgrade ledger canister");
+        println!("Upgraded {} '{}'", self.canister_name, self.ledger_id);
     }
 }
 
@@ -175,15 +253,6 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
     const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
 
-    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
-    let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
-        );
-
     let ck_btc_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("mqygn-kiaaa-aaaar-qaadq-cai")
             .unwrap()
@@ -197,16 +266,16 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         ],
     };
 
-    perform_upgrade_downgrade_testing(
-        &state_machine,
-        vec![CanisterConfig::new_with_params(
-            (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-            Some(burns_without_spender),
-            true,
-        )],
-        ledger_wasm,
-        mainnet_ledger_wasm,
-    );
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+
+    LedgerSuiteConfig::new_with_params(
+        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
+        &MAINNET_WASM,
+        &MASTER_WASM,
+        Some(burns_without_spender),
+        true,
+    )
+    .perform_upgrade_downgrade_testing(&state_machine);
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -230,9 +299,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     const CK_WSTETH_LEDGER: (&str, &str) = ("j2tuh-yqaaa-aaaar-qahcq-cai", "ckWSTETH");
     const CK_XAUT_LEDGER: (&str, &str) = ("nza5v-qaaaa-aaaar-qahzq-cai", "ckXAUT");
 
-    let mainnet_ledger_wasm_u256 = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
             .unwrap()
@@ -247,37 +313,42 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
         ],
     };
 
-    let ledger_wasm_u256 = Wasm::from_bytes(ledger_wasm());
+    let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
+        CK_ETH_LEDGER,
+        &MAINNET_U256_WASM,
+        &MASTER_WASM,
+        Some(ck_eth_burns_without_spender),
+        true,
+    )];
+    for canister_id_and_name in vec![
+        CK_SEPOLIA_LINK_LEDGER,
+        CK_SEPOLIA_LINK_LEDGER,
+        CK_SEPOLIA_PEPE_LEDGER,
+        CK_SEPOLIA_USDC_LEDGER,
+        CK_EURC_LEDGER,
+        CK_USDC_LEDGER,
+        CK_LINK_LEDGER,
+        CK_OCT_LEDGER,
+        CK_PEPE_LEDGER,
+        CK_SHIB_LEDGER,
+        CK_UNI_LEDGER,
+        CK_USDT_LEDGER,
+        CK_WBTC_LEDGER,
+        CK_WSTETH_LEDGER,
+        CK_XAUT_LEDGER,
+    ] {
+        canister_configs.push(LedgerSuiteConfig::new(
+            canister_id_and_name,
+            &MAINNET_U256_WASM,
+            &MASTER_WASM,
+        ));
+    }
 
-    let canister_configs = vec![
-        CanisterConfig::new_with_params(CK_ETH_LEDGER, Some(ck_eth_burns_without_spender), true),
-        CanisterConfig::new(CK_SEPOLIA_LINK_LEDGER),
-        CanisterConfig::new(CK_SEPOLIA_LINK_LEDGER),
-        CanisterConfig::new(CK_SEPOLIA_PEPE_LEDGER),
-        CanisterConfig::new(CK_SEPOLIA_USDC_LEDGER),
-        CanisterConfig::new(CK_EURC_LEDGER),
-        CanisterConfig::new(CK_USDC_LEDGER),
-        CanisterConfig::new(CK_LINK_LEDGER),
-        CanisterConfig::new(CK_OCT_LEDGER),
-        CanisterConfig::new(CK_PEPE_LEDGER),
-        CanisterConfig::new(CK_SHIB_LEDGER),
-        CanisterConfig::new(CK_UNI_LEDGER),
-        CanisterConfig::new(CK_USDT_LEDGER),
-        CanisterConfig::new(CK_WBTC_LEDGER),
-        CanisterConfig::new(CK_WSTETH_LEDGER),
-        CanisterConfig::new(CK_XAUT_LEDGER),
-    ];
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic(
-        );
-
-    perform_upgrade_downgrade_testing(
-        &state_machine,
-        canister_configs,
-        ledger_wasm_u256,
-        mainnet_ledger_wasm_u256,
-    );
+    for canister_config in canister_configs {
+        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+    }
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -315,52 +386,56 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     const YRAL: (&str, &str) = ("6rdgd-kyaaa-aaaaq-aaavq-cai", "YRAL");
     const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku DAO");
 
-    let ledger_wasm = Wasm::from_bytes(ledger_wasm());
-    let mainnet_ledger_wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-
-    let canister_configs = vec![
-        CanisterConfig::new_with_params(OPENCHAT, None, true),
-        CanisterConfig::new(BOOMDAO),
-        CanisterConfig::new(CATALYZE),
-        CanisterConfig::new(CYCLES_TRANSFER_STATION),
-        CanisterConfig::new(DECIDEAI),
-        CanisterConfig::new(DOGMI),
-        CanisterConfig::new(DRAGGINZ),
-        CanisterConfig::new(ELNAAI),
-        CanisterConfig::new(ESTATEDAO),
-        CanisterConfig::new(GOLDDAO),
-        CanisterConfig::new(ICGHOST),
-        CanisterConfig::new(ICLIGHTHOUSE),
-        CanisterConfig::new(ICPANDA),
-        CanisterConfig::new(ICPCC),
-        CanisterConfig::new(ICPSWAP),
-        CanisterConfig::new(ICVC),
-        CanisterConfig::new(KINIC),
-        CanisterConfig::new(MOTOKO),
-        CanisterConfig::new(NEUTRINITE),
-        CanisterConfig::new(NUANCE),
-        CanisterConfig::new(OPENFPL),
-        CanisterConfig::new(ORIGYN),
-        CanisterConfig::new(SEERS),
-        CanisterConfig::new(SNEED),
-        CanisterConfig::new(SONIC),
-        CanisterConfig::new(TRAX),
-        CanisterConfig::new(WATERNEURON),
-        CanisterConfig::new(YRAL),
-        CanisterConfig::new(YUKU),
-    ];
+    let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
+        OPENCHAT,
+        &MAINNET_U64_WASM,
+        &MASTER_WASM,
+        None,
+        true,
+    )];
+    for canister_id_and_name in vec![
+        BOOMDAO,
+        CATALYZE,
+        CYCLES_TRANSFER_STATION,
+        DECIDEAI,
+        DOGMI,
+        DRAGGINZ,
+        ELNAAI,
+        ESTATEDAO,
+        GOLDDAO,
+        ICGHOST,
+        ICLIGHTHOUSE,
+        ICPANDA,
+        ICPCC,
+        ICPSWAP,
+        ICVC,
+        KINIC,
+        MOTOKO,
+        NEUTRINITE,
+        NUANCE,
+        OPENFPL,
+        ORIGYN,
+        SEERS,
+        SNEED,
+        SONIC,
+        TRAX,
+        WATERNEURON,
+        YRAL,
+        YUKU,
+    ] {
+        canister_configs.push(LedgerSuiteConfig::new(
+            canister_id_and_name,
+            &MAINNET_U64_WASM,
+            &MASTER_WASM,
+        ));
+    }
 
     let state_machine =
         ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
-    perform_upgrade_downgrade_testing(
-        &state_machine,
-        canister_configs,
-        ledger_wasm,
-        mainnet_ledger_wasm,
-    );
+    for canister_config in canister_configs {
+        canister_config.perform_upgrade_downgrade_testing(&state_machine);
+    }
 }
 
 fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) {
@@ -557,87 +632,4 @@ fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) 
         NUM_TRANSACTIONS_PER_TYPE * 5,
         start.elapsed()
     );
-}
-
-fn perform_upgrade_downgrade_testing(
-    state_machine: &StateMachine,
-    canister_configs: Vec<CanisterConfig>,
-    master_canister_wasm: Wasm,
-    mainnet_canister_wasm: Wasm,
-) {
-    for canister_config in canister_configs {
-        let CanisterConfig {
-            canister_id: canister_id_str,
-            canister_name,
-            burns_without_spender,
-            extended_testing,
-        } = canister_config;
-        println!(
-            "Processing {} ledger, id {}",
-            canister_id_str, canister_name
-        );
-        let canister_id =
-            CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-        let mut previous_ledger_state = None;
-        if extended_testing {
-            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                None,
-            ));
-        }
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            master_canister_wasm.clone(),
-        );
-        // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            bump_gzip_timestamp(&master_canister_wasm),
-        );
-        if extended_testing {
-            previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                previous_ledger_state,
-            ));
-        }
-        // Downgrade back to the mainnet ledger version
-        upgrade_canister(
-            state_machine,
-            (canister_id_str, canister_name),
-            mainnet_canister_wasm.clone(),
-        );
-        if extended_testing {
-            let _ = LedgerState::verify_state_and_generate_transactions(
-                state_machine,
-                canister_id,
-                burns_without_spender.clone(),
-                previous_ledger_state,
-            );
-        }
-    }
-}
-
-fn upgrade_canister(
-    state_machine: &StateMachine,
-    (canister_id_str, canister_name): (&str, &str),
-    ledger_wasm: Wasm,
-) {
-    let canister_id =
-        CanisterId::unchecked_from_principal(PrincipalId::from_str(canister_id_str).unwrap());
-    upgrade_ledger(state_machine, ledger_wasm, canister_id);
-    println!("Upgraded {} '{}'", canister_name, canister_id_str);
-}
-
-fn upgrade_ledger(state_machine: &StateMachine, wasm: Wasm, canister_id: CanisterId) {
-    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
-    let args = Encode!(&args).unwrap();
-    state_machine
-        .upgrade_canister(canister_id, wasm.bytes(), args)
-        .expect("should successfully upgrade ledger canister");
 }

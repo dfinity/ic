@@ -28,3 +28,10 @@ impl GovernanceCanister {
             .await
     }
 }
+
+impl GovernanceCanister {
+    pub fn new(canister_id: impl Into<PrincipalId>) -> Self {
+        let canister_id = canister_id.into();
+        Self { canister_id }
+    }
+}
