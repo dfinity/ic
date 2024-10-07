@@ -16439,7 +16439,7 @@ dependencies = [
  "hex",
  "ic-agent",
  "ic-base-types",
- "ic-cdk 0.13.5",
+ "ic-cdk 0.16.0",
  "ic-transport-types",
  "ic-universal-canister",
  "icp-ledger",
