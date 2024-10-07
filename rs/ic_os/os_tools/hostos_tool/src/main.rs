@@ -4,10 +4,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 
 use config::types::{HostOSConfig, Ipv6Config};
-use config::{
-    deserialize_config, DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH,
-    DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH,
-};
+use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
 use network::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
@@ -35,13 +32,6 @@ pub enum Commands {
 
 #[derive(Parser)]
 struct HostOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH.to_string(), value_name = "FILE")]
-    config: String,
-
-    #[arg(short, long, default_value_t = DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH.to_string(), value_name = "FILE")]
-    /// deployment.json file path
-    deployment_file: String,
-
     #[command(subcommand)]
     command: Option<Commands>,
 }
