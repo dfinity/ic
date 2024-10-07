@@ -242,7 +242,7 @@ impl IngressSelector for IngressManager {
         // serialized `IngressPayload`, we need to check the size of the latter.
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
-        while !payload.is_empty() && payload.count_bytes() < byte_limit.get() as usize {
+        while !payload.is_empty() && payload.count_bytes() > byte_limit.get() as usize {
             warn!(
                 self.log,
                 "Serialized form of ingress (was {} bytes) did not pass \
