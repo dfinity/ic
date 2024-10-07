@@ -4717,7 +4717,7 @@ impl Governance {
 
         // The following code must remain after the async call.
         if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            dfn_core::api::print(format!("setting time to now: {:?}", self.env.now()));
+            dfn_core::api::print(format!("setting time to now (1): {:?}", self.env.now()));
             cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
             cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
         }
@@ -4726,7 +4726,7 @@ impl Governance {
         // and that requires cached_upgrade_steps != None.
         // However, we handle it just in case.
         else {
-            dfn_core::api::print(format!("setting time to now: {:?}", self.env.now()));
+            dfn_core::api::print(format!("setting time to now (2): {:?}", self.env.now()));
             self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
                 response_timestamp_seconds: Some(self.env.now()),
                 upgrade_steps: Some(upgrade_steps),

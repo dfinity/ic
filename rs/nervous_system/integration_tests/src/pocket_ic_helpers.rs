@@ -635,8 +635,8 @@ pub fn upgrade_nns_canister_to_tip_of_master_or_panic(
     // We need to wait for a few blocks before the effect takes place. Successful proposals do not
     // yet imply that the upgrade took place.
     for _ in 0..10 {
-        pocket_ic.tick();
         pocket_ic.advance_time(Duration::from_secs(1));
+        pocket_ic.tick();
     }
 
     // Check 3: WASM module hash must change.
@@ -775,8 +775,8 @@ pub mod nns {
             // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
             let mut last_proposal_info = None;
             for _attempt_count in 1..=100 {
-                pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
+                pocket_ic.tick();
                 let proposal_info_result =
                     nns_get_proposal_info(pocket_ic, proposal_id, PrincipalId::new_anonymous());
 
@@ -1141,8 +1141,8 @@ pub mod sns {
         );
 
         for _ in 0..10 {
-            pocket_ic.tick();
             pocket_ic.advance_time(Duration::from_secs(10));
+            pocket_ic.tick();
         }
 
         let post_upgrade_running_version =
@@ -1174,8 +1174,8 @@ pub mod sns {
             .expect("Proposal did not execute successfully");
 
             for _ in 0..10 {
-                pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(10));
+                pocket_ic.tick();
             }
         }
 
@@ -1332,8 +1332,8 @@ pub mod sns {
             // We create some blocks until the proposal has finished executing (`pocket_ic.tick()`).
             let mut last_proposal_data = None;
             for _attempt_count in 1..=50 {
-                pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
+                pocket_ic.tick();
                 let proposal_result = get_proposal(
                     pocket_ic,
                     canister_id,
@@ -2069,8 +2069,8 @@ pub mod sns {
         let mut num_blocks_synced = u64::MAX;
         let mut chain_length = u64::MAX;
         for _i in 0..MAX_ATTEMPTS {
-            pocket_ic.tick();
             pocket_ic.advance_time(Duration::from_secs(1));
+            pocket_ic.tick();
             num_blocks_synced = index_ng::status(pocket_ic, index_canister_id)
                 .num_blocks_synced
                 .0
@@ -2367,8 +2367,8 @@ pub mod sns {
             pocket_ic.advance_time(Duration::from_secs(48 * 60 * 60));
             let mut last_lifecycle = None;
             for _attempt_count in 1..=100 {
-                pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
+                pocket_ic.tick();
                 let response = get_lifecycle(pocket_ic, swap_canister_id);
                 let lifecycle = Lifecycle::try_from(response.lifecycle.unwrap()).unwrap();
                 if lifecycle == expected_lifecycle {
@@ -2540,8 +2540,8 @@ pub mod sns {
         ) -> Result<GetAutoFinalizationStatusResponse, String> {
             let mut last_auto_finalization_status = None;
             for _attempt_count in 1..=100 {
-                pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
+                pocket_ic.tick();
                 let auto_finalization_status =
                     get_auto_finalization_status(pocket_ic, swap_canister_id);
                 match status {

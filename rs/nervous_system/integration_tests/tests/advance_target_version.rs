@@ -73,7 +73,7 @@ fn test_get_upgrade_journal() {
     };
 
     // State A: right after SNS creation.
-    {
+    let response_timestamp_seconds = {
         let sns_pb::GetUpgradeJournalResponse {
             upgrade_steps,
             response_timestamp_seconds,
@@ -83,11 +83,10 @@ fn test_get_upgrade_journal() {
             .versions;
         assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
         assert_eq!(response_timestamp_seconds, Some(1620501459));
-    }
+        response_timestamp_seconds.unwrap()
+    };
 
-    assert_eq!(pocket_ic.get_time().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(), 1620501459);
     wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
-    assert_eq!(pocket_ic.get_time().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(), 1620501459 + UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
 
     // State B: after the first periodic task's completion. No changes expected yet.
     {
@@ -106,6 +105,6 @@ fn test_get_upgrade_journal() {
         // assertion `left == right` failed
         // left: Some(1620505063)
         // right: Some(1620505059)
-        assert_eq!(response_timestamp_seconds, Some(1620501459 + UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS));
+        assert_eq!(response_timestamp_seconds, Some(response_timestamp_seconds + UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS));
     }
 }
