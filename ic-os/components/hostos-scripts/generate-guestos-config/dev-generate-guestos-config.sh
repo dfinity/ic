@@ -80,8 +80,7 @@ function assemble_config_media() {
         cmd+=(--ipv4_gateway "${ipv4_gateway}")
         cmd+=(--domain "${domain}")
     fi
-    # todo: can I use the fetch-mgmt-mac in hostos tool?
-    cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
+    cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
     cmd+=(--nns_url "$nns_url")
     if [ -f "$node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "$node_operator_private_key")

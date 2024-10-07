@@ -48,7 +48,7 @@ function validate_arguments() {
 }
 
 function construct_hostname() {
-    local mac=$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')
+    local mac=$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')
 
     if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
         HOSTNAME=$(echo ${TYPE}-${mac}-$(cat ${FILE}))
