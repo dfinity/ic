@@ -33,7 +33,7 @@ impl IngressPayloadBuilder {
 
     /// Returns the built `IngressPayload`.
     pub fn build(self) -> IngressPayload {
-        self.ingress_payload.into()
+        self.ingress_payload.iter().collect::<Vec<_>>().into()
     }
 }
 
