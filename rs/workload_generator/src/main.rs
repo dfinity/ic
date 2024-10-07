@@ -7,12 +7,11 @@ extern crate slog_scope;
 // extern crate tokio;
 use byte_unit::Byte;
 use chrono::Utc;
-use clap::{Arg, value_parser, ValueEnum};
+use clap::{value_parser, Arg, ValueEnum};
 use slog::Drain;
 use std::{
-    fs, 
     ffi::OsString,
-    io,
+    fs, io,
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
@@ -163,8 +162,8 @@ async fn main() {
         )
         .arg(
             Arg::new("method")
-                .short('m')                
-                .value_parser(value_parser!(RequestType))                
+                .short('m')
+                .value_parser(value_parser!(RequestType))
                 .ignore_case(true)
                 .default_value("QueryCounter")
                 .help("What method to issue"),
@@ -319,7 +318,11 @@ async fn main() {
         .unwrap()
         .parse::<usize>()
         .unwrap();
-    let rps = matches.get_one::<String>("rps").unwrap().parse::<f64>().unwrap();
+    let rps = matches
+        .get_one::<String>("rps")
+        .unwrap()
+        .parse::<f64>()
+        .unwrap();
     let rpms = (rps * 1000f64).floor() as usize;
 
     let principal_id = matches
@@ -342,8 +345,13 @@ async fn main() {
 
     let random_query_payload = matches.contains_id("random-query-payload");
 
-    let call_payload_size = Byte::from_str(matches.get_one::<String>("payload-size").map_or("0", |v| v).trim())
-        .expect("Could not parse the value of --payload-size");
+    let call_payload_size = Byte::from_str(
+        matches
+            .get_one::<String>("payload-size")
+            .map_or("0", |v| v)
+            .trim(),
+    )
+    .expect("Could not parse the value of --payload-size");
 
     let call_payload = hex::decode(matches.get_one::<String>("payload").map_or("", |v| v))
         .expect("Payload must be in hex format");
@@ -449,7 +457,10 @@ async fn main() {
                 )
                 .expect("Failed to parse method option.")
             };
-            let canister_method_name = matches.get_one::<String>("call-method").map_or("", |v| v).to_string();
+            let canister_method_name = matches
+                .get_one::<String>("call-method")
+                .map_or("", |v| v)
+                .to_string();
             match request_type {
                 RequestType::Update | RequestType::Query => {
                     assert!(
@@ -480,7 +491,8 @@ async fn main() {
                         panic!("Illegal value for option --canister-id: '{}'", s);
                     }))
                     .unwrap();
-                if let Some(wasm_file_path) = matches.get_one::<OsString>("canister").map(Path::new) {
+                if let Some(wasm_file_path) = matches.get_one::<OsString>("canister").map(Path::new)
+                {
                     let mut install_succeeded = false;
                     for url in install_endpoint {
                         match canister::install_canister(
