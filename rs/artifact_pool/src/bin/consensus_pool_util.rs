@@ -140,8 +140,9 @@ fn to_string<T: Serialize>(msg: &T) -> String {
 
 fn export(path: &str, matches: &clap::ArgMatches) {
     let artifacts = match matches.get_many::<String>("artifact") {
-        Some(names) => 
-            parse_artifact_names(&names.map(|name| name.as_str()).collect::<Vec<&str>>()),
+        Some(names) => {
+            parse_artifact_names(&names.map(|name| name.as_str()).collect::<Vec<&str>>())
+        }
         None => ALL_ARTIFACT_NAMES.to_vec(),
     };
 
