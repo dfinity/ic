@@ -63,6 +63,7 @@ use std::{cell::Cell, thread::LocalKey};
 
 // This could be generic. That is, add a T parameter. Currently, only bool is supported, because YAGNI.
 #[must_use]
+#[derive(Debug)]
 pub struct Temporary {
     flag: &'static LocalKey<Cell<bool>>,
     original_value: bool,

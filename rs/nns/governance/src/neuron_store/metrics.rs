@@ -182,14 +182,20 @@ impl NeuronStore {
         now_seconds: u64,
         minimum_stake_e8s: u64,
     ) -> NeuronMetrics {
+        // panic!(
+        //     "Neuron metrics, stable? {}.  Self.counts: {} in heap, {} in stable",
+        //     self.use_stable_memory_for_all_neurons,
+        //     self.heap_neurons.len(),
+        //     with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len())
+        // );
         if self.use_stable_memory_for_all_neurons {
-            self.compute_neuron_metrics_current(now_seconds, minimum_stake_e8s)
-        } else {
             self.compute_neuron_metrics_all_stable(now_seconds, minimum_stake_e8s)
+        } else {
+            self.compute_neuron_metrics_current(now_seconds, minimum_stake_e8s)
         }
     }
 
-    pub(crate) fn compute_neuron_metrics_current(
+    pub(crate) fn compute_neuron_metrics_all_stable(
         &self,
         now_seconds: u64,
         minimum_stake_e8s: u64,
@@ -207,10 +213,6 @@ impl NeuronStore {
                 ..Default::default()
             };
 
-            let mut garbage_collectible_neurons_count = 0;
-            let neurons_fund_total_active_neurons =
-                self.list_active_neurons_fund_neurons().len() as u64;
-
             for neuron in stable_neuron_store.range_neurons(..) {
                 let neuron = &neuron;
                 metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
@@ -223,6 +225,10 @@ impl NeuronStore {
                 metrics.total_staked_maturity_e8s_equivalent +=
                     neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
                 metrics.total_maturity_e8s_equivalent += neuron.maturity_e8s_equivalent;
+
+                if Self::is_active_neurons_fund_neuron(neuron, now_seconds) {
+                    metrics.neurons_fund_total_active_neurons += 1;
+                }
 
                 if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
                     metrics.community_fund_total_staked_e8s += neuron.minted_stake_e8s();
@@ -364,14 +370,11 @@ impl NeuronStore {
                 .total_staked_e8s
                 .saturating_sub(metrics.dissolved_neurons_e8s);
 
-            metrics.garbage_collectable_neurons_count = garbage_collectible_neurons_count;
-            metrics.neurons_fund_total_active_neurons = neurons_fund_total_active_neurons;
-
             metrics
         })
     }
 
-    pub(crate) fn compute_neuron_metrics_all_stable(
+    pub(crate) fn compute_neuron_metrics_current(
         &self,
         now_seconds: u64,
         minimum_stake_e8s: u64,
