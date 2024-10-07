@@ -384,7 +384,14 @@ impl GovernanceProto {
     }
 
     pub fn root_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(self.root_canister_id.expect("No root_canister_id."))
+        self.root_canister_id().expect("No root_canister_id.")
+    }
+
+    pub fn root_canister_id_or_err(&self) -> Result<CanisterId, String> {
+        let Some(root_canister_id) = self.proto.root_canister_id else {
+            return Err("Root canister ID is not set! Believe it or not, this is a bug.".to_string());
+        };
+        Ok(CanisterId::unchecked_from_principal(root_canister_id))
     }
 
     pub fn ledger_canister_id_or_panic(&self) -> CanisterId {
@@ -4655,6 +4662,9 @@ impl Governance {
         }
 
         // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+        self.try_refresh_deployed_version().await;
+
+        // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
         {
             dfn_core::println!("{}AAA", log_prefix());
             if self.try_acquire_upgrade_to_next_version_lock() {
@@ -4662,6 +4672,89 @@ impl Governance {
                 self.upgrade_to_next_version().await;
             }
             dfn_core::println!("{}CCC", log_prefix());
+        }
+    }
+
+    // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+    //
+    // TODO: Currently, only SNS Root can be upgraded using the new feature. So we currently only
+    // TODO: check for that canister's version. This needs to be generalized to detect arbitrary SNS
+    // TODO: canister version changes.
+    pub async fn try_refresh_deployed_version(&mut self) {
+        let Some(upgrade_lock @ UpgradeLock {
+            expected_version,
+            ..
+        }) = self.proto.upgrade_lock else {
+            return;
+        };
+
+        let Some(expected_version) = expected_version else {
+            dfn_core::println!("{}UpgradeLock.expected_version must be specified.", log_prefix());
+            log!(ERROR, "{}UpgradeLock.expected_version must be specified.", log_prefix());
+            return;
+        };
+
+        if upgrade_lock.refresh_deployed_version_attempts.is_some() {
+            upgrade_lock.refresh_deployed_version_attempts.map(|refresh_deployed_version_attempts| refresh_deployed_version_attempts + 1);
+        } else {
+            upgrade_lock.refresh_deployed_version_attempts = Some(1);
+        }
+        
+        // Assume delta(starting_version, expected_version) == Root
+        let Some(root_canister_id) = match self.proto.root_canister_id_or_err() {
+            Err(err) => {
+                dfn_core::println!("{}{}", log_prefix(), err);
+                log!(ERROR, "{}{}", log_prefix(), err);
+                return;
+            }
+            Ok(root_canister_id) => root_canister_id,
+        };
+
+        let canister_info_arg = match Encode!(&CanisterInfoRequest::new(
+            root_canister_id,
+            Some(1),
+        )) {
+            Ok(canister_info_arg) => canister_info_arg,
+            Err(err) => {
+                dfn_core::println!("{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                log!(ERROR, "{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                return;
+            }
+        };
+
+        let root_canister_info = self.env
+            .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
+            .await;
+
+        let root_canister_info = match root_canister_info {
+            Ok(root_canister_info) => root_canister_info,
+            Err((_, err)) => {
+                dfn_core::println!("{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                log!(ERROR, "{}Cannot get Root canister info from the management canister: {}", log_prefix(), err);
+                return;
+            }
+        };
+
+        let CanisterInfoResponse {
+            module_hash: Some(module_hash),
+            ..
+        } = match Decode!(&root_canister_info[..], CanisterInfoResponse) {
+            Ok(canister_info_response) => canister_info_response,
+            Err(err) => {
+                dfn_core::println!("{}Cannot decode canister info from the management canister: {}", log_prefix(), err);
+                log!(ERROR, "{}Cannot decode canister info from the management canister: {}", log_prefix(), err);
+                return;
+            }
+        };
+        
+
+        if expected_version.root_wasm_hash == module_hash {
+            dfn_core::println!("{}Upgrading Root to {:?} succeeded after {:?} attempts!", log_prefix(), module_hash, refresh_deployed_version_attempts);
+            log!(ERROR, "{}Upgrading Root to {:?} succeeded after {:?} attempts!", log_prefix(), module_hash, refresh_deployed_version_attempts);
+            self.proto.deployed_version = expected_version.clone();
+        } else {
+            dfn_core::println!("{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...", log_prefix(), module_hash, refresh_deployed_version_attempts);
+            log!(ERROR, "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...", log_prefix(), module_hash, refresh_deployed_version_attempts);
         }
     }
 
@@ -4736,19 +4829,14 @@ impl Governance {
             }
         };
 
-        let Some(root_canister_id) = self.proto.root_canister_id else {
-            dfn_core::println!(
-                "{}Root canister ID is not set! Believe it or not, this is a bug.",
-                log_prefix(),
-            );
-            log!(
-                ERROR,
-                "{}Root canister ID is not set! Believe it or not, this is a bug.",
-                log_prefix(),
-            );
-            return;
+        let Some(root_canister_id) = match self.self.root_canister_id() {
+            Err(err) => {
+                dfn_core::println!("{}{}", log_prefix(), err);
+                log!(ERROR, "{}{}", log_prefix(), err);
+                return;
+            }
+            Ok(root_canister_id) => root_canister_id,
         };
-        let root_canister_id = CanisterId::unchecked_from_principal(root_canister_id);
 
         let arg = match Encode!() {
             Ok(arg) => arg,
@@ -4824,6 +4912,7 @@ impl Governance {
             if let Some(ref expected_version) = upgrade_lock.expected_version {
                 if expected_version == current_version {
                     upgrade_lock.released_timestamp_seconds = Some(now_timestamp_seconds);
+                    self.proto.deployed_version = Some(expected_version.clone());
                     // Continue (this upgrade succeeded; maybe there are more upgrades to be done).
                 } else {
                     if let Some(acquired_timestamp_seconds) =
