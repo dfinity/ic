@@ -4857,9 +4857,15 @@ impl Governance {
                 refresh_deployed_version_attempts
             );
             self.proto.deployed_version = Some(expected_version.clone());
-            self.proto.cached_upgrade_steps.as_mut().map(|cached_upgrade_steps| {
-                cached_upgrade_steps.upgrade_steps.as_mut().map(|upgrade_steps| upgrade_steps.versions.remove(0));
-            });
+            self.proto
+                .cached_upgrade_steps
+                .as_mut()
+                .map(|cached_upgrade_steps| {
+                    cached_upgrade_steps
+                        .upgrade_steps
+                        .as_mut()
+                        .map(|upgrade_steps| upgrade_steps.versions.remove(0));
+                });
             // TODO: check invariant cached_upgrade_steps[0] == expected_version
             *released_timestamp_seconds = Some(self.env.now());
         } else {
@@ -4933,7 +4939,12 @@ impl Governance {
             return;
         }
 
-        dfn_core::println!("{}expected_version = {:#?}, wasm_hash = {:?}", log_prefix(), expected_version, wasm_hash); // DO NOT MERGE
+        dfn_core::println!(
+            "{}expected_version = {:#?}, wasm_hash = {:?}",
+            log_prefix(),
+            expected_version,
+            wasm_hash
+        ); // DO NOT MERGE
         let get_wasm_result = get_wasm(&*self.env, wasm_hash, canister_type_to_upgrade).await;
 
         let wasm = match get_wasm_result {
@@ -5011,9 +5022,7 @@ impl Governance {
         // In this function, we're interested in just the first two version (current and next).
         let (current_version, next_version) = match &upgrade_steps.versions[..] {
             [current_version] => (current_version, None),
-            [current_version, next_version, ..] => {
-                (current_version, Some(next_version))
-            },
+            [current_version, next_version, ..] => (current_version, Some(next_version)),
             _ => {
                 dfn_core::println!("{}upgrade_steps is empty.", log_prefix());
                 log!(ERROR, "{}upgrade_steps is empty.", log_prefix());
