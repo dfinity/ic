@@ -5,16 +5,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
-use ic_replicated_state::{CallOrigin, ExecutionTask, InputQueueType, StateError, SystemState};
+use ic_replicated_state::{ExecutionTask, InputQueueType, StateError, SystemState};
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::messages::{
     CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, RejectContext, Request,
-    RequestMetadata, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
 };
-use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
-use ic_types::{CanisterId, Cycles, Time};
+use ic_types::{CanisterId, Cycles};
 use std::{collections::BTreeMap, sync::Arc};
 
 /// Figure out how many cycles a canister should have so that it can support the
@@ -402,31 +401,6 @@ fn induct_messages_to_self_full_queue() {
     assert_eq!(0, fixture.system_state.queues().output_message_count());
 }
 
-/// Registers a callback with the given deadline.
-fn register_callback(fixture: &mut SystemStateFixture, deadline: CoarseTime) -> CallbackId {
-    let call_context_manager = fixture.system_state.call_context_manager_mut().unwrap();
-    let time = Time::from_nanos_since_unix_epoch(1);
-    let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::SystemTask,
-        Cycles::zero(),
-        time,
-        RequestMetadata::new(0, time),
-    );
-
-    call_context_manager.register_callback(Callback::new(
-        call_context_id,
-        CANISTER_ID,
-        OTHER_CANISTER_ID,
-        Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
-        WasmClosure::new(0, 2),
-        WasmClosure::new(0, 2),
-        None,
-        deadline,
-    ))
-}
-
 /// Simulates an outbound call with the given deadline, by registering a
 /// callback and reserving a response slot.
 fn simulate_outbound_call(fixture: &mut SystemStateFixture, deadline: CoarseTime) -> CallbackId {
@@ -437,7 +411,9 @@ fn simulate_outbound_call(fixture: &mut SystemStateFixture, deadline: CoarseTime
     fixture.pop_output().unwrap();
 
     // Register a callback.
-    register_callback(fixture, deadline)
+    fixture
+        .system_state
+        .with_callback(OTHER_CANISTER_ID, deadline)
 }
 
 #[test]
@@ -466,7 +442,7 @@ fn time_out_callbacks() {
     fixture
         .system_state
         .task_queue
-        .push_front(ExecutionTask::PausedExecution {
+        .enqueue(ExecutionTask::PausedExecution {
             id: PausedExecutionId(1),
             input: CanisterMessageOrTask::Message(response1),
         });
@@ -528,8 +504,8 @@ fn time_out_callbacks_no_reserved_slot() {
 
     // Register 3 callbacks, but only make one slot reservation.
     let c1 = simulate_outbound_call(&mut fixture, d1);
-    let c2 = register_callback(&mut fixture, d1);
-    let c3 = register_callback(&mut fixture, d1);
+    let c2 = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
+    let c3 = fixture.system_state.with_callback(OTHER_CANISTER_ID, d1);
 
     // Time out callbacks with deadlines before `d2`.
     assert!(fixture.system_state.has_expired_callbacks(d2));
