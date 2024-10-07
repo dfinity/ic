@@ -145,7 +145,7 @@ rust_binary(
         "//rs/monitoring/adapter_metrics/server",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "@crate_index//:clap_3_2_25",
+        "@crate_index//:clap",
         "@crate_index//:slog",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
