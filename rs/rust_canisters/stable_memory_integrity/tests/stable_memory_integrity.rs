@@ -238,8 +238,6 @@ enum StableOperation {
     Grow(u64),
     Read { start: u64, length: u64 },
     Write { start: u64, contents: Vec<u8> },
-    Read32 { start: u32, length: u32 },
-    Write32 { start: u32, contents: Vec<u8> },
 }
 
 impl From<StableOperation> for StableOperationResult {
@@ -256,13 +254,6 @@ impl From<StableOperation> for StableOperationResult {
             },
             StableOperation::Write { start, contents } => {
                 StableOperationResult::Write { start, contents }
-            }
-            StableOperation::Read32 { start, length } => StableOperationResult::Read32 {
-                start,
-                result: vec![0; length as usize],
-            },
-            StableOperation::Write32 { start, contents } => {
-                StableOperationResult::Write32 { start, contents }
             }
         }
     }
@@ -281,14 +272,6 @@ impl From<&StableOperationResult> for StableOperation {
                 length: result.len() as u64,
             },
             StableOperationResult::Write { start, contents } => StableOperation::Write {
-                start: *start,
-                contents: contents.clone(),
-            },
-            StableOperationResult::Read32 { start, result } => StableOperation::Read32 {
-                start: *start,
-                length: result.len() as u32,
-            },
-            StableOperationResult::Write32 { start, contents } => StableOperation::Write32 {
                 start: *start,
                 contents: contents.clone(),
             },
