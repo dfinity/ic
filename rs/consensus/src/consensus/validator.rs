@@ -1919,6 +1919,7 @@ pub mod test {
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
+    use ic_limits::INITIAL_NOTARY_DELAY;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -3846,10 +3847,11 @@ pub mod test {
 
             let block = pool.make_next_block_with_rank(Rank(1));
             let mut second_block = block.clone();
-            second_block.content.as_mut().context.time += Duration::from_nanos(1);
+            second_block.content.as_mut().context.time += INITIAL_NOTARY_DELAY;
             second_block.update_content();
             let mut third_block = block.clone();
-            third_block.content.as_mut().context.time += Duration::from_nanos(2);
+            third_block.content.as_mut().context.time +=
+                INITIAL_NOTARY_DELAY + INITIAL_NOTARY_DELAY;
             third_block.update_content();
             time_source
                 .set_time(third_block.content.as_ref().context.time)
@@ -3860,7 +3862,13 @@ pub mod test {
             pool.insert_unvalidated(third_block.clone());
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(changeset.is_empty());
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::AddToValidated(ValidatedArtifact {
+                    msg: ConsensusMessage::EquivocationProof(_),
+                    timestamp: _,
+                })]
+            );
             pool.apply(changeset);
 
             // Now that rank 1 is disqualified, we should be able to validate
@@ -3872,7 +3880,12 @@ pub mod test {
                 .ok();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(changeset.is_empty());
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(ref proposal)
+                )] if proposal.rank() == block.rank()
+            );
         });
     }
 }
