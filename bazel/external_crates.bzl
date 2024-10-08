@@ -1065,7 +1065,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.23.12",
+                version = "^0.23.14",
                 default_features = False,
                 features = [
                     "ring",
@@ -1075,12 +1075,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls-pemfile": crate.spec(
                 version = "^2.1.2",
-            ),
-            "rustls-pki-types": crate.spec(
-                version = "^1.7.0",
-                features = [
-                    "alloc",
-                ],
             ),
             "rustversion": crate.spec(
                 version = "^1.0",
