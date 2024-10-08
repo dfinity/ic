@@ -1408,6 +1408,10 @@ message Governance {
     bytes index_wasm_hash = 6;
   }
 
+  message Versions {
+    repeated Governance.Version versions = 1;
+  }
+
   // Current version that this SNS is running.
   Version deployed_version = 23;
 
@@ -1449,6 +1453,23 @@ message Governance {
 
   reserved "migrated_root_wasm_memory_limit";
   reserved 27;
+
+  // The sns's local cache of the upgrade steps recieved from SNS-W.
+  message CachedUpgradeSteps {
+    // The upgrade steps that have been returned from SNS-W the last time we
+    // called list_upgrade_steps.
+    Governance.Versions upgrade_steps = 1;
+    // The timestamp of the request we sent to list_upgrade_steps.
+    // It's possible that this is greater than the response_timestamp_seconds, because
+    // we update it as soon as we send the request, and only update the
+    // response_timestamp and the upgrade_steps when we receive the response.
+    // The primary use of this is that we can avoid calling list_upgrade_steps
+    // more frequently than necessary.
+    optional uint64 requested_timestamp_seconds = 2;
+    // The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+    optional uint64 response_timestamp_seconds = 3;
+  }
+  CachedUpgradeSteps cached_upgrade_steps = 29;
 }
 
 // Request message for 'get_metadata'.
@@ -2106,6 +2127,13 @@ message AddMaturityRequest {
 // available when governance is compiled with the `test` feature enabled.
 message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
+}
+
+message GetUpgradeJournalRequest {}
+
+message GetUpgradeJournalResponse {
+  Governance.Versions upgrade_steps = 1;
+  optional uint64 response_timestamp_seconds = 2;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint
