@@ -68,7 +68,7 @@ use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
 };
 
-use super::SchedulerImpl;
+use super::{RoundSchedule, SchedulerImpl};
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -558,7 +558,6 @@ impl SchedulerTest {
             &mut csprng,
             &mut round_limits,
             &measurements,
-            false,
             self.registry_settings(),
             &BTreeMap::new(),
         )
@@ -892,7 +891,7 @@ impl SchedulerTestBuilder {
             &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
+            RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
             self.scheduler_config.scheduler_cores,

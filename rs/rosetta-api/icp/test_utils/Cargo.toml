@@ -1,0 +1,29 @@
+[package]
+name = "ic-rosetta-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+candid = { workspace = true }
+hex = { workspace = true }
+ic-icrc1-test-utils = { path = "../../../ledger_suite/icrc1/test_utils" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-rosetta-api = { path = "../" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-types = { path = "../../../types/types" }
+icp-ledger = { path = "../../../ledger_suite/icp" }
+nix = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+rosetta-core = { path = "../../common/rosetta_core" }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+url = { workspace = true }

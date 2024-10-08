@@ -996,19 +996,25 @@ impl ExecutionTest {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::Heartbeat);
+                    .enqueue(ExecutionTask::Heartbeat);
             }
             CanisterTask::GlobalTimer => {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::GlobalTimer);
+                    .enqueue(ExecutionTask::GlobalTimer);
             }
             CanisterTask::OnLowWasmMemory => {
+                // Set `OnLowWasmMemoryHookStatus` to `ConditionNotSatisfied`.
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::OnLowWasmMemory);
+                    .remove(ExecutionTask::OnLowWasmMemory);
+                // Set `OnLowWasmMemoryHookStatus` to `Ready`.
+                canister
+                    .system_state
+                    .task_queue
+                    .enqueue(ExecutionTask::OnLowWasmMemory);
             }
         }
         let result = execute_canister(
