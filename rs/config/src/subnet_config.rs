@@ -37,9 +37,9 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 // to enter and exit the Wasm engine.
 const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
-// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 2ms
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
 // to prepare execution of a canister.
-const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(4 * M);
+const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(8 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
