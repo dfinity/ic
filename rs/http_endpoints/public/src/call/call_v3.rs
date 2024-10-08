@@ -11,6 +11,7 @@ use crate::{
         HttpHandlerMetrics, CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
         CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING,
+        CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE,
         CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT,
     },
     HttpError,
@@ -206,7 +207,8 @@ async fn call_sync_v3(
             let signature = certification.signed.signature.signature.get().0;
 
             metrics
-                .call_v3_message_already_in_certified_state_total
+                .call_v3_early_response_trigger_total
+                .with_label_values(&[CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE])
                 .inc();
 
             return CallV3Response::Certificate(Certificate {
