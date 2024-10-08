@@ -611,7 +611,6 @@ mod tests {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_limits::INITIAL_NOTARY_DELAY;
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::{
@@ -680,7 +679,7 @@ mod tests {
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
-            initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
+            initial_notary_delay_millis: 1500,
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
@@ -718,7 +717,7 @@ mod tests {
             max_ingress_messages_per_block: Some(256),
             max_block_payload_size: Some(200),
             unit_delay_millis: Some(300),
-            initial_notary_delay_millis: Some(INITIAL_NOTARY_DELAY.as_millis() as u64),
+            initial_notary_delay_millis: Some(200),
             dkg_interval_length: Some(8),
             dkg_dealings_per_block: Some(1),
             start_as_nns: Some(true),
@@ -762,7 +761,7 @@ mod tests {
                 max_ingress_messages_per_block: 256,
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
-                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
+                initial_notary_delay_millis: 200,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
@@ -795,7 +794,7 @@ mod tests {
             max_ingress_messages_per_block: 1000,
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
-            initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
+            initial_notary_delay_millis: 1500,
             replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
@@ -858,7 +857,7 @@ mod tests {
                 max_ingress_messages_per_block: 1000,
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
-                initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
+                initial_notary_delay_millis: 1500,
                 replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
