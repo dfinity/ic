@@ -88,6 +88,10 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
+}
+
 fn archive_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -426,7 +430,7 @@ fn icrc1_test_upgrade_serialization_fixed_tx() {
 fn icrc1_test_stable_migration_endpoints_disabled() {
     ic_icrc1_ledger_sm_tests::icrc1_test_stable_migration_endpoints_disabled(
         ledger_mainnet_wasm(),
-        ledger_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
@@ -435,7 +439,7 @@ fn icrc1_test_stable_migration_endpoints_disabled() {
 fn icrc1_test_incomplete_migration() {
     ic_icrc1_ledger_sm_tests::test_incomplete_migration(
         ledger_mainnet_wasm(),
-        ledger_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }

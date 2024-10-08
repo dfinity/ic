@@ -173,6 +173,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_lowupgradeinstructionlimits",
+            ["low-upgrade-instruction-limits"],
+            [
+                ":ledger",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_lowupgradeinstructionlimits",
+            [
+                "low-upgrade-instruction-limits",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
@@ -196,6 +215,7 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
+            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -210,6 +230,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm)",
         },
         deps = [
             # Keep sorted.

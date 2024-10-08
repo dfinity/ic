@@ -157,6 +157,16 @@ fn pre_upgrade() {
     });
 }
 
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
+
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 0;
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
+
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
     #[cfg(feature = "canbench-rs")]
@@ -218,8 +228,9 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         ledger.state = LedgerState::Migrating(LedgerField::Allowances);
         ledger.approvals.allowances_data.clear_arrivals();
     });
-    const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
-    migrate_next_part(MAX_INSTRUCTIONS_PER_UPGRADE - pre_upgrade_instructions_consumed);
+    migrate_next_part(
+        MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+    );
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
@@ -280,7 +291,6 @@ fn migrate_next_part(instruction_limit: u64) {
                 &LOG,
                 "Migration partially done. Scheduling the next part. {msg}"
             );
-            const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
             ic_cdk_timers::set_timer(Duration::from_secs(0), || {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
