@@ -1,7 +1,9 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{corrupt_dealing, ComplaintCorrupter};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{
+    corrupt_dealing, ComplaintCorrupter,
+};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };

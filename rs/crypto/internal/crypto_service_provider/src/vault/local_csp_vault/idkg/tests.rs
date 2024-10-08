@@ -1916,7 +1916,9 @@ mod idkg_load_transcript_with_openings {
 mod idkg_open_dealing {
     use super::*;
     use crate::{types::CspSecretKey, vault::api::IDkgDealingInternalBytes};
-    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{CommitmentOpening, MEGaPublicKeyK256Bytes};
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+        CommitmentOpening, MEGaPublicKeyK256Bytes,
+    };
     use ic_types::{
         crypto::{
             canister_threshold_sig::{

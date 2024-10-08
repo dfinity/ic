@@ -39,7 +39,9 @@ use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{verify_mega_public_key, EccCurveType};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    verify_mega_public_key, EccCurveType,
+};
 pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
 pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;

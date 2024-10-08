@@ -1,5 +1,7 @@
 use crate::KeyId;
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, EccPoint, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    EccCurveType, EccPoint, MEGaPublicKey,
+};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
 
 #[test]
@@ -24,7 +26,9 @@ mod stability_tests {
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_3_PK;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_4_PK;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::PedersenCommitment;
-    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{PolynomialCommitment, SimpleCommitment};
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+        PolynomialCommitment, SimpleCommitment,
+    };
     use ic_crypto_internal_types::curves::bls12_381;
     use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
