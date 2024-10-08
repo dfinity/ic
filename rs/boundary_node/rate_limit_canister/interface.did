@@ -44,7 +44,7 @@ type OutputRuleMetadata = record {
 type GetRuleByIdResponse = variant {
   Ok: OutputRuleMetadata;
   Err: text;
-}
+};
 
 type GetConfigResponse = variant {
   Ok: OutputConfigResponse;
