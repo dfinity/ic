@@ -279,7 +279,7 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
 
 /// In contrast to canister_init(), this method does not do deserialization.
 #[init]
-fn canister_init_(init_payload: Init) {
+fn canister_init(init_payload: Init) {
     let swap = Swap::new(init_payload);
     unsafe {
         assert!(
@@ -294,7 +294,7 @@ fn canister_init_(init_payload: Init) {
 /// Serialize and write the state to stable memory so that it is
 /// preserved during the upgrade and can be deserialized again in
 /// `canister_post_upgrade`.
-#[post_upgrade]
+#[pre_upgrade]
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
@@ -320,9 +320,8 @@ fn canister_pre_upgrade() {
 
 /// Deserialize what has been written to stable memory in
 /// canister_pre_upgrade and initialising the state with it.
-#[pre_upgrade]
+#[post_upgrade]
 fn canister_post_upgrade() {
-    ic_cdk::setup();
     fn set_state(proto: Swap) {
         unsafe {
             assert!(
