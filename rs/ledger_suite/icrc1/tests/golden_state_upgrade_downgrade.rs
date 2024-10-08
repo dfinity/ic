@@ -41,8 +41,6 @@ lazy_static! {
         "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
     ));
     pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
-    pub static ref STATE_MACHINE: StateMachine =
-        new_state_machine_with_golden_fiduciary_state_or_panic();
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -54,8 +52,6 @@ lazy_static! {
         "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
     ));
     pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
-    pub static ref STATE_MACHINE: StateMachine =
-        new_state_machine_with_golden_fiduciary_state_or_panic();
 }
 
 struct LedgerSuiteConfig {
@@ -63,7 +59,6 @@ struct LedgerSuiteConfig {
     canister_name: &'static str,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     extended_testing: bool,
-    state_machine: &'static StateMachine,
     mainnet_wasm: &'static Wasm,
     master_wasm: &'static Wasm,
 }
@@ -71,7 +66,6 @@ struct LedgerSuiteConfig {
 impl LedgerSuiteConfig {
     fn new(
         canister_id_and_name: (&'static str, &'static str),
-        state_machine: &'static StateMachine,
         mainnet_wasm: &'static Wasm,
         master_wasm: &'static Wasm,
     ) -> Self {
@@ -81,7 +75,6 @@ impl LedgerSuiteConfig {
             canister_name,
             burns_without_spender: None,
             extended_testing: false,
-            state_machine,
             mainnet_wasm,
             master_wasm,
         }
@@ -89,7 +82,6 @@ impl LedgerSuiteConfig {
 
     fn new_with_params(
         canister_id_and_name: (&'static str, &'static str),
-        state_machine: &'static StateMachine,
         mainnet_wasm: &'static Wasm,
         master_wasm: &'static Wasm,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
@@ -98,16 +90,11 @@ impl LedgerSuiteConfig {
         Self {
             burns_without_spender,
             extended_testing,
-            ..Self::new(
-                canister_id_and_name,
-                state_machine,
-                mainnet_wasm,
-                master_wasm,
-            )
+            ..Self::new(canister_id_and_name, mainnet_wasm, master_wasm)
         }
     }
 
-    fn perform_upgrade_downgrade_testing(&self) {
+    fn perform_upgrade_downgrade_testing(&self, state_machine: &StateMachine) {
         println!(
             "Processing {} ledger, id {}",
             self.ledger_id, self.canister_name
@@ -117,28 +104,28 @@ impl LedgerSuiteConfig {
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                self.state_machine,
+                state_machine,
                 ledger_canister_id,
                 self.burns_without_spender.clone(),
                 None,
             ));
         }
-        self.upgrade_canister(self.master_wasm.clone());
+        self.upgrade_canister(state_machine, self.master_wasm.clone());
         // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        self.upgrade_canister(bump_gzip_timestamp(self.master_wasm));
+        self.upgrade_canister(state_machine, bump_gzip_timestamp(self.master_wasm));
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
-                self.state_machine,
+                state_machine,
                 ledger_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
             ));
         }
         // Downgrade back to the mainnet ledger version
-        self.upgrade_canister(self.mainnet_wasm.clone());
+        self.upgrade_canister(state_machine, self.mainnet_wasm.clone());
         if self.extended_testing {
             let _ = LedgerState::verify_state_and_generate_transactions(
-                self.state_machine,
+                state_machine,
                 ledger_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
@@ -146,12 +133,12 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn upgrade_canister(&self, wasm: Wasm) {
+    fn upgrade_canister(&self, state_machine: &StateMachine, wasm: Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
-        self.state_machine
+        state_machine
             .upgrade_canister(canister_id, wasm.bytes(), args)
             .expect("should successfully upgrade ledger canister");
         println!("Upgraded {} '{}'", self.canister_name, self.ledger_id);
@@ -279,15 +266,16 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
         ],
     };
 
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+
     LedgerSuiteConfig::new_with_params(
         (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-        &STATE_MACHINE,
         &MAINNET_WASM,
         &MASTER_WASM,
         Some(burns_without_spender),
         true,
     )
-    .perform_upgrade_downgrade_testing();
+    .perform_upgrade_downgrade_testing(&state_machine);
 }
 
 #[cfg(feature = "u256-tokens")]
@@ -327,7 +315,6 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
         CK_ETH_LEDGER,
-        &STATE_MACHINE,
         &MAINNET_U256_WASM,
         &MASTER_WASM,
         Some(ck_eth_burns_without_spender),
@@ -352,14 +339,15 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &STATE_MACHINE,
             &MAINNET_U256_WASM,
             &MASTER_WASM,
         ));
     }
 
+    let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
+
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing();
+        canister_config.perform_upgrade_downgrade_testing(&state_machine);
     }
 }
 
@@ -400,7 +388,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
         OPENCHAT,
-        &STATE_MACHINE,
         &MAINNET_U64_WASM,
         &MASTER_WASM,
         None,
@@ -438,14 +425,16 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &STATE_MACHINE,
             &MAINNET_U64_WASM,
             &MASTER_WASM,
         ));
     }
 
+    let state_machine =
+        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
+
     for canister_config in canister_configs {
-        canister_config.perform_upgrade_downgrade_testing();
+        canister_config.perform_upgrade_downgrade_testing(&state_machine);
     }
 }
 

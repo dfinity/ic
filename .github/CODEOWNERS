@@ -20,7 +20,7 @@
 /bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
 /third_party/             @dfinity/idx
 /WORKSPACE.bazel          @dfinity/idx
-/mainnet-canisters.bzl    @dfinity/idx @dfinity/nns-team
+/mainnet-canisters.json   @dfinity/idx @dfinity/nns-team
 /BUILD.bazel              @dfinity/idx
 .bazelrc                  @dfinity/idx
 .bazelversion             @dfinity/idx

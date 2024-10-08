@@ -246,10 +246,8 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
     );
 
     assert_eq!(
-        ccm.call_context_mut(cc_id)
-            .unwrap()
-            .withdraw_cycles(Cycles::new(40)),
-        Err(())
+        Err("Canister accepted more cycles than available from call context"),
+        ccm.withdraw_cycles(cc_id, Cycles::new(40))
     );
 }
 
@@ -265,12 +263,9 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
         RequestMetadata::new(0, UNIX_EPOCH),
     );
 
-    assert_eq!(
-        ccm.call_context_mut(cc_id)
-            .unwrap()
-            .withdraw_cycles(Cycles::new(25)),
-        Ok(())
-    );
+    let cc = ccm.withdraw_cycles(cc_id, Cycles::new(25)).unwrap().clone();
+    assert_eq!(ccm.call_contexts().get(&cc_id).unwrap(), &cc);
+    assert_eq!(Cycles::new(5), cc.available_cycles());
 }
 
 #[test]
