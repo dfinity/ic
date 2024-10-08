@@ -26,8 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PocketIC HTTP gateway routes requests whose paths start with `/_/` and for which no canister ID can be found
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
-- The endpoint `/instances/<instance_id>/update/set_time` executes a round after setting time so that
-  a state with that time becomes certified and, e.g., query calls are evaluated on a state with the specified time.
 
 
 

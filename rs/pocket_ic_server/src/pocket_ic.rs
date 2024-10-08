@@ -975,7 +975,6 @@ impl Operation for SetTime {
         // Sets the time on all subnets.
         for subnet in pic.subnets.read().unwrap().values() {
             subnet.set_time(self.time.into());
-            subnet.tick();
         }
         OpOut::NoOutput
     }
