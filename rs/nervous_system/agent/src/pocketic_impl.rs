@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_nervous_system_clients::Request;
-use pocket_ic::PocketIc;
+use pocket_ic::nonblocking::PocketIc;
 use thiserror::Error;
 
 use crate::CallCanisters;
@@ -36,6 +36,7 @@ impl CallCanisters for PocketIc {
                 R::METHOD,
                 request_bytes,
             )
+            .await
         } else {
             self.query_call(
                 canister_id,
@@ -43,6 +44,7 @@ impl CallCanisters for PocketIc {
                 R::METHOD,
                 request_bytes,
             )
+            .await
         }
         .map_err(PocketIcCallError::PocketIc)?;
 

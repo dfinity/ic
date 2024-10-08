@@ -1,5 +1,5 @@
 {
-  "checksum": "2e5e95a125ab5d3a3e2131d32e20e295871ac98d124e0e42fa5fa77a91ac6593",
+  "checksum": "f625f9be8687fe74a5490e321e5f113cb53201d5f45a455999b7c7e5fc773ddb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18016,7 +18016,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.16.0",
+              "id": "ic-cdk 0.13.5",
               "target": "ic_cdk"
             },
             {
@@ -18843,7 +18843,7 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.215.0",
+              "id": "wasm-encoder 0.217.0",
               "target": "wasm_encoder"
             },
             {
@@ -18851,11 +18851,11 @@
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.215.0",
+              "id": "wasmparser 0.217.0",
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.215.0",
+              "id": "wasmprinter 0.217.0",
               "target": "wasmprinter"
             },
             {
@@ -29211,74 +29211,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk 0.16.0": {
-      "name": "ic-cdk",
-      "version": "0.16.0",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.16.0/download",
-          "sha256": "dd8ecacd682fa05a985253592963306cb9799622d7b1cce4b1edb89c6ec85be1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_cdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.6",
-              "target": "candid"
-            },
-            {
-              "id": "ic0 0.23.0",
-              "target": "ic0"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "ic-cdk-macros 0.16.0",
-              "target": "ic_cdk_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.16.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -29540,73 +29472,6 @@
         },
         "edition": "2021",
         "version": "0.14.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "ic-cdk-macros 0.16.0": {
-      "name": "ic-cdk-macros",
-      "version": "0.16.0",
-      "package_url": "https://github.com/dfinity/cdk-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.16.0/download",
-          "sha256": "0d4d857135deef20cc7ea8f3869a30cd9cfeb1392b3a81043790b2cd82adc3e0"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "ic_cdk_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.6",
-              "target": "candid"
-            },
-            {
-              "id": "proc-macro2 1.0.85",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            },
-            {
-              "id": "serde_tokenstream 0.2.1",
-              "target": "serde_tokenstream"
-            },
-            {
-              "id": "syn 2.0.66",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.16.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -71917,14 +71782,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasm-encoder 0.215.0": {
+    "wasm-encoder 0.217.0": {
       "name": "wasm-encoder",
-      "version": "0.215.0",
+      "version": "0.217.0",
       "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.215.0/download",
-          "sha256": "4fb56df3e06b8e6b77e37d2969a50ba51281029a9aeb3855e76b7f49b6418847"
+          "url": "https://static.crates.io/crates/wasm-encoder/0.217.0/download",
+          "sha256": "7b88b0814c9a2b323a9b46c687e726996c255ac8b64aa237dd11c81ed4854760"
         }
       },
       "targets": [
@@ -71959,56 +71824,8 @@
               "target": "leb128"
             },
             {
-              "id": "wasmparser 0.215.0",
+              "id": "wasmparser 0.217.0",
               "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.215.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "wasm-encoder 0.217.0": {
-      "name": "wasm-encoder",
-      "version": "0.217.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.217.0/download",
-          "sha256": "7b88b0814c9a2b323a9b46c687e726996c255ac8b64aa237dd11c81ed4854760"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_encoder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
             }
           ],
           "selects": {}
@@ -72295,83 +72112,6 @@
       ],
       "license_file": null
     },
-    "wasmparser 0.215.0": {
-      "name": "wasmparser",
-      "version": "0.215.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.215.0/download",
-          "sha256": "53fbde0881f24199b81cf49b6ff8f9c145ac8eb1b7fc439adb5c099734f7d90e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "serde",
-            "std",
-            "validate"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.8.11",
-              "target": "ahash"
-            },
-            {
-              "id": "bitflags 2.4.1",
-              "target": "bitflags"
-            },
-            {
-              "id": "hashbrown 0.14.5",
-              "target": "hashbrown"
-            },
-            {
-              "id": "indexmap 2.2.6",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.22",
-              "target": "semver"
-            },
-            {
-              "id": "serde 1.0.203",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.215.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "wasmparser 0.217.0": {
       "name": "wasmparser",
       "version": "0.217.0",
@@ -72403,6 +72143,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "features",
             "serde",
             "std",
@@ -72441,62 +72182,6 @@
         },
         "edition": "2021",
         "version": "0.217.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
-    "wasmprinter 0.215.0": {
-      "name": "wasmprinter",
-      "version": "0.215.0",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmprinter/0.215.0/download",
-          "sha256": "d8e9a325d85053408209b3d2ce5eaddd0dd6864d1cff7a007147ba073157defc"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmprinter",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmprinter",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.72",
-              "target": "anyhow"
-            },
-            {
-              "id": "termcolor 1.4.1",
-              "target": "termcolor"
-            },
-            {
-              "id": "wasmparser 0.215.0",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.215.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
       "license_ids": [
@@ -79505,7 +79190,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.16.0",
+    "ic-cdk 0.13.5",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certificate-verification 2.6.0",
@@ -79720,10 +79405,10 @@
     "walkdir 2.3.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.87",
-    "wasm-encoder 0.215.0",
+    "wasm-encoder 0.217.0",
     "wasm-smith 0.212.0",
-    "wasmparser 0.215.0",
-    "wasmprinter 0.215.0",
+    "wasmparser 0.217.0",
+    "wasmprinter 0.217.0",
     "wasmtime 25.0.1",
     "wasmtime-environ 25.0.1",
     "wast 212.0.0",

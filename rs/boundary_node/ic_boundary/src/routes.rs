@@ -76,14 +76,14 @@ pub enum RequestType {
     Status,
     Query,
     Call,
-    CallV3,
+    SyncCall,
     ReadState,
     ReadStateSubnet,
 }
 
 impl RequestType {
     pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::CallV3)
+        matches!(self, Self::Call | Self::SyncCall)
     }
 }
 
@@ -472,7 +472,7 @@ pub async fn validate_canister_request(
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
         PATH_CALL => RequestType::Call,
-        PATH_CALL_V3 => RequestType::CallV3,
+        PATH_CALL_V3 => RequestType::SyncCall,
         PATH_READ_STATE => RequestType::ReadState,
         _ => panic!("unknown path, should never happen"),
     };
