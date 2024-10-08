@@ -153,7 +153,7 @@ impl ErrorCause {
         match self {
             Self::Other(_) => ErrorClientFacing::Other,
             Self::BodyTimedOut => ErrorClientFacing::BodyTimedOut,
-            Self::UnableToReadBody(x) => ErrorClientFacing::UnableToReadBody(x.clone()),
+            Self::UnableToReadBody(_) => ErrorClientFacing::Other,
             Self::PayloadTooLarge(x) => ErrorClientFacing::PayloadTooLarge(*x),
             Self::UnableToParseCBOR(x) => ErrorClientFacing::UnableToParseCBOR(x.clone()),
             Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
@@ -200,7 +200,6 @@ pub enum ErrorClientFacing {
     SubnetNotFound,
     UnableToParseCBOR(String),
     UnableToParseHTTPArg(String),
-    UnableToReadBody(String),
 }
 
 impl ErrorClientFacing {
@@ -219,7 +218,6 @@ impl ErrorClientFacing {
             Self::SubnetNotFound => StatusCode::BAD_REQUEST,
             Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
             Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
-            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
         }
     }
 
@@ -238,7 +236,6 @@ impl ErrorClientFacing {
             Self::SubnetNotFound => "The specified subnet cannot be found.".to_string(),
             Self::UnableToParseCBOR(x) => format!("Failed to parse the CBOR request body: {x}"),
             Self::UnableToParseHTTPArg(x) => format!("Unable to decode the arguments of the request to the http_request method: {x}"),
-            Self::UnableToReadBody(x) => format!("Failed to read the request body: {x}"),
         }
     }
 }
