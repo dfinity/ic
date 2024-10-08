@@ -3829,7 +3829,7 @@ dependencies = [
  "ic-cdk 0.16.0",
  "num-bigint 0.4.6",
  "serde",
- "strum 0.26.2",
+ "strum 0.26.3",
  "thiserror",
 ]
 
