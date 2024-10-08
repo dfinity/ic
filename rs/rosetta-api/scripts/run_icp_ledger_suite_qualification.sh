@@ -22,5 +22,5 @@ for canister in ${CANISTERS[@]}; do
 done
 
 for ((idx = ${#CANISTERS[@]} - 1; idx >= 0; idx--)); do
-    time "$SCRIPT_DIR/run_upgrade_test.sh" "$UPGRADE_COMMIT_ID" "${CANISTERS[idx]}" '()'
+    time "$SCRIPT_DIR/run_upgrade_test.sh" "$DOWNGRADE_COMMIT_ID" "${CANISTERS[idx]}" '()'
 done
