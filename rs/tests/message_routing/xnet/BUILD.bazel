@@ -26,6 +26,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS.
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
