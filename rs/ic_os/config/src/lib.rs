@@ -72,7 +72,7 @@ mod tests {
         let icos_settings = ICOSSettings {
             logging,
             nns_public_key_path: PathBuf::from("/path/to/key"),
-            nns_url: vec!["http://localhost".parse().unwrap()],
+            nns_urls: vec!["http://localhost".parse().unwrap()],
             hostname: "mainnet".to_string(),
             node_operator_private_key_path: None,
             ssh_authorized_keys_path: None,
