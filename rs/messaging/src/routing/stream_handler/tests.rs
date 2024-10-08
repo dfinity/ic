@@ -1,7 +1,7 @@
 use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use assert_matches::assert_matches;
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
@@ -11,7 +11,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
-use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream};
+use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream, SystemState};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
@@ -2076,8 +2076,12 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
                 .canister_states
                 .get_mut(&LOCAL_CANISTER)
                 .unwrap()
-                .system_state
-                .status = CanisterStatus::Stopped;
+                .system_state = SystemState::new_stopped_for_testing(
+                *LOCAL_CANISTER,
+                PrincipalId::default(),
+                Cycles::new(u128::MAX / 2),
+                NumSeconds::from(0),
+            );
         },
         RejectReason::CanisterStopped,
     );
@@ -2093,11 +2097,12 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopping() {
                 .canister_states
                 .get_mut(&LOCAL_CANISTER)
                 .unwrap()
-                .system_state
-                .status = CanisterStatus::Stopping {
-                call_context_manager: Default::default(),
-                stop_contexts: Default::default(),
-            };
+                .system_state = SystemState::new_stopping_for_testing(
+                *LOCAL_CANISTER,
+                PrincipalId::default(),
+                Cycles::new(u128::MAX / 2),
+                NumSeconds::from(0),
+            );
         },
         RejectReason::CanisterStopping,
     );

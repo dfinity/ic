@@ -787,11 +787,8 @@ impl StreamHandlerImpl {
     /// Inducts a message into `state`. There are 3 possible outcomes:
     /// - `msg` successfully inducted, returns `None`.
     /// - `msg` silently dropped (e.g. late best-effort response), `returns None`.
-    /// - Failed to induct `msg` (error or canister migrating), returns `(StateError, RequestOrResponse)`.
+    /// - Failed to induct `msg` (error or canister migrating), returns `(RejectReason, RequestOrResponse)`.
     ///   Caller is expected to produce a reject response or a reject signal.
-    ///
-    /// The return type is `Option<_>` rather than `Result<_, _>` because not returning an error
-    /// does not always mean the message was inducted successfully.
     fn induct_message_impl(
         &self,
         msg: RequestOrResponse,
