@@ -249,8 +249,7 @@ impl TestConsensusPool {
             .get_notarization_delay_settings(self.subnet_id, registry_version)
             .unwrap()
             .expect("subnet record should be available")
-            .initial_notary_delay
-            + core::time::Duration::from_nanos(1);
+            .initial_notary_delay;
         block.context.time += monotonic_block_increment;
 
         block.context.registry_version = registry_version;

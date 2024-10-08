@@ -3854,7 +3854,7 @@ pub mod test {
                 INITIAL_NOTARY_DELAY + INITIAL_NOTARY_DELAY;
             third_block.update_content();
             time_source
-                .set_time(third_block.content.as_ref().context.time)
+                .set_time(third_block.content.as_ref().context.time + INITIAL_NOTARY_DELAY)
                 .ok();
 
             pool.insert_validated(block.clone());
@@ -3876,11 +3876,16 @@ pub mod test {
             let block = pool.make_next_block_with_rank(Rank(2));
             pool.insert_unvalidated(block.clone());
             time_source
-                .set_time(block.content.as_ref().context.time)
+                .set_time(block.content.as_ref().context.time + INITIAL_NOTARY_DELAY)
                 .ok();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(changeset.is_empty());
+            assert_matches!(
+                changeset[..],
+                [ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(ref proposal)
+                )] if proposal.rank() == block.rank()
+            );
         });
     }
 }
