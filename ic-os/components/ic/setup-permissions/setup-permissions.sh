@@ -23,7 +23,7 @@ function make_group_owned_and_sticky() {
     local TARGET_DIR="$1"
     local USER="$2"
     local GROUP="$3"
-    local RECURSIVE_FLAG="$4"  # "-R" if recursive
+    local RECURSIVE_FLAG="$4" # "-R" if recursive
 
     mkdir -p "${TARGET_DIR}"
 
