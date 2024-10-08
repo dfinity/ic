@@ -31,23 +31,16 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
 
     canbench_bin = "$(location @crate_index//:canbench__canbench)"
     wasm_path = "$(location :{name}_wasm)".format(name = name)
-    pocket_ic_bin = "$(rootpath //:pocket-ic-server-v6)"
+    pocket_ic_bin = "$(rootpath //:pocket-ic-server)"
     data = [
         ":{name}_wasm".format(name = name),
         "@crate_index//:canbench__canbench",
         results_file,
         "//:WORKSPACE.bazel",
-        "//:pocket-ic-server-v6",
+        "//:pocket-ic-server",
     ]
     canbench_results_path = "$(rootpath {results_file})".format(results_file = results_file)
     env = {
-        "CANBENCH_BIN": canbench_bin,
-        "WASM_PATH": wasm_path,
-        "CANBENCH_RESULTS_PATH": canbench_results_path,
-        # Hack to escape the sandbox and update the actual repository
-        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-    }
-    test_env = {
         "CANBENCH_BIN": canbench_bin,
         "WASM_PATH": wasm_path,
         "CANBENCH_RESULTS_PATH": canbench_results_path,
@@ -58,6 +51,7 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
 
     native.sh_binary(
         name = name,
+        testonly = True,
         srcs = [
             "//bazel:canbench.sh",
         ],
@@ -67,6 +61,7 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
 
     native.sh_binary(
         name = name + "_update",
+        testonly = True,
         srcs = [
             "//bazel:canbench.sh",
         ],
@@ -81,9 +76,7 @@ def rust_canbench(name, results_file, add_test = False, **kwargs):
             srcs = [
                 "//bazel:canbench.sh",
             ],
-            data = data + [
-                "//rs/pocket_ic_server:pocket-ic-server",
-            ],
-            env = test_env,
+            data = data,
+            env = env,
             args = ["--test"],
         )

@@ -150,10 +150,3 @@ genrule(
     outs = ["pocket-ic"],
     cmd = "gunzip -c $< > $@",
 )
-
-genrule(
-    name = "pocket-ic-server-v6",
-    srcs = ["@pocket-ic-server-v6-gz//file"],
-    outs = ["pocket-ic-v6"],
-    cmd = "gunzip -c $< > $@",
-)

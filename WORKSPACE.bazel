@@ -987,9 +987,3 @@ http_file(
     sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
     url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
 )
-
-http_file(
-    name = "pocket-ic-server-v6-gz",
-    sha256 = "9fdf7040696c26c8fd8d3f12b3fbbf4e4b9da1e0d873fe2cb4ab2735e0fd8289",
-    url = "https://github.com/dfinity/pocketic/releases/download/6.0.0/pocket-ic-x86_64-linux.gz",
-)
