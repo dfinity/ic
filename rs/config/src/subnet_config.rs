@@ -366,6 +366,10 @@ pub struct CyclesAccountManagerConfig {
     /// than 1 cycles per instruction.
     pub ten_update_instructions_execution_fee: Cycles,
 
+    /// Fee for every 10 instructions executed when executing update type
+    /// messages on a Wasm64 canister.
+    pub ten_update_instructions_execution_fee_wasm64: Cycles,
+
     /// Fee for every inter-canister call performed. This includes the fee for
     /// sending the request and receiving the response.
     pub xnet_call_fee: Cycles,
@@ -438,6 +442,7 @@ impl CyclesAccountManagerConfig {
             // verified subnet is using.
             update_message_execution_fee: Cycles::new(590_000),
             ten_update_instructions_execution_fee: Cycles::new(4),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(8),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
@@ -466,6 +471,7 @@ impl CyclesAccountManagerConfig {
             compute_percent_allocated_per_second_fee: Cycles::new(0),
             update_message_execution_fee: Cycles::new(0),
             ten_update_instructions_execution_fee: Cycles::new(0),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(0),
             xnet_call_fee: Cycles::new(0),
             xnet_byte_transmission_fee: Cycles::new(0),
             ingress_message_reception_fee: Cycles::new(0),

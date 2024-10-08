@@ -33,6 +33,7 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
+use ic_interfaces::execution_environment::HypervisorError::InsufficientCyclesBalance;
 
 #[cfg(test)]
 mod tests;
@@ -444,6 +445,49 @@ impl InstallCodeHelper {
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
         }
 
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
+        );
+
+        // In case the canister is Wasm64, we need to add the Wasm64 install surcharge.
+        if self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64)
+        {
+            let mut cycles_account_manager = *round.cycles_account_manager;
+            cycles_account_manager.switch_to_wasm64_mode();
+            let mem_usage = self.canister.memory_usage();
+            let comp_allocation = self.canister.compute_allocation();
+            match cycles_account_manager.wasm64_install_or_upgrade_surcharge(
+                &mut self.canister.system_state,
+                wasm_memory_usage,
+                mem_usage,
+                comp_allocation,
+                instructions_used,
+                original.subnet_size,
+                false,
+            ) {
+                Ok(_) => {}
+                Err(err) => {
+                    return finish_err(
+                        clean_canister,
+                        self.instructions_left(),
+                        original,
+                        round,
+                        CanisterManagerError::Hypervisor(
+                            self.canister.canister_id(),
+                            InsufficientCyclesBalance(err),
+                        ),
+                        self.take_canister_log(),
+                    );
+                }
+            }
+        }
+
         // After this point `install_code` is guaranteed to succeed.
         // Commit all the remaining state and round limit changes.
 
@@ -452,12 +496,6 @@ impl InstallCodeHelper {
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
         }
-
-        let instructions_used = NumInstructions::from(
-            message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
-        );
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);

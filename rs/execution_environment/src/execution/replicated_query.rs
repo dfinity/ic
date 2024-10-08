@@ -44,7 +44,18 @@ pub fn execute_replicated_query(
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
     let reveal_top_up = canister.controllers().contains(req.sender());
-    let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
+
+    let is_wasm64_execution = canister
+        .execution_state
+        .as_ref()
+        .map_or(false, |es| es.is_wasm64);
+
+    let mut cycles_account_manager = *round.cycles_account_manager;
+    if is_wasm64_execution {
+        cycles_account_manager.switch_to_wasm64_mode();
+    }
+
+    let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
         message_memory_usage,
@@ -68,7 +79,7 @@ pub fn execute_replicated_query(
     };
 
     if let WasmMethod::CompositeQuery(_) = &method {
-        round.cycles_account_manager.refund_unused_execution_cycles(
+        cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
@@ -93,7 +104,7 @@ pub fn execute_replicated_query(
     }
 
     if let Err(user_error) = validate_message(&canister, &method) {
-        round.cycles_account_manager.refund_unused_execution_cycles(
+        cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
@@ -148,7 +159,7 @@ pub fn execute_replicated_query(
     let response =
         wasm_result_to_query_response(result, &canister, time, call_origin, log, req.take_cycles());
 
-    round.cycles_account_manager.refund_unused_execution_cycles(
+    cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
         instruction_limit,

@@ -7889,3 +7889,62 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
 }
+
+fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cycles, Cycles) {
+    let memory_type = if is_wasm64_mode { "i64" } else { "" };
+    let canister_wat = format!(
+        r#"
+        (module 
+            (func (export "canister_update test")
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+                (drop (i32.add (i32.const 1) (i32.const 2)))
+            )
+            (memory {memory_type} 1)
+        )
+    "#
+    );
+
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let canister_id = test
+        .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
+        .unwrap();
+
+    let balance_before_ingress = test.canister_state(canister_id).system_state.balance();
+    let cost_for_install = DEFAULT_PROVISIONAL_BALANCE - balance_before_ingress;
+
+    if execute_ingress {
+        let _ = test.ingress(canister_id, "test", vec![]);
+    } else {
+        return (balance_before_ingress, cost_for_install);
+    }
+
+    let balance_after_ingress = test.canister_state(canister_id).system_state.balance();
+    let cost_for_ingress = balance_before_ingress - balance_after_ingress;
+
+    (balance_after_ingress, cost_for_ingress)
+}
+
+#[test]
+fn check_update_call_canister_in_wasm64_mode_is_charged_correctly() {
+    let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, true);
+    let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, true);
+
+    // Balance should be lower in 64-bit mode.
+    assert_lt!(balance64, balance32);
+    // Execution cost should be higher in 64-bit mode.
+    assert_lt!(execution_cost32, execution_cost64);
+}
+
+#[test]
+fn check_install_code_in_wasm64_mode_is_charged_correctly() {
+    let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
+    let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
+
+    // Balance should be lower in 64-bit mode.
+    assert_lt!(balance64, balance32);
+    // Execution cost should be higher in 64-bit mode.
+    assert_lt!(execution_cost32, execution_cost64);
+}

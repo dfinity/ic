@@ -57,29 +57,39 @@ pub fn execute_update(
                     .caller()
                     .map(|caller| canister.controllers().contains(&caller))
                     .unwrap_or_default();
-                let prepaid_execution_cycles =
-                    match round.cycles_account_manager.prepay_execution_cycles(
-                        &mut canister.system_state,
-                        memory_usage,
-                        message_memory_usage,
-                        execution_parameters.compute_allocation,
-                        execution_parameters.instruction_limits.message(),
-                        subnet_size,
-                        reveal_top_up,
-                    ) {
-                        Ok(cycles) => cycles,
-                        Err(err) => {
-                            return finish_call_with_error(
-                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                                canister,
-                                call_or_task,
-                                NumInstructions::from(0),
-                                round.time,
-                                execution_parameters.subnet_type,
-                                round.log,
-                            );
-                        }
-                    };
+
+                let is_wasm64_execution = canister
+                    .execution_state
+                    .as_ref()
+                    .map_or(false, |es| es.is_wasm64);
+
+                let mut cycles_account_manager = *round.cycles_account_manager;
+                if is_wasm64_execution {
+                    cycles_account_manager.switch_to_wasm64_mode();
+                }
+
+                let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
+                    &mut canister.system_state,
+                    memory_usage,
+                    message_memory_usage,
+                    execution_parameters.compute_allocation,
+                    execution_parameters.instruction_limits.message(),
+                    subnet_size,
+                    reveal_top_up,
+                ) {
+                    Ok(cycles) => cycles,
+                    Err(err) => {
+                        return finish_call_with_error(
+                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                            canister,
+                            call_or_task,
+                            NumInstructions::from(0),
+                            round.time,
+                            execution_parameters.subnet_type,
+                            round.log,
+                        );
+                    }
+                };
                 (canister, prepaid_execution_cycles, false)
             }
         };
@@ -240,8 +250,18 @@ fn finish_err(
         round.counters.charging_from_balance_error,
     );
 
+    let is_wasm64_execution = canister
+        .execution_state
+        .as_ref()
+        .map_or(false, |es| es.is_wasm64);
+
+    let mut cycles_account_manager = *round.cycles_account_manager;
+    if is_wasm64_execution {
+        cycles_account_manager.switch_to_wasm64_mode();
+    }
+
     let instruction_limit = original.execution_parameters.instruction_limits.message();
-    round.cycles_account_manager.refund_unused_execution_cycles(
+    cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         instructions_left,
         instruction_limit,
@@ -490,7 +510,19 @@ impl UpdateHelper {
             round.log,
             round.counters.ingress_with_cycles_error,
         );
-        round.cycles_account_manager.refund_unused_execution_cycles(
+
+        let is_wasm64_execution = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
+        let mut cycles_account_manager = *round.cycles_account_manager;
+        if is_wasm64_execution {
+            cycles_account_manager.switch_to_wasm64_mode();
+        }
+
+        cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
