@@ -3880,12 +3880,7 @@ pub mod test {
                 .ok();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_matches!(
-                changeset[..],
-                [ChangeAction::MoveToValidated(
-                    ConsensusMessage::BlockProposal(ref proposal)
-                )] if proposal.rank() == block.rank()
-            );
+            assert!(changeset.is_empty());
         });
     }
 }
