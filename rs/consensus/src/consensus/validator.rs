@@ -1919,7 +1919,6 @@ pub mod test {
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::messaging::RefMockMessageRouting;
-    use ic_limits::INITIAL_NOTARY_DELAY;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -3847,15 +3846,14 @@ pub mod test {
 
             let block = pool.make_next_block_with_rank(Rank(1));
             let mut second_block = block.clone();
-            second_block.content.as_mut().context.time += INITIAL_NOTARY_DELAY;
+            second_block.content.as_mut().context.time += Duration::from_nanos(1);
             second_block.update_content();
             let mut third_block = block.clone();
-            third_block.content.as_mut().context.time +=
-                INITIAL_NOTARY_DELAY + INITIAL_NOTARY_DELAY;
+            third_block.content.as_mut().context.time += Duration::from_nanos(2);
             third_block.update_content();
             time_source
-                .set_time(third_block.content.as_ref().context.time + INITIAL_NOTARY_DELAY)
-                .ok();
+                .set_time(third_block.content.as_ref().context.time)
+                .unwrap();
 
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(second_block.clone());
@@ -3876,8 +3874,8 @@ pub mod test {
             let block = pool.make_next_block_with_rank(Rank(2));
             pool.insert_unvalidated(block.clone());
             time_source
-                .set_time(block.content.as_ref().context.time + INITIAL_NOTARY_DELAY)
-                .ok();
+                .set_time(block.content.as_ref().context.time)
+                .unwrap();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(

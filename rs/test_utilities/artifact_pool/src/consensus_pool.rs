@@ -244,12 +244,14 @@ impl TestConsensusPool {
         let registry_version = self.registry_client.get_latest_version();
 
         // Increase time monotonically by at least initial_notary_delay
-        let monotonic_block_increment = self
+        let settings = self
             .registry_client
             .get_notarization_delay_settings(self.subnet_id, registry_version)
             .unwrap()
-            .expect("subnet record should be available")
-            .initial_notary_delay;
+            .expect("subnet record should be available");
+        let monotonic_block_increment = settings.initial_notary_delay
+            + settings.unit_delay * rank.0 as u32
+            + std::time::Duration::from_nanos(1);
         block.context.time += monotonic_block_increment;
 
         block.context.registry_version = registry_version;
