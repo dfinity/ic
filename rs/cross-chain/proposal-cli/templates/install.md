@@ -18,7 +18,7 @@ TODO: THIS MUST BE FILLED OUT
 git fetch
 git checkout {{at}}
 cd {{canister.repo_dir().as_path().display()}}
-{{install_args.didc_encode_cmd()}}
+{{install_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 
 ## Wasm Verification
