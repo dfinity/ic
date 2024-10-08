@@ -1,11 +1,11 @@
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     EccCurveType, EccPoint, EccScalar, PedersenCommitment, PolynomialCommitment,
     PolynomialCommitmentType, SimpleCommitment,
 };
 use rand::{CryptoRng, Rng};
 
 use assert_matches::assert_matches;
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
@@ -862,8 +862,11 @@ pub fn compute_public_key(
         algorithm_id: alg,
         public_key: key_transcript.constant_term().serialize(),
     };
-    ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(&master_public_key, path)
-        .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{:?}", e)))
+    ic_crypto_internal_threshold_sig_canister_threshold_sig::derive_threshold_public_key(
+        &master_public_key,
+        path,
+    )
+    .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{:?}", e)))
 }
 
 #[derive(Clone, Debug)]

@@ -1,8 +1,8 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::{corrupt_dealing, ComplaintCorrupter};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::{corrupt_dealing, ComplaintCorrupter};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     IDkgComplaintInternal, IDkgDealingInternal, NodeIndex, Seed,
 };
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
@@ -2798,7 +2798,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
                 .expect("failed to deserialize internal dealing");
 
         let corrupted_internal_dealing =
-            ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing(
+            ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::corrupt_dealing(
                 &internal_dealing,
                 &[receiver_index],
                 Seed::from_rng(rng),

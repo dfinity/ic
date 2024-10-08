@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "//rs/types/types",
     "@crate_index//:assert_matches",
     "@crate_index//:clap_3_2_25",

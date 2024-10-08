@@ -14,7 +14,7 @@ use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
-use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
@@ -26,7 +26,7 @@ pub mod conversions;
 mod external_conversion_utilities;
 
 #[cfg(test)]
-use ic_crypto_internal_threshold_sig_ecdsa::EccScalarBytes;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::EccScalarBytes;
 #[cfg(test)]
 use proptest::prelude::*;
 #[cfg(test)]

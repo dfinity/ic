@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
@@ -560,7 +560,7 @@ mod privately_verify {
 
 mod privately_verify_dealing {
     use super::*;
-    use ic_crypto_internal_threshold_sig_ecdsa::privately_verify_dealing;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::privately_verify_dealing;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::AlgorithmId;
     use strum::IntoEnumIterator;

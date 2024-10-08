@@ -1,5 +1,5 @@
 [package]
-name = "tecdsa-fuzz"
+name = "canister-threshold-sig-fuzz"
 version = "0.0.0"
 publish = false
 authors.workspace = true
@@ -16,7 +16,7 @@ libfuzzer-sys = "0.4"
 num-bigint = { workspace = true }
 subtle = "2.4"
 
-[dependencies.ic-crypto-internal-threshold-sig-ecdsa]
+[dependencies.ic-crypto-internal-threshold-sig-canister-threshold-sig]
 path = ".."
 
 # Prevent this from interfering with workspaces

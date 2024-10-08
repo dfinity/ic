@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
-use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgDealingInternal;
 
 // This fuzzer tries to find panics in CBOR deserialization of dealings. We ignore errors
 // returned by the decoding, as these do not lead to panics. You can run the fuzzer locally:

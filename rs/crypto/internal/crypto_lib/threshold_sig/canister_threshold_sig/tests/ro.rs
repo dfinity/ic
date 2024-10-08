@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 
 #[test]
 fn test_random_oracle_stability() -> CanisterThresholdResult<()> {

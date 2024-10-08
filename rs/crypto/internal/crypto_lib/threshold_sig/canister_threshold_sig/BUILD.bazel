@@ -30,14 +30,14 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/fe-derive",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/fe-derive",
     "@crate_index//:paste",
     "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:bip32",
@@ -51,10 +51,10 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "tecdsa",
+    name = "canister_threshold_sig",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_crypto_internal_threshold_sig_ecdsa",
+    crate_name = "ic_crypto_internal_threshold_sig_canister_threshold_sig",
     proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
@@ -65,9 +65,9 @@ rust_library(
 )
 
 rust_test(
-    name = "tecdsa_test",
+    name = "canister_threshold_sig_test",
     aliases = ALIASES,
-    crate = ":tecdsa",
+    crate = ":canister_threshold_sig",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -80,7 +80,7 @@ rust_test_suite(
     aliases = ALIASES,
     compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":tecdsa"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":canister_threshold_sig"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_bench(
@@ -89,7 +89,7 @@ rust_bench(
     srcs = ["benches/dealings.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
@@ -104,7 +104,7 @@ rust_bench(
     srcs = ["benches/group_ops.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand",
@@ -117,7 +117,7 @@ rust_bench(
     srcs = ["benches/hash2curve.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "@crate_index//:criterion",
     ],
 )
@@ -128,7 +128,7 @@ rust_bench(
     srcs = ["benches/key_derivation.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/types/types",
         "@crate_index//:criterion",
@@ -142,7 +142,7 @@ rust_bench(
     srcs = ["benches/poly.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand",
@@ -155,7 +155,7 @@ rust_bench(
     srcs = ["benches/zk.rs"],
     deps = [
         # Keep sorted.
-        ":tecdsa",
+        ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand",

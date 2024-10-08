@@ -1,4 +1,4 @@
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use std::convert::TryFrom;
 use strum::IntoEnumIterator;

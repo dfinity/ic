@@ -1,5 +1,5 @@
 [package]
-name = "ic-crypto-internal-threshold-sig-ecdsa"
+name = "ic-crypto-internal-threshold-sig-canister-threshold-sig"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -38,7 +38,7 @@ assert_matches = { workspace = true }
 bip32 = { version = "0.5", features = ["secp256k1"] }
 criterion = { workspace = true }
 ed25519-dalek = { workspace = true }
-ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "test_utils" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 num-traits = { workspace = true }
 strum = { workspace = true }

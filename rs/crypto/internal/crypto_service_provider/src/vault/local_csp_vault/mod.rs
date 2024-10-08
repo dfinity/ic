@@ -23,7 +23,7 @@ use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
 use crate::{CspRwLock, KeyId};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_ecdsa::{CombinedCommitment, CommitmentOpening};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{CombinedCommitment, CommitmentOpening};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;

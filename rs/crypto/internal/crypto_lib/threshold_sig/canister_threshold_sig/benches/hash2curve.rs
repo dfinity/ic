@@ -1,5 +1,5 @@
 use criterion::*;
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 
 fn hash2curve(c: &mut Criterion) {
     let input = "greetings humans".as_bytes();

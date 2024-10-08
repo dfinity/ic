@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, EccPoint};
 
 // This fuzzer tries to find panics in CBOR deserialization of ECC points. We ignore errors
 // returned by the decoding, as these do not lead to panics. You can run the fuzzer locally:

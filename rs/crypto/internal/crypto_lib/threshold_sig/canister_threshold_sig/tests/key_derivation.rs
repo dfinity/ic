@@ -1,10 +1,10 @@
 use assert_matches::assert_matches;
-use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::convert::{TryFrom, TryInto};
 
-use ic_crypto_internal_threshold_sig_ecdsa_test_utils::*;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::*;
 
 #[test]
 fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), CanisterThresholdError>
@@ -477,7 +477,7 @@ fn key_derivation_on_unsupported_alg_fails() {
 
     let path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let derived = ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(&mpk, &path);
+    let derived = ic_crypto_internal_threshold_sig_canister_threshold_sig::derive_threshold_public_key(&mpk, &path);
 
     assert_matches!(
         derived,
