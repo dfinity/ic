@@ -48,14 +48,14 @@ fn read_custom_section(wasm_bytes: &[u8], query_name: &str) -> Vec<u8> {
 
 #[test]
 fn test_why_list_neurons_expensive() {
-    // Step 1: Prepare the world
-
-    // Step 1.1: Load golden nns state into a StateMachine.
+    // Load golden nns state into a StateMachine.
     let state_machine = new_state_machine_with_golden_nns_state_or_panic();
 
-    // Step 1.2: Custom governance WASMs
+    // Install governance WASM built from working copy. The main thing this does
+    // is allocate some stable memory that will be used to store profiling data
+    // that can be used to generate a flame graph. This space will be used by
+    // ic-wasm instrument.
 
-    // Step 1.2.1: Allocate stable memory for ic-wasm profiling. This happens during post_upgrade.
     println!("\nAllocating stable memory for profiling...\n");
     let governance_wasm_gz: Vec<u8> = canister_test::Project::cargo_bin_maybe_from_env(
         "governance-canister",
@@ -89,6 +89,10 @@ fn test_why_list_neurons_expensive() {
     println!("  page_limit = {}", page_limit);
     println!("");
 
+    // Grab a sample of principals that have "associated" neurons. More
+    // precisely, these principals either control or are a hotkey of some
+    // (nonzero number of) neurons. These will later be used as callers of the
+    // list_neurons method.
     let principal_id_to_neuron_count = state_machine.execute_ingress(
         GOVERNANCE_CANISTER_ID,
         "principal_id_to_neuron_count",
@@ -117,9 +121,9 @@ fn test_why_list_neurons_expensive() {
     // DO NOT MERGE: THIS IS A HACK
     let page_limit = page_limit / 2;
 
-    // Step 1.2.2: Enable ic-wasm profiling.
+    // Enable profiling of the governance canister.
 
-    // Step 1.2.2.1: Modify governance WASM.
+    // Have ic-wasm instrument the governance WASM.
     let mut instrumented_governance_wasm =
         walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
             .expect("walrus cannot cope with our WASM.");
@@ -134,23 +138,16 @@ fn test_why_list_neurons_expensive() {
     .unwrap();
     let instrumented_governance_wasm = instrumented_governance_wasm.emit_wasm();
 
-    // Step 1.2.2.2: Read some metadata from modified governance WASM that will later be used
-    // visualize. This is based on
+    // Read some metadata from the profiling-enabled governance WASM that will
+    // later be used to visualize where instructions are consumed. This is based on
     // https://sourcegraph.com/github.com/dfinity/ic-repl@746bea25ddd4cc98709f6b9eaa283f32a21ac30d/-/blob/src/helper.rs?L504
     let name_custom_section_payload = Decode!(
         &read_custom_section(&instrumented_governance_wasm, "icp:public name"),
         BTreeMap<u16, String>
     )
     .unwrap();
-    /*
-    println!("");
-    println!(
-        "custom section 'name' payload:\n{:#?}",
-        name_custom_section_payload
-    );
-    */
 
-    // Step 1.2.2.3: Install modified governance WASM.
+    // Install the profiling-enabled governance WASM.
     println!("");
     println!("Installing governance WITH ic-wasm profiling ENABLED...");
     println!("");
@@ -166,12 +163,9 @@ fn test_why_list_neurons_expensive() {
     println!("Ready for fine-grained performance measurement 👍");
     println!("");
 
-    // Step 2: Run the code under test (while profiling is enabled).
-
     let mut previous_neuron_count = None;
-    // TODO: more than 1 neuron with similar number of neurons.
+    // Make a bunch of list_neuron calls.
     for (caller, neuron_count) in principal_id_to_neuron_count {
-        // let caller = PrincipalId::from_str(caller).unwrap();
 
         if neuron_count > 9000 {
             continue;
@@ -198,6 +192,7 @@ fn test_why_list_neurons_expensive() {
             }
         };
 
+        // Call code being measured.
         let _result = list_neurons(
             &state_machine,
             caller,
@@ -209,12 +204,10 @@ fn test_why_list_neurons_expensive() {
             },
         );
 
-        // Step 3: Inspect results. In particular, generate flame graph.
-
-        // Step 3.1: Fetch measurement.
+        // Fetch measurement.
         let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
 
-        // Step 3.2: Visualize. Output is at list_neurons.svg.
+        // Visualize where instructions get consumed.
         let cost = render_profiling( // DO NOT MERGE
             profiling,
             &name_custom_section_payload,
@@ -223,6 +216,7 @@ fn test_why_list_neurons_expensive() {
         )
         .unwrap();
 
+        // Print data that can be copied into a spreadsheet for further analysis.
         println!("{}\t{}\t{}", caller, neuron_count, unwrap_cost(cost));
     }
 }
