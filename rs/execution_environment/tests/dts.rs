@@ -187,7 +187,6 @@ fn dts_env(
             message_instruction_limit,
             slice_instruction_limit,
         ))))
-        .with_canister_snapshots(true)
         .with_subnet_type(SubnetType::Application)
         .build()
 }

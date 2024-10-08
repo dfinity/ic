@@ -6465,9 +6465,7 @@ fn can_create_and_restore_snapshot() {
 
 #[test]
 fn restore_heap_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6534,9 +6532,7 @@ fn restore_heap_from_snapshot() {
 
 #[test]
 fn restore_stable_memory_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6613,9 +6609,7 @@ fn restore_stable_memory_from_snapshot() {
 
 #[test]
 fn restore_binary_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -6678,9 +6672,7 @@ fn restore_binary_from_snapshot() {
 
 #[test]
 fn restore_chunk_store_from_snapshot() {
-    let env = StateMachineBuilder::new()
-        .with_canister_snapshots(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(false);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
