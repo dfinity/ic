@@ -180,7 +180,7 @@ impl Setup {
 
             // Transfer From
             let transfer_from_args = TransferFromArgs {
-                spender_subaccount: None,
+                spender_subaccount: Some(USER2_SUBACCOUNT),
                 from: Account {
                     owner: USER1_PRINCIPAL_ID.0,
                     subaccount: Some(USER1_SUBACCOUNT),
