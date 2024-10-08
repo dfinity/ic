@@ -517,7 +517,7 @@ impl TaskQueue {
                     self.paused_or_aborted_task,
                     Some(ExecutionTask::PausedExecution { .. })
                 ),
-                "Received aborted task {:?} is not compatible with paused task {:?}.",
+                "Received aborted task {:?} which is not compatible with paused task {:?}.",
                 aborted_task,
                 self.paused_or_aborted_task
             ),
