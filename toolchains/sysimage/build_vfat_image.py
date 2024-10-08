@@ -41,7 +41,17 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             with open(os.path.join(fs_basedir, path), "wb") as f:
                 f.write(tf.extractfile(member).read())
             subprocess.run(
-                ["faketime", "-f", "1970-1-1 0:0:0", "mcopy", "-o", "-i", out_file, os.path.join(fs_basedir, path), "::/" + path],
+                [
+                    "faketime",
+                    "-f",
+                    "1970-1-1 0:0:0",
+                    "mcopy",
+                    "-o",
+                    "-i",
+                    out_file,
+                    os.path.join(fs_basedir, path),
+                    "::/" + path,
+                ],
                 check=True,
             )
         else:

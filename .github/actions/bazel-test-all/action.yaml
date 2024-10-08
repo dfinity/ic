@@ -19,8 +19,8 @@ inputs:
   BAZEL_STARTUP_ARGS:
     required: false
     default: '--output_base=/var/tmp/bazel-output/'
-  HONEYCOMB_API_TOKEN:
-    required: false
+  BUILDEVENT_APIKEY:
+    required: true
   SSH_PRIVATE_KEY:
     required: false
 
@@ -50,7 +50,7 @@ runs:
           ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
-          if [ -n "$HONEYCOMB_API_TOKEN" ] && [ -f ./bazel-bep.pb ]; then
+          if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
               # only the (more relevant) output from the main bazel command is shown.
               exportout=$(mktemp)
@@ -70,5 +70,6 @@ runs:
           BAZEL_STARTUP_ARGS: ${{ inputs.BAZEL_STARTUP_ARGS }}
           CI_PULL_REQUEST_TARGET_BRANCH_NAME: ${{ github.event.pull_request.base.ref }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HONEYCOMB_API_TOKEN: ${{ inputs.HONEYCOMB_API_TOKEN }}
+          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BUILDEVENT_APIKEY: ${{ inputs.BUILDEVENT_APIKEY }}
           SSH_PRIVATE_KEY: ${{ inputs.SSH_PRIVATE_KEY }}

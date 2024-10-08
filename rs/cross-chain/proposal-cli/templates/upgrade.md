@@ -20,7 +20,7 @@ TODO: THIS MUST BE FILLED OUT
 git fetch
 git checkout {{to}}
 cd {{canister.repo_dir().as_path().display()}}
-{{upgrade_args.didc_encode_cmd()}}
+{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 
 ## Release Notes

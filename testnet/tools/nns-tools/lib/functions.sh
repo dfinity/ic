@@ -110,6 +110,11 @@ propose_upgrade_canister_wasm_file_pem() {
     echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
+    local ENCODED_ARGS_SHA=""
+
+    if [ -f "$ENCODED_ARGS_FILE" ]; then
+        local ENCODED_ARGS_SHA=$(sha_256 "$ENCODED_ARGS_FILE")
+    fi
 
     $IC_ADMIN --nns-url "$NNS_URL" -s "$PEM" \
         propose-to-change-nns-canister --mode=upgrade \
@@ -119,7 +124,8 @@ propose_upgrade_canister_wasm_file_pem() {
         --summary-file $PROPOSAL \
         --proposer "$NEURON_ID" \
         $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
-        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE") \
+        $([ -z "$ENCODED_ARGS_SHA" ] || echo "--arg-sha256 $ENCODED_ARGS_SHA")
 
     rm -rf $PROPOSAL
 }
