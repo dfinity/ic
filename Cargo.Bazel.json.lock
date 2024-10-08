@@ -1,5 +1,5 @@
 {
-  "checksum": "0b3ea17c968956a9bf172b31f0d4f15bc9347326fecb83b91781451bc74f5308",
+  "checksum": "bfd99bc1fb1610640d53b82762827388cd6a7b8960dd19d804e6fb0e1aaf034d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17817,7 +17817,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.5",
+              "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
             },
             {
@@ -29036,6 +29036,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk 0.16.0": {
+      "name": "ic-cdk",
+      "version": "0.16.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.16.0/download",
+          "sha256": "dd8ecacd682fa05a985253592963306cb9799622d7b1cce4b1edb89c6ec85be1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.16.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.16.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -29297,6 +29365,73 @@
         },
         "edition": "2021",
         "version": "0.14.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.16.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.16.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.16.0/download",
+          "sha256": "0d4d857135deef20cc7ea8f3869a30cd9cfeb1392b3a81043790b2cd82adc3e0"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.16.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -79366,7 +79501,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.5",
+    "ic-cdk 0.16.0",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certificate-verification 2.6.0",
