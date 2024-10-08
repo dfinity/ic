@@ -24,7 +24,11 @@ use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError, TimeWarp as GovTimeWarp},
     neuron_data_validation::NeuronDataValidationSummary,
     pb::v1::{self as gov_pb, Governance as InternalGovernanceProto},
-    storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
+    storage::{
+        allocate_ic_wasm_instrument_memory_once, grow_upgrades_memory_to, validate_stable_storage,
+        where_ic_wasm_instrument_memory as where_ic_wasm_instrument_memory_native,
+        with_upgrades_memory,
+    },
 };
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
@@ -423,6 +427,8 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
+    allocate_ic_wasm_instrument_memory_once();
+
     let restored_state = with_upgrades_memory(|memory| {
         let result: Result<InternalGovernanceProto, _> = load_protobuf(memory);
         result
@@ -453,6 +459,11 @@ fn canister_post_upgrade() {
     ));
 
     validate_stable_storage();
+}
+
+#[query]
+fn where_ic_wasm_instrument_memory() -> (u64, u64) {
+    where_ic_wasm_instrument_memory_native()
 }
 
 #[cfg(feature = "test")]
@@ -530,6 +541,50 @@ async fn claim_or_refresh_neuron_from_account(
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
+
+/// What "principal P 'has' neuron N" means precisely is that P is either a
+/// controller of N, a hotkey (or both).
+use std::collections::HashMap;
+#[update]
+fn principal_id_to_neuron_count() // DO NOT MERGE
+    -> Vec<(PrincipalId, /* neuron_count */ u64)>
+{
+    use ic_nns_governance::storage::with_stable_neuron_indexes;
+
+    let mut result = HashMap::new();
+
+    with_stable_neuron_indexes(|neuron_indexes| {
+        for ((principal_id, _neuron_id), ()) in
+            neuron_indexes
+                .principal()
+                .principal_and_neuron_id_set
+                .iter()
+        {
+            let principal_id = PrincipalId::from(principal_id);
+            let count = result.entry(principal_id).or_default();
+            *count += 1;
+        }
+    });
+
+    let mut result = result.into_iter().collect::<Vec<_>>();
+    result.sort_by_key(|(_principal_id, count)| *count);
+    result.reverse();
+
+    // Decimate tail down to 1k elements. (Thus, result will end up with 2k).
+    let tail = result.split_off(1000);
+    let mut random = rand::rngs::StdRng::seed_from_u64(42);
+    use rand::seq::IteratorRandom;
+    let mut new_tail = vec![(PrincipalId::new_user_test_id(0), 0); 1000];
+    tail
+        .into_iter()
+        .choose_multiple_fill(&mut random, &mut new_tail);
+    let mut tail = new_tail;
+    tail.sort_by_key(|(_principal_id, neuron_count)| *neuron_count);
+    tail.reverse();
+    result.append(&mut tail);
+
+    result
+}
 
 #[update]
 fn claim_gtc_neurons(
@@ -662,7 +717,7 @@ fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
     governance().list_proposals(&caller(), &(req.into())).into()
 }
 
-#[query]
+#[update]
 fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
     debug_log("list_neurons");
     governance().list_neurons(&(req.into()), caller()).into()
@@ -762,10 +817,11 @@ fn get_network_economics_parameters() -> NetworkEconomics {
     NetworkEconomics::from(response)
 }
 
-#[heartbeat]
+/* DO NOT MERGE #[heartbeat]
 async fn heartbeat() {
     governance_mut().run_periodic_tasks().await
 }
+*/
 
 // Protobuf interface.
 

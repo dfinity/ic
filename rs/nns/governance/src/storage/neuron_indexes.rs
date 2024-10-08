@@ -66,7 +66,7 @@ where
 }
 
 /// Neuron indexes based on stable storage.
-pub(crate) struct StableNeuronIndexes<Memory>
+pub /* DO NOT MERGE (crate)*/ struct StableNeuronIndexes<Memory>
 where
     Memory: ic_stable_structures::Memory,
 {

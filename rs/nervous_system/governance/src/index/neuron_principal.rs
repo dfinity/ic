@@ -132,6 +132,7 @@ where
     NeuronId: Storable + Default + Clone + Ord,
     M: Memory,
 {
+    pub // DO NOT MERGE
     principal_and_neuron_id_set: StableBTreeMap<(Principal, NeuronId), (), M>,
 }
 

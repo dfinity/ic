@@ -200,6 +200,7 @@ rust_canister(
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
+    keep_name_section = True,
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
