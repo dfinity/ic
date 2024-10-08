@@ -26,7 +26,7 @@ WORKDIR /tmp
 # Download and verify ic-gateway
 RUN \
     curl -L -O https://github.com/dfinity/ic-gateway/releases/download/v0.1.56/ic-gateway_0.1.56_amd64.deb && \
-    echo "26c0cf5ecbda18553f012441af309a676a5201fe6d69228ca4d25367ed3e8c76  ic-gateway_0.1.56_amd64.deb" | sha256sum -c
+    echo "808fbdbc664c29b865bb8ed8e17843b7d10efe5fc9ee5cd4db5b43ea59d599e9  ic-gateway_0.1.56_amd64.deb" | sha256sum -c
 
 #
 # Second build stage:
