@@ -1,6 +1,3 @@
-use candid::candid_method;
-use dfn_candid::{candid_one, candid_one_with_config, CandidOne};
-use dfn_core::{over, over_async, over_init};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
