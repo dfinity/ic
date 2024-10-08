@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
@@ -100,7 +99,8 @@ pub enum RateLimitCause {
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum ErrorCause {
     BodyTimedOut,
     UnableToReadBody(String),
@@ -120,7 +120,9 @@ pub enum ErrorCause {
     ReplicaTLSErrorOther(String),
     ReplicaTLSErrorCert(String),
     ReplicaErrorOther(String),
+    #[strum(serialize = "rate_limited_{0}")]
     RateLimited(RateLimitCause),
+    #[strum(serialize = "internal_server_error")]
     Other(String),
 }
 
@@ -173,34 +175,6 @@ impl ErrorCause {
     }
 }
 
-// TODO use strum
-impl fmt::Display for ErrorCause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Other(_) => write!(f, "general_error"),
-            Self::BodyTimedOut => write!(f, "body_timed_out"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
-            Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
-            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
-            Self::LoadShed => write!(f, "load_shed"),
-            Self::MalformedRequest(_) => write!(f, "malformed_request"),
-            Self::MalformedResponse(_) => write!(f, "malformed_response"),
-            Self::NoRoutingTable => write!(f, "no_routing_table"),
-            Self::SubnetNotFound => write!(f, "subnet_not_found"),
-            Self::CanisterNotFound => write!(f, "canister_not_found"),
-            Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
-            Self::ReplicaErrorDNS(_) => write!(f, "replica_error_dns"),
-            Self::ReplicaErrorConnect => write!(f, "replica_error_connect"),
-            Self::ReplicaTimeout => write!(f, "replica_error_timeout"),
-            Self::ReplicaTLSErrorOther(_) => write!(f, "replica_error_tls"),
-            Self::ReplicaTLSErrorCert(_) => write!(f, "replica_error_tls_cert"),
-            Self::ReplicaErrorOther(_) => write!(f, "replica_error_other"),
-            Self::RateLimited(x) => write!(f, "rate_limited_{x}"),
-        }
-    }
-}
-
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
@@ -209,13 +183,15 @@ impl IntoResponse for ErrorCause {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Display, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum ErrorClientFacing {
     BodyTimedOut,
     CanisterNotFound,
     LoadShed,
     MalformedRequest(String),
     NoHealthyNodes,
+    #[strum(serialize = "internal_server_error")]
     Other,
     PayloadTooLarge(usize),
     RateLimited,
@@ -225,27 +201,6 @@ pub enum ErrorClientFacing {
     UnableToParseCBOR(String),
     UnableToParseHTTPArg(String),
     UnableToReadBody(String),
-}
-
-impl fmt::Display for ErrorClientFacing {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::BodyTimedOut => write!(f, "body_timed_out"),
-            Self::CanisterNotFound => write!(f, "canister_not_found"),
-            Self::LoadShed => write!(f, "load_shed"),
-            Self::MalformedRequest(_) => write!(f, "malformed_request"),
-            Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
-            Self::Other => write!(f, "internal_server_error"),
-            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
-            Self::RateLimited => write!(f, "rate_limited"),
-            Self::ReplicaError => write!(f, "replica_error"),
-            Self::ServiceUnavailable => write!(f, "service_unavailable"),
-            Self::SubnetNotFound => write!(f, "subnet_not_found"),
-            Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
-            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-        }
-    }
 }
 
 impl ErrorClientFacing {
