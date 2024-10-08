@@ -11808,6 +11808,7 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
+ "ic-cdk 0.13.5",
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-canisters",

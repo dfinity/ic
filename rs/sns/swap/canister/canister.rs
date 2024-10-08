@@ -1,12 +1,10 @@
 use candid::candid_method;
 use dfn_candid::{candid_one, candid_one_with_config, CandidOne};
-use dfn_core::{
-    api::{caller, id, now},
-    over, over_async, over_init, CanisterId,
-};
-use ic_base_types::PrincipalId;
+use dfn_core::{over, over_async, over_init};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk::{api::time, caller, id};
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -14,7 +12,7 @@ use ic_nervous_system_clients::{
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_swap::{
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
@@ -63,6 +61,17 @@ fn swap() -> &'static Swap {
 /// happens in `canister_init` or `canister_post_upgrade`.
 fn swap_mut() -> &'static mut Swap {
     unsafe { SWAP.as_mut().expect("Canister not initialized!") }
+}
+
+/// Returns caller as PrincipalId
+fn caller_principal_id() -> PrincipalId {
+    PrincipalId::try_from(caller()).expect("Invalid caller")
+}
+
+/// This canister id
+fn this_canister_id() -> CanisterId {
+    // We know the CanisterId is always valid.
+    CanisterId::unchecked_from_principal(PrincipalId::try_from(id()).expect("Invalid canister id."))
 }
 
 // =============================================================================
@@ -136,13 +145,13 @@ fn refresh_buyer_tokens() {
 async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
     log!(INFO, "refresh_buyer_tokens");
     let p: PrincipalId = if arg.buyer.is_empty() {
-        caller()
+        caller_principal_id()
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     match swap_mut()
-        .refresh_buyer_token_e8s(p, arg.confirmation_text, id(), &icp_ledger)
+        .refresh_buyer_token_e8s(p, arg.confirmation_text, this_canister_id(), &icp_ledger)
         .await
     {
         Ok(r) => r,
@@ -180,7 +189,9 @@ fn error_refund_icp() {
 #[candid_method(update, rename = "error_refund_icp")]
 async fn error_refund_icp_(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
-    swap().error_refund_icp(id(), &request, &icp_ledger).await
+    swap()
+        .error_refund_icp(this_canister_id(), &request, &icp_ledger)
+        .await
 }
 
 #[export_name = "canister_update get_canister_status"]
@@ -190,7 +201,11 @@ fn get_canister_status() {
 
 #[candid_method(update, rename = "get_canister_status")]
 async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(id(), &ManagementCanisterClientImpl::<DfnRuntime>::new(None)).await
+    do_get_canister_status(
+        this_canister_id(),
+        &ManagementCanisterClientImpl::<CdkRuntime>::new(None),
+    )
+    .await
 }
 
 async fn do_get_canister_status(
@@ -281,7 +296,7 @@ fn get_open_ticket() {
 #[candid_method(query, rename = "get_open_ticket")]
 async fn get_open_ticket_(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
     log!(INFO, "get_open_ticket");
-    swap().get_open_ticket(&request, caller())
+    swap().get_open_ticket(&request, caller_principal_id())
 }
 
 #[export_name = "canister_update new_sale_ticket"]
@@ -292,7 +307,7 @@ fn new_sale_ticket() {
 #[candid_method(update, rename = "new_sale_ticket")]
 async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
     log!(INFO, "new_sale_ticket");
-    swap_mut().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
+    swap_mut().new_sale_ticket(&request, caller_principal_id(), ic_cdk::api::time())
 }
 
 /// Lists direct participants in the Swap.
@@ -329,7 +344,7 @@ fn notify_payment_failure() {
 #[candid_method(update, rename = "notify_payment_failure")]
 fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
     log!(INFO, "notify_payment_failure");
-    swap_mut().notify_payment_failure(&caller())
+    swap_mut().notify_payment_failure(&caller_principal_id())
 }
 
 // =============================================================================
@@ -342,21 +357,31 @@ fn canister_heartbeat() {
     let future = swap_mut().heartbeat(now_fn);
 
     // The canister_heartbeat must be synchronous, so we cannot .await the future.
-    dfn_core::api::futures::spawn(future);
+    ic_cdk::spawn(future);
+}
+
+fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        ic_cdk::api::time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
 }
 
 fn now_seconds() -> u64 {
-    now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or(Duration::ZERO)
-        .as_secs()
+    Duration::from_nanos(now_nanoseconds()).as_secs()
 }
 
 /// Returns a real ledger stub that communicates with the specified
 /// canister, which is assumed to be the ICP production ledger or a
 /// canister that implements that same interface.
-fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<DfnRuntime> {
-    IcpLedgerCanister::<DfnRuntime>::new(id)
+fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
+    IcpLedgerCanister::<CdkRuntime>::new(id)
 }
 
 #[export_name = "canister_init"]
@@ -367,7 +392,7 @@ fn canister_init() {
 /// In contrast to canister_init(), this method does not do deserialization.
 #[candid_method(init)]
 fn canister_init_(init_payload: Init) {
-    dfn_core::printer::hook();
+    ic_cdk::setup();
     let swap = Swap::new(init_payload);
     unsafe {
         assert!(
@@ -410,7 +435,7 @@ fn canister_pre_upgrade() {
 /// canister_pre_upgrade and initialising the state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
+    ic_cdk::setup();
     fn set_state(proto: Swap) {
         unsafe {
             assert!(
@@ -497,7 +522,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cycle_balance",
-        dfn_core::api::canister_cycle_balance() as f64,
+        ic_cdk::api::canister_balance() as f64,
         "Cycle balance on the sale canister.",
     )?;
     w.encode_gauge(
