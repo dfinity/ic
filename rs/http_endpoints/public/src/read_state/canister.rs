@@ -297,7 +297,7 @@ fn verify_paths(
                         if let Some(receiver) = ingress_status.receiver() {
                             if ingress_user_id != *user {
                                 return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
+                                    status: StatusCode::BAD_REQUEST,
                                     message:
                                         "Request IDs must be for requests signed by the caller."
                                             .to_string(),
@@ -306,7 +306,7 @@ fn verify_paths(
 
                             if !targets.contains(&receiver) {
                                 return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
+                                    status: StatusCode::BAD_REQUEST,
                                     message:
                                         "Request IDs must be for requests to canisters belonging to sender delegation targets."
                                             .to_string(),
