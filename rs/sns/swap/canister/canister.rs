@@ -4,7 +4,7 @@ use dfn_core::{over, over_async, over_init};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{api::time, caller, id};
+use ic_cdk::{api::time, caller, heartbeat, id, init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -79,55 +79,29 @@ fn this_canister_id() -> CanisterId {
 // =============================================================================
 
 /// See `GetStateResponse`.
-#[export_name = "canister_query get_state"]
-fn get_state() {
-    over(candid_one, get_state_)
-}
-
-/// See `GetStateResponse`.
-#[candid_method(query, rename = "get_state")]
-fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
+#[query]
+fn get_state(_arg: GetStateRequest) -> GetStateResponse {
     swap().get_state()
 }
 
 /// Get the state of a buyer. This will return a `GetBuyerStateResponse`
 /// with an optional `BuyerState` struct if the Swap Canister has
 /// been successfully notified of a buyer's ICP transfer.
-#[export_name = "canister_query get_buyer_state"]
-fn get_buyer_state() {
-    over(candid_one, get_buyer_state_)
-}
-
-/// Get the state of a buyer. This will return a `GetBuyerStateResponse`
-/// with an optional `BuyerState` struct if the Swap Canister has
-/// been successfully notified of a buyer's ICP transfer.
-#[candid_method(query, rename = "get_buyer_state")]
-fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
+#[query]
+fn get_buyer_state(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
     log!(INFO, "get_buyer_state");
     swap().get_buyer_state(&request)
 }
 
 /// Get Params.
-#[export_name = "canister_query get_sale_parameters"]
-fn get_sale_parameters() {
-    over(candid_one, get_sale_parameters_)
-}
-
-/// Get Params.
-#[candid_method(query, rename = "get_sale_parameters")]
-fn get_sale_parameters_(request: GetSaleParametersRequest) -> GetSaleParametersResponse {
+#[query]
+fn get_sale_parameters(request: GetSaleParametersRequest) -> GetSaleParametersResponse {
     swap().get_sale_parameters(&request)
 }
 
 /// List Community Fund participants.
-#[export_name = "canister_query list_community_fund_participants"]
-fn list_community_fund_participants() {
-    over(candid_one, list_community_fund_participants_);
-}
-
-/// List Community Fund participants.
-#[candid_method(query, rename = "list_community_fund_participants")]
-fn list_community_fund_participants_(
+#[query]
+fn list_community_fund_participants(
     request: ListCommunityFundParticipantsRequest,
 ) -> ListCommunityFundParticipantsResponse {
     log!(INFO, "list_community_fund_participants");
@@ -135,14 +109,8 @@ fn list_community_fund_participants_(
 }
 
 /// See `Swap.refresh_buyer_token_e8`.
-#[export_name = "canister_update refresh_buyer_tokens"]
-fn refresh_buyer_tokens() {
-    over_async(candid_one, refresh_buyer_tokens_)
-}
-
-/// See `Swap.refresh_buyer_token_e8`.
-#[candid_method(update, rename = "refresh_buyer_tokens")]
-async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
+#[update]
+async fn refresh_buyer_tokens(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
     log!(INFO, "refresh_buyer_tokens");
     let p: PrincipalId = if arg.buyer.is_empty() {
         caller_principal_id()
@@ -164,14 +132,8 @@ fn now_fn(_: bool) -> u64 {
 }
 
 /// See Swap.finalize.
-#[export_name = "canister_update finalize_swap"]
-fn finalize_swap() {
-    over_async(candid_one, finalize_swap_)
-}
-
-/// See Swap.finalize.
-#[candid_method(update, rename = "finalize_swap")]
-async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
+#[update]
+async fn finalize_swap(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     log!(INFO, "finalize_swap");
     let mut clients = swap()
         .init_or_panic()
@@ -181,26 +143,16 @@ async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     swap_mut().finalize(now_fn, &mut clients).await
 }
 
-#[export_name = "canister_update error_refund_icp"]
-fn error_refund_icp() {
-    over_async(candid_one, error_refund_icp_)
-}
-
-#[candid_method(update, rename = "error_refund_icp")]
-async fn error_refund_icp_(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
+#[update]
+async fn error_refund_icp(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     swap()
         .error_refund_icp(this_canister_id(), &request, &icp_ledger)
         .await
 }
 
-#[export_name = "canister_update get_canister_status"]
-fn get_canister_status() {
-    over_async(candid_one, get_canister_status_)
-}
-
-#[candid_method(update, rename = "get_canister_status")]
-async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
+#[update]
+async fn get_canister_status(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
     do_get_canister_status(
         this_canister_id(),
         &ManagementCanisterClientImpl::<CdkRuntime>::new(None),
@@ -225,37 +177,19 @@ async fn do_get_canister_status(
 }
 
 /// Returns the total amount of ICP deposited by participants in the swap.
-#[export_name = "canister_update get_buyers_total"]
-fn get_buyers_total() {
-    over_async(candid_one, get_buyers_total_)
-}
-
-/// Returns the total amount of ICP deposited by participants in the swap.
-#[candid_method(update, rename = "get_buyers_total")]
-async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
+#[update]
+async fn get_buyers_total(_request: GetBuyersTotalRequest) -> GetBuyersTotalResponse {
     swap().get_buyers_total()
 }
 
-/// Return the current lifecycle stage (e.g. Open, Committed, etc)
-#[export_name = "canister_query get_lifecycle"]
-fn get_lifecycle() {
-    over(candid_one, get_lifecycle_)
-}
-
-#[candid_method(query, rename = "get_lifecycle")]
-fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
+#[query]
+fn get_lifecycle(request: GetLifecycleRequest) -> GetLifecycleResponse {
     log!(INFO, "get_lifecycle");
     swap().get_lifecycle(&request)
 }
 
-/// Return the status of auto-finalization
-#[export_name = "canister_query get_auto_finalization_status"]
-fn get_auto_finalization_status() {
-    over(candid_one, get_auto_finalization_status_)
-}
-
-#[candid_method(query, rename = "get_auto_finalization_status")]
-fn get_auto_finalization_status_(
+#[query]
+fn get_auto_finalization_status(
     request: GetAutoFinalizationStatusRequest,
 ) -> GetAutoFinalizationStatusResponse {
     log!(INFO, "get_auto_finalization_status");
@@ -263,86 +197,48 @@ fn get_auto_finalization_status_(
 }
 
 /// Returns the initialization data of the canister
-#[export_name = "canister_query get_init"]
-fn get_init() {
-    over_async(candid_one, get_init_)
-}
-
-/// Returns the initialization data of the canister
-#[candid_method(query, rename = "get_init")]
-async fn get_init_(request: GetInitRequest) -> GetInitResponse {
+#[query]
+async fn get_init(request: GetInitRequest) -> GetInitResponse {
     log!(INFO, "get_init");
     swap().get_init(&request)
 }
 
 /// Return the current derived state of the Swap
-#[export_name = "canister_query get_derived_state"]
-fn get_derived_state() {
-    over_async(candid_one, get_derived_state_)
-}
-
-/// Return the current derived state of the Swap
-#[candid_method(query, rename = "get_derived_state")]
-async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
+#[query]
+async fn get_derived_state(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
     log!(INFO, "get_derived_state");
     swap().derived_state().into()
 }
 
-#[export_name = "canister_query get_open_ticket"]
-fn get_open_ticket() {
-    over_async(candid_one, get_open_ticket_)
-}
-
-#[candid_method(query, rename = "get_open_ticket")]
-async fn get_open_ticket_(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
+#[query]
+async fn get_open_ticket(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
     log!(INFO, "get_open_ticket");
     swap().get_open_ticket(&request, caller_principal_id())
 }
 
-#[export_name = "canister_update new_sale_ticket"]
-fn new_sale_ticket() {
-    over_async(candid_one, new_sale_ticket_)
-}
-
-#[candid_method(update, rename = "new_sale_ticket")]
-async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
+#[update]
+async fn new_sale_ticket(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
     log!(INFO, "new_sale_ticket");
     swap_mut().new_sale_ticket(&request, caller_principal_id(), ic_cdk::api::time())
 }
 
 /// Lists direct participants in the Swap.
-#[export_name = "canister_query list_direct_participants"]
-fn list_direct_participants() {
-    over_async(candid_one, list_direct_participants_)
-}
-
-/// Lists direct participants in the Swap.
-#[candid_method(query, rename = "list_direct_participants")]
-async fn list_direct_participants_(
+#[query]
+async fn list_direct_participants(
     request: ListDirectParticipantsRequest,
 ) -> ListDirectParticipantsResponse {
     log!(INFO, "list_direct_participants");
     swap().list_direct_participants(request)
 }
 
-#[export_name = "canister_query list_sns_neuron_recipes"]
-fn list_sns_neuron_recipes() {
-    over(candid_one, list_sns_neuron_recipes_)
-}
-
-#[candid_method(query, rename = "list_sns_neuron_recipes")]
-fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
+#[query]
+fn list_sns_neuron_recipes(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
     log!(INFO, "list_neuron_recipes");
     swap().list_sns_neuron_recipes(request)
 }
 
-#[export_name = "canister_update notify_payment_failure"]
-fn notify_payment_failure() {
-    over(candid_one, notify_payment_failure_)
-}
-
-#[candid_method(update, rename = "notify_payment_failure")]
-fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
+#[update]
+fn notify_payment_failure(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
     log!(INFO, "notify_payment_failure");
     swap_mut().notify_payment_failure(&caller_principal_id())
 }
@@ -352,7 +248,7 @@ fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPayme
 // =============================================================================
 
 /// Tries to commit or abort the swap if the parameters have been satisfied.
-#[export_name = "canister_heartbeat"]
+#[heartbeat]
 fn canister_heartbeat() {
     let future = swap_mut().heartbeat(now_fn);
 
@@ -384,15 +280,9 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
     IcpLedgerCanister::<CdkRuntime>::new(id)
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(arg))
-}
-
 /// In contrast to canister_init(), this method does not do deserialization.
-#[candid_method(init)]
+#[init]
 fn canister_init_(init_payload: Init) {
-    ic_cdk::setup();
     let swap = Swap::new(init_payload);
     unsafe {
         assert!(
@@ -407,7 +297,7 @@ fn canister_init_(init_payload: Init) {
 /// Serialize and write the state to stable memory so that it is
 /// preserved during the upgrade and can be deserialized again in
 /// `canister_post_upgrade`.
-#[export_name = "canister_pre_upgrade"]
+#[post_upgrade]
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
@@ -433,7 +323,7 @@ fn canister_pre_upgrade() {
 
 /// Deserialize what has been written to stable memory in
 /// canister_pre_upgrade and initialising the state with it.
-#[export_name = "canister_post_upgrade"]
+#[pre_upgrade]
 fn canister_post_upgrade() {
     ic_cdk::setup();
     fn set_state(proto: Swap) {
@@ -488,14 +378,9 @@ fn canister_post_upgrade() {
     });
 }
 
-/// Resources to serve for a given http_request
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    over(candid_one_with_config, serve_http)
-}
-
 /// Serve an HttpRequest made to this canister
-pub fn serve_http(request: HttpRequest) -> HttpResponse {
+#[query(hidden = true, decoding_quota = 10000)]
+pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
