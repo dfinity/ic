@@ -137,6 +137,7 @@ run_with_chroot() {
 usage() {
     echo "Usage: $0 [--mount] [--chroot <directory>] <command>"
     echo "Runs <command> in a separate namespace optionally under chroot."
+    echo "This tool is only supported within the build container."
     echo "  --mount                Set up system mount points (eg. /dev and /proc). Requires --chroot"
     echo "  --chroot <directory>   Specify the directory to chroot into."
     echo "  <command>              Command to run."
@@ -174,7 +175,7 @@ if [[ -z "$COMMAND" ]]; then
 fi
 
 if [[ $MOUNT = true && -z $CHROOT_DIR ]]; then
-    echo "Error: Cannot use mount option without a chroot dir."
+    echo "Error: Cannot use --mount option without specifying --chroot dir."
     usage
 fi
 
