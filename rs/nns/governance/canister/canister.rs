@@ -648,7 +648,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// controller of N, a hotkey (or both).
 use std::collections::HashMap;
 #[update]
-fn principal_to_neuron_count() // DO NOT MERGE
+fn principal_id_to_neuron_count() // DO NOT MERGE
     -> Vec<(PrincipalId, /* neuron_count */ u64)>
 {
     use ic_nns_governance::storage::with_stable_neuron_indexes;
@@ -672,7 +672,19 @@ fn principal_to_neuron_count() // DO NOT MERGE
     result.sort_by_key(|(_principal_id, count)| *count);
     result.reverse();
 
-    result.truncate(1000);
+    // Decimate tail down to 1k elements. (Thus, result will end up with 2k).
+    let tail = result.split_off(1000);
+    let mut random = rand::rngs::StdRng::seed_from_u64(42);
+    use rand::seq::IteratorRandom;
+    let mut new_tail = vec![(PrincipalId::new_user_test_id(0), 0); 1000];
+    tail
+        .into_iter()
+        .choose_multiple_fill(&mut random, &mut new_tail);
+    let mut tail = new_tail;
+    tail.sort_by_key(|(_principal_id, neuron_count)| *neuron_count);
+    tail.reverse();
+    result.append(&mut tail);
+
     result
 }
 
