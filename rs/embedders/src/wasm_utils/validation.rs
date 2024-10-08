@@ -710,6 +710,13 @@ fn get_valid_exported_functions() -> HashMap<String, FunctionSignature> {
                 return_type: vec![],
             },
         ),
+        (
+            "canister_on_low_wasm_memory",
+            FunctionSignature {
+                param_types: vec![],
+                return_type: vec![],
+            },
+        ),
     ];
 
     valid_exported_functions
@@ -882,6 +889,7 @@ fn validate_export_section(
             "canister_inspect_message",
             "canister_heartbeat",
             "canister_global_timer",
+            "canister_on_low_wasm_memory",
         ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
