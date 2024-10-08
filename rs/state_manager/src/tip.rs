@@ -982,6 +982,7 @@ fn serialize_canister_to_tip(
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
                 next_scheduled_method: execution_state.next_scheduled_method,
+                is_wasm64: execution_state.is_wasm64,
             })
         }
         None => {
@@ -1020,7 +1021,7 @@ fn serialize_canister_to_tip(
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
-            status: canister_state.system_state.status.clone(),
+            status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics
@@ -1050,6 +1051,7 @@ fn serialize_canister_to_tip(
             task_queue: canister_state
                 .system_state
                 .task_queue
+                .get_queue()
                 .clone()
                 .into_iter()
                 .collect(),
@@ -1077,7 +1079,8 @@ fn serialize_canister_to_tip(
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             on_low_wasm_memory_hook_status: canister_state
                 .system_state
-                .get_on_low_wasm_memory_hook_status(),
+                .task_queue
+                .peek_hook_status(),
         }
         .into(),
     )?;
