@@ -2446,7 +2446,9 @@ impl StateMachine {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
-    /// Returns the state machine time at the beginning of next round.
+    /// Returns the state machine time at the beginning of next round
+    /// under the assumption that time won't be advanced before that
+    /// round is finalized.
     pub fn time_of_next_round(&self) -> SystemTime {
         let time = self.time();
         if time == *self.time_of_last_round.read().unwrap() {
