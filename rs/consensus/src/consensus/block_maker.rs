@@ -558,7 +558,7 @@ pub(super) fn get_block_maker_delay(
     registry_version: RegistryVersion,
     rank: Rank,
     metrics: Option<&BlockMakerMetrics>,
-) -> Option<Duration> {
+) -> Duration {
     let settings =
         get_notarization_delay_settings(log, registry_client, subnet_id, registry_version);
     // If this is not a Rank-0 block maker, check how many non-rank-0 blocks have been notarized in
@@ -574,7 +574,7 @@ pub(super) fn get_block_maker_delay(
         Duration::ZERO
     };
 
-    Some(settings.unit_delay * rank.0 as u32 + dynamic_delay)
+    settings.unit_delay * rank.0 as u32 + dynamic_delay
 }
 
 /// Return true if the time since round start is greater than the required block
@@ -593,7 +593,7 @@ pub(super) fn is_time_to_make_block(
     let Some(registry_version) = pool.registry_version(height) else {
         return false;
     };
-    let Some(block_maker_delay) = get_block_maker_delay(
+    let block_maker_delay = get_block_maker_delay(
         log,
         registry_client,
         subnet_id,
@@ -602,9 +602,7 @@ pub(super) fn is_time_to_make_block(
         registry_version,
         rank,
         metrics,
-    ) else {
-        return false;
-    };
+    );
 
     // If the relative time indicates that not enough time has passed, we fall
     // back to the the monotonic round start time. We do this to safeguard
@@ -726,8 +724,7 @@ mod tests {
                     RegistryVersion::from(10),
                     Rank(4),
                     /*metrics=*/ None,
-                )
-                .unwrap();
+                );
             let expected_context = ValidationContext {
                 certified_height,
                 registry_version: RegistryVersion::from(10),
@@ -1175,7 +1172,6 @@ mod tests {
                 block_maker_rank,
                 /*metrics=*/ None,
             )
-            .expect("Should successfully compute the block maker delay with valid inputs")
         })
     }
 }

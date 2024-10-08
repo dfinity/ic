@@ -2588,8 +2588,7 @@ pub mod test {
                     pool_reader.registry_version(test_block.height()).unwrap(),
                     rank,
                     /*metrics=*/ None,
-                )
-                .unwrap();
+                );
 
             time_source.set_time(parent.context.time + delay).unwrap();
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
@@ -3291,8 +3290,7 @@ pub mod test {
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
                 /*metrics=*/ None,
-            )
-            .unwrap();
+            );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
             test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
@@ -3344,8 +3342,7 @@ pub mod test {
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
                 /*metrics=*/ None,
-            )
-            .unwrap();
+            );
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
             test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
