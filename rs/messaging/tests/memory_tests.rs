@@ -186,9 +186,9 @@ fn check_guaranteed_response_message_memory_limits_are_respected_impl(
 ///
 /// For the second phase, `migrating_canister` stops making calls and is then migrated to the
 /// remote subnet. Since all other canisters are stopped, there are bound to be a number of reject
-/// signals for requests in the stream to the local_subnet. But since we migrated thec`migrating_canister`
-/// to the remote subnet, the locally generated reject responses fail tocinduct and are rerouted into the
-/// stream to the remote subnet. The remote subnet eventually pickscthem up and inducts them into
+/// signals for requests in the stream to the local_subnet. But since we migrated the `migrating_canister`
+/// to the remote subnet, the locally generated reject responses fail to induct and are rerouted into the
+/// stream to the remote subnet. The remote subnet eventually picks them up and inducts them into
 /// `migrating_canister` leaving no hanging calls after some more rounds.
 ///
 /// If there are hanging calls after a threshold number of rounds, there is most likely a bug
