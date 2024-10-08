@@ -156,6 +156,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -169,6 +170,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_large_test",
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
