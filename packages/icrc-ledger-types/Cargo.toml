@@ -21,7 +21,8 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 sha2 = { workspace = true }
-strum = { workspace = true}
+strum = { workspace = true }
+strum_macros = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]

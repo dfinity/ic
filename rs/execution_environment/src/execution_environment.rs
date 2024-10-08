@@ -15,6 +15,7 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
+    RoundSchedule,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -54,7 +55,7 @@ use ic_replicated_state::{
         ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -82,7 +83,7 @@ use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::{Into, TryFrom},
-    fmt, mem,
+    fmt,
     str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -330,6 +331,8 @@ pub struct ExecutionEnvironment {
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
+    // Global registry of all the paused executions and install code executions
+    // on the current subnet.
     paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
     // This scaling factor accounts for the execution threads running in
     // parallel and potentially reserving resources. It should be initialized to
@@ -3035,7 +3038,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedInstallCode(id));
+                    .enqueue(ExecutionTask::PausedInstallCode(id));
 
                 match (dts_status, ingress_status) {
                     (DtsInstallCodeStatus::StartingFirstExecution, Some((message_id, status))) => {
@@ -3150,6 +3153,50 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
+    fn abort_paused_executions_and_return_tasks(
+        &self,
+        paused_tasks: Vec<&ExecutionTask>,
+        log: &ReplicaLogger,
+    ) -> HashMap<PausedExecutionId, ExecutionTask> {
+        paused_tasks
+            .into_iter()
+            .map(|paused_task| match *paused_task {
+                ExecutionTask::PausedExecution { id, .. } => {
+                    let paused = self.take_paused_execution(id).unwrap();
+                    let (input, prepaid_execution_cycles) = paused.abort(log);
+                    (
+                        id,
+                        ExecutionTask::AbortedExecution {
+                            input,
+                            prepaid_execution_cycles,
+                        },
+                    )
+                }
+                ExecutionTask::PausedInstallCode(id) => {
+                    let paused = self.take_paused_install_code(id).unwrap();
+                    let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
+                    (
+                        id,
+                        ExecutionTask::AbortedInstallCode {
+                            message,
+                            call_id,
+                            prepaid_execution_cycles,
+                        },
+                    )
+                }
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => {
+                    unreachable!("Function abort_paused_executions_and_return_tasks is only called after 
+                    the paused tasks are returned from TaskQueue, hence no task other than PausedExecution 
+                    and PausedInstallCode should appear in paused_tasks except if there is a bug.")
+                }
+            })
+            .collect()
+    }
+
     /// Registers the given paused execution and returns its id.
     fn register_paused_execution(&self, paused: Box<dyn PausedExecution>) -> PausedExecutionId {
         let mut guard = self.paused_execution_registry.lock().unwrap();
@@ -3174,37 +3221,22 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let task_queue = std::mem::take(&mut canister.system_state.task_queue);
-            canister.system_state.task_queue = task_queue
-                .into_iter()
-                .map(|task| match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. }
-                    | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer
-                    | ExecutionTask::OnLowWasmMemory => task,
-                    ExecutionTask::PausedExecution { id, .. } => {
-                        let paused = self.take_paused_execution(id).unwrap();
-                        let (input, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedExecution {
-                            input,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                    ExecutionTask::PausedInstallCode(id) => {
-                        let paused = self.take_paused_install_code(id).unwrap();
-                        let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedInstallCode {
-                            message,
-                            call_id,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                })
-                .collect();
-            canister.apply_priority_credit();
+            let paused_tasks = canister.system_state.task_queue.get_all_paused_tasks();
+
+            self.metrics
+                .executions_aborted
+                .inc_by(paused_tasks.len().try_into().unwrap());
+
+            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
+            // we can abort all executions on it without `paused_tasks`.
+            let aborted_tasks = self.abort_paused_executions_and_return_tasks(paused_tasks, log);
+
+            canister
+                .system_state
+                .task_queue
+                .replace_paused_with_aborted_tasks(aborted_tasks);
+
+            RoundSchedule::apply_priority_credit(canister);
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,
@@ -3291,7 +3323,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution { id, input });
+                    .enqueue(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }
@@ -3413,88 +3445,45 @@ impl ExecutionEnvironment {
         let time = state.time();
 
         for canister in canister_states.values_mut() {
-            let canister_id = canister.canister_id();
-            match canister.system_state.status {
-                // Canister is not stopping so we can skip it.
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
-
-                // Canister is ready to stop.
-                CanisterStatus::Stopping { .. } if canister.system_state.ready_to_stop() => {
-                    // Transition the canister to "stopped".
-                    let stopping_status =
-                        mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-                    canister.system_state.canister_version += 1;
-
-                    // Reply to all pending stop_canister requests.
-                    if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                        for stop_context in stop_contexts {
-                            self.reply_to_stop_context(
-                                &stop_context,
-                                &mut state,
-                                canister_id,
-                                time,
-                                StopCanisterReply::Completed,
-                            );
+            let (stopped, stop_contexts) =
+                canister.system_state.try_stop_canister(|stop_context| {
+                    match stop_context.call_id() {
+                        Some(call_id) => {
+                            let sc_time = state
+                                .metadata
+                                .subnet_call_context_manager
+                                .get_time_for_stop_canister_call(call_id);
+                            match sc_time {
+                                Some(t) => time >= t + self.config.stop_canister_timeout_duration,
+                                // Should never hit this case unless there's a
+                                // bug but handle it for robustness.
+                                None => false,
+                            }
                         }
+                        // Should only happen for old stop requests that existed
+                        // before call ids were added.
+                        None => false,
                     }
-                }
-
-                // Canister is stopping, but not yet ready to stop.
-                CanisterStatus::Stopping {
-                    ref mut stop_contexts,
-                    ..
-                } => {
-                    // Respond to any stop contexts that have timed out.
-                    self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
-                }
+                });
+            if stopped {
+                canister.system_state.canister_version += 1;
+            }
+            for stop_context in stop_contexts.iter() {
+                self.reply_to_stop_context(
+                    stop_context,
+                    &mut state,
+                    canister.canister_id(),
+                    time,
+                    if stopped {
+                        StopCanisterReply::Completed
+                    } else {
+                        StopCanisterReply::Timeout
+                    },
+                );
             }
         }
         state.put_canister_states(canister_states);
         state
-    }
-
-    fn timeout_expired_requests(
-        &self,
-        time: Time,
-        canister_id: CanisterId,
-        stop_contexts: &mut Vec<StopCanisterContext>,
-        state: &mut ReplicatedState,
-    ) {
-        // Identify if any of the stop contexts have expired.
-        let (expired_stop_contexts, remaining_stop_contexts) = std::mem::take(stop_contexts)
-            .into_iter()
-            .partition(|stop_context| {
-                match stop_context.call_id() {
-                    Some(call_id) => {
-                        let sc_time = state
-                            .metadata
-                            .subnet_call_context_manager
-                            .get_time_for_stop_canister_call(call_id);
-                        match sc_time {
-                            Some(t) => time >= t + self.config.stop_canister_timeout_duration,
-                            // Should never hit this case unless there's a
-                            // bug but handle it for robustness.
-                            None => false,
-                        }
-                    }
-                    // Should only happen for old stop requests that existed
-                    // before call ids were added.
-                    None => false,
-                }
-            });
-
-        for stop_context in expired_stop_contexts {
-            // Respond to expired requests that they timed out.
-            self.reply_to_stop_context(
-                &stop_context,
-                state,
-                canister_id,
-                time,
-                StopCanisterReply::Timeout,
-            );
-        }
-
-        *stop_contexts = remaining_stop_contexts;
     }
 
     fn reject_unexpected_ingress(&self, method: Ic00Method) -> ExecuteSubnetMessageResult {

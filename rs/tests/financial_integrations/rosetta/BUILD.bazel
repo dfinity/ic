@@ -12,7 +12,7 @@ system_test_nns(
     test_timeout = "long",
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -30,8 +30,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -49,8 +49,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -68,8 +68,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -87,8 +87,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -106,8 +106,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -125,8 +125,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -144,8 +144,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -163,8 +163,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -182,8 +182,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -201,8 +201,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -220,8 +220,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -239,8 +239,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -258,8 +258,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],
@@ -277,8 +277,8 @@ system_test_nns(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
-            "//rs/rosetta-api:ic-rosetta-api",
-            "//rs/rosetta-api:rosetta_image.tar",
+            "//rs/rosetta-api/icp:ic-rosetta-api",
+            "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
             "@rosetta-cli//:rosetta-cli",
         ],

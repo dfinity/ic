@@ -33,7 +33,7 @@ def main(argv):
 
 
 def host_files(p):
-    for (root, dirs, files) in walk(p):
+    for root, dirs, files in walk(p):
         for f in filter(lambda f: f.endswith(".ini"), files):
             yield path.join(root, f)
 

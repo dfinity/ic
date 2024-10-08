@@ -21,12 +21,14 @@ dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+ic-cdk = { workspace = true }
 ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1"
+ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 intmap = { version = "1.1.0", features = ["serde"] }
@@ -49,3 +51,4 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 
 [features]
 notify-method = []
+upgrade-to-memory-manager = []
