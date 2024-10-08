@@ -1,6 +1,5 @@
 use super::input_schedule::testing::InputScheduleTesting;
 use super::message_pool::{MessageStats, REQUEST_LIFETIME};
-use super::queue::{InputQueue, OutputQueue};
 use super::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
 use super::*;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
@@ -13,7 +12,7 @@ use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, Response
 use ic_types::messages::{CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE};
 use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
 use ic_types::{Cycles, UserId};
-use maplit::{btreemap, btreeset};
+use maplit::btreemap;
 use proptest::prelude::*;
 use std::cell::RefCell;
 use std::convert::TryInto;
@@ -72,6 +71,20 @@ impl CanisterQueuesFixture {
                 .into(),
             LocalSubnet,
         )
+    }
+
+    fn try_push_deadline_expired_input(&mut self) -> Result<bool, String> {
+        self.last_callback_id += 1;
+        self.queues.try_push_deadline_expired_input(
+            CallbackId::from(self.last_callback_id),
+            &self.other,
+            &self.this,
+            &BTreeMap::new(),
+        )
+    }
+
+    fn peek_input(&mut self) -> Option<CanisterInput> {
+        self.queues.peek_input()
     }
 
     fn pop_input(&mut self) -> Option<CanisterInput> {
@@ -458,6 +471,115 @@ fn test_available_output_request_slots() {
 }
 
 #[test]
+fn test_deadline_expired_input() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Enqueue a "deadline expired" compact reject response.
+    fixture.push_output_request().unwrap();
+    fixture.pop_output().unwrap();
+    assert_eq!(Ok(true), fixture.try_push_deadline_expired_input());
+
+    // We have one input (compact) response.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.has_output());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Peek, then pop the "deadline expired" compact reject response. This also
+    // implicitly checks that the input schedule was correctly updated.
+    let expected_callback_id = CallbackId::from(fixture.last_callback_id);
+    assert_eq!(
+        Some(CanisterInput::DeadlineExpired(expected_callback_id)),
+        fixture.peek_input()
+    );
+    assert_eq!(
+        Some(CanisterInput::DeadlineExpired(expected_callback_id)),
+        fixture.pop_input()
+    );
+
+    // No inputs and no outputs left.
+    assert_eq!(0, fixture.queues.input_queues_message_count());
+    assert_eq!(0, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(!fixture.queues.has_input());
+    assert!(!fixture.queues.has_output());
+    assert!(fixture.queues.store.is_empty());
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_no_queue() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Pushing a deadline expired input into a non-existent queue signals a bug.
+    assert_eq!(
+        Err("No input queue for expired callback: 1".to_string()),
+        fixture.try_push_deadline_expired_input()
+    );
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_no_reserved_slot() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Enqueue an input request, to create the input queue.
+    fixture.push_input_request().unwrap();
+
+    // Pushing a deadline expired input without a reserved slot signals a bug.
+    assert_eq!(
+        Err("No reserved response slot for expired callback: 1".to_string()),
+        fixture.try_push_deadline_expired_input()
+    );
+}
+
+#[test]
+fn test_try_push_deadline_expired_input_with_same_callback_id() {
+    let mut fixture = CanisterQueuesFixture::new();
+
+    // Push an input response.
+    fixture.push_output_request().unwrap();
+    fixture.pop_output().unwrap();
+    fixture.push_input_response().unwrap();
+
+    // Sanity check.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Pushing a deadline expired input with the same callback ID is a no-op.
+    let callback_id = fixture.last_callback_id.into();
+    assert_eq!(
+        Ok(false),
+        fixture.queues.try_push_deadline_expired_input(
+            callback_id,
+            &fixture.other,
+            &fixture.this,
+            &BTreeMap::new(),
+        )
+    );
+
+    // Nothing has changed.
+    assert_eq!(1, fixture.queues.input_queues_message_count());
+    assert_eq!(1, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(fixture.queues.has_input());
+    assert!(!fixture.queues.store.is_empty());
+
+    // Pop the response.
+    assert_matches!(fixture.pop_input(), Some(CanisterInput::Response(_)));
+
+    // Nothing left.
+    assert_eq!(0, fixture.queues.input_queues_message_count());
+    assert_eq!(0, fixture.queues.input_queues_response_count());
+    assert_eq!(0, fixture.queues.input_queues_reserved_slots());
+    assert!(!fixture.queues.has_input());
+    assert!(fixture.queues.store.is_empty());
+}
+
+#[test]
 fn test_shed_largest_message() {
     let this = canister_test_id(13);
     let other = canister_test_id(11);
@@ -765,7 +887,7 @@ impl CanisterQueuesMultiFixture {
     }
 
     fn pool_is_empty(&self) -> bool {
-        self.queues.pool.len() == 0
+        self.queues.store.is_empty()
     }
 }
 
@@ -1036,7 +1158,7 @@ fn test_peek_input_round_robin() {
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1159,7 +1281,7 @@ fn test_peek_input_with_stale_references() {
     assert_eq!(expected, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1175,7 +1297,7 @@ fn test_pop_input_with_stale_references() {
     assert_eq!(expected, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1203,7 +1325,7 @@ fn test_skip_input_with_stale_references() {
     assert_eq!(request_3, queues.pop_input().unwrap());
 
     assert!(!queues.has_input());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 /// Produces a `CanisterQueues` with 3 local input queues and 3 remote input
@@ -1283,7 +1405,7 @@ fn test_pop_input_with_empty_queue_in_input_schedule() {
     assert!(!queues.has_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
     assert_eq!(
         Ok(()),
         queues.schedules_ok(&input_queue_type_from_local_canisters(vec![
@@ -1312,7 +1434,7 @@ fn test_pop_input_with_gced_queue_in_input_schedule() {
     assert!(!queues.has_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
     assert_eq!(Ok(()), queues.schedules_ok(&|_| RemoteSubnet));
 }
 
@@ -1329,7 +1451,7 @@ fn test_peek_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1350,7 +1472,7 @@ fn test_peek_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1367,7 +1489,7 @@ fn test_skip_input_with_empty_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1389,7 +1511,7 @@ fn test_skip_input_with_gced_queue_in_input_schedule() {
     assert_eq!(None, queues.peek_input());
     assert_eq!(None, queues.pop_input());
 
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1516,7 +1638,7 @@ fn test_output_into_iter() {
     }
 
     assert_eq!(0, queues.output_message_count());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -1764,8 +1886,8 @@ fn encode_non_default_pool() {
         .unwrap();
     queues.pop_canister_input(RemoteSubnet).unwrap();
     // Sanity check that the pool is empty but not equal to the default.
-    assert_eq!(0, queues.pool.len());
-    assert_ne!(MessagePool::default(), queues.pool);
+    assert!(queues.store.is_empty());
+    assert_ne!(MessageStoreImpl::default(), queues.store);
 
     // And a roundtrip encode preserves the `CanisterQueues` unaltered.
     let encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -1775,151 +1897,15 @@ fn encode_non_default_pool() {
     assert_eq!(queues, decoded);
 }
 
-/// Tests decoding `CanisterQueues` from `input_queues` + `output_queues`
-/// (instead of `canister_queues` + `pool`).
-#[test]
-fn decode_backward_compatibility() {
-    let local_canister = canister_test_id(13);
-    let remote_canister = canister_test_id(14);
-
-    let mut queues_proto = pb_queues::CanisterQueues::default();
-    let mut expected_queues = CanisterQueues::default();
-
-    let response_callback = CallbackId::from(42);
-    let req = RequestBuilder::default()
-        .sender(local_canister)
-        .receiver(local_canister)
-        .sender_reply_callback(response_callback)
-        .build();
-    let rep = ResponseBuilder::default()
-        .originator(local_canister)
-        .respondent(local_canister)
-        .originator_reply_callback(response_callback)
-        .build();
-    let t1 = Time::from_secs_since_unix_epoch(12345).unwrap();
-    let t2 = t1 + Duration::from_secs(1);
-    let d1 = t1 + REQUEST_LIFETIME;
-    let d2 = t2 + REQUEST_LIFETIME;
-
-    //
-    // `local_canister`'s queues.
-    //
-
-    // An `InputQueue` with a request, a response and a reserved slot.
-    let mut iq1 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    iq1.push(req.clone().into()).unwrap();
-    iq1.reserve_slot().unwrap();
-    iq1.push(rep.clone().into()).unwrap();
-    iq1.reserve_slot().unwrap();
-
-    // Expected input queue.
-    let mut expected_iq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    // Enqueue a request and a response.
-    expected_iq1.push_request(expected_queues.pool.insert_inbound(req.clone().into()));
-    expected_iq1.try_reserve_response_slot().unwrap();
-    expected_iq1.push_response(expected_queues.pool.insert_inbound(rep.clone().into()));
-    // Make an extra response reservation.
-    expected_iq1.try_reserve_response_slot().unwrap();
-
-    // An output queue with a response, a timed out request, a non-timed out request
-    // and a reserved slot.
-    let mut oq1 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    oq1.reserve_slot().unwrap();
-    oq1.push_response(rep.clone().into());
-    oq1.push_request(req.clone().into(), d1).unwrap();
-    oq1.time_out_requests(d2).count();
-    oq1.push_request(req.clone().into(), d2).unwrap();
-    oq1.reserve_slot().unwrap();
-
-    // Expected output queue. The timed out request is gone.
-    let mut expected_oq1 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    expected_oq1.try_reserve_response_slot().unwrap();
-    expected_oq1.push_response(
-        expected_queues
-            .pool
-            .insert_outbound_response(rep.clone().into()),
-    );
-    expected_oq1.push_request(
-        expected_queues
-            .pool
-            .insert_outbound_request(req.clone().into(), t2),
-    );
-    expected_oq1.try_reserve_response_slot().unwrap();
-
-    queues_proto.input_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(local_canister.into()),
-        queue: Some((&iq1).into()),
-    });
-    queues_proto.output_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(local_canister.into()),
-        queue: Some((&oq1).into()),
-    });
-    queues_proto
-        .local_sender_schedule
-        .push(local_canister.into());
-    queues_proto.guaranteed_response_memory_reservations += 2;
-    expected_queues
-        .canister_queues
-        .insert(local_canister, (expected_iq1, expected_oq1));
-    expected_queues
-        .input_schedule
-        .schedule(local_canister, LocalSubnet);
-
-    //
-    // `remote_canister`'s queues.
-    //
-
-    // Input queue with a reserved slot.
-    let mut iq2 = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
-    iq2.reserve_slot().unwrap();
-
-    // Expected input queue.
-    let mut expected_iq2 = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
-    expected_iq2.try_reserve_response_slot().unwrap();
-
-    // Empty output queue.
-    let oq2 = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-
-    queues_proto.input_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(remote_canister.into()),
-        queue: Some((&iq2).into()),
-    });
-    queues_proto.output_queues.push(pb_queues::QueueEntry {
-        canister_id: Some(remote_canister.into()),
-        queue: Some((&oq2).into()),
-    });
-    queues_proto.guaranteed_response_memory_reservations += 1;
-    expected_queues.canister_queues.insert(
-        remote_canister,
-        (expected_iq2, CanisterQueue::new(DEFAULT_QUEUE_CAPACITY)),
-    );
-
-    //
-    // Adjust stats.
-    //
-
-    expected_queues.queue_stats = CanisterQueues::calculate_queue_stats(
-        &expected_queues.canister_queues,
-        queues_proto.guaranteed_response_memory_reservations as usize,
-        0,
-    );
-    expected_queues.callbacks_with_enqueued_response = btreeset! {CallbackId::from(42)};
-
-    let queues = (
-        queues_proto,
-        &StrictMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-    assert_eq!(expected_queues, queues);
-}
-
 /// Constructs an encoded `CanisterQueues` with 2 inbound responses (callbacks 1
-/// and 2) and one shed inbound response (callback 3).
+/// and 2), one shed inbound response (callback 3) and one expired callback
+/// response (4).
 fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     let mut queues = CanisterQueues::default();
 
-    // Make 3 input queue reservations.
+    let canister_id = canister_test_id(13);
+
+    // Make 4 input queue reservations.
     let deadline = coarse_time(1);
     queues
         .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
@@ -1930,9 +1916,12 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     queues
         .push_output_request(request(3, deadline).into(), UNIX_EPOCH)
         .unwrap();
-    assert_eq!(3, queues.output_into_iter().count());
+    queues
+        .push_output_request(request(4, deadline).into(), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(4, queues.output_into_iter().count());
 
-    // Enqueue 3 inbound responses.
+    // Enqueue 3 inbound responses plus a deadine expired compact reject response.
     queues
         .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
         .unwrap();
@@ -1942,12 +1931,21 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     queues
         .push_input(response(3, deadline).into(), LocalSubnet)
         .unwrap();
+    assert_eq!(
+        Ok(true),
+        queues.try_push_deadline_expired_input(
+            4.into(),
+            &canister_id,
+            &canister_id,
+            &BTreeMap::new()
+        )
+    );
 
     // Shed the response for callback 3.
-    assert!(queues.shed_largest_message(&canister_test_id(13), &BTreeMap::new()));
+    assert!(queues.shed_largest_message(&canister_id, &BTreeMap::new()));
     assert_eq!(
         Some(&CallbackId::from(3)),
-        queues.shed_responses.values().next()
+        queues.store.shed_responses.values().next()
     );
 
     // Sanity check: roundtrip encode succeeds.
@@ -1978,7 +1976,7 @@ fn decode_with_duplicate_response_callback_in_pool() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1, 3]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
     );
 }
 
@@ -1993,7 +1991,23 @@ fn decode_with_duplicate_response_callback_in_shed_responses() {
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 2, 1]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
+    );
+}
+
+#[test]
+fn decode_with_duplicate_response_callback_in_expired_callbacks() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Have the callback ID of the expired callback match that of one of the
+    // responses.
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.callback_id = 1;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 1"
     );
 }
 
@@ -2004,12 +2018,13 @@ fn decode_with_duplicate_reference() {
     // Replace the reference to the second response with a duplicate reference to
     // the third.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.queue[1] = input_queue.queue.get(2).cloned().unwrap();
+    input_queue.deprecated_queue[1] = input_queue.deprecated_queue.get(2).cloned().unwrap();
+    input_queue.queue[1] = input_queue.queue[2];
 
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 3, 3]"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Duplicate inbound response callback: 3"
     );
     // A critical error should also have been observed.
     assert_eq!(1, *metrics.0.borrow());
@@ -2021,16 +2036,46 @@ fn decode_with_both_response_and_shed_response_for_reference() {
 
     // Make the the shed response have the same reference as one of the responses.
     let input_queue = encoded.canister_queues[0].input_queue.as_ref().unwrap();
-    let queue_item = input_queue.queue.get(1).unwrap();
-    let pb_queues::canister_queue::queue_item::R::Reference(response_id) =
-        queue_item.r.as_ref().unwrap();
     for shed_response in &mut encoded.shed_responses {
-        shed_response.id = *response_id;
+        shed_response.id = input_queue.queue[1];
     }
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Both response and shed response for reference Id(")
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
+    );
+}
+
+#[test]
+fn decode_with_both_response_and_expired_callback_for_reference() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Make the the shed response have the same reference as one of the responses.
+    let input_queue = encoded.canister_queues[0].input_queue.as_ref().unwrap();
+    let response_id = input_queue.queue[1];
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.id = response_id;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
+    );
+}
+
+#[test]
+fn decode_with_both_shed_response_and_expired_callback_for_reference() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Make the the expired callback have the same reference as the shed response.
+    let response_id = encoded.shed_responses[0].id;
+    for expired_callback in &mut encoded.expired_callbacks {
+        expired_callback.id = response_id;
+    }
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if msg.contains("CanisterQueues: Multiple responses for Reference(")
     );
 }
 
@@ -2040,12 +2085,13 @@ fn decode_with_unreferenced_inbound_response() {
 
     // Remove the reference to the second response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.deprecated_queue.remove(1);
     input_queue.queue.remove(1);
 
     let metrics = CountingMetrics(RefCell::new(0));
     assert_matches!(
         CanisterQueues::try_from((encoded, &metrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 3 inbound responses, but only 2 are enqueued"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
     );
     // A critical error should also have been observed.
     assert_eq!(1, *metrics.0.borrow());
@@ -2057,11 +2103,26 @@ fn decode_with_unreferenced_shed_response() {
 
     // Remove the reference to the third (shed) response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.deprecated_queue.remove(2);
     input_queue.queue.remove(2);
 
     assert_matches!(
         CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
-        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 3 inbound responses, but only 2 are enqueued"
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
+    );
+}
+
+#[test]
+fn decode_with_unreferenced_expired_callback() {
+    let mut encoded = canister_queues_proto_with_inbound_responses();
+
+    // Remove the reference to the fourth (expired callback) response.
+    let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
+    input_queue.queue.remove(3);
+
+    assert_matches!(
+        CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics)),
+        Err(ProxyDecodeError::Other(msg)) if &msg == "CanisterQueues: Have 4 inbound responses, but only 3 are enqueued"
     );
 }
 
@@ -2108,53 +2169,7 @@ fn decode_with_duplicate_inbound_response() {
     // Decoding should now fail because of the duplicate `CallbackId`.
     let err = CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics))
         .unwrap_err();
-    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1]");
-}
-
-#[test]
-fn decode_duplicate_inbound_response() {
-    let mut queues = CanisterQueues::default();
-
-    // Make 2 input queue reservations.
-    queues
-        .push_output_request(request(1, NO_DEADLINE).into(), UNIX_EPOCH)
-        .unwrap();
-    queues
-        .push_output_request(request(2, SOME_DEADLINE).into(), UNIX_EPOCH)
-        .unwrap();
-    assert_eq!(2, queues.output_into_iter().count());
-
-    // Enqueue 2 inbound responses.
-    queues
-        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap();
-    queues
-        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap();
-
-    // Sanity check: roundtrip encode succeeds.
-    let mut encoded: pb_queues::CanisterQueues = (&queues).into();
-    let decoded = (
-        encoded.clone(),
-        &StrictMetrics as &dyn CheckpointLoadingMetrics,
-    )
-        .try_into()
-        .unwrap();
-    assert_eq!(queues, decoded);
-
-    // Tweak the encoded queues so both responses have the same `CallbackId`.
-    for entry in &mut encoded.pool.as_mut().unwrap().messages {
-        let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
-            panic!("Expected only responses");
-        };
-        response.originator_reply_callback = 1;
-    }
-
-    // Decoding should now fail because of the duplicate `CallbackId`.
-    let err = CanisterQueues::try_from((encoded, &StrictMetrics as &dyn CheckpointLoadingMetrics))
-        .unwrap_err();
-    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback(s): [1, 1]");
+    assert_matches!(err, ProxyDecodeError::Other(msg) if &msg == "CanisterQueues: Duplicate inbound response callback: 1");
 }
 
 #[test]
@@ -2163,7 +2178,7 @@ fn test_stats_best_effort() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Best-effort requests and best-effort responses, to be enqueued one each into
     // an input and an output queue.
@@ -2224,7 +2239,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming request and the outgoing response.
@@ -2253,7 +2268,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 1,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Time out the one message with a deadline of less than 20 (the outgoing
@@ -2289,7 +2304,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 0,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
     // But the `CanisterQueues` getter methods know that there are two responses.
     assert_eq!(2, queues.input_queues_message_count());
@@ -2310,7 +2325,7 @@ fn test_stats_best_effort() {
     // No changes in slot and memory reservations.
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 #[test]
@@ -2319,7 +2334,7 @@ fn test_stats_guaranteed_response() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Guaranteed response requests and guaranteed responses, to be enqueued one
     // each into an input and an output queue.
@@ -2380,7 +2395,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming request and the outgoing response.
@@ -2409,7 +2424,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 1,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Time out the one message that has an (implicit) deadline (the outgoing
@@ -2437,7 +2452,7 @@ fn test_stats_guaranteed_response() {
     };
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // And we have all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // Consume the output queue slot reservation.
     queues.push_output_response(response4_.clone().into());
@@ -2445,7 +2460,7 @@ fn test_stats_guaranteed_response() {
 
     // Default stats throughout.
     assert_eq!(QueueStats::default(), queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 #[test]
@@ -2454,7 +2469,7 @@ fn test_stats_oversized_requests() {
 
     let mut expected_queue_stats = QueueStats::default();
     assert_eq!(expected_queue_stats, queues.queue_stats);
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 
     // One oversized best-effort request and one oversized guaranteed response
     // request, to be enqueued into both an input and an output queue.
@@ -2510,7 +2525,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Pop the incoming best-effort request and the incoming guaranteed request.
@@ -2539,7 +2554,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
         },
-        queues.pool.message_stats()
+        queues.message_stats()
     );
 
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
@@ -2569,7 +2584,7 @@ fn test_stats_oversized_requests() {
     // No change in slot and memory reservations.
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // But back to all-zero message stats.
-    assert_eq!(&MessageStats::default(), queues.pool.message_stats());
+    assert_eq!(&MessageStats::default(), queues.message_stats());
 }
 
 /// Simulates sending an outgoing request and receiving an incoming response,
@@ -2697,7 +2712,7 @@ fn test_reject_subnet_output_request() {
     // And after popping it, there are no messages or reserved slots left.
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -2786,7 +2801,7 @@ fn test_output_queues_for_each() {
     // No output left.
     assert!(!queues.has_output());
     // And the pool is also empty.
-    assert!(queues.pool.len() == 0);
+    assert!(queues.store.is_empty());
 }
 
 #[test]
@@ -2823,22 +2838,22 @@ fn test_peek_output_with_stale_references() {
     assert!(queues.has_output());
 
     // One message to canister 1.
-    let peeked = requests.get(2).unwrap().clone().into();
-    assert_eq!(Some(&peeked), queues.peek_output(&canister1));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister1));
+    let request2: RequestOrResponse = requests.get(2).unwrap().clone().into();
+    assert_eq!(Some(&request2), queues.peek_output(&canister1));
+    assert_eq!(Some(request2), queues.pop_canister_output(&canister1));
     assert_eq!(None, queues.peek_output(&canister1));
 
     // No message to canister 2.
     assert_eq!(None, queues.peek_output(&canister2));
 
     // One message to canister 3.
-    let peeked = requests.get(3).unwrap().clone().into();
-    assert_eq!(Some(&peeked), queues.peek_output(&canister3));
-    assert_eq!(Some(peeked), queues.pop_canister_output(&canister3));
+    let request3: RequestOrResponse = requests.get(3).unwrap().clone().into();
+    assert_eq!(Some(&request3), queues.peek_output(&canister3));
+    assert_eq!(Some(request3), queues.pop_canister_output(&canister3));
     assert_eq!(None, queues.peek_output(&canister3));
 
     assert!(!queues.has_output());
-    assert!(queues.pool.len() == 2);
+    assert!(queues.store.pool.len() == 2);
 }
 
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
@@ -2877,7 +2892,7 @@ fn output_into_iter_peek_and_next_consistent(
 
     prop_assert_eq!(output_iter.next(), None);
     prop_assert_eq!(raw_requests.len(), popped);
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -2949,7 +2964,7 @@ fn output_into_iter_leaves_non_consumed_messages_untouched(
     // Ensure that there are no messages left in the canister queues.
     prop_assert_eq!(canister_queues.output_message_count(), 0);
     // And the pool is empty.
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -3004,7 +3019,7 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
     // Ensure that there are no messages left in the canister queues.
     prop_assert_eq!(canister_queues.output_message_count(), 0);
     // And the pool is empty.
-    prop_assert!(canister_queues.pool.len() == 0);
+    prop_assert!(canister_queues.store.is_empty());
 }
 
 #[test_strategy::proptest]
@@ -3248,7 +3263,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
     // Check that each canister has one request timed out in the output queue and one
     // reject response in the corresponding input queue.
     assert_eq!(1, canister_queues.queue_stats.input_queues_reserved_slots);
-    let message_stats = canister_queues.pool.message_stats();
+    let message_stats = canister_queues.message_stats();
     assert_eq!(3, message_stats.inbound_message_count);
     assert_eq!(2, message_stats.inbound_guaranteed_response_count);
     assert_eq!(1, message_stats.outbound_message_count);
@@ -3264,9 +3279,9 @@ fn time_out_messages_pushes_correct_reject_responses() {
             .0;
         assert_eq!(1, input_queue_from_canister.len());
         let reference = input_queue_from_canister.peek().unwrap();
-        let reject_response = canister_queues.pool.get(reference).unwrap();
+        let reject_response = canister_queues.store.get(reference);
         assert_eq!(
-            RequestOrResponse::from(Response {
+            CanisterInput::from(RequestOrResponse::from(Response {
                 originator: own_canister_id,
                 respondent: from_canister,
                 originator_reply_callback: CallbackId::from(callback_id),
@@ -3277,8 +3292,8 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
                 )),
                 deadline,
-            }),
-            *reject_response,
+            })),
+            reject_response,
         );
     };
     check_reject_response(own_canister_id, 0, NO_DEADLINE);
@@ -3303,7 +3318,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 
     // Zero input queue reserved slots, 4 inbound responses,
     assert_eq!(0, canister_queues.queue_stats.input_queues_reserved_slots);
-    let message_stats = canister_queues.pool.message_stats();
+    let message_stats = canister_queues.message_stats();
     assert_eq!(4, message_stats.inbound_message_count);
     assert_eq!(3, message_stats.inbound_guaranteed_response_count);
     assert_eq!(0, message_stats.outbound_message_count);

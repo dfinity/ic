@@ -5,7 +5,6 @@ set -e
 # Set the transient or persistent hostname.
 
 source /opt/ic/bin/logging.sh
-# Source the functions required for writing metrics
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -68,7 +67,7 @@ function read_variables() {
 
 function construct_hostname() {
     if [ -z "${hostname}" ]; then
-        local mac=$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')
+        local mac=$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')
 
         if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
             HOSTNAME=$(echo ${TYPE}-${mac}-$(cat ${FILE}))

@@ -276,7 +276,7 @@ impl StateError {
     }
 
     /// Creates a `StateError::CanisterNotFound` variant with the given error
-    /// mnessage for the given `Response`.
+    /// message for the given `Response`.
     pub fn non_matching_response(err_str: impl ToString, response: &Response) -> Self {
         Self::NonMatchingResponse {
             err_str: err_str.to_string(),
@@ -891,7 +891,7 @@ impl ReplicatedState {
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_messages()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first
-        // filter for the (usually much fewer) canisters with timed requests and only
+        // filter for the (usually much fewer) canisters with timed out requests and only
         // apply the costly remove-call-replace to those.
         let canister_ids_with_expired_deadlines = self
             .canister_states
@@ -899,7 +899,7 @@ impl ReplicatedState {
             .filter(|(_, canister_state)| {
                 canister_state
                     .system_state
-                    .has_expired_deadlines(current_time)
+                    .has_expired_message_deadlines(current_time)
             })
             .map(|(canister_id, _)| *canister_id)
             .collect::<Vec<_>>();
@@ -916,6 +916,45 @@ impl ReplicatedState {
         }
 
         timed_out_messages_count
+    }
+
+    /// Times out all callbacks with expired deadlines (given the state time) that
+    /// have not already been timed out. Returns the number of timed out callbacks
+    /// and any errors that prevented a `DeadlineExpired` response from being
+    /// enqueued (which would signal a bug).
+    ///
+    /// See `CanisterQueues::time_out_callbacks` for further details.
+    pub fn time_out_callbacks(&mut self) -> (usize, Vec<StateError>) {
+        let current_time = CoarseTime::floor(self.metadata.time());
+        // Because the borrow checker requires us to remove each canister before
+        // calling `time_out_callbacks()` on it and replace it afterwards; and removing
+        // and replacing every canister on a large subnet is very costly; we first
+        // filter for the (usually much fewer) canisters with timed out callbacks and
+        // only apply the costly remove-call-replace to those.
+        let canister_ids_with_expired_callbacks = self
+            .canister_states
+            .iter()
+            .filter(|(_, canister_state)| {
+                canister_state
+                    .system_state
+                    .has_expired_callbacks(current_time)
+            })
+            .map(|(canister_id, _)| *canister_id)
+            .collect::<Vec<_>>();
+
+        let mut expired_callback_count = 0;
+        let mut errors = Vec::new();
+        for canister_id in canister_ids_with_expired_callbacks {
+            let mut canister = self.canister_states.remove(&canister_id).unwrap();
+            let (canister_expired_callback_count, canister_errors) = canister
+                .system_state
+                .time_out_callbacks(current_time, &canister_id, &self.canister_states);
+            expired_callback_count += canister_expired_callback_count;
+            errors.extend(canister_errors);
+            self.canister_states.insert(canister_id, canister);
+        }
+
+        (expired_callback_count, errors)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining

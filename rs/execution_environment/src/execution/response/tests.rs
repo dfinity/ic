@@ -1477,7 +1477,7 @@ fn dts_response_concurrent_cycles_change_fails() {
 }
 
 #[test]
-fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
+fn dts_response_with_cleanup_concurrent_cycles_change_succeeds() {
     // Test steps:
     // 1. Canister A calls canister B.
     // 2. Canister B replies to canister A.
@@ -1616,6 +1616,104 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
         test.execution_state(a_id).stable_memory.size,
         NumWasmPages::from(2)
     );
+}
+
+#[test]
+fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
+    // Test steps:
+    // 1. Canister A calls canister B.
+    // 2. Canister B replies to canister A.
+    // 3. The response callback of canister A traps.
+    // 4. The cleanup callback of canister A runs in multiple slices.
+    // 5. While canister A is paused, we emulate more postponed charges.
+    // 6. The cleanup callback resumes and succeeds because it cannot change the
+    //    cycles balance of the canister.
+    let instruction_limit = 100_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(1_000_000)
+        .with_subnet_memory_threshold(100 * 1024 * 1024)
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let transferred_cycles = Cycles::new(1_000);
+
+    let b = wasm()
+        .accept_cycles(transferred_cycles)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a = wasm()
+        .inter_update(
+            b_id,
+            call_args()
+                .other_side(b.clone())
+                .on_reply(
+                    wasm()
+                        // Fail the response callback to trigger the cleanup callback.
+                        .trap(),
+                )
+                .on_cleanup(
+                    wasm()
+                        // Grow by enough pages to trigger a cycles reservation for the extra storage.
+                        .stable64_grow(1_300)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
+        .unwrap();
+
+    // The test setup is done by this point.
+
+    // Execute one slice of the canister. This will run the response callback in full as
+    // it immediately traps and will start the first slice of the cleanup callback.
+    test.execute_slice(a_id);
+
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Emulate a postponed charge that drives the cycles balance of the canister to zero.
+    let cycles_debit = test.canister_state(a_id).system_state.balance();
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
+
+    // Keep running the cleanup callback until it finishes.
+    test.execute_slice(a_id);
+    while test.canister_state(a_id).next_execution() != NextExecution::None {
+        test.execute_slice(a_id);
+    }
+
+    let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    // Check that the cleanup callback did run.
+    assert_eq!(
+        test.execution_state(a_id).stable_memory.size,
+        NumWasmPages::from(1300)
+    );
+
+    // Even though the emulated ingress induction debit was set to be equal to the
+    // canister's balance, it's going to be capped by the amount removed from the
+    // balance during Wasm execution, so the canister will maintain a positive
+    // balance.
+    assert!(test.canister_state(a_id).system_state.balance() > Cycles::zero());
 }
 
 #[test]
@@ -2487,7 +2585,7 @@ fn cycles_balance_changes_applied_correctly() {
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();
     let b_id = test
-        .universal_canister_with_cycles(Cycles::new(81_000_000_000))
+        .universal_canister_with_cycles(Cycles::new(121_000_000_000))
         .unwrap();
 
     test.ingress(

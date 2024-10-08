@@ -47,9 +47,10 @@ use ic_sns_governance::{
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
+        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
+        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+        RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -133,15 +134,8 @@ impl Environment for CanisterEnv {
     }
 
     // Returns a random u64.
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.rng.next_u64()
-    }
-
-    // Returns a random byte array.
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.rng.fill_bytes(&mut bytes);
-        bytes
     }
 
     // Calls an external method (i.e., on a canister outside the nervous system) to execute a
@@ -731,6 +725,17 @@ fn add_maturity() {
 #[candid_method(update, rename = "add_maturity")]
 fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
     governance_mut().add_maturity(request)
+}
+
+#[export_name = "canister_query get_upgrade_journal"]
+fn get_upgrade_journal() {
+    over(candid_one, get_upgrade_journal_)
+}
+
+#[candid_method(query, rename = "get_upgrade_journal")]
+fn get_upgrade_journal_(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalResponse {
+    let GetUpgradeJournalRequest {} = arg;
+    governance().get_upgrade_journal()
 }
 
 /// Mints tokens for testing

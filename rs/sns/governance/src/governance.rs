@@ -1,10 +1,7 @@
-use crate::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
-};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        update_root_canister_settings, upgrade_canister_directly,
+        upgrade_canister_directly,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -23,7 +20,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
+                UpgradeInProgress, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -39,22 +37,24 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
-            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
-            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
-            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
-            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Account as AccountProto, AddMaturityRequest, AddMaturityResponse, Ballot,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
+            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
+            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
+            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
             ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
             ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, WaitForQuietState,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -82,7 +82,6 @@ use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -95,10 +94,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{
-    DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-    LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID,
-};
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
@@ -156,6 +152,9 @@ pub fn log_prefix() -> String {
 }
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
+
+// How frequently the canister should attempt to refresh the cached_upgrade_steps
+pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -1333,7 +1332,7 @@ impl Governance {
             aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
             followees: parent_neuron.followees.clone(),
             maturity_e8s_equivalent: 0,
-            dissolve_state: parent_neuron.dissolve_state.clone(),
+            dissolve_state: parent_neuron.dissolve_state,
             voting_power_percentage_multiplier: parent_neuron.voting_power_percentage_multiplier,
             source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
             staked_maturity_e8s_equivalent: None,
@@ -1345,7 +1344,7 @@ impl Governance {
         // Add the child neuron's id to the set of neurons with ongoing operations.
         let in_flight_command = NeuronInFlightCommand {
             timestamp: creation_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
+            command: Some(InFlightCommand::Split(*split)),
         };
         let _child_lock = self.lock_neuron_for_command(&child_nid, in_flight_command)?;
 
@@ -1466,7 +1465,7 @@ impl Governance {
                 0, // Minting transfer don't pay a fee
                 None, // This is a minting transfer, no 'from' account is needed
                 self.neuron_account_id(subaccount), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await?;
 
@@ -1984,7 +1983,6 @@ impl Governance {
             .map(|proposal_data| {
                 proposal_data
                     .wait_for_quiet_state
-                    .clone()
                     .map(|w| w.current_deadline_timestamp_seconds)
                     .unwrap_or_else(|| {
                         proposal_data
@@ -4602,34 +4600,10 @@ impl Governance {
         true
     }
 
-    async fn maybe_migrate_root_wasm_memory_limit(&mut self) {
-        if self
-            .proto
-            .migrated_root_wasm_memory_limit
-            .unwrap_or_default()
-        {
-            return;
-        }
-
-        // Set migrated_root_wasm_memory_limit to Some(true) so this doesn't run again
-        self.proto.migrated_root_wasm_memory_limit = Some(true);
-
-        let settings = CanisterSettings {
-            wasm_memory_limit: Some(candid::Nat::from(
-                DEFAULT_SNS_NON_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
-            )),
-            ..Default::default()
-        };
-
-        // Set root settings
-        match update_root_canister_settings(self, settings).await {
-            Ok(_) => (),
-            Err(e) => log!(ERROR, "Failed to update root canister settings: {}", e),
-        }
-    }
-
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
+        use dfn_core::println;
+
         self.process_proposals();
 
         if self.should_check_upgrade_status() {
@@ -4666,7 +4640,111 @@ impl Governance {
 
         self.maybe_gc();
 
-        self.maybe_migrate_root_wasm_memory_limit().await;
+        log!(INFO, "AAA");
+        println!("AAA");
+        if self.should_refresh_cached_upgrade_steps() {
+            log!(INFO, "BBB");
+            println!("BBB");
+            self.temporarily_lock_refresh_cached_upgrade_steps();
+            log!(INFO, "CCC");
+            println!("CCC");
+            self.refresh_cached_upgrade_steps().await;
+            log!(INFO, "DDD");
+            println!("DDD");
+        }
+        log!(INFO, "EEE");
+        println!("EEE");
+    }
+
+    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
+        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
+        } else {
+            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                requested_timestamp_seconds: Some(self.env.now()),
+                ..Default::default()
+            });
+        }
+    }
+
+    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
+        let now = self.env.now();
+
+        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            let requested_timestamp_seconds = cached_upgrade_steps
+                .requested_timestamp_seconds
+                .unwrap_or(0);
+            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Refreshes the cached_upgrade_steps field
+    pub async fn refresh_cached_upgrade_steps(&mut self) {
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            log!(
+                ERROR,
+                "Cannot refresh cached_upgrade_steps: deployed_version not set."
+            );
+            return;
+        };
+        let sns_governance_canister_id = self.env.canister_id().get();
+
+        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
+            &*self.env,
+            deployed_version.clone(),
+            sns_governance_canister_id,
+        )
+        .await;
+
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) => upgrade_steps,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    err
+                );
+                return;
+            }
+        };
+        let upgrade_steps = Versions {
+            versions: upgrade_steps,
+        };
+
+        // The following code must remain after the async call.
+        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
+            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
+        }
+        // It's unlikely that cached_upgrade_steps is None, the caller is
+        // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
+        // and that requires cached_upgrade_steps != None.
+        // However, we handle it just in case.
+        else {
+            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                response_timestamp_seconds: Some(self.env.now()),
+                upgrade_steps: Some(upgrade_steps),
+                ..Default::default()
+            });
+        }
+    }
+
+    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match cached_upgrade_steps {
+            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+                upgrade_steps: cached_upgrade_steps.upgrade_steps,
+                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+            },
+            None => GetUpgradeJournalResponse {
+                upgrade_steps: None,
+                response_timestamp_seconds: None,
+            },
+        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -5450,7 +5528,7 @@ impl Governance {
         _: GetMaturityModulationRequest,
     ) -> GetMaturityModulationResponse {
         GetMaturityModulationResponse {
-            maturity_modulation: self.proto.maturity_modulation.clone(),
+            maturity_modulation: self.proto.maturity_modulation,
         }
     }
 
@@ -5491,7 +5569,7 @@ impl Governance {
                     .expect("recipient must be set")
                     .try_into()
                     .unwrap(), // The account of the neuron on the ledger
-                self.env.random_u64(), // Random memo(nonce) for the ledger's transaction
+                self.env.insecure_random_u64(), // Random memo(nonce) for the ledger's transaction
             )
             .await
             .unwrap();
@@ -6499,7 +6577,7 @@ mod tests {
                     action: Some(Action::ManageNervousSystemParameters(
                         NervousSystemParameters {
                             // The operative data is here. Foils make_proposal.
-                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS.clone()),
+                            voting_rewards_parameters: Some(BASE_VOTING_REWARDS_PARAMETERS),
                             ..Default::default()
                         },
                     )),
@@ -6544,11 +6622,7 @@ mod tests {
                 unimplemented!();
             }
 
-            fn random_u64(&mut self) -> u64 {
-                unimplemented!();
-            }
-
-            fn random_byte_array(&mut self) -> [u8; 32] {
+            fn insecure_random_u64(&mut self) -> u64 {
                 unimplemented!();
             }
 
@@ -9832,7 +9906,7 @@ mod tests {
             };
             let filled_in_ballot = Ballot {
                 vote: vote_of_neuron as i32,
-                ..empty_ballot.clone()
+                ..empty_ballot
             };
 
             // Code under test.
@@ -9845,7 +9919,7 @@ mod tests {
                     &follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id,
                 ]
                 .into_iter()
-                .map(|neuron_id| (neuron_id.to_string(), empty_ballot.clone()))
+                .map(|neuron_id| (neuron_id.to_string(), empty_ballot))
                 .collect::<BTreeMap<String, Ballot>>();
 
                 // voter neuron votes, and the code under test deduces all of the implications of
@@ -9876,21 +9950,21 @@ mod tests {
                 btreemap! {
                     voting_neuron_id.to_string()
                         // Direct vote.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_catch_all_neuron_id.to_string()
                         // Thanks to catch-all/fallback following.
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Because this only follows specifically on TransferSnsTreasuryFunds.
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
                         // Thanks to catch-all/fallback following, although from just this case, it
                         // is unclear why this happens (you need to look at behavior on many
                         // different proposals to explain the behavior of this neuron).
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9903,22 +9977,22 @@ mod tests {
                 critical_ballots,
                 btreemap! {
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Perhaps, surprisingly, even though this neuron follows on
                     // "catch-all/fallback", that does not apply here, because the proposal is
                     // "critical".
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
 
                     // Unsurprisingly, this neuron follows, because it specifically follows on
                     // proposals of this type.
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // Even less surprisingly, this also follows for similar reasons.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
                 }
             );
 
@@ -9932,16 +10006,16 @@ mod tests {
                 btreemap! {
                     // Only direct vote.
                     voting_neuron_id.to_string()
-                        => filled_in_ballot.clone(),
+                        => filled_in_ballot,
 
                     // No following.
                     follows_on_catch_all_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                     // Even this "super follower" doesn't follow here.
                     follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                        => empty_ballot.clone(),
+                        => empty_ballot,
                 }
             );
         }

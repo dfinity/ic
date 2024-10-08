@@ -4,6 +4,7 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use ic_sns_governance::{
     pb::sns_root_types::{RegisterDappCanistersRequest, SetDappControllersRequest},
+    sns_upgrade::ListUpgradeStepsRequest,
     types::{Environment, HeapGrowthPotential},
 };
 use rand::{rngs::StdRng, RngCore};
@@ -17,6 +18,7 @@ pub enum CanisterCallRequest {
     RegisterDappCanisters(RegisterDappCanistersRequest),
     SetDappControllers(SetDappControllersRequest),
     UpdateSettings(CanisterSettings),
+    ListUpgradeSteps(ListUpgradeStepsRequest),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -75,6 +77,9 @@ impl EnvironmentFixture {
             "update_settings" => {
                 CanisterCallRequest::UpdateSettings(Decode!(&args, CanisterSettings)?)
             }
+            "list_upgrade_steps" => {
+                CanisterCallRequest::ListUpgradeSteps(Decode!(&args, ListUpgradeStepsRequest)?)
+            }
             _ => panic!("Unsupported method_name `{method_name}` in decode_canister_call."),
         };
 
@@ -131,22 +136,12 @@ impl Environment for EnvironmentFixture {
         self.environment_fixture_state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
+    fn insecure_random_u64(&mut self) -> u64 {
         self.environment_fixture_state
             .try_lock()
             .unwrap()
             .rng
             .next_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
     }
 
     async fn call_canister(

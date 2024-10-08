@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
+use std::fmt;
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
@@ -74,4 +75,44 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
     }
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+pub struct InitArg {
+    pub btc_network: BtcNetwork,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum BtcNetwork {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+}
+
+impl From<BtcNetwork> for bitcoin::Network {
+    fn from(btc_network: BtcNetwork) -> Self {
+        match btc_network {
+            BtcNetwork::Mainnet => Self::Bitcoin,
+            BtcNetwork::Testnet => Self::Testnet,
+        }
+    }
+}
+
+impl fmt::Display for BtcNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct UpgradeArg {}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum KytArg {
+    InitArg(InitArg),
+    UpgradeArg(Option<UpgradeArg>),
 }

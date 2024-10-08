@@ -10,7 +10,7 @@ use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterUpgradeOptions,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -20,7 +20,7 @@ use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
-use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
+use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -2110,7 +2110,7 @@ fn ic0_call_cycles_add_deducts_cycles() {
             (data (i32.const 0) "some_remote_method XYZ")
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -2169,7 +2169,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             (data (i32.const 100) "\09\03\00\00\00\00\00\00\ff\01")
         )"#;
 
-    let initial_cycles = Cycles::new(100_000_000_000);
+    let initial_cycles = Cycles::new(121_000_000_000);
     let canister_id = test
         .canister_from_cycles_and_wat(initial_cycles, wat)
         .unwrap();
@@ -3490,11 +3490,8 @@ fn cannot_execute_update_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3511,8 +3508,8 @@ fn cannot_execute_update_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -3528,11 +3525,8 @@ fn cannot_execute_query_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3549,8 +3543,8 @@ fn cannot_execute_query_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -4916,11 +4910,8 @@ fn cannot_send_request_to_stopping_canister() {
     // Move canister B to a stopping state before calling it.
     test.stop_canister(b_id);
     assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Send a message to canister A which will call canister B.
@@ -4959,8 +4950,8 @@ fn cannot_send_request_to_stopped_canister() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(b_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(b_id).system_state.status()
     );
 
     // Send a message to canister A which will call canister B.
@@ -5013,11 +5004,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Canister A cannot transition to the stopped state because it has an open
     // call context.
     assert_matches!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Execute the call in canister B.
@@ -5033,8 +5021,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Now it should be possible to stop canister A.
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
 }
 
@@ -7847,4 +7835,33 @@ fn ic0_mint_cycles_u64() {
             .get()
             >= 2 * (1 << 64) - 10_000_000
     );
+}
+
+fn check_correct_execution_state(is_wasm64: bool) {
+    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let memory_size = if is_wasm64 { "i64" } else { "" };
+    let wat = format!(
+        r#"
+        (module
+            (func (export "canister_update test")
+                (drop (i64.const 0))
+            )
+            (memory {memory_size} 12)
+        )"#,
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+    let execution_state = test.execution_state(canister_id);
+    assert_eq!(execution_state.is_wasm64, is_wasm64);
+}
+
+#[test]
+fn wasm64_correct_execution_state() {
+    check_correct_execution_state(true);
+}
+
+#[test]
+fn wasm32_correct_execution_state() {
+    check_correct_execution_state(false);
 }

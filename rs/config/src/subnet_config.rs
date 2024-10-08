@@ -37,9 +37,9 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 // to enter and exit the Wasm engine.
 const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
-// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 2ms
 // to prepare execution of a canister.
-const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(8 * M);
+const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(4 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
@@ -60,13 +60,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
-// This is a temporary measure until a longer term solution that alleviates the
-// limitations with the current upgrade process is implemented.
-//
-// The value is picked to allow roughly for 4GB of state to be stored to stable
-// memory during upgrade. We know that we hit `MAX_INSTRUCTIONS_PER_MESSAGE`
-// with roughly 100MB of state, so we set the limit to 40x.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(300 * B);
 
 // The limit on the number of instructions a slice of an `install_code` message
 // is allowed to executed.
@@ -343,35 +337,7 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
-        // When the `install_code` instruction limit on application subnets is
-        // also increased to 300B, then this line can be removed.
-        let max_instructions_per_install_code = NumInstructions::from(300 * B);
-        Self {
-            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
-            max_paused_executions: MAX_PAUSED_EXECUTIONS,
-            subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
-            max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
-            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
-            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
-            instruction_overhead_per_canister_for_finalization:
-                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code,
-            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
-            max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
-            max_message_duration_before_warn_in_seconds:
-                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
-            install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
-            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
-            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
-            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
-            canister_snapshot_baseline_instructions:
-                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
-        }
+        Self::application_subnet()
     }
 
     pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {

@@ -8,10 +8,10 @@ use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    metadata_state::StreamMap, replicated_state::LABEL_VALUE_OUT_OF_MEMORY,
-    testing::ReplicatedStateTesting, CanisterStatus, ReplicatedState, Stream,
-};
+use ic_replicated_state::metadata_state::StreamMap;
+use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
+use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
+use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
@@ -21,12 +21,10 @@ use ic_test_utilities_state::{new_canister_state, register_callback};
 use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
-use ic_types::{
-    messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE},
-    time::UNIX_EPOCH,
-    xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue},
-    CanisterId, CountBytes, Cycles,
-};
+use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE};
+use ic_types::time::UNIX_EPOCH;
+use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
+use ic_types::{CanisterId, CountBytes, Cycles};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -1951,7 +1949,7 @@ fn check_stream_handler_generated_reject_signal_canister_stopped() {
                 .get_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
-                .status = CanisterStatus::Stopped;
+                .set_status(CanisterStatus::Stopped);
         },
         RejectReason::CanisterStopped,
     );
@@ -1967,10 +1965,10 @@ fn check_stream_handler_generated_reject_signal_canister_stopping() {
                 .get_mut(&LOCAL_CANISTER)
                 .unwrap()
                 .system_state
-                .status = CanisterStatus::Stopping {
-                call_context_manager: Default::default(),
-                stop_contexts: Default::default(),
-            };
+                .set_status(CanisterStatus::Stopping {
+                    call_context_manager: Default::default(),
+                    stop_contexts: Default::default(),
+                });
         },
         RejectReason::CanisterStopping,
     );
