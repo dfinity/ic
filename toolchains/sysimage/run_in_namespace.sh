@@ -135,8 +135,8 @@ run_with_chroot() {
 }
 
 usage() {
-    echo "Runs <command> in a separate namespace optionally under chroot."
     echo "Usage: $0 [--mount] [--chroot <directory>] <command>"
+    echo "Runs <command> in a separate namespace optionally under chroot."
     echo "  --mount                Set up system mount points (eg. /dev and /proc). Requires --chroot"
     echo "  --chroot <directory>   Specify the directory to chroot into."
     echo "  <command>              Command to run."
