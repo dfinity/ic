@@ -158,7 +158,8 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ github.ref_protected && github.repository == 'ic' }} # Run on protected branches, but only on public repo
+    # if: ${{ github.ref_protected && github.repository == 'dfinity/ic' }} # Run on protected branches, but only on public repo
+    if: ${{ github.repository == 'dfinity/ic' }}
     steps:
       - <<: *checkout
       - name: Set PATH
