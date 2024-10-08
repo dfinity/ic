@@ -64,6 +64,7 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_messages_completed_execution_channel_capacity: IntGauge,
 
     // Call v3 handler metrics
+    pub call_v3_message_already_in_certified_state_total: IntCounter,
     pub call_v3_early_response_trigger_total: IntCounterVec,
     pub call_v3_certificate_status_total: IntCounterVec,
 }
@@ -196,6 +197,10 @@ impl HttpHandlerMetrics {
                 "replica_http_call_v3_early_response_trigger_total",
                 "The count of early response triggers for the /v3/.../call endpoint.",
                 &[LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER],
+            ),
+            call_v3_message_already_in_certified_state_total: metrics_registry.int_counter(
+                "replica_http_call_v3_message_already_in_certified_state_total",
+                "The count of messages that are already in a certified state when the call v3 handler receives them."
             ),
         }
     }

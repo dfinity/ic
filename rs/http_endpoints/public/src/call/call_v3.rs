@@ -205,6 +205,10 @@ async fn call_sync_v3(
             let delegation_from_nns = delegation_from_nns.get().cloned();
             let signature = certification.signed.signature.signature.get().0;
 
+            metrics
+                .call_v3_message_already_in_certified_state_total
+                .inc();
+
             return CallV3Response::Certificate(Certificate {
                 tree,
                 signature: Blob(signature),
