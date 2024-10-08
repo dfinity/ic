@@ -228,10 +228,9 @@ fn legacy_induct_loopback_stream_reject_response() {
             ..StreamConfig::default()
         }],
         |stream_handler, state, metrics| {
-            let reject_response = generate_reject_response(
+            let reject_response = generate_reject_response_for(
+                RejectReason::CanisterNotFound,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 21),
-                RejectCode::DestinationInvalid,
-                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
             );
             let reject_response_count_bytes = reject_response.count_bytes();
 
@@ -415,13 +414,9 @@ fn legacy_induct_loopback_stream_reroute_response() {
             push_input(&mut expected_state, inducted_response);
 
             // The request @23 is expected to trigger a reject response in the loopback stream.
-            let reject_response = generate_reject_response(
+            let reject_response = generate_reject_response_for(
+                RejectReason::CanisterMigrating,
                 request_in_stream(state.get_stream(&LOCAL_SUBNET), 23),
-                RejectCode::SysTransient,
-                format!(
-                    "Canister {} is being migrated to/from {}",
-                    *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-                ),
             );
             let reject_response_count_bytes = reject_response.count_bytes();
             let loopback_stream = stream_from_config(StreamConfig {
@@ -747,14 +742,9 @@ fn legacy_induct_loopback_stream_with_memory_limit_impl(config: HypervisorConfig
             // ...and a loopback stream with indices advanced and a reject response for the request @22.
             let loopback_stream = stream_from_config(StreamConfig {
                 begin: 23,
-                messages: vec![generate_reject_response(
+                messages: vec![generate_reject_response_for(
+                    RejectReason::OutOfMemory,
                     request_in_stream(state.get_stream(&LOCAL_SUBNET), 22),
-                    RejectCode::CanisterError,
-                    StateError::OutOfMemory {
-                        requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                        available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
-                    }
-                    .to_string(),
                 )],
                 signals_end: 23,
                 ..StreamConfig::default()
@@ -2039,8 +2029,7 @@ fn legacy_check_stream_handler_generated_reject_response_impl(
     // induces the type of reject response that will be be compared against a reference given
     // by `expected_reject_code` and `expected_state_error`.
     setup_state: &dyn Fn(&mut ReplicatedState),
-    expected_reject_code: RejectCode,
-    expected_state_error: StateError,
+    expected_reject_reason: RejectReason,
 ) {
     with_legacy_local_test_setup(
         // A loopback stream with one request in it.
@@ -2054,23 +2043,13 @@ fn legacy_check_stream_handler_generated_reject_response_impl(
 
             // Generate the expected reject response for the request in `loopback_stream`.
             let request = request_in_stream(state.get_stream(&LOCAL_SUBNET), 0);
-            let reject_response = ic_types::messages::Response {
-                originator: request.sender,
-                respondent: request.receiver,
-                originator_reply_callback: request.sender_reply_callback,
-                refund: request.payment,
-                response_payload: Payload::Reject(RejectContext::new(
-                    expected_reject_code,
-                    expected_state_error,
-                )),
-                deadline: request.deadline,
-            };
+            let reject_response = generate_reject_response_for(expected_reject_reason, request);
 
             // Induct the loopback stream and check the expected reject response is present.
             let inducted_state = stream_handler
                 .induct_loopback_stream(state, &mut available_guaranteed_response_memory);
             assert_eq!(
-                response_in_stream(inducted_state.get_stream(&LOCAL_SUBNET), 1),
+                message_in_stream(inducted_state.get_stream(&LOCAL_SUBNET), 1),
                 &reject_response,
             );
         },
@@ -2085,8 +2064,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_not_found() {
         &|state| {
             state.canister_states.remove(&LOCAL_CANISTER).unwrap();
         },
-        RejectCode::DestinationInvalid,
-        StateError::CanisterNotFound(*LOCAL_CANISTER),
+        RejectReason::CanisterNotFound,
     );
 }
 
@@ -2103,8 +2081,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopped() {
                 .system_state
                 .status = CanisterStatus::Stopped;
         },
-        RejectCode::CanisterError,
-        StateError::CanisterStopped(*LOCAL_CANISTER),
+        RejectReason::CanisterStopped,
     );
 }
 
@@ -2124,8 +2101,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_stopping() {
                 stop_contexts: Default::default(),
             };
         },
-        RejectCode::CanisterError,
-        StateError::CanisterStopping(*LOCAL_CANISTER),
+        RejectReason::CanisterStopping,
     );
 }
 
@@ -2144,8 +2120,7 @@ fn legacy_check_stream_handler_generated_reject_response_queue_full() {
                 callback_id += 1;
             }
         },
-        RejectCode::SysTransient,
-        StateError::QueueFull { capacity: 500 },
+        RejectReason::QueueFull,
     );
 }
 
@@ -2155,11 +2130,7 @@ fn lgeacy_check_stream_handler_generated_reject_response_out_of_memory() {
     legacy_check_stream_handler_generated_reject_response_impl(
         0, // `available_guaranteed_response_memory`
         &|_| {},
-        RejectCode::CanisterError,
-        StateError::OutOfMemory {
-            requested: (MAX_RESPONSE_COUNT_BYTES as u64).into(),
-            available: 0,
-        },
+        RejectReason::OutOfMemory,
     );
 }
 
@@ -2176,11 +2147,7 @@ fn legacy_check_stream_handler_generated_reject_response_canister_migrating() {
                 CANISTER_MIGRATION_SUBNET,
             );
         },
-        RejectCode::SysTransient,
-        StateError::CanisterMigrating {
-            canister_id: *LOCAL_CANISTER,
-            host_subnet: CANISTER_MIGRATION_SUBNET,
-        },
+        RejectReason::CanisterMigrating,
     );
 }
 
@@ -2361,10 +2328,9 @@ fn legacy_induct_stream_slices_partial_success() {
             let response_count_bytes =
                 response_in_slice(slices.get(&REMOTE_SUBNET), 45).count_bytes();
 
-            let reject_response = generate_reject_response(
+            let reject_response = generate_reject_response_for(
+                RejectReason::CanisterNotFound,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 46),
-                RejectCode::DestinationInvalid,
-                StateError::CanisterNotFound(*OTHER_LOCAL_CANISTER).to_string(),
             );
             let reject_response_count_bytes = reject_response.count_bytes();
 
@@ -2664,13 +2630,9 @@ fn legacy_induct_stream_slices_with_messages_to_migrating_canister() {
                 LOCAL_SUBNET,
             );
 
-            let reject_response = generate_reject_response(
+            let reject_response = generate_reject_response_for(
+                RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
-                RejectCode::SysTransient,
-                format!(
-                    "Canister {} is being migrated to/from {}",
-                    *REMOTE_CANISTER, CANISTER_MIGRATION_SUBNET
-                ),
             );
             let reject_response_count_bytes = reject_response.count_bytes();
 
@@ -2852,13 +2814,9 @@ fn legacy_induct_stream_slices_with_messages_to_migrated_canister() {
                 CANISTER_MIGRATION_SUBNET,
             );
 
-            let reject_response = generate_reject_response(
+            let reject_response = generate_reject_response_for(
+                RejectReason::CanisterMigrating,
                 request_in_slice(slices.get(&REMOTE_SUBNET), 43),
-                RejectCode::SysTransient,
-                format!(
-                    "Canister {} is being migrated to/from {}",
-                    *LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-                ),
             );
             let reject_response_count_bytes = reject_response.count_bytes();
 
@@ -3151,14 +3109,9 @@ fn legacy_induct_stream_slices_with_memory_limit_impl(subnet_type: SubnetType) {
                 begin: 31,
                 messages: vec![
                     // ...a reject response for request1 @43...
-                    generate_reject_response(
+                    generate_reject_response_for(
+                        RejectReason::OutOfMemory,
                         request_in_slice(slices.get(&REMOTE_SUBNET), 43),
-                        RejectCode::CanisterError,
-                        StateError::OutOfMemory {
-                            requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                            available: MAX_RESPONSE_COUNT_BYTES as i64 / 2,
-                        }
-                        .to_string(),
                     ),
                 ],
                 // ...and the `signal_end` incremented by 3.
@@ -3694,13 +3647,9 @@ fn legacy_process_stream_slices_canister_migration_in_both_subnets_success() {
                 begin: 28,
                 messages: vec![
                     // ...and a reject response for the request @26.
-                    generate_reject_response(
+                    generate_reject_response_for(
+                        RejectReason::CanisterMigrating,
                         request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
-                        RejectCode::SysTransient,
-                        format!(
-                            "Canister {} is being migrated to/from {}",
-                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-                        ),
                     ),
                 ],
                 signals_end: 28,
@@ -3714,22 +3663,14 @@ fn legacy_process_stream_slices_canister_migration_in_both_subnets_success() {
                     // ...one message @34 not gc'ed...
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 34).clone(),
                     // ...a reject response for the request @154...
-                    generate_reject_response(
+                    generate_reject_response_for(
+                        RejectReason::CanisterMigrating,
                         request_in_slice(slices.get(&REMOTE_SUBNET), 154),
-                        RejectCode::SysTransient,
-                        format!(
-                            "Canister {} is being migrated to/from {}",
-                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-                        ),
                     ),
                     // ...a reject response for the request @156...
-                    generate_reject_response(
+                    generate_reject_response_for(
+                        RejectReason::CanisterMigrating,
                         request_in_slice(slices.get(&REMOTE_SUBNET), 156),
-                        RejectCode::SysTransient,
-                        format!(
-                            "Canister {} is being migrated to/from {}",
-                            *OTHER_LOCAL_CANISTER, CANISTER_MIGRATION_SUBNET
-                        ),
                     ),
                 ],
                 signals_end: 158,

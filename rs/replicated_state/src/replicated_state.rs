@@ -98,12 +98,6 @@ pub enum StateError {
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
 
-    /// Message enqueuing failed due to canister migration.
-    CanisterMigrating {
-        canister_id: CanisterId,
-        host_subnet: SubnetId,
-    },
-
     /// Message enqueuing failed due to full in/out queue.
     QueueFull { capacity: usize },
 
@@ -259,7 +253,6 @@ impl PeekableOutputIterator for OutputIterator<'_> {
     }
 }
 
-pub const LABEL_VALUE_CANISTER_MIGRATING: &str = "CanisterMigrating";
 pub const LABEL_VALUE_QUEUE_FULL: &str = "QueueFull";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
@@ -273,7 +266,6 @@ impl StateError {
             StateError::CanisterNotFound(_) => LABEL_VALUE_CANISTER_NOT_FOUND,
             StateError::CanisterStopped(_) => LABEL_VALUE_CANISTER_STOPPED,
             StateError::CanisterStopping(_) => LABEL_VALUE_CANISTER_STOPPING,
-            StateError::CanisterMigrating { .. } => LABEL_VALUE_CANISTER_MIGRATING,
             StateError::QueueFull { .. } => LABEL_VALUE_QUEUE_FULL,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
@@ -309,9 +301,6 @@ impl std::fmt::Display for StateError {
             }
             StateError::CanisterStopping(canister_id) => {
                 write!(f, "Canister {} is stopping", canister_id)
-            }
-            StateError::CanisterMigrating { canister_id, host_subnet } => {
-                write!(f, "Canister {} is being migrated to/from {}", canister_id, host_subnet)
             }
             StateError::QueueFull { capacity } => {
                 write!(f, "Maximum queue capacity {} reached", capacity)
