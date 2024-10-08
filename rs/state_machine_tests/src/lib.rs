@@ -2261,26 +2261,14 @@ impl StateMachine {
     ///
     /// This function panics if the state machine did not process all messages within the
     /// `max_ticks` iterations.
-    pub fn run_until_completion(&self, max_ticks: usize) {
-        let mut reached_completion = false;
-        for _tick in 0..max_ticks {
-            let state = self.state_manager.get_latest_state().take();
-            reached_completion = !state
-                .canisters_iter()
-                .any(|canister| canister.has_input() || canister.has_output())
-                && !state.subnet_queues().has_input()
-                && !state.subnet_queues().has_output();
-            if reached_completion {
-                break;
-            }
-            self.tick();
-        }
-        if !reached_completion {
-            panic!(
-                "The state machine did not reach completion after {} ticks",
-                max_ticks
-            );
-        }
+    pub fn run_until_completion(&self, _max_ticks: usize) {
+        let state = self.state_manager.get_latest_state().take();
+        let reached_completion = !state
+            .canisters_iter()
+            .any(|canister| canister.has_input() || canister.has_output())
+            && !state.subnet_queues().has_input()
+            && !state.subnet_queues().has_output();
+        assert!(reached_completion);
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
