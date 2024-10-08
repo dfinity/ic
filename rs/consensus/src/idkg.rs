@@ -477,7 +477,7 @@ impl IDkgBouncerArgs {
 
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
-        let _timer = self.metrics.start_timer();
+        let _timer = self.metrics.update_duration.start_timer();
 
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;

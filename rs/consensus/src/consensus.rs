@@ -608,7 +608,7 @@ impl ConsensusBouncer {
 impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusBouncer {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
-        let _timer = self.metrics.start_timer();
+        let _timer = self.metrics.update_duration.start_timer();
 
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }

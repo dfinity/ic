@@ -403,7 +403,7 @@ impl DkgBouncer {
 // them before.
 impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
     fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
-        let _timer = self.metrics.start_timer();
+        let _timer = self.metrics.update_duration.start_timer();
 
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id| {

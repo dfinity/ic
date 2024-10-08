@@ -81,7 +81,7 @@ impl<Pool: CertificationPool> BouncerFactory<CertificationMessageId, Pool> for C
     // any new artifacts at that height. If it is above the CUP height and we do not
     // have a full certification at that height, we're interested in all artifacts.
     fn new_bouncer(&self, certification_pool: &Pool) -> Bouncer<CertificationMessageId> {
-        let _timer = self.metrics.start_timer();
+        let _timer = self.metrics.update_duration.start_timer();
 
         let certified_heights = certification_pool.certified_heights();
         let cup_height = self.consensus_pool_cache.catch_up_package().height();
