@@ -163,14 +163,8 @@ fn test_why_list_neurons_expensive() {
     println!("Ready for fine-grained performance measurement 👍");
     println!("");
 
-    let mut previous_neuron_count = None;
     // Make a bunch of list_neuron calls.
     for (caller, neuron_count) in principal_id_to_neuron_count {
-
-        if neuron_count > 9000 {
-            continue;
-        }
-
         let is_principal_too_heavy = [
             PrincipalId::from_str("dies2-up6x4-i42et-avcop-xvl3v-it2mm-hqeuj-j4hyu-vz7wl-ewndz-dae").unwrap(),
             PrincipalId::from_str("renrk-eyaaa-aaaaa-aaada-cai").unwrap(),
@@ -178,19 +172,6 @@ fn test_why_list_neurons_expensive() {
         if is_principal_too_heavy {
             continue;
         }
-
-        match previous_neuron_count {
-            None => {
-                previous_neuron_count = Some(neuron_count as f64);
-            }
-            Some(ok) => {
-                let neuron_count = neuron_count as f64;
-                if neuron_count > 0.9 * ok {
-                    continue;
-                }
-                previous_neuron_count = Some(neuron_count);
-            }
-        };
 
         // Call code being measured.
         let _result = list_neurons(
