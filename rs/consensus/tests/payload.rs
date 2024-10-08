@@ -9,6 +9,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
@@ -31,7 +32,6 @@ use ic_types::{
     CryptoHashOfState, Height,
 };
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
 use tokio::sync::watch;
 
 /// Test that the batches that Consensus produces contain expected batch
@@ -200,20 +200,20 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY.mul_f64(1.5));
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(INITIAL_NOTARY_DELAY.mul_f64(1.5));
         driver.step(); // this stops before notary timeout expires after making 3rd block
 
         // Make a few more batches past the summary.
         for _ in 0..=DKG_INTERVAL_LENGTH {
-            time_source.advance_time(Duration::from_millis(2000));
+            time_source.advance_time(INITIAL_NOTARY_DELAY.mul_f64(1.5));
             driver.step();
         }
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
         // Plus 2 initial driver steps.
-        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 3);
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 1);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
         let first_batch_summary = batches[0].batch_summary.clone().unwrap();
         assert_eq!(
