@@ -25,6 +25,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -44,6 +45,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -63,6 +65,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -82,6 +85,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -101,6 +105,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -120,6 +125,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -139,6 +145,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -158,6 +165,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -177,6 +185,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -196,6 +205,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -215,6 +225,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -234,6 +245,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -253,6 +265,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -272,6 +285,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "rosetta",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
