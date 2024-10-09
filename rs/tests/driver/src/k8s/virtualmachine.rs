@@ -49,6 +49,7 @@ spec:
             passt: {}
             ports:
             - port: 22
+            - port: 8100
             - port: 8332
             - port: 18444
             - port: 20443
