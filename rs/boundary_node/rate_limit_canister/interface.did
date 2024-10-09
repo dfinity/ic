@@ -1,13 +1,14 @@
 type Version = nat64;   // Represents the config version number
 type Timestamp = nat64; // Represents timestamp in nanoseconds since the epoch (1970-01-01)
 type RuleId = text;     // Unique identifier for each rule
+type IncidentId = text; // Unique identifier for each incident
 
 
 // Input structure for defining a rule with mandatory fields within a config
 type InputRule = record {
-  id: RuleId;        // Unique identifier for the rule
-  rule_raw: blob;    // Raw rule data (in binary format), expected to be a valid json object
-  description: text; // Textual description of the rule
+  incident_id: IncidentId; // Unique identifier for the incident
+  rule_raw: blob;          // Raw rule data (in binary format), expected to be a valid json object
+  description: text;       // Textual description of the rule
 };
 
 // Output structure for rules
@@ -61,9 +62,24 @@ type OverwriteConfigResponse = variant {
   Err: text;
 };
 
+type DiscloseRulesByRuleIdsResponse = variant {
+  Ok;
+  Err: text;
+};
+
+type DiscloseRulesByIncidentIdResponse = variant {
+  Ok;
+  Err: text;
+};
+
+type GetRulesByIncidentIdResponse = variant {
+  Ok: vec RuleId;
+  Err: text;
+};
+
 // Configuration containing a list of rules that replaces the current configuration
 type InputConfig = record {
-  rules: vec InputRule; 
+  rules: vec InputRule;
 };
 
 // Initialization arguments for the service
@@ -76,12 +92,18 @@ service : (InitArg) -> {
   overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
 
   // Make the viewing of the specified rules publicly accessible
-  disclose_rules: (vec RuleId) -> (DiscloseRulesResponse);
+  disclose_rules_by_rule_ids: (vec RuleId) -> (DiscloseRulesByRuleIdsResponse);
+
+  // Make the viewing of the specified rules related to an incident ID publicly accessible
+  disclose_rules_by_incident_id: (IncidentId) -> (DiscloseRulesByIncidentIdResponse);
 
   // Fetches the rate-limit rule configuration for a specified version
   // If no version is provided, the latest configuration is returned
-  get_config: (opt Version) -> (GetConfigResponse);
+  get_config: (opt Version) -> (GetConfigResponse) query;
 
   // Fetch the rule with metadata by its ID
-  get_rule_by_id: (RuleId) -> (GetRuleByIdResponse);
+  get_rule_by_id: (RuleId) -> (GetRuleByIdResponse) query;
+
+  // Fetch all rules IDs related to an ID of the incident
+  get_rules_by_incident_id: (IncidentId) -> (GetRulesByIncidentIdResponse) query;
 }
