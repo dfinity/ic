@@ -481,7 +481,6 @@ pub enum SingleCallError {
     EvmRpcError(String),
 }
 
-// TODO XC-206: Implement Error for error types in evm_rpc_types
 impl From<EvmRpcError> for SingleCallError {
     fn from(value: EvmRpcError) -> Self {
         match value {

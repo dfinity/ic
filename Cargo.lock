@@ -6488,6 +6488,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "ethers-core",
+ "evm_rpc_types",
  "hex",
  "ic-base-types",
  "ic-canisters-http-types",
