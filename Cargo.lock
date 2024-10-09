@@ -9922,6 +9922,7 @@ dependencies = [
  "icp-ledger",
  "itertools 0.12.1",
  "lazy_static",
+ "local_key",
  "maplit",
  "mockall 0.13.0",
  "num-traits",
@@ -9941,6 +9942,8 @@ dependencies = [
  "strum",
  "strum_macros",
  "tempfile",
+ "tla_instrumentation",
+ "tla_instrumentation_proc_macros",
  "tokio",
  "tokio-test",
 ]
@@ -20067,6 +20070,7 @@ dependencies = [
  "sha2 0.10.8",
  "tla_instrumentation_proc_macros",
  "tokio-test",
+ "uuid",
 ]
 
 [[package]]
