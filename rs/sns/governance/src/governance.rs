@@ -4640,20 +4640,10 @@ impl Governance {
 
         self.maybe_gc();
 
-        log!(INFO, "AAA");
-        println!("AAA");
         if self.should_refresh_cached_upgrade_steps() {
-            log!(INFO, "BBB");
-            println!("BBB");
             self.temporarily_lock_refresh_cached_upgrade_steps();
-            log!(INFO, "CCC");
-            println!("CCC");
             self.refresh_cached_upgrade_steps().await;
-            log!(INFO, "DDD");
-            println!("DDD");
         }
-        log!(INFO, "EEE");
-        println!("EEE");
     }
 
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {

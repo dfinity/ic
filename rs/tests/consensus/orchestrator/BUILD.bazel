@@ -121,7 +121,6 @@ system_test_nns(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     uses_guestos_dev_test = True,
