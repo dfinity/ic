@@ -258,15 +258,74 @@ impl InstallCodeHelper {
             self.canister.system_state.balance()
         );
 
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            instructions_left,
-            message_instruction_limit,
-            original.prepaid_execution_cycles,
-            round.counters.execution_refund_error,
-            original.subnet_size,
-            round.log,
+        let instructions_used = NumInstructions::from(
+            message_instruction_limit
+                .get()
+                .saturating_sub(instructions_left.get()),
         );
+
+        // In case the canister is Wasm64, we need to add the Wasm64 install surcharge.
+        // This basically equates to charging once more for the same instructions.
+        if self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64)
+        {
+            // We need to first refund all the cycles taken for instructions because thei were
+            // charged as if for Wasm32.
+            round.cycles_account_manager.refund_unused_execution_cycles(
+                &mut self.canister.system_state,
+                message_instruction_limit,
+                message_instruction_limit,
+                original.prepaid_execution_cycles,
+                round.counters.execution_refund_error,
+                original.subnet_size,
+                round.log,
+            );
+
+            // We then charge for the instructions again, but this time using the Wasm64 fees.
+            let mut cycles_account_manager = *round.cycles_account_manager;
+            cycles_account_manager.switch_to_wasm64_mode();
+            let mem_usage = self.canister.memory_usage();
+            let msg_mem_usage = self.canister.message_memory_usage();
+            let comp_allocation = self.canister.compute_allocation();
+            match cycles_account_manager.wasm64_install_or_upgrade_surcharge(
+                &mut self.canister.system_state,
+                mem_usage,
+                msg_mem_usage,
+                comp_allocation,
+                instructions_used,
+                original.subnet_size,
+                false,
+            ) {
+                Ok(_) => {}
+                Err(err) => {
+                    return finish_err(
+                        clean_canister,
+                        // We have already refunded, so on `finish_err` we don't need to refund again.
+                        NumInstructions::from(0),
+                        original,
+                        round,
+                        CanisterManagerError::Hypervisor(
+                            self.canister.canister_id(),
+                            InsufficientCyclesBalance(err),
+                        ),
+                        self.take_canister_log(),
+                    );
+                }
+            }
+        } else {
+            round.cycles_account_manager.refund_unused_execution_cycles(
+                &mut self.canister.system_state,
+                instructions_left,
+                message_instruction_limit,
+                original.prepaid_execution_cycles,
+                round.counters.execution_refund_error,
+                original.subnet_size,
+                round.log,
+            );
+        }
 
         self.canister
             .system_state
@@ -443,49 +502,6 @@ impl InstallCodeHelper {
                 .compute_allocation_used
                 .saturating_sub(old_compute_allocation.as_percent());
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
-        }
-
-        let instructions_used = NumInstructions::from(
-            message_instruction_limit
-                .get()
-                .saturating_sub(instructions_left.get()),
-        );
-
-        // In case the canister is Wasm64, we need to add the Wasm64 install surcharge.
-        if self
-            .canister
-            .execution_state
-            .as_ref()
-            .map_or(false, |es| es.is_wasm64)
-        {
-            let mut cycles_account_manager = *round.cycles_account_manager;
-            cycles_account_manager.switch_to_wasm64_mode();
-            let mem_usage = self.canister.memory_usage();
-            let comp_allocation = self.canister.compute_allocation();
-            match cycles_account_manager.wasm64_install_or_upgrade_surcharge(
-                &mut self.canister.system_state,
-                wasm_memory_usage,
-                mem_usage,
-                comp_allocation,
-                instructions_used,
-                original.subnet_size,
-                false,
-            ) {
-                Ok(_) => {}
-                Err(err) => {
-                    return finish_err(
-                        clean_canister,
-                        self.instructions_left(),
-                        original,
-                        round,
-                        CanisterManagerError::Hypervisor(
-                            self.canister.canister_id(),
-                            InsufficientCyclesBalance(err),
-                        ),
-                        self.take_canister_log(),
-                    );
-                }
-            }
         }
 
         // After this point `install_code` is guaranteed to succeed.
