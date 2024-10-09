@@ -92,10 +92,7 @@ use tokio::{runtime::Runtime, sync::mpsc};
 use tonic::transport::{Channel, Server};
 use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
-use tower::{
-    service_fn,
-    util::ServiceExt,
-};
+use tower::{service_fn, util::ServiceExt};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
