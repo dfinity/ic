@@ -8,6 +8,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ProviderId {
     BtcScan,
+    BlockStream,
     MempoolSpace,
 }
 
@@ -15,6 +16,7 @@ impl fmt::Display for ProviderId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::BtcScan => write!(f, "btcscan.org"),
+            Self::BlockStream => write!(f, "blockstream.info"),
             Self::MempoolSpace => write!(f, "mempool.space"),
         }
     }
@@ -43,9 +45,11 @@ impl Provider {
     pub fn next(&self) -> Self {
         let btc_network = self.btc_network;
         let provider_id = match (self.btc_network, self.provider_id) {
-            (BtcNetwork::Mainnet, ProviderId::BtcScan) => ProviderId::MempoolSpace,
+            (BtcNetwork::Mainnet, ProviderId::BtcScan) => ProviderId::BlockStream,
+            (BtcNetwork::Mainnet, ProviderId::BlockStream) => ProviderId::MempoolSpace,
             (BtcNetwork::Mainnet, ProviderId::MempoolSpace) => ProviderId::BtcScan,
-            (BtcNetwork::Testnet, _) => ProviderId::MempoolSpace,
+            (BtcNetwork::Testnet, ProviderId::BlockStream) => ProviderId::MempoolSpace,
+            (BtcNetwork::Testnet, _) => ProviderId::BlockStream,
         };
         Self {
             btc_network,
@@ -58,17 +62,18 @@ impl Provider {
         txid: Txid,
         max_response_bytes: u32,
     ) -> CanisterHttpRequestArgument {
-        match (self.btc_network, self.provider_id) {
-            (BtcNetwork::Mainnet, ProviderId::BtcScan) => {
-                mempool_space_request(self.btc_network, txid, max_response_bytes)
+        match (self.provider_id, self.btc_network) {
+            (ProviderId::BlockStream, _) => make_request(
+                "blockstream.info",
+                self.btc_network,
+                txid,
+                max_response_bytes,
+            ),
+            (ProviderId::MempoolSpace, _) => {
+                make_request("mempool.space", self.btc_network, txid, max_response_bytes)
             }
-            (BtcNetwork::Mainnet, ProviderId::MempoolSpace) => {
-                btcscan_request(txid, max_response_bytes)
-            }
-            (BtcNetwork::Testnet, ProviderId::MempoolSpace) => {
-                mempool_space_request(self.btc_network, txid, max_response_bytes)
-            }
-            (btc_network, provider) => {
+            (ProviderId::BtcScan, BtcNetwork::Mainnet) => btcscan_request(txid, max_response_bytes),
+            (provider, btc_network) => {
                 panic!(
                     "Provider {} does not support bitcoin {}",
                     provider, btc_network
@@ -101,12 +106,12 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestAr
     }
 }
 
-fn mempool_space_request(
+fn make_request(
+    host: &str,
     network: BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
 ) -> CanisterHttpRequestArgument {
-    let host = "mempool.space";
     let url = match network {
         BtcNetwork::Mainnet => format!("https://{}/api/tx/{}/raw", host, txid),
         BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
