@@ -968,8 +968,15 @@ mod index {
         if ledger_and_archive_blocks.blocks.is_empty() {
             println!("No blocks to retrieve from index");
             return;
+        } else {
+            println!(
+                "Verifying ledger and archives vs index block parity for {} blocks starting at index {}",
+                ledger_and_archive_blocks.blocks.len(),
+                ledger_and_archive_blocks.start_index
+            );
         }
         wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
+        let start = Instant::now();
         let index_blocks = get_all_index_blocks(
             state_machine,
             index_id,
@@ -984,6 +991,12 @@ mod index {
             index_blocks.len()
         );
         assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
+        println!(
+            "Verified ledger and archives vs index block parity for {} blocks starting at index {} in {:?}",
+            index_blocks.len(),
+            ledger_and_archive_blocks.start_index,
+            start.elapsed()
+        );
     }
 
     pub fn wait_until_index_sync_is_completed(
