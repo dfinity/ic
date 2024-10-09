@@ -268,7 +268,10 @@ async fn test_fetch_tx() {
     ));
     assert!(matches!(
         state::get_fetch_status(txid_2),
-        Some(FetchTxStatus::Error((_, HttpGetTxError::TxEncoding(_))))
+        Some(FetchTxStatus::Error(FetchTxStatusError {
+            error: HttpGetTxError::TxEncoding(_),
+            ..
+        }))
     ));
 }
 
@@ -477,22 +480,30 @@ async fn test_check_fetched() {
             - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
 
-    // case TransientInternalError can be retried.
-    state::clear_fetch_status(txid_2);
+    // case HttpGetTxError can be retried.
+    let remaining_cycles = env.cycles_available();
+    let provider = providers::next_provider(env.btc_network());
+    state::set_fetch_status(
+        txid_2,
+        FetchTxStatus::Error(FetchTxStatusError {
+            provider,
+            max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
+            error: HttpGetTxError::Rejected {
+                code: RejectionCode::SysTransient,
+                message: "no more reply".to_string(),
+            },
+        }),
+    );
+    env.expect_get_tx_with_reply(Ok(tx_2.clone()));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
-            CheckTransactionRetriable::TransientInternalError(_)
-        ))
-    ));
-    let called_provider = *env.called_provider.borrow();
-    // call again
-    assert!(matches!(
-        env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
-            CheckTransactionRetriable::TransientInternalError(_)
-        ))
+        CheckTransactionResponse::Passed
     ));
     // check if provider has been rotated
-    assert!(*env.called_provider.borrow() != called_provider);
+    assert!(*env.called_provider.borrow() == Some(provider.next()));
+    // Check remaining cycle. The cost should match RETRY_MAX_RESPONSE_BYTES
+    assert_eq!(
+        env.cycles_available(),
+        remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
+    );
 }

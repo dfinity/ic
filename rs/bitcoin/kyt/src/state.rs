@@ -34,8 +34,15 @@ pub enum HttpGetTxError {
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error((Provider, HttpGetTxError)),
+    Error(FetchTxStatusError),
     Fetched(FetchedTx),
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchTxStatusError {
+    pub provider: Provider,
+    pub max_response_bytes: u32,
+    pub error: HttpGetTxError,
 }
 
 /// Once the transaction data is successfully fetched, we create

@@ -1,4 +1,4 @@
-use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError};
+use crate::state::{FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError};
 use crate::types::{
     CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
@@ -76,17 +76,23 @@ pub trait FetchEnv {
         &self,
         txid: Txid,
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let provider = providers::next_provider(self.btc_network());
         let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
-            None => (provider, INITIAL_MAX_RESPONSE_BYTES),
+            None => (
+                providers::next_provider(self.btc_network()),
+                INITIAL_MAX_RESPONSE_BYTES,
+            ),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => (provider, max_response_bytes),
+            }) => (
+                providers::next_provider(self.btc_network()),
+                max_response_bytes,
+            ),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error((provider, _err))) => (
-                // All FetchTxStatus error are retriable with another provider
-                provider.next(),
-                INITIAL_MAX_RESPONSE_BYTES,
+            Some(FetchTxStatus::Error(err)) => (
+                // An FetchTxStatus error can be retried with another provider
+                err.provider.next(),
+                // The next provider can use the same max_response_bytes
+                err.max_response_bytes,
             ),
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
         };
@@ -140,7 +146,14 @@ pub trait FetchEnv {
                 Ok(FetchResult::RetryWithBiggerBuffer)
             }
             Err(err) => {
-                state::set_fetch_status(txid, FetchTxStatus::Error((provider, err.clone())));
+                state::set_fetch_status(
+                    txid,
+                    FetchTxStatus::Error(FetchTxStatusError {
+                        provider,
+                        max_response_bytes,
+                        error: err.clone(),
+                    }),
+                );
                 Ok(FetchResult::Error(err))
             }
         }
