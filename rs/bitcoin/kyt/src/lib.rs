@@ -78,7 +78,6 @@ impl FetchEnv for KytCanisterEnv {
                     // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
                         code: RejectionCode::SysTransient,
-                        provider,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
                 }
@@ -99,7 +98,6 @@ impl FetchEnv for KytCanisterEnv {
                 // TODO(XC-158): maybe try other providers and also log the error.
                 println!("The http_request resulted into error. RejectionCode: {r:?}, Error: {m}");
                 Err(HttpGetTxError::Rejected {
-                    provider,
                     code: r,
                     message: m,
                 })

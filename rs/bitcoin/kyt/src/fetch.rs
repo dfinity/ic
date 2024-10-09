@@ -83,10 +83,9 @@ pub trait FetchEnv {
                 max_response_bytes, ..
             }) => (provider, max_response_bytes),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(err)) => (
+            Some(FetchTxStatus::Error((provider, _err))) => (
                 // All FetchTxStatus error are retriable with another provider
-                err.get_provider()
-                    .map_or(provider, |provider| provider.next()),
+                provider.next(),
                 INITIAL_MAX_RESPONSE_BYTES,
             ),
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
@@ -141,7 +140,7 @@ pub trait FetchEnv {
                 Ok(FetchResult::RetryWithBiggerBuffer)
             }
             Err(err) => {
-                state::set_fetch_status(txid, FetchTxStatus::Error(err.clone()));
+                state::set_fetch_status(txid, FetchTxStatus::Error((provider, err.clone())));
                 Ok(FetchResult::Error(err))
             }
         }

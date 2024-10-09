@@ -24,17 +24,7 @@ pub enum HttpGetTxError {
     Rejected {
         code: RejectionCode,
         message: String,
-        provider: Provider,
     },
-}
-
-impl HttpGetTxError {
-    pub fn get_provider(&self) -> Option<Provider> {
-        match self {
-            HttpGetTxError::Rejected { provider, .. } => Some(*provider),
-            _ => None,
-        }
-    }
 }
 
 /// We store in state the `FetchStatus` for every `Txid` we fetch.
@@ -44,7 +34,7 @@ impl HttpGetTxError {
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error(HttpGetTxError),
+    Error((Provider, HttpGetTxError)),
     Fetched(FetchedTx),
 }
 

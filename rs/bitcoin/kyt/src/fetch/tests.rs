@@ -51,7 +51,6 @@ impl FetchEnv for MockEnv {
             .unwrap_or(Err(HttpGetTxError::Rejected {
                 code: RejectionCode::SysTransient,
                 message: "no more reply".to_string(),
-                provider,
             }))
     }
     fn cycles_accept(&self, cycles: u128) -> u128 {
@@ -269,7 +268,7 @@ async fn test_fetch_tx() {
     ));
     assert!(matches!(
         state::get_fetch_status(txid_2),
-        Some(FetchTxStatus::Error(HttpGetTxError::TxEncoding(_)))
+        Some(FetchTxStatus::Error((_, HttpGetTxError::TxEncoding(_))))
     ));
 }
 
