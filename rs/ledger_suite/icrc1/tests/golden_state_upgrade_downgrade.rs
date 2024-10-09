@@ -1,7 +1,9 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
+use crate::index::{get_all_index_blocks, wait_until_index_sync_is_completed};
 use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::Block;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
@@ -138,11 +140,14 @@ impl LedgerSuiteConfig {
         );
         let ledger_canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let index_canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
         let mut previous_ledger_state = None;
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 ledger_canister_id,
+                index_canister_id,
                 self.burns_without_spender.clone(),
                 None,
             ));
@@ -153,6 +158,7 @@ impl LedgerSuiteConfig {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 ledger_canister_id,
+                index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
             ));
@@ -163,6 +169,7 @@ impl LedgerSuiteConfig {
             let _ = LedgerState::verify_state_and_generate_transactions(
                 state_machine,
                 ledger_canister_id,
+                index_canister_id,
                 self.burns_without_spender.clone(),
                 previous_ledger_state,
             );
@@ -214,6 +221,11 @@ impl LedgerSuiteConfig {
     }
 }
 
+struct FetchedBlocks {
+    blocks: Vec<Block<Tokens>>,
+    start_index: u64,
+}
+
 struct LedgerState {
     in_memory_ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
     num_blocks: u64,
@@ -236,19 +248,20 @@ impl LedgerState {
     /// If `total_num_blocks` is `None`, fetch all blocks from the ledger canister, otherwise fetch
     /// `total_num_blocks - self.num_blocks` blocks (some amount of latest blocks that the in-memory
     /// ledger does not hold yet).
-    fn fetch_next_blocks(
+    fn fetch_and_ingest_next_ledger_and_archive_blocks(
         &mut self,
         state_machine: &StateMachine,
         canister_id: CanisterId,
         total_num_blocks: Option<u64>,
-    ) {
+    ) -> FetchedBlocks {
         let num_blocks = total_num_blocks
             .unwrap_or(u64::MAX)
             .saturating_sub(self.num_blocks);
+        let start_index = self.num_blocks;
         let blocks = get_all_ledger_and_archive_blocks(
             state_machine,
             canister_id,
-            Some(self.num_blocks),
+            Some(start_index),
             Some(num_blocks),
         );
         self.num_blocks = self
@@ -256,6 +269,10 @@ impl LedgerState {
             .checked_add(blocks.len() as u64)
             .expect("number of blocks should fit in u64");
         self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+        FetchedBlocks {
+            blocks,
+            start_index,
+        }
     }
 
     fn new(burns_without_spender: Option<BurnsWithoutSpender<Account>>) -> Self {
@@ -288,7 +305,8 @@ impl LedgerState {
     /// - Return the new `ledger_state`
     fn verify_state_and_generate_transactions(
         state_machine: &StateMachine,
-        canister_id: CanisterId,
+        ledger_id: CanisterId,
+        index_id: CanisterId,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         previous_ledger_state: Option<LedgerState>,
     ) -> Self {
@@ -302,16 +320,52 @@ impl LedgerState {
         // or new transactions triggered e.g., by timers running in other canisters on the subnet,
         // that get applied after the `StateMachine` is initialized, and are not part of the
         // transactions in `generate_transactions`.
-        ledger_state.fetch_next_blocks(state_machine, canister_id, num_blocks_to_fetch);
-        ledger_state.verify_balances_and_allowances(state_machine, canister_id);
+        let ledger_and_archive_blocks = ledger_state
+            .fetch_and_ingest_next_ledger_and_archive_blocks(
+                state_machine,
+                ledger_id,
+                num_blocks_to_fetch,
+            );
+        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
+        let index_blocks = get_all_index_blocks(
+            state_machine,
+            index_id,
+            Some(ledger_and_archive_blocks.start_index),
+            Some(ledger_and_archive_blocks.blocks.len() as u64),
+        );
+        assert_eq!(
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len(),
+            "Number of blocks fetched from the ledger and index do not match: {} vs {}",
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len()
+        );
+        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
+        ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
             ledger_state.assert_eq(previous_ledger_state);
         }
-        generate_transactions(state_machine, canister_id);
+        generate_transactions(state_machine, ledger_id);
         // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
         // not fetched in the previous call to `fetch_next_blocks`.
-        ledger_state.fetch_next_blocks(state_machine, canister_id, None);
+        let ledger_and_archive_blocks = ledger_state
+            .fetch_and_ingest_next_ledger_and_archive_blocks(state_machine, ledger_id, None);
+        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
+        let index_blocks = get_all_index_blocks(
+            state_machine,
+            index_id,
+            Some(ledger_and_archive_blocks.start_index),
+            Some(ledger_and_archive_blocks.blocks.len() as u64),
+        );
+        assert_eq!(
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len(),
+            "Number of blocks fetched from the ledger and index do not match: {} vs {}",
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len()
+        );
+        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
         ledger_state
     }
 }
@@ -881,4 +935,105 @@ fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) 
         NUM_TRANSACTIONS_PER_TYPE * 5,
         start.elapsed()
     );
+}
+
+mod index {
+    use super::*;
+    use candid::Decode;
+    use ic_icrc1_index_ng::Status;
+    use ic_state_machine_tests::WasmResult;
+    use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+    use std::time::Duration;
+
+    pub fn get_all_index_blocks(
+        state_machine: &StateMachine,
+        index_id: CanisterId,
+        start_index: Option<u64>,
+        num_blocks: Option<u64>,
+    ) -> Vec<Block<Tokens>> {
+        let start_index = start_index.unwrap_or(0);
+        let num_blocks = num_blocks.unwrap_or(u32::MAX as u64);
+
+        let res = get_index_blocks(state_machine, index_id, 0_u64, 0_u64);
+        let length = num_blocks.min(res.chain_length.saturating_sub(start_index));
+        let mut blocks: Vec<_> = vec![];
+        let mut curr_start = start_index;
+        while length > blocks.len() as u64 {
+            let new_blocks = get_index_blocks(
+                state_machine,
+                index_id,
+                curr_start,
+                length - (curr_start - start_index),
+            )
+            .blocks;
+            assert!(!new_blocks.is_empty());
+            curr_start += new_blocks.len() as u64;
+            blocks.extend(new_blocks);
+        }
+        blocks
+            .into_iter()
+            .map(ic_icrc1::Block::try_from)
+            .collect::<Result<Vec<Block<Tokens>>, String>>()
+            .expect("should convert generic blocks to ICRC1 blocks")
+    }
+
+    pub fn wait_until_index_sync_is_completed(
+        env: &StateMachine,
+        index_id: CanisterId,
+        ledger_id: CanisterId,
+    ) {
+        const MAX_ATTEMPTS: u8 = 100;
+        const SYNC_STEP_SECONDS: Duration = Duration::from_secs(1);
+
+        let mut num_blocks_synced = u64::MAX;
+        let mut chain_length = u64::MAX;
+        for _i in 0..MAX_ATTEMPTS {
+            env.advance_time(SYNC_STEP_SECONDS);
+            env.tick();
+            num_blocks_synced = u64::try_from(status(env, index_id).num_blocks_synced.0)
+                .expect("num_blocks_synced should fit in u64");
+            chain_length = get_index_blocks(env, ledger_id, 0u64, 0u64).chain_length;
+            if num_blocks_synced == chain_length {
+                return;
+            }
+        }
+        panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+    }
+
+    fn get_index_blocks<I>(
+        state_machine: &StateMachine,
+        index_id: CanisterId,
+        start_index: I,
+        num_blocks: I,
+    ) -> ic_icrc1_index_ng::GetBlocksResponse
+    where
+        I: Into<Nat>,
+    {
+        let req = GetBlocksRequest {
+            start: start_index.into(),
+            length: num_blocks.into(),
+        };
+        let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
+        let res = state_machine
+            .query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes();
+        Decode!(&res, ic_icrc1_index_ng::GetBlocksResponse)
+            .expect("Failed to decode GetBlocksResponse")
+    }
+
+    fn status(state_machine: &StateMachine, canister_id: CanisterId) -> Status {
+        let arg = Encode!(&()).unwrap();
+        match state_machine.query(canister_id, "status", arg) {
+            Err(err) => {
+                panic!("{canister_id}.status query failed with error {err}");
+            }
+            Ok(WasmResult::Reject(err)) => {
+                panic!("{canister_id}.status query rejected with error {err}");
+            }
+            Ok(WasmResult::Reply(res)) => {
+                Decode!(&res, Status).expect("error decoding response to status query")
+            }
+        }
+    }
 }
