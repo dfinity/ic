@@ -15370,6 +15370,7 @@ dependencies = [
  "k256",
  "registry-canister",
  "slog",
+ "tokio",
 ]
 
 [[package]]
