@@ -50,6 +50,18 @@ string_flag(
     build_setting_default = FAKE_IC_VERSION,
 )
 
+bool_flag(
+    name = "release_build",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "is_release_build",
+    flag_values = {
+        ":release_build": "True",
+    },
+)
+
 string_flag(
     name = "timeout_value",
     build_setting_default = "10m",
@@ -76,17 +88,6 @@ ic_version_or_git_sha(
     name = "rc_only_version.txt",
     ic_version = ":ic_version_rc_only",
     tags = ["no-cache"],
-    visibility = ["//visibility:public"],
-)
-
-genrule(
-    name = "commit_timestamp_txt",
-    outs = ["commit_timestamp.txt"],
-    cmd = "git show -s --format=%ct > $@",
-    tags = [
-        "local",
-        "no-cache",
-    ],
     visibility = ["//visibility:public"],
 )
 

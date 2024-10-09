@@ -81,9 +81,9 @@ RUN systemctl disable \
 
 # ------ SETUPOS WORK --------------------------------------------
 
-# build-time is checked in the setupOS installation to verify that images
+# commit-time is checked in the setupOS installation to verify that images
 # are < six weeks old.
-COPY build-time /build-time
+COPY commit-time /commit-time
 
 # Clear additional files that may lead to indeterministic build.
 RUN rm -rf \

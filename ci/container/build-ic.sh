@@ -113,7 +113,8 @@ rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
 echo_green "Building selected IC artifacts"
-BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
+BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY' " \
+          "--release_build=$RELEASE"
 BUILD_BINARIES_CMD=$(
     cat <<-END
     # build binaries
