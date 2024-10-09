@@ -202,6 +202,10 @@ impl StubOnce {
     }
 
     fn expect_rpc_call(self, env: &PocketIc) {
+        println!(
+            "HTTP requests before expect_rpc_call {}",
+            debug_http_outcalls(env)
+        );
         let request = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
             panic!(
                 "no request found matching the stub {:?}. Current requests {}",
@@ -209,9 +213,10 @@ impl StubOnce {
                 debug_http_outcalls(env)
             )
         });
-        let request_id = JsonRpcRequest::from_str(std::str::from_utf8(&request.body).unwrap())
-            .expect("BUG: invalid JSON RPC request")
-            .id;
+        let json_rpc_request =
+            JsonRpcRequest::from_str(std::str::from_utf8(&request.body).unwrap())
+                .expect("BUG: invalid JSON RPC request");
+        let request_id = json_rpc_request.id;
 
         let response_body = serde_json::to_vec(&json!({
             "jsonrpc":"2.0",
@@ -287,6 +292,8 @@ impl StubOnce {
         // payload = payload.http_response(id, &http_response);
         // env.execute_payload(payload);
 
+        println!("JSON RPC mock response {:?}", json_rpc_request);
+        println!("Matcher {:?}", self.matcher);
         env.mock_canister_http_response(MockCanisterHttpResponse {
             subnet_id: request.subnet_id,
             request_id: request.request_id,
@@ -297,10 +304,16 @@ impl StubOnce {
             }),
             additional_responses: vec![],
         });
+        env.tick();
+        env.tick();
+        println!(
+            "HTTP requests after expect_rpc_call {}",
+            debug_http_outcalls(env)
+        );
     }
 }
 
-fn debug_http_outcalls(env: &PocketIc) -> String {
+pub fn debug_http_outcalls(env: &PocketIc) -> String {
     let mut debug_str = vec![];
     for context in env.get_canister_http().into_iter() {
         let request_body = std::str::from_utf8(&context.body).unwrap();

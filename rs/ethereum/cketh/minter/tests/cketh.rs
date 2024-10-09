@@ -25,9 +25,9 @@ use ic_cketh_test_utils::{
     CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT,
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
-    EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION,
+    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
+    EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -101,45 +101,44 @@ fn should_deposit_and_withdraw() {
     assert_eq!(cketh.balance_of(caller), Nat::from(0_u8));
 
     cketh.assert_has_unique_events_in_order(&vec![
-            EventPayload::AcceptedEthWithdrawalRequest {
-                withdrawal_amount: withdrawal_amount.clone(),
-                destination: destination.clone(),
-                ledger_burn_index: withdrawal_id.clone(),
-                from: caller,
-                from_subaccount: None,
-                created_at: Some(time),
+        EventPayload::AcceptedEthWithdrawalRequest {
+            withdrawal_amount: withdrawal_amount.clone(),
+            destination: destination.clone(),
+            ledger_burn_index: withdrawal_id.clone(),
+            from: caller,
+            from_subaccount: None,
+            created_at: Some(time),
+        },
+        EventPayload::CreatedTransaction {
+            withdrawal_id: withdrawal_id.clone(),
+            transaction: UnsignedTransaction {
+                chain_id: Nat::from(1_u8),
+                nonce: Nat::from(0_u8),
+                max_priority_fee_per_gas,
+                max_fee_per_gas: max_fee_per_gas.clone(),
+                gas_limit: gas_limit.clone(),
+                destination,
+                value: withdrawal_amount - max_fee_per_gas * gas_limit,
+                data: Default::default(),
+                access_list: vec![],
             },
-            EventPayload::CreatedTransaction {
-                withdrawal_id: withdrawal_id.clone(),
-                transaction: UnsignedTransaction {
-                    chain_id: Nat::from(1_u8),
-                    nonce: Nat::from(0_u8),
-                    max_priority_fee_per_gas,
-                    max_fee_per_gas: max_fee_per_gas.clone(),
-                    gas_limit: gas_limit.clone(),
-                    destination,
-                    value: withdrawal_amount - max_fee_per_gas * gas_limit,
-                    data: Default::default(),
-                    access_list: vec![],
-                },
+        },
+        EventPayload::SignedTransaction {
+            withdrawal_id: withdrawal_id.clone(),
+            raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
+        },
+        EventPayload::FinalizedTransaction {
+            withdrawal_id,
+            transaction_receipt: TransactionReceipt {
+                block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                effective_gas_price: Nat::from(4277923390u64),
+                gas_used: Nat::from(21_000_u32),
+                status: TransactionStatus::Success,
+                transaction_hash: DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string(),
             },
-            EventPayload::SignedTransaction {
-                withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
-            },
-            EventPayload::FinalizedTransaction {
-                withdrawal_id,
-                transaction_receipt: TransactionReceipt {
-                    block_hash: DEFAULT_BLOCK_HASH.to_string(),
-                    block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                    effective_gas_price: Nat::from(4277923390u64),
-                    gas_used: Nat::from(21_000_u32),
-                    status: TransactionStatus::Success,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
-                },
-            },
-        ]);
+        },
+    ]);
 }
 
 #[test]

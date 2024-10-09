@@ -159,7 +159,30 @@ impl DepositFlow {
     }
 
     fn handle_deposit_until_block(&mut self, block_number: u64) {
-        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+        println!(
+            "Time before advancing clock {:?}",
+            self.setup.env.get_time()
+        );
+        println!(
+            "HTTP requests before advancing time {:?}",
+            self.setup.env.get_canister_http()
+        );
+        self.setup.env.advance_time(Duration::from_secs(60));
+        self.setup.env.tick();
+        self.setup.env.tick();
+        println!(
+            "HTTP requests after advancing time 1 {:?}",
+            self.setup.env.get_canister_http()
+        );
+        self.setup.env.advance_time(Duration::from_secs(120));
+        self.setup.env.tick();
+        self.setup.env.tick();
+        self.setup.env.tick();
+        self.setup.env.tick();
+        println!(
+            "HTTP requests after advancing time2 {:?}",
+            self.setup.env.get_canister_http()
+        );
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -649,7 +672,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> LatestTransactionCountProcessWi
         let default_eth_get_latest_transaction_count =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
                 .respond_for_all_with(transaction_count_response(0))
-                .with_request_params(json!([MINTER_ADDRESS, "latest"]));
+                .with_request_params(json!([MINTER_ADDRESS.to_ascii_lowercase(), "latest"]));
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
@@ -768,7 +791,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId>
         let default_eth_get_latest_transaction_count =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
                 .respond_for_all_with(transaction_count_response(1))
-                .with_request_params(json!([MINTER_ADDRESS, "finalized"]));
+                .with_request_params(json!([MINTER_ADDRESS.to_ascii_lowercase(), "finalized"]));
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
