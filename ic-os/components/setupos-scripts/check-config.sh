@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# check-config.sh verifies the existence of the configuration JSON file created by config.service, halting the installation if not found.
+
 set -o nounset
 set -o pipefail
 
