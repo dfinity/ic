@@ -277,9 +277,9 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
 }
 
 async fn run_periodic_tasks() {
-    if swap().requires_periodic_tasks() {
-        swap_mut().run_periodic_tasks(now_fn).await;
-    } else {
+    swap_mut().run_periodic_tasks(now_fn).await;
+
+    if !swap().requires_periodic_tasks() {
         log!(
             INFO,
             "All work that needs to be done in Swap's periodic tasks has been completed. \
