@@ -82,7 +82,7 @@ use std::{
     io::{BufReader, Write},
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     time::{Duration, SystemTime},
 };
 use tempfile::{NamedTempFile, TempDir};
@@ -94,7 +94,7 @@ use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{
     service_fn,
-    util::{BoxCloneService, ServiceExt},
+    util::ServiceExt,
 };
 
 // See build.rs
@@ -1169,17 +1169,7 @@ fn process_mock_canister_https_response(
                         .collect(),
                     content: reply.body.clone(),
                 })));
-            let query_handler = subnet.query_handler.clone();
-            let query_handler = BoxCloneService::new(service_fn(move |arg| {
-                let query_handler = query_handler.clone();
-                async {
-                    let r = query_handler
-                        .oneshot(arg)
-                        .await
-                        .expect("Inner service should be alive. I hope.");
-                    Ok(r)
-                }
-            }));
+            let query_handler = subnet.query_handler.lock().unwrap().clone();
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
@@ -1720,16 +1710,7 @@ impl Operation for CallRequest {
                     subnet.get_subnet_id(),
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
-                    Arc::new(Mutex::new(BoxCloneService::new(service_fn(move |arg| {
-                        let ingress_filter = ingress_filter.clone();
-                        async {
-                            let r = ingress_filter
-                                .oneshot(arg)
-                                .await
-                                .expect("Inner service should be alive. I hope.");
-                            Ok(r)
-                        }
-                    })))),
+                    ingress_filter,
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
@@ -1861,16 +1842,7 @@ impl Operation for QueryRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(OnceCell::new_with(delegation)),
-                    BoxCloneService::new(service_fn(move |arg| {
-                        let query_handler = query_handler.clone();
-                        async {
-                            let r = query_handler
-                                .oneshot(arg)
-                                .await
-                                .expect("Inner service should be alive. I hope.");
-                            Ok(r)
-                        }
-                    })),
+                    query_handler.lock().unwrap().clone(),
                 )
                 .build_service();
 

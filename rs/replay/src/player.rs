@@ -61,7 +61,7 @@ use ic_types::{
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
-    messages::{CertificateDelegation, Query, QuerySource},
+    messages::{Query, QuerySource},
     signature::ThresholdSignature,
     time::current_time,
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
@@ -77,7 +77,7 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
@@ -116,8 +116,7 @@ pub struct Player {
     membership: Option<Arc<Membership>>,
     validator: Option<ReplayValidator>,
     crypto: Arc<dyn CryptoComponentForVerificationOnly>,
-    query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    query_handler: QueryExecutionService,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
@@ -368,8 +367,7 @@ impl Player {
             membership,
             validator,
             crypto,
-            query_handler: runtime
-                .block_on(async { TowerBuffer::new(execution_service.query_execution_service, 1) }),
+            query_handler: execution_service.query_execution_service,
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
             registry,
