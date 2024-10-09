@@ -6,6 +6,7 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ic-os/base:defs.bzl", "icos_container_filesystem")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
@@ -22,6 +23,7 @@ def icos_build(
         visibility = None,
         tags = None,
         build_local_base_image = False,
+        experimental_simplified_build = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -37,6 +39,7 @@ def icos_build(
       visibility: See Bazel documentation
       tags: See Bazel documentation
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
+      experimental_simplified_build: if True, run the simplified build without Docker (experimental)
       ic_version: the label pointing to the target that returns IC version
     """
 
@@ -84,7 +87,16 @@ def icos_build(
 
     # -------------------- Build the container image --------------------
 
-    if build_local_base_image:
+    if experimental_simplified_build:
+        icos_container_filesystem(
+            name = "rootfs-tree.tar",
+            component_files = image_deps["component_files"],
+            build_args = image_deps["build_args"],
+            apt_packages = image_deps["apt_packages"],
+            custom_packages = image_deps["custom_packages"],
+            setup_script = image_deps["setup_script"],
+        )
+    elif build_local_base_image:
         base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
         package_files_arg = "PACKAGE_FILES=packages.common"
         if "dev" in mode:
