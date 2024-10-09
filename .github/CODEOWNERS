@@ -124,7 +124,6 @@ go_deps.bzl               @dfinity/idx
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/networking
 /rs/http_endpoints/fuzz/                                @dfinity/product-security
-/rs/http_endpoints/xnet/                                @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/http_utils/                                         @dfinity/consensus
 /rs/https_outcalls/                                     @dfinity/networking
 /rs/https_outcalls/consensus/                           @dfinity/consensus

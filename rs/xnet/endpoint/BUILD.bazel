@@ -45,15 +45,15 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "xnet",
+    name = "endpoint",
     srcs = glob(["src/**"]),
-    crate_name = "ic_http_endpoints_xnet",
+    crate_name = "ic_xnet_endpoint",
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "test",
-    crate = ":xnet",
+    name = "endpoint_test",
+    crate = ":endpoint",
     deps = DEV_DEPENDENCIES,
 )
