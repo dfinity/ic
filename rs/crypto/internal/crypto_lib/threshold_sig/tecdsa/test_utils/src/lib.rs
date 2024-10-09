@@ -62,8 +62,8 @@ pub fn verify_taproot_signature_using_third_party(
         // The bitcoin Rust library doesn't support arbitrary hash inputs yet
         return true;
     }
-    use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
     use bitcoin::schnorr::TapTweak;
+    use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
     use bitcoin::util::taproot::TapBranchHash;
 
     let secp256k1 = Secp256k1::new();
