@@ -281,7 +281,7 @@ fn verify_paths(
             {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in lenght?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
                 })?;
                 {
                     if let Some(request_status_id) = request_status_id {
