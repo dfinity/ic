@@ -340,6 +340,11 @@ pub fn encode_metrics(
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
+    w.encode_gauge(
+        "governance_latest_gc_timestamp_seconds",
+        governance.latest_gc_timestamp_seconds as f64,
+        "Timestamp of the last proposal gc, in seconds since the Unix epoch.",
+    )?;
 
     // Proposals (more detailed breakdowns later).
 
@@ -362,14 +367,14 @@ pub fn encode_metrics(
         "Total number of neurons.",
     )?;
     w.encode_gauge(
-        "governance_latest_gc_timestamp_seconds",
-        governance.latest_gc_timestamp_seconds as f64,
-        "Timestamp of the last proposal gc, in seconds since the Unix epoch.",
-    )?;
-    w.encode_gauge(
         "governance_locked_neurons_total",
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
+    )?;
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in stable memory.",
     )?;
 
     // Rewards
@@ -475,12 +480,6 @@ pub fn encode_metrics(
         "governance_account_id_index_len",
         account_id_index_len as f64,
         "Total number of entries in the account_id index",
-    )?;
-
-    w.encode_gauge(
-        "governance_stable_memory_neuron_count",
-        governance.neuron_store.stable_neuron_store_len() as f64,
-        "The number of neurons in stable memory.",
     )?;
 
     let mut builder = w.gauge_vec(
