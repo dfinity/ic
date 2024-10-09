@@ -12,7 +12,7 @@ inputs:
     default: '--config=ci'
   BAZEL_EXTRA_ARGS:
     required: false
-    degault: ''
+    default: ''
   BAZEL_STARTUP_ARGS:
     required: false
     default: '--output_base=/var/tmp/bazel-output/'
