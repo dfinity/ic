@@ -72,8 +72,6 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 
 *Interpretation of configuration bits*: Any script or service in the system may pull configuration bits out of /boot/config to customize its behavior. E.g. if adding parameter-driven customization of ic.json5, then augment the generate-replica-config.sh script to pull the configuration values and substitute them into the generated configuration.
 
-*Documentation*: Please keep documentation up-to-date (link:ConfigStore-SetupOSHostOS.adoc[SetupOS/HostOS config store], link:../guestos/docs/ConfigStore.adoc[GuestOS config store])
-
 === Testing
 
 * *bootstrap-ic-node.sh* can be temporarily tweaked (internally adapt paths, then run the process_bootstrap function):
