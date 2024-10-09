@@ -1,3 +1,4 @@
+use bitcoin::hashes::hex::FromHex;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, EccPoint, EccScalar, PedersenCommitment, PolynomialCommitment,
     PolynomialCommitmentType, SimpleCommitment,
@@ -62,18 +63,19 @@ pub fn verify_taproot_signature_using_third_party(
         return true;
     }
     use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
-    use bitcoin::{hashes::Hash, key::TapTweak, TapNodeHash};
+    use bitcoin::schnorr::TapTweak;
+    use bitcoin::util::taproot::TapBranchHash;
 
     let secp256k1 = Secp256k1::new();
     let pk = XOnlyPublicKey::from_slice(&sec1_pk[1..]).unwrap();
 
-    let tnh = TapNodeHash::from_slice(taproot_hash).unwrap();
+    let tnh = TapBranchHash::from_hex(&hex::encode(taproot_hash)).unwrap();
 
     let dk = pk.tap_tweak(&secp256k1, Some(tnh)).0.to_inner();
 
-    let msg = Message::from_digest_slice(msg).unwrap();
+    let msg = Message::from_slice(msg).unwrap();
     let sig = Signature::from_slice(sig).unwrap();
-    dk.verify(&secp256k1, &msg, &sig).is_ok()
+    sig.verify(&msg, &dk).is_ok()
 }
 
 pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
