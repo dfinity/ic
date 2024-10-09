@@ -1736,9 +1736,9 @@ dependencies = [
 
 [[package]]
 name = "canbench"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aecd4be2f49ce16c76bccb351a639cf32fd396039dd3c8e20dc156c66ff6752f"
+checksum = "bf010ed5b327776525d545cef0fd17ffec73af71eb1b304ca11df3494ed65c31"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -1758,9 +1758,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74799b36a6c2bd4493a52e18d6130de06590ddd0aef4d2b5fae49ea0c918a244"
+checksum = "e85a8f1ee95044a770b3d5166a12f55814283cb3aed71b81439dc59960ab76c1"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1770,9 +1770,9 @@ dependencies = [
 
 [[package]]
 name = "canbench-rs-macros"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d774a421d3ce35bc6957d5611cba7e3ba66cd455a915d2ccf5b0e69d746299b1"
+checksum = "37aa9dbb190b03569ab14aadf669884a331712d54462c5a6c5b86c9867fe4e65"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8036,9 +8036,9 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "4.0.0"
+version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "629f46b7ab8a8d2fee02220ef8e99ae552c7e220117efa1ce0882ff09c8fb038"
+checksum = "beff607d4dbebff8d003453ced669d2645e905de496ca93713f3d47633357e6c"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -8050,6 +8050,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "sha2 0.10.8",
+ "slog",
  "tokio",
  "tracing",
  "tracing-appender",
