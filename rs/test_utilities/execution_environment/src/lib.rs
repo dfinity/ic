@@ -162,7 +162,7 @@ pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
 /// Expects a test function that takes a `SubnetType` as an argument
 /// so it can be tested over the desired subnet types.
 pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test: T) {
-    for subnet_type in vec![SubnetType::Application, SubnetType::VerifiedApplication] {
+    for subnet_type in [SubnetType::Application, SubnetType::VerifiedApplication] {
         test(subnet_type);
     }
 }
