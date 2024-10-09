@@ -346,16 +346,16 @@ where
         R: RangeBounds<NeuronId> + Clone,
     {
         let first = match range.start_bound() {
-            RangeBound::Included(start) => Some(start), // Start is inclusive, extract value
-            RangeBound::Excluded(start) => Some(start), // Start is exclusive, extract value
-            RangeBound::Unbounded => Some(NeuronId::MIN), // No lower bound, return None
+            RangeBound::Included(start) => Some(start.clone()), // Start is inclusive, extract value
+            RangeBound::Excluded(start) => Some(start.clone()), // Start is exclusive, extract value
+            RangeBound::Unbounded => Some(NeuronId::MIN),       // No lower bound, return None
         }
         .unwrap();
         // Get the last bound (end of the range)
         let last = match range.end_bound() {
-            RangeBound::Included(end) => Some(end), // End is inclusive, extract value
-            RangeBound::Excluded(end) => Some(end), // End is exclusive, extract value
-            RangeBound::Unbounded => Some(NeuronId::MAX), // No upper bound, return None
+            RangeBound::Included(end) => Some(end.clone()), // End is inclusive, extract value
+            RangeBound::Excluded(end) => Some(end.clone()), // End is exclusive, extract value
+            RangeBound::Unbounded => Some(NeuronId::MAX),   // No upper bound, return None
         }
         .unwrap();
 
@@ -373,10 +373,11 @@ where
         let mut hot_keys_iter = self.hot_keys_map.range(simple_1).peekable();
         let mut recent_ballots_iter = self.recent_ballots_map.range(simple_2).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
-        // let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
-        // let mut transfer_iter = self.transfer_map.range(range.clone()).peekable();
+        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
+        let mut transfer_iter = self.transfer_map.range(range.clone()).peekable();
+        // let main_range = self.main.range(range).peekable();
 
-        self.main.range(range).map(|(main_neuron_id, neuron)| {
+        self.main.range(range).map(move |(main_neuron_id, neuron)| {
             let abridged_neuron = neuron;
             // We'll collect data from all relevant maps for this neuron_id
             let mut hot_keys = vec![];
@@ -407,14 +408,37 @@ where
 
             // Synchronize followees_map:
             while let Some((followees_key, followee_id)) = followees_iter.peek() {
-                if followees_key.neuron_id > main_neuron_id {
+                if followees_key.follower_id > main_neuron_id {
                     break;
                 }
-                if followees_key.neuron_id == main_neuron_id {
-                    followees.push(*followee_id);
+                if followees_key.follower_id == main_neuron_id {
+                    followees.push((followees_key.clone(), *followee_id));
                 }
                 followees_iter.next(); // Advance the followees iterator
             }
+
+            let mut current_known_neuron_data = None;
+            while let Some((neuron_id, known_neuron_data)) = known_neuron_data_iter.peek() {
+                if *neuron_id > main_neuron_id {
+                    break;
+                }
+                if *neuron_id == main_neuron_id {
+                    current_known_neuron_data.replace(known_neuron_data.clone());
+                }
+                known_neuron_data_iter.next();
+            }
+
+            let mut current_transfer = None;
+            while let Some((neuron_id, transfer)) = transfer_iter.peek() {
+                if *neuron_id > main_neuron_id {
+                    break;
+                }
+                if *neuron_id == main_neuron_id {
+                    current_transfer.replace(transfer.clone());
+                }
+                transfer_iter.next();
+            }
+
             Neuron::from(DecomposedNeuron {
                 id: main_neuron_id,
                 main: abridged_neuron,
@@ -433,8 +457,8 @@ where
                         (i32::from(topic), Followees { followees })
                     })
                     .collect(),
-                known_neuron_data: None,
-                transfer: None,
+                known_neuron_data: current_known_neuron_data,
+                transfer: current_transfer,
             })
         })
     }
@@ -528,6 +552,7 @@ where
         let range = self.followees_map.range(first..=last);
 
         range
+            // create groups for topics
             .group_by(|(followees_key, _followee_id)| followees_key.topic)
             .into_iter()
             // convert (Topic, group) into (i32, followees)
@@ -604,7 +629,6 @@ pub struct NeuronStorageLens {
     pub known_neuron_data: u64,
 }
 
-use crate::pb::v1::manage_neuron::NeuronIdOrSubaccount::NeuronId;
 #[cfg(test)]
 use ic_stable_structures::VectorMemory;
 
