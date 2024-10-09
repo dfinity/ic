@@ -46,7 +46,7 @@ use tokio::sync::{
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// True if the node should serve synchronous responses to v3 update calls.
-const ENABLE_SYNCHRONOUS_CALL_V3: bool = false;
+const ENABLE_SYNCHRONOUS_CALL_V3: bool = true;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
