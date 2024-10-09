@@ -4,8 +4,9 @@ use ic_canister_client_sender::Sender;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_interfaces::execution_environment::QueryExecutionResponse;
-use ic_interfaces::execution_environment::{IngressHistoryReader, QueryExecutionError};
+use ic_interfaces::execution_environment::{
+    IngressHistoryReader, QueryExecutionError, QueryExecutionService,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::{
@@ -35,7 +36,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CertificateDelegation, Query, QuerySource, SignedIngress},
+    messages::{Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, ReplicaVersion, Time,
@@ -44,10 +45,8 @@ use prost::Message;
 use slog_scope::info;
 use std::{
     collections::BTreeMap,
-    convert::Infallible,
     convert::TryFrom,
     net::SocketAddr,
-    pin::Pin,
     str::FromStr,
     sync::{Arc, Mutex},
     thread,
@@ -55,7 +54,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -151,12 +150,8 @@ where
 ///
 /// The code of the replica is the real one, only the interface is changed, with
 /// function calls instead of http calls.
-#[allow(clippy::type_complexity)]
 pub struct LocalTestRuntime {
-    pub query_handler: tower::buffer::Buffer<
-        (Query, Option<CertificateDelegation>),
-        Pin<Box<dyn Future<Output = Result<QueryExecutionResponse, Infallible>> + Send>>,
-    >,
+    pub query_handler: QueryExecutionService,
     pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -374,7 +369,7 @@ where
         }
 
         let runtime = LocalTestRuntime {
-            query_handler: TowerBuffer::new(query_handler, 1),
+            query_handler,
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader,
