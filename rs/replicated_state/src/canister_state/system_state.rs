@@ -43,7 +43,6 @@ use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
@@ -276,14 +275,22 @@ impl CanisterHistory {
     }
 }
 
-/// `TaskQueue` represents the implementation of a queue structure for tasks.
+/// `TaskQueue` represents the implementation of queue structure for canister tasks satisfying the following conditions:
+///
+/// 1. If there is a `Paused` or `Aborted` task it will be returned first.
+/// 2. If an `OnLowWasmMemoryHook` is ready to be executed, it will be returned next.
+/// 3. All other tasks will be returned based on the order in which they are added to the queue.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct TaskQueue {
-    /// Queue of tasks.
-    queue: VecDeque<ExecutionTask>,
+    /// Keeps `PausedExecution`, or `PausedInstallCode`, or `AbortedExecution`,
+    /// or `AbortedInstallCode` task if there is one.
+    paused_or_aborted_task: Option<ExecutionTask>,
 
     /// Status of low_on_wasm_memory hook execution.
     on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+
+    /// Queue of `Heartbeat` and `GlobalTimer` tasks.
+    queue: VecDeque<ExecutionTask>,
 }
 
 impl TaskQueue {
@@ -292,9 +299,25 @@ impl TaskQueue {
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
         canister_id: &CanisterId,
     ) -> Self {
+        let mut mut_queue = queue;
+
+        // Extraction of paused_or_aborted_task from queue will be removed in the follow-up EXC-1752 when
+        // we introduce CanisterStateBits version of TaskQueue, so the conversion will be implicit.
+        let paused_or_aborted_task = match mut_queue.front() {
+            Some(ExecutionTask::AbortedInstallCode { .. })
+            | Some(ExecutionTask::PausedExecution { .. })
+            | Some(ExecutionTask::PausedInstallCode(_))
+            | Some(ExecutionTask::AbortedExecution { .. }) => mut_queue.pop_front(),
+            Some(ExecutionTask::OnLowWasmMemory)
+            | Some(ExecutionTask::Heartbeat)
+            | Some(ExecutionTask::GlobalTimer)
+            | None => None,
+        };
+
         let queue = TaskQueue {
-            queue,
+            paused_or_aborted_task,
             on_low_wasm_memory_hook_status,
+            queue: mut_queue,
         };
 
         // Because paused tasks are not allowed in checkpoint rounds when
@@ -309,11 +332,15 @@ impl TaskQueue {
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
-        self.queue.front()
+        self.paused_or_aborted_task
+            .as_ref()
+            .or_else(|| self.queue.front())
     }
 
     pub fn pop_front(&mut self) -> Option<ExecutionTask> {
-        self.queue.pop_front()
+        self.paused_or_aborted_task
+            .take()
+            .or_else(|| self.queue.pop_front())
     }
 
     pub fn remove(&mut self, task: ExecutionTask) {
@@ -334,32 +361,40 @@ impl TaskQueue {
 
     pub fn enqueue(&mut self, task: ExecutionTask) {
         match task {
+            ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => {
+                debug_assert!(self.paused_or_aborted_task.is_none());
+                self.paused_or_aborted_task = Some(task);
+            }
             ExecutionTask::OnLowWasmMemory => {
                 self.on_low_wasm_memory_hook_status.update(true);
             }
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => self.queue.push_front(task),
+            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => self.queue.push_front(task),
         };
     }
 
     pub fn is_empty(&self) -> bool {
-        self.queue.is_empty()
+        self.paused_or_aborted_task.is_none() && self.queue.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.queue.len()
+        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
     }
 
+    /// peek_hook_status will be removed in the follow-up EXC-1752.
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
     }
 
-    pub fn get_queue(&self) -> &VecDeque<ExecutionTask> {
-        &self.queue
+    /// get_queue will be removed in the follow-up EXC-1752.
+    pub fn get_queue(&self) -> VecDeque<ExecutionTask> {
+        let mut queue = self.queue.clone();
+        if let Some(task) = self.paused_or_aborted_task.as_ref() {
+            queue.push_front(task.clone());
+        }
+        queue
     }
 
     /// `check_dts_invariants` should only be called after round execution.
@@ -375,18 +410,39 @@ impl TaskQueue {
         current_round_type: ExecutionRoundType,
         id: &CanisterId,
     ) {
-        // There should be at most one paused or aborted task left in the task queue.
-        assert!(
-            self.queue.len() <= 1,
-            "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
-            id,
-            self.queue
-        );
+        if let Some(paused_or_aborted_task) = &self.paused_or_aborted_task {
+            match paused_or_aborted_task {
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                    assert_eq!(
+                    current_round_type,
+                    ExecutionRoundType::OrdinaryRound,
+                    "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                    paused_or_aborted_task,
+                    id
+                );
 
-        for task in self.queue.iter() {
-            match task {
+                    assert_eq!(
+                        deterministic_time_slicing,
+                        FlagStatus::Enabled,
+                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
+                        paused_or_aborted_task,
+                        id
+                    );
+                }
                 ExecutionTask::AbortedExecution { .. }
                 | ExecutionTask::AbortedInstallCode { .. } => {}
+                ExecutionTask::Heartbeat
+                | ExecutionTask::GlobalTimer
+                | ExecutionTask::OnLowWasmMemory => {
+                    unreachable!(
+                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .", paused_or_aborted_task, id
+                    )
+                }
+            }
+        }
+
+        if let Some(task) = self.queue.front() {
+            match task {
                 ExecutionTask::Heartbeat => {
                     panic!(
                         "Unexpected heartbeat task after a round in canister {:?}",
@@ -399,27 +455,13 @@ impl TaskQueue {
                         id
                     );
                 }
-                ExecutionTask::OnLowWasmMemory => {
-                    panic!(
-                        "Unexpected on low wasm memory task in the queue part of struct TaskQueue, after a round in canister {:?}",
-                        id
-                    );
-                }
-                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                    assert_eq!(
-                        current_round_type,
-                        ExecutionRoundType::OrdinaryRound,
-                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                        task,
-                        id
-                    );
-
-                    assert_eq!(
-                        deterministic_time_slicing,
-                        FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        task,
-                        id
+                ExecutionTask::OnLowWasmMemory
+                | ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. }
+                | ExecutionTask::PausedExecution { .. }
+                | ExecutionTask::PausedInstallCode(_) => {
+                    unreachable!(
+                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}", task, id
                     );
                 }
             }
@@ -428,77 +470,79 @@ impl TaskQueue {
 
     /// Removes aborted install code task.
     pub fn remove_aborted_install_code_task(&mut self) {
-        self.queue.retain(|task| match task {
-            ExecutionTask::AbortedInstallCode { .. } => false,
-            ExecutionTask::Heartbeat
-            | ExecutionTask::GlobalTimer
-            | ExecutionTask::OnLowWasmMemory
-            | ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(_)
-            | ExecutionTask::AbortedExecution { .. } => true,
-        });
+        if let Some(ExecutionTask::AbortedInstallCode { .. }) = &self.paused_or_aborted_task {
+            self.paused_or_aborted_task = None;
+        }
     }
 
     /// Removes `Heartbeat` and `GlobalTimer` tasks.
     pub fn remove_heartbeat_and_global_timer(&mut self) {
-        self.queue.retain(|task| match task {
-            ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
-            ExecutionTask::PausedExecution { .. }
-            | ExecutionTask::PausedInstallCode(..)
-            | ExecutionTask::AbortedExecution { .. }
-            | ExecutionTask::AbortedInstallCode { .. }
-            | ExecutionTask::OnLowWasmMemory => true,
-        });
+        for task in self.queue.iter() {
+            debug_assert!(
+                *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer,
+                "Unexpected task type {:?} in TaskQueue::queue.",
+                task
+            );
+        }
+
+        self.queue.clear();
     }
 
-    /// Returns all `PausedExecution` and `PausedInstallCode` tasks.
-    pub fn get_all_paused_tasks(&self) -> Vec<&ExecutionTask> {
-        let mut res = Vec::new();
-        for task in self.queue.iter() {
+    /// Returns `PausedExecution` or `PausedInstallCode` task.
+    pub fn get_paused_task(&self) -> Option<&ExecutionTask> {
+        if let Some(task) = &self.paused_or_aborted_task {
             match task {
-                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(..) => {
-                    res.push(task)
+                ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
+                    Some(task)
                 }
+                ExecutionTask::AbortedExecution { .. }
+                | ExecutionTask::AbortedInstallCode { .. } => None,
                 ExecutionTask::Heartbeat
                 | ExecutionTask::GlobalTimer
-                | ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::OnLowWasmMemory => (),
+                | ExecutionTask::OnLowWasmMemory => unreachable!(
+                    "Unexpected on task type in the in TaskQueue::paused_or_aborted_task."
+                ),
             }
+        } else {
+            None
         }
-        res
     }
 
-    /// Replace all `PausedExecution` and `PausedInstallCode` with corresponding
-    /// `AbortedExecution` and `AbortedInstallCode` respectively.
-    pub fn replace_paused_with_aborted_tasks(
-        &mut self,
-        mut aborted_tasks: HashMap<PausedExecutionId, ExecutionTask>,
-    ) {
-        let task_queue = std::mem::take(&mut self.queue);
+    /// Replace `PausedExecution` or `PausedInstallCode` with corresponding
+    /// `AbortedExecution` or `AbortedInstallCode` respectively.
+    pub fn replace_paused_with_aborted_task(&mut self, aborted_task: ExecutionTask) {
+        match &aborted_task {
+            ExecutionTask::AbortedExecution { .. } => assert!(
+                matches!(
+                    self.paused_or_aborted_task,
+                    Some(ExecutionTask::PausedExecution { .. })
+                ),
+                "Received aborted task {:?} which is not compatible with paused task {:?}.",
+                aborted_task,
+                self.paused_or_aborted_task
+            ),
+            ExecutionTask::AbortedInstallCode { .. } => assert!(
+                matches!(
+                    self.paused_or_aborted_task,
+                    Some(ExecutionTask::PausedInstallCode(_))
+                ),
+                "Received aborted task {:?} which is not compatible with paused task {:?}.",
+                aborted_task,
+                self.paused_or_aborted_task
+            ),
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory
+            | ExecutionTask::PausedExecution { .. }
+            | ExecutionTask::PausedInstallCode(_) => {
+                unreachable!(
+                    "Unexpected task type {:?} of the aborted task.",
+                    aborted_task
+                )
+            }
+        };
 
-        self.queue = task_queue
-            .into_iter()
-            .map(|task| match task {
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => task,
-                ExecutionTask::PausedExecution { id, .. } => {
-                    let aborted = aborted_tasks.remove(&id).unwrap();
-                    debug_assert!(matches!(aborted, ExecutionTask::AbortedExecution { .. }));
-                    aborted
-                }
-                ExecutionTask::PausedInstallCode(id) => {
-                    let aborted = aborted_tasks.remove(&id).unwrap();
-                    debug_assert!(matches!(aborted, ExecutionTask::AbortedInstallCode { .. }));
-                    aborted
-                }
-            })
-            .collect();
-
-        debug_assert!(aborted_tasks.is_empty());
+        self.paused_or_aborted_task = Some(aborted_task);
     }
 }
 
@@ -2502,7 +2546,20 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use crate::canister_state::system_state::OnLowWasmMemoryHookStatus;
+    use std::sync::Arc;
+
+    use crate::{
+        canister_state::system_state::OnLowWasmMemoryHookStatus,
+        metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask,
+    };
+
+    use super::{PausedExecutionId, TaskQueue};
+
+    use ic_test_utilities_types::messages::IngressBuilder;
+    use ic_types::{
+        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
+        Cycles,
+    };
     #[test]
     fn test_on_low_wasm_memory_hook_start_status_condition_not_satisfied() {
         let mut status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
@@ -2534,5 +2591,77 @@ mod tests {
         let mut status = OnLowWasmMemoryHookStatus::Executed;
         status.update(true);
         assert_eq!(status, OnLowWasmMemoryHookStatus::Executed);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_heartbeat() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::Heartbeat);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_global_timer() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::GlobalTimer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_low_wasm_memory() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::OnLowWasmMemory);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_paused_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Unexpected task type")]
+    fn test_replace_paused_with_aborted_task_on_paused_install_code() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::PausedInstallCode(
+            PausedExecutionId(0),
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "is not compatible with paused task")]
+    fn test_replace_paused_with_aborted_task_on_paused_install_code_aborted_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+
+        task_queue.replace_paused_with_aborted_task(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "is not compatible with paused task")]
+    fn test_replace_paused_with_aborted_task_on_paused_execution_aborted_install_code() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.enqueue(ExecutionTask::PausedExecution {
+            id: PausedExecutionId(0),
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+        });
+
+        let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
+
+        let aborted_install_code = ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Ingress(Arc::clone(&ingress)),
+            prepaid_execution_cycles: Cycles::new(1),
+            call_id: InstallCodeCallId::new(0),
+        };
+
+        task_queue.replace_paused_with_aborted_task(aborted_install_code);
     }
 }
