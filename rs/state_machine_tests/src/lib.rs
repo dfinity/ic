@@ -1699,7 +1699,9 @@ impl StateMachine {
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
                     // We use a fixed seed here so that all subnets in PocketIC share the same keys.
-                    let private_key = PrivateKey::generate_from_seed(&[42; 32]).derive_subkey(&path).0;
+                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                        .derive_subkey(&path)
+                        .0;
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
