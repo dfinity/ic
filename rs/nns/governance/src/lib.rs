@@ -372,6 +372,11 @@ pub fn encode_metrics(
         "Total number of neurons that have been locked for disburse operations.",
     )?;
     w.encode_gauge(
+        "governance_heap_neuron_count",
+        governance.neuron_store.heap_neuron_store_len() as f64,
+        "The number of neurons in heap.",
+    )?;
+    w.encode_gauge(
         "governance_stable_memory_neuron_count",
         governance.neuron_store.stable_neuron_store_len() as f64,
         "The number of neurons in stable memory.",
