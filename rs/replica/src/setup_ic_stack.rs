@@ -50,9 +50,8 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// The subnets that should not serve synchronous responses to v3 update calls.
 /// The list contains all system subnets.
-const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 1] = [
-    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-];
+const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 1] =
+    ["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"];
 
 /// Returns true if the subnet is whitelisted to serve synchronous responses to v3
 /// update calls.
