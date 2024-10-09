@@ -1495,8 +1495,6 @@ fn test_controllers<T>(
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
 
-    env.run_until_completion(/*max_ticks=*/ 10);
-
     let archive_info = list_archives(&env, ledger_id);
     assert_eq!(archive_info.len(), 1);
 
@@ -1632,7 +1630,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, ledger_id);
     let first_archive = ArchiveInfo {
@@ -1670,7 +1667,6 @@ where
     for i in 0..NUM_BLOCKS_TO_ARCHIVE {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
     let archive_info = list_archives(&env, ledger_id);
     let second_archive = ArchiveInfo {
         canister_id: "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap(),
@@ -1713,8 +1709,6 @@ pub fn test_archiving<T>(
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
@@ -1839,8 +1833,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i * 10_000).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
     assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
@@ -2703,7 +2695,6 @@ pub fn test_upgrade_serialization(
 pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_nextmigrationversionmemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2796,18 +2787,6 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // Test serializing to the memory manager
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager.clone(),
-        balances.clone(),
-    );
-    // Test upgrade to memory manager again
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager,
-        balances.clone(),
-    );
-    // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
