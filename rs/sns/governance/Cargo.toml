@@ -34,6 +34,7 @@ candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 comparable = { version = "0.5", features = ["derive"] }
 hex = { workspace = true }
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
