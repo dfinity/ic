@@ -1395,36 +1395,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "boundary-node-prober"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.7.7",
- "candid",
- "clap 3.2.25",
- "futures",
- "glob",
- "humantime",
- "hyper 1.4.1",
- "ic-agent",
- "ic-utils 0.37.0",
- "indoc",
- "mockall 0.13.0",
- "opentelemetry 0.23.0",
- "opentelemetry-prometheus 0.16.0",
- "opentelemetry_sdk 0.23.0",
- "prometheus",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "wat",
-]
-
-[[package]]
 name = "brotli"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1962,7 +1932,7 @@ dependencies = [
  "leb128",
  "mockall 0.13.0",
  "opentelemetry 0.20.0",
- "opentelemetry-prometheus 0.13.0",
+ "opentelemetry-prometheus",
  "pem 1.1.1",
  "prometheus",
  "rcgen",
@@ -5437,34 +5407,6 @@ dependencies = [
  "slog-term",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "ic-balance-exporter"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.7.7",
- "candid",
- "clap 3.2.25",
- "dashmap 6.1.0",
- "futures",
- "humantime",
- "hyper 1.4.1",
- "ic-agent",
- "indoc",
- "mockall 0.13.0",
- "opentelemetry 0.23.0",
- "opentelemetry-prometheus 0.16.0",
- "opentelemetry_sdk 0.23.0",
- "prometheus",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -15726,19 +15668,6 @@ dependencies = [
  "once_cell",
  "opentelemetry_api 0.20.0",
  "opentelemetry_sdk 0.20.0",
- "prometheus",
- "protobuf",
-]
-
-[[package]]
-name = "opentelemetry-prometheus"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e1a24eafe47b693cb938f8505f240dc26c71db60df9aca376b4f857e9653ec7"
-dependencies = [
- "once_cell",
- "opentelemetry 0.23.0",
- "opentelemetry_sdk 0.23.0",
  "prometheus",
  "protobuf",
 ]
