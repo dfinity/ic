@@ -1,5 +1,5 @@
 use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
-use crate::index::{get_all_index_blocks, wait_until_index_sync_is_completed};
+use crate::index::verify_ledger_archive_and_index_block_parity;
 use candid::{Encode, Nat};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -326,21 +326,12 @@ impl LedgerState {
                 ledger_id,
                 num_blocks_to_fetch,
             );
-        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
-        let index_blocks = get_all_index_blocks(
+        verify_ledger_archive_and_index_block_parity(
             state_machine,
+            ledger_and_archive_blocks,
+            ledger_id,
             index_id,
-            Some(ledger_and_archive_blocks.start_index),
-            Some(ledger_and_archive_blocks.blocks.len() as u64),
         );
-        assert_eq!(
-            ledger_and_archive_blocks.blocks.len(),
-            index_blocks.len(),
-            "Number of blocks fetched from the ledger and index do not match: {} vs {}",
-            ledger_and_archive_blocks.blocks.len(),
-            index_blocks.len()
-        );
-        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
         ledger_state.verify_balances_and_allowances(state_machine, ledger_id);
         // Verify the reconstructed ledger state matches the previous state
         if let Some(previous_ledger_state) = &previous_ledger_state {
@@ -351,21 +342,12 @@ impl LedgerState {
         // not fetched in the previous call to `fetch_next_blocks`.
         let ledger_and_archive_blocks = ledger_state
             .fetch_and_ingest_next_ledger_and_archive_blocks(state_machine, ledger_id, None);
-        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
-        let index_blocks = get_all_index_blocks(
+        verify_ledger_archive_and_index_block_parity(
             state_machine,
+            ledger_and_archive_blocks,
+            ledger_id,
             index_id,
-            Some(ledger_and_archive_blocks.start_index),
-            Some(ledger_and_archive_blocks.blocks.len() as u64),
         );
-        assert_eq!(
-            ledger_and_archive_blocks.blocks.len(),
-            index_blocks.len(),
-            "Number of blocks fetched from the ledger and index do not match: {} vs {}",
-            ledger_and_archive_blocks.blocks.len(),
-            index_blocks.len()
-        );
-        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
         ledger_state
     }
 }
@@ -975,6 +957,29 @@ mod index {
             .map(ic_icrc1::Block::try_from)
             .collect::<Result<Vec<Block<Tokens>>, String>>()
             .expect("should convert generic blocks to ICRC1 blocks")
+    }
+
+    pub fn verify_ledger_archive_and_index_block_parity(
+        state_machine: &StateMachine,
+        ledger_and_archive_blocks: FetchedBlocks,
+        ledger_id: CanisterId,
+        index_id: CanisterId,
+    ) {
+        wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
+        let index_blocks = get_all_index_blocks(
+            state_machine,
+            index_id,
+            Some(ledger_and_archive_blocks.start_index),
+            Some(ledger_and_archive_blocks.blocks.len() as u64),
+        );
+        assert_eq!(
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len(),
+            "Number of blocks fetched from the ledger and index do not match: {} vs {}",
+            ledger_and_archive_blocks.blocks.len(),
+            index_blocks.len()
+        );
+        assert_eq!(ledger_and_archive_blocks.blocks, index_blocks);
     }
 
     pub fn wait_until_index_sync_is_completed(
