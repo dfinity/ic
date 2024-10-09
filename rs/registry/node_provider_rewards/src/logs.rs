@@ -80,7 +80,7 @@ impl RewardsPerNodeProviderLog {
     }
 
     pub fn add_entry(&mut self, entry: LogEntry) {
-        println!("{}/n", &entry);
+        println!("{}", &entry);
         self.entries.push(entry);
     }
 
