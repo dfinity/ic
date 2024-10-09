@@ -5113,7 +5113,7 @@ dependencies = [
  "protobuf",
  "slog",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
 ]
 
@@ -5128,7 +5128,7 @@ dependencies = [
  "protobuf",
  "slog",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
 ]
 
 [[package]]
@@ -5137,7 +5137,7 @@ version = "0.1.0"
 dependencies = [
  "prost 0.13.3",
  "prost-build 0.13.3",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tonic-build",
 ]
 
@@ -5378,7 +5378,7 @@ dependencies = [
  "sync_wrapper 1.0.1",
  "thiserror",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
 ]
 
 [[package]]
@@ -5644,7 +5644,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-socks",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
 ]
 
@@ -5666,7 +5666,7 @@ dependencies = [
  "serde_bytes",
  "slog",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
  "tracing",
 ]
@@ -5770,7 +5770,7 @@ name = "ic-btc-service"
 version = "0.9.0"
 dependencies = [
  "prost 0.13.3",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tonic-build",
 ]
 
@@ -8290,7 +8290,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
  "uuid",
  "warp",
@@ -8320,7 +8320,7 @@ dependencies = [
  "prometheus",
  "slog",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
  "tower-test",
  "tracing",
@@ -8366,7 +8366,7 @@ name = "ic-https-outcalls-service"
 version = "0.1.0"
 dependencies = [
  "prost 0.13.3",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tonic-build",
 ]
 
@@ -11074,7 +11074,7 @@ dependencies = [
  "slog-scope",
  "tempfile",
  "tokio",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
  "tracing-subscriber",
  "wat",
@@ -16499,7 +16499,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
- "tonic 0.12.3",
+ "tonic 0.12.0",
  "tower 0.4.13",
  "tower-http",
  "tracing",
@@ -20314,9 +20314,9 @@ dependencies = [
 
 [[package]]
 name = "tonic"
-version = "0.12.3"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877c5b330756d856ffcc4553ab34a5684481ade925ecc54bcd1bf02b1d0d4d52"
+checksum = "f738b6a169a29bca4e39656db89c44a08e09c5b700b896ee9e7459f0652e81dd"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -20344,14 +20344,13 @@ dependencies = [
 
 [[package]]
 name = "tonic-build"
-version = "0.12.3"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9557ce109ea773b399c9b9e5dca39294110b74f1f342cb347a80d1fce8c26a11"
+checksum = "690943cc223adcdd67bb597a2e573ead1b88e999ba37528fe8e6356bf44b29b6"
 dependencies = [
  "prettyplease",
  "proc-macro2",
  "prost-build 0.13.3",
- "prost-types 0.13.3",
  "quote",
  "syn 2.0.79",
 ]
