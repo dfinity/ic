@@ -516,7 +516,7 @@ http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
 hyper = { version = "1.4.1", features = ["full"] }
-hyper-rustls = { version = "0.27.2", default-features = false, features = [
+hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",

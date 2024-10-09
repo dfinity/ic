@@ -1,5 +1,5 @@
 {
-  "checksum": "17d6b2f9dad92f18049536965a233d0b740dafb3f8ac826097649460a91355a2",
+  "checksum": "ab8c9b3cf6bf59bbc707fb4b0f10832b1c246dca2519d06574412d12ec8f97b9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17840,7 +17840,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -27312,7 +27312,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -27442,14 +27442,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-rustls 0.27.2": {
+    "hyper-rustls 0.27.3": {
       "name": "hyper-rustls",
-      "version": "0.27.2",
+      "version": "0.27.3",
       "package_url": "https://github.com/rustls/hyper-rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-rustls/0.27.2/download",
-          "sha256": "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.3/download",
+          "sha256": "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
         }
       },
       "targets": [
@@ -27640,7 +27640,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.7.0",
+              "id": "rustls-native-certs 0.8.0",
               "target": "rustls_native_certs"
             },
             {
@@ -27668,7 +27668,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.2"
+        "version": "0.27.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -28316,7 +28316,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -33111,7 +33111,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -34693,7 +34693,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -53379,7 +53379,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -56244,6 +56244,79 @@
         },
         "edition": "2021",
         "version": "0.7.0"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "rustls-native-certs 0.8.0": {
+      "name": "rustls-native-certs",
+      "version": "0.8.0",
+      "package_url": "https://github.com/rustls/rustls-native-certs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.0/download",
+          "sha256": "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_native_certs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustls_native_certs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustls-pemfile 2.1.2",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-pki-types 1.9.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {
+            "cfg(all(unix, not(target_os = \"macos\")))": [
+              {
+                "id": "openssl-probe 0.1.5",
+                "target": "openssl_probe"
+              }
+            ],
+            "cfg(target_os = \"macos\")": [
+              {
+                "id": "security-framework 2.9.1",
+                "target": "security_framework"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "schannel 0.1.22",
+                "target": "schannel"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.8.0"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -79550,7 +79623,7 @@
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
     "hyper 1.4.1",
-    "hyper-rustls 0.27.2",
+    "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.7",
     "ic-agent 0.37.1",

@@ -522,7 +522,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.2",
+                version = "^0.27.3",
                 features = [
                     "http1",
                     "http2",
