@@ -29,12 +29,6 @@ pub enum HttpGetTxError {
 }
 
 impl HttpGetTxError {
-    pub fn is_retriable(&self) -> bool {
-        match self {
-            HttpGetTxError::Rejected { code, .. } => matches!(code, RejectionCode::SysTransient),
-            _ => false,
-        }
-    }
     pub fn get_provider(&self) -> Option<Provider> {
         match self {
             HttpGetTxError::Rejected { provider, .. } => Some(*provider),

@@ -75,13 +75,9 @@ impl FetchEnv for KytCanisterEnv {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
-                    let code = if response.status == 429u32 || response.status == 500u32 {
-                        RejectionCode::SysTransient
-                    } else {
-                        RejectionCode::SysFatal
-                    };
+                    // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
-                        code,
+                        code: RejectionCode::SysTransient,
                         provider,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
@@ -139,7 +135,6 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     match env.try_fetch_tx(txid) {
         TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
         TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
-        TryFetchResult::Error(err) => (txid, err).into(),
         TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
         TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {

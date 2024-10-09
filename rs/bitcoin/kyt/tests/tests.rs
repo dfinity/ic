@@ -388,11 +388,11 @@ fn test_check_transaction_error() {
         .env
         .await_call(call_id)
         .expect("the fetch request didn't finish");
-    // 404 error is irrecoverable (i.e. transaction is not found)
+    // 404 error is retriable too
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-            CheckTransactionIrrecoverableError::InvalidTransaction(msg)
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
+            CheckTransactionRetriable::TransientInternalError(msg)
         )) if msg.contains("received code 404")
     ));
     let cycles_after = setup.env.cycle_balance(setup.caller);

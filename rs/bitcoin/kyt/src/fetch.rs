@@ -47,7 +47,6 @@ pub enum FetchResult {
 pub enum TryFetchResult<F> {
     Pending,
     HighLoad,
-    Error(HttpGetTxError),
     NotEnoughCycles,
     Fetched(FetchedTx),
     ToFetch(F),
@@ -84,17 +83,12 @@ pub trait FetchEnv {
                 max_response_bytes, ..
             }) => (provider, max_response_bytes),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(err)) => {
-                if err.is_retriable() {
-                    (
-                        err.get_provider()
-                            .map_or(provider, |provider| provider.next()),
-                        INITIAL_MAX_RESPONSE_BYTES,
-                    )
-                } else {
-                    return TryFetchResult::Error(err);
-                }
-            }
+            Some(FetchTxStatus::Error(err)) => (
+                // All FetchTxStatus error are retriable with another provider
+                err.get_provider()
+                    .map_or(provider, |provider| provider.next()),
+                INITIAL_MAX_RESPONSE_BYTES,
+            ),
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
         };
         let guard = match self.new_fetch_guard(txid) {
@@ -209,7 +203,7 @@ pub trait FetchEnv {
                         }
                     }
                     Pending => continue,
-                    HighLoad | NotEnoughCycles | Error(_) => break,
+                    HighLoad | NotEnoughCycles => break,
                 }
             }
         }
