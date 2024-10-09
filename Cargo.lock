@@ -11474,8 +11474,6 @@ dependencies = [
  "candid_parser",
  "clap 3.2.25",
  "comparable",
- "dfn_candid",
- "dfn_core",
  "futures",
  "hex",
  "ic-base-types",

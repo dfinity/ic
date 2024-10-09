@@ -346,13 +346,13 @@ fn get_sns_initialization_parameters(
 /// - claim or refresh the neuron
 /// - merge the neuron's maturity into the neuron's stake
 #[update]
-async fn manage_neuron(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+async fn manage_neuron(request: ManageNeuron) -> ManageNeuronResponse {
     log!(INFO, "manage_neuron");
     let governance = governance_mut();
     measure_span_async(
         governance.profiling_information,
         "manage_neuron",
-        governance.manage_neuron(&manage_neuron, &caller()),
+        governance.manage_neuron(&request, &caller()),
     )
     .await
 }
@@ -370,9 +370,9 @@ fn update_neuron(neuron: Neuron) -> Option<GovernanceError> {
 
 /// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
 #[query]
-fn get_neuron(get_neuron: GetNeuron) -> GetNeuronResponse {
+fn get_neuron(request: GetNeuron) -> GetNeuronResponse {
     log!(INFO, "get_neuron");
-    governance().get_neuron(get_neuron)
+    governance().get_neuron(request)
 }
 
 /// Returns a list of neurons of size `limit` using `start_page_at` to
@@ -389,15 +389,15 @@ fn get_neuron(get_neuron: GetNeuron) -> GetNeuronResponse {
 ///
 /// If this method is called as a query call, the returned list is not certified.
 #[query]
-fn list_neurons(list_neurons: ListNeurons) -> ListNeuronsResponse {
+fn list_neurons(request: ListNeurons) -> ListNeuronsResponse {
     log!(INFO, "list_neurons");
-    governance().list_neurons(&list_neurons)
+    governance().list_neurons(&request)
 }
 
 /// Returns the full proposal corresponding to the `proposal_id`.
 #[query]
-fn get_proposal(get_proposal: GetProposal) -> GetProposalResponse {
-    governance().get_proposal(&get_proposal)
+fn get_proposal(request: GetProposal) -> GetProposalResponse {
+    governance().get_proposal(&request)
 }
 
 /// Returns a list of proposals of size `limit` using `before_proposal` to
@@ -413,9 +413,9 @@ fn get_proposal(get_proposal: GetProposal) -> GetProposalResponse {
 ///
 /// If this method is called as a query call, the returned list is not certified.
 #[query]
-fn list_proposals(list_proposals: ListProposals) -> ListProposalsResponse {
+fn list_proposals(request: ListProposals) -> ListProposalsResponse {
     log!(INFO, "list_proposals");
-    governance().list_proposals(&list_proposals, &caller())
+    governance().list_proposals(&request, &caller())
 }
 
 /// Returns the current list of available NervousSystemFunctions.
@@ -614,7 +614,7 @@ fn get_upgrade_journal(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalRespon
 /// Mints tokens for testing
 #[cfg(feature = "test")]
 #[update]
-async fn mint_tokens_(request: MintTokensRequest) -> MintTokensResponse {
+async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
     governance_mut().mint_tokens(request).await
 }
 
