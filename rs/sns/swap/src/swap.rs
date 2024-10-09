@@ -675,8 +675,9 @@ impl Swap {
     ///
     /// See also: `Swap.run_periodic_tasks`.
     pub fn requires_periodic_tasks(&self) -> bool {
-        // In the terminal state, there is nothing that a Swap canister needs to periodically do.
-        !self.lifecycle_is_terminal()
+        // Practically, already_tried_to_auto_finalize should never be None, but we err towards
+        // caution, which in this case means to continue scheduling periodic tasks.
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(false)
     }
 
     //
