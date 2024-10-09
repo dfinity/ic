@@ -1,12 +1,9 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
-use candid::{Decode, Encode};
-use ic_cdk::api::management_canister::http_request::{
-    HttpResponse as OutCallHttpResponse, TransformArgs,
+use crate::{CkEthSetup, MAX_TICKS};
+use pocket_ic::common::rest::{
+    CanisterHttpMethod, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
+    MockCanisterHttpResponse,
 };
-use ic_state_machine_tests::{
-    CallbackId, CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload,
-    PayloadBuilder, RejectCode, StateMachine,
-};
+use pocket_ic::PocketIc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::json;
@@ -16,7 +13,7 @@ use std::time::Duration;
 use strum::IntoEnumIterator;
 
 trait Matcher {
-    fn matches(&self, context: &CanisterHttpRequestContext) -> bool;
+    fn matches(&self, context: &CanisterHttpRequest) -> bool;
 }
 
 pub struct MockJsonRpcProviders {
@@ -129,21 +126,16 @@ impl JsonRpcRequestMatcher {
         self
     }
 
-    fn tick_until_next_http_request(&self, env: &StateMachine) {
+    fn tick_until_next_http_request(&self, env: &PocketIc) {
         let method = self.json_rpc_method.to_string();
         for _ in 0..MAX_TICKS {
-            let matching_method = env
-                .canister_http_request_contexts()
-                .values()
-                .any(|context| {
-                    JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
-                    )
+            let matching_method = env.get_canister_http().into_iter().any(|context| {
+                JsonRpcRequest::from_str(std::str::from_utf8(&context.body).unwrap())
                     .expect("BUG: invalid JSON RPC method")
                     .method
                     .to_string()
-                        == method
-                });
+                    == method
+            });
             if matching_method {
                 break;
             }
@@ -152,36 +144,29 @@ impl JsonRpcRequestMatcher {
         }
     }
 
-    pub fn find_rpc_call(
-        &self,
-        env: &StateMachine,
-    ) -> Option<(CallbackId, CanisterHttpRequestContext)> {
+    pub fn find_rpc_call(&self, env: &PocketIc) -> Option<CanisterHttpRequest> {
         self.tick_until_next_http_request(env);
-        env.canister_http_request_contexts()
+        env.get_canister_http()
             .into_iter()
-            .find(|(_id, context)| self.matches(context))
+            .find(|request| self.matches(request))
     }
 }
 
 impl Matcher for JsonRpcRequestMatcher {
-    fn matches(&self, context: &CanisterHttpRequestContext) -> bool {
+    fn matches(&self, context: &CanisterHttpRequest) -> bool {
         let has_json_content_type_header = context
             .headers
             .iter()
             .any(|header| header.name == "Content-Type" && header.value == "application/json");
         let has_expected_max_response_bytes =
             match (self.max_response_bytes, context.max_response_bytes) {
-                (Some(expected), Some(actual)) => expected == actual.get(),
+                (Some(expected), Some(actual)) => expected == actual,
                 (Some(_), None) => false,
                 (None, _) => true,
             };
-        let request_body = context
-            .body
-            .as_ref()
-            .map(|body| std::str::from_utf8(body).unwrap())
-            .expect("BUG: missing request body");
         let json_rpc_request =
-            JsonRpcRequest::from_str(request_body).expect("BUG: invalid JSON RPC request");
+            JsonRpcRequest::from_str(std::str::from_utf8(&context.body).unwrap())
+                .expect("BUG: invalid JSON RPC request");
 
         self.http_method == context.http_method
             && self.provider.url() == context.url
@@ -203,33 +188,31 @@ struct StubOnce {
 }
 
 impl StubOnce {
-    fn expect_no_matching_rpc_call(self, env: &StateMachine) {
-        if let Some((id, _)) = self.matcher.find_rpc_call(env) {
+    fn expect_no_matching_rpc_call(self, env: &PocketIc) {
+        if let Some(request) = self.matcher.find_rpc_call(env) {
             panic!(
-                "expect no request matching the stub {:?} but found one {}",
-                self, id
+                "expect no request matching the stub {:?} but found one {:?}",
+                self, request
             );
         }
     }
 
-    fn expect_rpc_call(self, env: &StateMachine) {
-        let (id, context) = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
+    fn expect_rpc_call(self, env: &PocketIc) {
+        println!(
+            "HTTP requests before expect_rpc_call {}",
+            debug_http_outcalls(env)
+        );
+        let request = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
             panic!(
                 "no request found matching the stub {:?}. Current requests {}",
                 self,
                 debug_http_outcalls(env)
             )
         });
-        let request_id = {
-            let request_body = context
-                .body
-                .as_ref()
-                .map(|body| std::str::from_utf8(body).unwrap())
-                .expect("BUG: missing request body");
-            JsonRpcRequest::from_str(request_body)
-                .expect("BUG: invalid JSON RPC request")
-                .id
-        };
+        let json_rpc_request =
+            JsonRpcRequest::from_str(std::str::from_utf8(&request.body).unwrap())
+                .expect("BUG: invalid JSON RPC request");
+        let request_id = json_rpc_request.id;
 
         let response_body = serde_json::to_vec(&json!({
             "jsonrpc":"2.0",
@@ -238,83 +221,31 @@ impl StubOnce {
         }))
         .unwrap();
 
-        if let Some(max_response_bytes) = context.max_response_bytes {
-            if (response_body.len() as u64) > max_response_bytes.get() {
-                let mut payload = PayloadBuilder::new();
-                payload = payload.http_response_failure(
-                    id,
-                    RejectCode::SysFatal,
-                    format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
-                    ),
-                );
-                env.execute_payload(payload);
-                return;
-            }
-        }
-
-        let clean_up_context = match context.transform.clone() {
-            Some(transform) => transform.context,
-            None => vec![],
-        };
-        let transform_arg = TransformArgs {
-            response: OutCallHttpResponse {
-                status: 200_u8.into(),
+        println!("JSON RPC mock response {:?}", json_rpc_request);
+        println!("Matcher {:?}", self.matcher);
+        env.mock_canister_http_response(MockCanisterHttpResponse {
+            subnet_id: request.subnet_id,
+            request_id: request.request_id,
+            response: CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
+                status: 200_u16,
                 headers: vec![],
                 body: response_body,
-            },
-            context: clean_up_context.to_vec(),
-        };
-        let canister_id_cleanup_response = context.request.sender;
-        let clean_up_response = Decode!(
-            &assert_reply(
-                env.execute_ingress(
-                    canister_id_cleanup_response,
-                    "cleanup_response",
-                    Encode!(&transform_arg).unwrap(),
-                )
-                .expect("failed to query transform http response")
-            ),
-            OutCallHttpResponse
-        )
-        .unwrap();
-
-        if let Some(max_response_bytes) = context.max_response_bytes {
-            if (clean_up_response.body.len() as u64) > max_response_bytes.get() {
-                let mut payload = PayloadBuilder::new();
-                payload = payload.http_response_failure(
-                    id,
-                    RejectCode::SysFatal,
-                    format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
-                    ),
-                );
-                env.execute_payload(payload);
-                return;
-            }
-        }
-
-        let http_response = CanisterHttpResponsePayload {
-            status: 200_u128,
-            headers: vec![],
-            body: clean_up_response.body,
-        };
-        let mut payload = PayloadBuilder::new();
-        payload = payload.http_response(id, &http_response);
-        env.execute_payload(payload);
+            }),
+            additional_responses: vec![],
+        });
+        env.tick();
+        env.tick();
+        println!(
+            "HTTP requests after expect_rpc_call {}",
+            debug_http_outcalls(env)
+        );
     }
 }
 
-fn debug_http_outcalls(env: &StateMachine) -> String {
+pub fn debug_http_outcalls(env: &PocketIc) -> String {
     let mut debug_str = vec![];
-    for context in env.canister_http_request_contexts().values() {
-        let request_body = context
-            .body
-            .as_ref()
-            .map(|body| std::str::from_utf8(body).unwrap())
-            .expect("BUG: missing request body");
+    for context in env.get_canister_http().into_iter() {
+        let request_body = std::str::from_utf8(&context.body).unwrap();
         debug_str.push(format!(
             "{:?} {} (max_response_bytes={:?}) {}",
             context.http_method, context.url, context.max_response_bytes, request_body

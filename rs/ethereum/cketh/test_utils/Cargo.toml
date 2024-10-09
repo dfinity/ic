@@ -19,10 +19,10 @@ ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

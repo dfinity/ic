@@ -9,12 +9,11 @@ use crate::response::{
 use crate::{
     assert_reply, CkEthSetup, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS,
-    MINTER_ADDRESS,
+    DEFAULT_PRINCIPAL_ID, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MINTER_ADDRESS,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::api::management_canister::main::CanisterId;
 use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
 use ic_cketh_minter::endpoints::{
@@ -26,10 +25,13 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
-use ic_state_machine_tests::{MessageId, StateMachine};
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use num_traits::ToPrimitive;
+use pocket_ic::common::rest::{
+    CanisterHttpReject, CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
+};
+use pocket_ic::PocketIc;
 use serde_json::json;
 use std::convert::identity;
 use std::str::FromStr;
@@ -50,7 +52,7 @@ impl Default for DepositParams {
     fn default() -> Self {
         Self {
             from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
-            recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            recipient: DEFAULT_PRINCIPAL_ID,
             amount: EXPECTED_BALANCE,
             override_rpc_eth_get_block_by_number: Box::new(identity),
             override_rpc_eth_get_logs: Box::new(identity),
@@ -159,6 +161,8 @@ impl DepositFlow {
     }
 
     fn handle_deposit_until_block(&mut self, block_number: u64) {
+        // time is advanced by more than 30s, so all current HTTPs outcalls are rejected
+        self.setup.reject_current_https_outcalls();
         self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
@@ -206,7 +210,7 @@ impl<T> LedgerTransactionAssert<T> {
 }
 
 pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
-    env: &StateMachine,
+    env: &PocketIc,
     ledger_id: CanisterId,
     ledger_index: T,
 ) -> LedgerTransaction {
@@ -218,8 +222,13 @@ pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
     };
     let mut response = Decode!(
         &assert_reply(
-            env.query(ledger_id, "get_transactions", Encode!(&request).unwrap())
-                .expect("failed to query get_transactions on the ledger")
+            env.query_call(
+                ledger_id,
+                Principal::anonymous(),
+                "get_transactions",
+                Encode!(&request).unwrap()
+            )
+            .expect("failed to query get_transactions on the ledger")
         ),
         GetTransactionsResponse
     )
@@ -260,7 +269,7 @@ impl ApprovalFlow {
 
 pub struct WithdrawalFlow {
     pub(crate) setup: CkEthSetup,
-    pub(crate) message_id: MessageId,
+    pub(crate) message_id: RawMessageId,
 }
 
 impl WithdrawalFlow {
@@ -288,7 +297,7 @@ impl WithdrawalFlow {
     fn minter_response(&self) -> Result<RetrieveEthRequest, WithdrawalError> {
         Decode!(&assert_reply(
         self.setup.env
-            .await_ingress(self.message_id.clone(), MAX_TICKS)
+            .await_call(self.message_id.clone())
             .expect("failed to resolve message with id: {message_id}"),
     ), Result<RetrieveEthRequest, WithdrawalError>)
         .unwrap()
@@ -644,7 +653,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> LatestTransactionCountProcessWi
         let default_eth_get_latest_transaction_count =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
                 .respond_for_all_with(transaction_count_response(0))
-                .with_request_params(json!([MINTER_ADDRESS, "latest"]));
+                .with_request_params(json!([MINTER_ADDRESS.to_ascii_lowercase(), "latest"]));
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);
@@ -763,7 +772,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId>
         let default_eth_get_latest_transaction_count =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetTransactionCount)
                 .respond_for_all_with(transaction_count_response(1))
-                .with_request_params(json!([MINTER_ADDRESS, "finalized"]));
+                .with_request_params(json!([MINTER_ADDRESS.to_ascii_lowercase(), "finalized"]));
         (override_mock)(default_eth_get_latest_transaction_count)
             .build()
             .expect_rpc_calls(&self.setup);

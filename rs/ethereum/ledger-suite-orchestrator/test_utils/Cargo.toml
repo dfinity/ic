@@ -14,9 +14,10 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-ledger-suite-orchestrator = { path = "../../ledger-suite-orchestrator" }
 ic-management-canister-types = { path = "../../../types/management_canister_types" }
-ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+num-traits = {workspace = true}
 paste = "1.0.12"
+pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }

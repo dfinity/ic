@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
-use ic_base_types::CanisterId;
+use ic_cdk::api::management_canister::main::CanisterStatusType;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{
@@ -26,11 +26,10 @@ use ic_cketh_test_utils::{
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
-use ic_state_machine_tests::ErrorCode;
-use ic_state_machine_tests::{CanisterStatusType, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
+use pocket_ic::{ErrorCode, UserError};
 use serde_json::json;
 use std::time::Duration;
 
@@ -38,13 +37,13 @@ use std::time::Duration;
 fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
     let cketh = CkEthSetup::default();
     let result = cketh.add_ckerc20_token(Principal::anonymous(), &ckusdc());
-    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: ERC-20"));
+    assert_matches!(result, Err(UserError{code, description}) if code == ErrorCode::CanisterCalledTrap && description.contains("ERROR: ERC-20"));
 
     let orchestrator_id: Principal = "nbsys-saaaa-aaaar-qaaga-cai".parse().unwrap();
     let result = cketh
         .upgrade_minter_to_add_orchestrator_id(orchestrator_id)
         .add_ckerc20_token(Principal::anonymous(), &ckusdc());
-    assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("ERROR: only the orchestrator"));
+    assert_matches!(result, Err(UserError{code, description}) if code == ErrorCode::CanisterCalledTrap && description.contains("ERROR: only the orchestrator"));
 
     fn ckusdc() -> AddCkErc20Token {
         AddCkErc20Token {
@@ -90,10 +89,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
 
     let mut ckerc20 = CkErc20Setup::default();
     let usdc = usdc();
-    let stop_msg_id = ckerc20
-        .env
-        .stop_canister_non_blocking(ckerc20.cketh.minter_id);
-    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopping);
+    ckerc20.cketh.stop_minter();
 
     ckerc20.orchestrator = ckerc20
         .orchestrator
@@ -107,9 +103,6 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
         .ledger
         .unwrap();
 
-    ckerc20.cketh.stop_ongoing_https_outcalls();
-    let stop_res = ckerc20.env.await_ingress(stop_msg_id, 100);
-    assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
     assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopped);
     ckerc20.env.advance_time(RETRY_FREQUENCY);
     ckerc20.env.tick();
@@ -168,6 +161,7 @@ mod withdraw_erc20 {
         CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
+        OTHER_PRINCIPAL,
     };
     use ic_ledger_suite_orchestrator_test_utils::{new_state_machine, CKERC20_TRANSFER_FEE};
     use icrc_ledger_types::icrc3::transactions::Burn;
@@ -527,7 +521,7 @@ mod withdraw_erc20 {
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
         let cketh_ledger = ckerc20.cketh_ledger_id();
         let user_1 = ckerc20.caller();
-        let user_2: Principal = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID + 1).into();
+        let user_2: Principal = OTHER_PRINCIPAL;
         assert_ne!(user_1, user_2);
         let insufficient_allowance_error = WithdrawErc20Error::CkEthLedgerError {
             error: LedgerError::InsufficientAllowance {
@@ -579,7 +573,7 @@ mod withdraw_erc20 {
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
         let cketh_ledger = ckerc20.cketh_ledger_id();
         let user_1 = ckerc20.caller();
-        let user_2: Principal = PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID + 1).into();
+        let user_2: Principal = OTHER_PRINCIPAL;
         assert_ne!(user_1, user_2);
         let insufficient_allowance_error = WithdrawErc20Error::CkEthLedgerError {
             error: LedgerError::InsufficientAllowance {
@@ -664,7 +658,7 @@ mod withdraw_erc20 {
                     .erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
                 TWO_USDC + CKERC20_TRANSFER_FEE
             );
-            let time = ckerc20.setup.env.get_time().as_nanos_since_unix_epoch();
+            let time = ckerc20.setup.cketh.time_since_epoch();
 
             let RetrieveErc20Request {
                 cketh_block_index,
@@ -1328,12 +1322,10 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
     let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
     let caller = ckerc20.caller();
 
-    let stop_res = ckerc20.env.stop_canister(ckerc20.cketh.ledger_id);
-    assert_matches!(
-        stop_res,
-        Ok(WasmResult::Reply(_)),
-        "Failed to stop ckETH ledger"
-    );
+    ckerc20
+        .env
+        .stop_canister(ckerc20.cketh.ledger_id, Some(ckerc20.cketh.controller))
+        .expect("Failed to stop ckETH ledger");
     ckerc20.stop_ckerc20_ledger(ckusdc.ledger_canister_id);
 
     let deposit_flow = ckerc20.deposit_cketh_and_ckerc20(
@@ -1375,12 +1367,10 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
             )
         });
 
-    let start_res = ckerc20.env.start_canister(ckerc20.cketh.ledger_id);
-    assert_matches!(
-        start_res,
-        Ok(WasmResult::Reply(_)),
-        "Failed to start ckETH ledger"
-    );
+    ckerc20
+        .env
+        .start_canister(ckerc20.cketh.ledger_id, Some(ckerc20.cketh.controller))
+        .expect("Failed to start ckETH ledger");
     ckerc20.start_ckerc20_ledger(ckusdc.ledger_canister_id);
 
     ckerc20.env.advance_time(MINT_RETRY_DELAY);
@@ -1412,10 +1402,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
         Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)
     );
     assert_eq!(
-        call_ledger_icrc1_total_supply(
-            &ckerc20.env,
-            CanisterId::unchecked_from_principal(ckusdc.ledger_canister_id.into()),
-        ),
+        call_ledger_icrc1_total_supply(&ckerc20.env, ckusdc.ledger_canister_id,),
         Nat::from(ONE_USDC)
     );
 }
