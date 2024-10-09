@@ -1,5 +1,6 @@
 use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
@@ -77,6 +78,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
+        HypervisorConfig::default().subnet_callback_soft_cap as u64,
         RequestMetadata::new(0, UNIX_EPOCH),
         Some(caller),
         api_type.call_context_id(),
@@ -99,6 +101,7 @@ fn test_api_for_update(
             canister_memory_limit,
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            canister_callback_quota: HypervisorConfig::default().canister_callback_quota as u64,
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

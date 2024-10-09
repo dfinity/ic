@@ -345,6 +345,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
              network_topology,
              execution_parameters,
              subnet_available_memory,
+             subnet_available_callbacks,
              ..
          }| {
             let mut round_limits = RoundLimits {
@@ -352,6 +353,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     execution_parameters.instruction_limits.message(),
                 ),
                 subnet_available_memory,
+                subnet_available_callbacks,
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
