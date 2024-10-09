@@ -2460,7 +2460,7 @@ icTests my_sub other_sub =
                                                                                                -- sign request with delegations (should fail)
                                                                                                delegationEnv defaultSK dels req >>= postCallCBOR cid >>= code400
 
-                                                                                             badRead cid req dels = do
+                                                                                             badRead cid req dels error_code = do
                                                                                                req <- addExpiry req
                                                                                                let rid = requestId req
                                                                                                -- submit with plain signature
@@ -2475,7 +2475,7 @@ icTests my_sub other_sub =
                                                                                                        "sender" =: GBlob defaultUser,
                                                                                                        "paths" =: GList [GList [GBlob "request_status", GBlob rid]]
                                                                                                      ]
-                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code400
+                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . error_code
 
                                                                                              badQuery cid req dels = do
                                                                                                req <- addExpiry req
@@ -2485,11 +2485,11 @@ icTests my_sub other_sub =
                                                                                              goodTestCase name mkReq mkDels =
                                                                                                simpleTestCase name ecid $ \cid -> good cid (fst $ mkReq cid) (snd $ mkReq cid) (mkDels cid)
 
-                                                                                             badTestCase name mkReq mkDels =
+                                                                                             badTestCase name mkReq read_state_error_code mkDels =
                                                                                                testGroup
                                                                                                  name
                                                                                                  [ simpleTestCase "in submit" ecid $ \cid -> badSubmit cid (fst $ mkReq cid) (mkDels cid),
-                                                                                                   simpleTestCase "in read_state" ecid $ \cid -> badRead cid (fst $ mkReq cid) (mkDels cid),
+                                                                                                   simpleTestCase "in read_state" ecid $ \cid -> badRead cid (fst $ mkReq cid) (mkDels cid) read_state_error_code,
                                                                                                    simpleTestCase "in query" ecid $ \cid -> badQuery cid (snd $ mkReq cid) (mkDels cid)
                                                                                                  ]
 
@@ -2500,13 +2500,13 @@ icTests my_sub other_sub =
                                                                                              withCycle = zip [createSecretKeyEd25519 (BS.singleton n) | n <- [y | _ <- [(0 :: Integer) ..], y <- [0, 1]]]
                                                                                           in [ goodTestCase "one delegation, singleton target" callReq $ \cid ->
                                                                                                  withEd25519 [Just [cid]],
-                                                                                               badTestCase "one delegation, wrong singleton target" callReq $ \_cid ->
+                                                                                               badTestCase "one delegation, wrong singleton target" callReq code403 $ \_cid ->
                                                                                                  withEd25519 [Just [doesn'tExist]],
                                                                                                goodTestCase "one delegation, two targets" callReq $ \cid ->
                                                                                                  withEd25519 [Just [cid, doesn'tExist]],
                                                                                                goodTestCase "one delegation, many targets" callReq $ \cid ->
                                                                                                  withEd25519 [Just (cid : map wordToId' [0 .. 998])],
-                                                                                               badTestCase "one delegation, too many targets" callReq $ \cid ->
+                                                                                               badTestCase "one delegation, too many targets" callReq code400 $ \cid ->
                                                                                                  withEd25519 [Just (cid : map wordToId' [0 .. 999])],
                                                                                                goodTestCase "two delegations, two targets, webauthn ECDSA" callReq $ \cid ->
                                                                                                  withWebAuthnECDSA [Just [cid, doesn'tExist], Just [cid, doesn'tExist]],
@@ -2520,27 +2520,27 @@ icTests my_sub other_sub =
                                                                                                  withEd25519 [Just [cid], Nothing],
                                                                                                goodTestCase "two delegations, second restricted" callReq $ \cid ->
                                                                                                  withEd25519 [Nothing, Just [cid]],
-                                                                                               badTestCase "two delegations, empty intersection" callReq $ \cid ->
+                                                                                               badTestCase "two delegations, empty intersection" callReq code403 $ \cid ->
                                                                                                  withEd25519 [Just [cid], Just [doesn'tExist]],
-                                                                                               badTestCase "two delegations, first empty target set" callReq $ \cid ->
+                                                                                               badTestCase "two delegations, first empty target set" callReq code403 $ \cid ->
                                                                                                  withEd25519 [Just [], Just [cid]],
-                                                                                               badTestCase "two delegations, second empty target set" callReq $ \cid ->
+                                                                                               badTestCase "two delegations, second empty target set" callReq code403 $ \cid ->
                                                                                                  withEd25519 [Just [cid], Just []],
                                                                                                goodTestCase "20 delegations" callReq $ \cid ->
                                                                                                  withEd25519 $ take 20 $ repeat $ Just [cid],
-                                                                                               badTestCase "too many delegations" callReq $ \cid ->
+                                                                                               badTestCase "too many delegations" callReq code400 $ \cid ->
                                                                                                  withEd25519 $ take 21 $ repeat $ Just [cid],
-                                                                                               badTestCase "self-loop in delegations" callReq $ \cid ->
+                                                                                               badTestCase "self-loop in delegations" callReq code400 $ \cid ->
                                                                                                  withSelfLoop [Just [cid], Just [cid]],
-                                                                                               badTestCase "cycle in delegations" callReq $ \cid ->
+                                                                                               badTestCase "cycle in delegations" callReq code400 $ \cid ->
                                                                                                  withCycle [Just [cid], Just [cid], Just [cid]],
                                                                                                goodTestCase "management canister: correct target" mgmtReq $ \_cid ->
                                                                                                  withEd25519 [Just [""]],
-                                                                                               badTestCase "management canister: empty target set" mgmtReq $ \_cid ->
+                                                                                               badTestCase "management canister: empty target set" mgmtReq code403 $ \_cid ->
                                                                                                  withEd25519 [Just []],
-                                                                                               badTestCase "management canister: bogus target" mgmtReq $ \_cid ->
+                                                                                               badTestCase "management canister: bogus target" mgmtReq code403 $ \_cid ->
                                                                                                  withEd25519 [Just [doesn'tExist]],
-                                                                                               badTestCase "management canister: bogus target (using target canister)" mgmtReq $ \cid ->
+                                                                                               badTestCase "management canister: bogus target (using target canister)" mgmtReq code403 $ \cid ->
                                                                                                  withEd25519 [Just [cid]]
                                                                                              ],
                                                                                        testGroup "Authentication schemes" $
