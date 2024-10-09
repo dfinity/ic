@@ -1,5 +1,5 @@
 {
-  "checksum": "d84a127c29d85a69368edc25cd93bc8bbd9efb5e14d5ef7849145143161f35b2",
+  "checksum": "5bca50c20d4ecff35f96e32a7c630c92d07dfdb19741b568d20a8fc577b7f52e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1648,7 +1648,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -2872,7 +2872,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -3797,7 +3797,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -4105,7 +4105,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -9945,7 +9945,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -10013,7 +10013,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -10082,7 +10082,7 @@
               "target": "once_cell"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -10318,7 +10318,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -10413,7 +10413,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -10500,14 +10500,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.6": {
+    "candid 0.10.10": {
       "name": "candid",
-      "version": "0.10.6",
+      "version": "0.10.10",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.6/download",
-          "sha256": "965e86b1bd1c0c26df70cf0c92ae16c56204ab402eb915c26a541cf949d841cf"
+          "url": "https://static.crates.io/crates/candid/0.10.10/download",
+          "sha256": "6c30ee7f886f296b6422c0ff017e89dd4f831521dfdcc76f3f71aae1ce817222"
         }
       },
       "targets": [
@@ -10587,7 +10587,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -10636,7 +10636,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.6"
+        "version": "0.10.10"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -10751,7 +10751,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -10787,7 +10787,7 @@
               "target": "pretty"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -12588,7 +12588,7 @@
               "target": "serde_with"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -17818,7 +17818,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -17941,6 +17941,10 @@
             {
               "id": "ethnum 1.4.0",
               "target": "ethnum"
+            },
+            {
+              "id": "evm_rpc_types 1.0.0",
+              "target": "evm_rpc_types"
             },
             {
               "id": "exec 0.3.1",
@@ -18750,7 +18754,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -19868,7 +19872,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -21224,7 +21228,7 @@
               "target": "sha3"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -21513,7 +21517,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -21846,6 +21850,77 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "evm_rpc_types 1.0.0": {
+      "name": "evm_rpc_types",
+      "version": "1.0.0",
+      "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.0.0/download",
+          "sha256": "d393282cc061a25958d3a177fd95e49d94eee54e3e59371f33ef3d4a2dc24431"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "evm_rpc_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "evm_rpc_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.10",
+              "target": "candid"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "ic-cdk 0.16.0",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "num-bigint 0.4.6",
+              "target": "num_bigint"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "strum 0.26.3",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 1.0.64",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "exec 0.3.1": {
       "name": "exec",
@@ -22954,7 +23029,7 @@
               "target": "nonempty"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -26116,7 +26191,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -26261,7 +26336,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -27901,7 +27976,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -28368,7 +28443,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -28468,7 +28543,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -28697,7 +28772,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -28799,7 +28874,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -28948,7 +29023,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -28988,7 +29063,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -29035,7 +29110,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29051,7 +29126,7 @@
               "target": "nom"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -29098,7 +29173,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29166,7 +29241,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29234,7 +29309,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29302,7 +29377,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29370,7 +29445,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29437,7 +29512,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29504,7 +29579,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29571,7 +29646,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29638,7 +29713,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29776,7 +29851,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -29812,7 +29887,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -29981,7 +30056,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30001,7 +30076,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -30059,7 +30134,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30095,7 +30170,7 @@
               "target": "ic_utils"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -30235,7 +30310,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30287,7 +30362,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -30454,7 +30529,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30513,7 +30588,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30541,7 +30616,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -30603,7 +30678,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30639,7 +30714,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -30881,7 +30956,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -30905,7 +30980,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -30956,7 +31031,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -31243,7 +31318,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -31297,7 +31372,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -31305,7 +31380,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -31368,7 +31443,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -33332,7 +33407,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -33744,7 +33819,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -34240,7 +34315,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -34849,7 +34924,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -34940,7 +35015,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -37196,7 +37271,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -40008,7 +40083,7 @@
               "target": "tagptr"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -40471,7 +40546,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -42493,7 +42568,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -42811,7 +42886,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -42894,7 +42969,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -42984,7 +43059,7 @@
               "target": "prost"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -43387,7 +43462,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -43470,7 +43545,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -43571,7 +43646,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -43680,7 +43755,7 @@
               "target": "regex"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -43792,7 +43867,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -43911,7 +43986,7 @@
               "target": "rand"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -45396,7 +45471,7 @@
               "target": "memchr"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -46409,7 +46484,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -46849,7 +46924,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.6",
+              "id": "candid 0.10.10",
               "target": "candid"
             },
             {
@@ -47344,7 +47419,7 @@
               "target": "tempfile"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -48892,7 +48967,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -50470,7 +50545,7 @@
               "target": "socket2"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -50558,7 +50633,7 @@
               "target": "slab"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -51934,7 +52009,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -52430,7 +52505,7 @@
               "target": "syscall"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -55976,7 +56051,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -59341,7 +59416,7 @@
               "target": "serde"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             }
           ],
@@ -60896,7 +60971,7 @@
               "target": "num_traits"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -64300,7 +64375,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -65059,14 +65134,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "thiserror 1.0.62": {
+    "thiserror 1.0.64": {
       "name": "thiserror",
-      "version": "1.0.62",
+      "version": "1.0.64",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/1.0.62/download",
-          "sha256": "f2675633b1499176c2dff06b0856a27976a8f9d436737b4cf4f312d4d91d8bbb"
+          "url": "https://static.crates.io/crates/thiserror/1.0.64/download",
+          "sha256": "d50af8abc119fb8bb6dbabcfa89656f46f84aa0ac7688088608076ad2b459a84"
         }
       },
       "targets": [
@@ -65103,7 +65178,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "build_script_build"
             }
           ],
@@ -65113,13 +65188,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 1.0.62",
+              "id": "thiserror-impl 1.0.64",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.62"
+        "version": "1.0.64"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -65133,14 +65208,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 1.0.62": {
+    "thiserror-impl 1.0.64": {
       "name": "thiserror-impl",
-      "version": "1.0.62",
+      "version": "1.0.64",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/1.0.62/download",
-          "sha256": "d20468752b09f49e909e55a5d338caa8bedf615594e9d80bc4c565d30faf798c"
+          "url": "https://static.crates.io/crates/thiserror-impl/1.0.64/download",
+          "sha256": "08904e7672f5eb876eaaf87e0ce17857500934f4981c4a0ab2b4aa98baac7fc3"
         }
       },
       "targets": [
@@ -65180,7 +65255,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.62"
+        "version": "1.0.64"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -66769,7 +66844,7 @@
               "target": "futures_util"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -68216,7 +68291,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -68350,7 +68425,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -69178,7 +69253,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -69294,7 +69369,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -69442,7 +69517,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -73034,7 +73109,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -77175,7 +77250,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 1.0.62",
+              "id": "thiserror 1.0.64",
               "target": "thiserror"
             },
             {
@@ -79391,7 +79466,7 @@
     "cached 0.49.2",
     "canbench 0.1.4",
     "canbench-rs 0.1.4",
-    "candid 0.10.6",
+    "candid 0.10.10",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.0.83",
@@ -79423,6 +79498,7 @@
     "escargot 0.5.8",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
+    "evm_rpc_types 1.0.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -79633,7 +79709,7 @@
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 1.0.62",
+    "thiserror 1.0.64",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.5.4",
