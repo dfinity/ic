@@ -62,13 +62,13 @@ fn swap_mut() -> &'static mut Swap {
 
 /// Returns caller as PrincipalId
 fn caller_principal_id() -> PrincipalId {
-    PrincipalId::try_from(caller()).expect("Invalid caller")
+    PrincipalId::from(caller())
 }
 
 /// This canister id
 fn this_canister_id() -> CanisterId {
     // We know the CanisterId is always valid.
-    CanisterId::unchecked_from_principal(PrincipalId::try_from(id()).expect("Invalid canister id."))
+    CanisterId::unchecked_from_principal(PrincipalId::from(id()))
 }
 
 // =============================================================================
@@ -216,7 +216,7 @@ async fn get_open_ticket(request: GetOpenTicketRequest) -> GetOpenTicketResponse
 #[update]
 async fn new_sale_ticket(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
     log!(INFO, "new_sale_ticket");
-    swap_mut().new_sale_ticket(&request, caller_principal_id(), ic_cdk::api::time())
+    swap_mut().new_sale_ticket(&request, caller_principal_id(), time())
 }
 
 /// Lists direct participants in the Swap.
@@ -255,7 +255,7 @@ fn canister_heartbeat() {
 
 fn now_nanoseconds() -> u64 {
     if cfg!(target_arch = "wasm32") {
-        ic_cdk::api::time()
+        time()
     } else {
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
