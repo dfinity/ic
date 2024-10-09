@@ -3,7 +3,7 @@
 set -euxo pipefail
 
 run_in_namespace=$(realpath toolchains/sysimage/run_in_namespace.sh)
-ubuntu_base=$(realpath external/ubuntu-base-24.04.1-base-amd64.tar.gz/file/downloaded)
+ubuntu_base=$(realpath $UBUNTU_BASE_PATH)
 
 icos_tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
 trap 'rm -rf "$icos_tmpdir"' INT TERM EXIT
