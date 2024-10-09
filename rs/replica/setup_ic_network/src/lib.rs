@@ -341,7 +341,7 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        let bouncer = Arc::new(ConsensusBouncer::new(message_router));
+        let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -404,7 +404,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = CertifierBouncer::new(Arc::clone(&consensus_pool_cache));
+        let bouncer = CertifierBouncer::new(metrics_registry, Arc::clone(&consensus_pool_cache));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -433,7 +433,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = Arc::new(dkg::DkgBouncer);
+        let bouncer = Arc::new(dkg::DkgBouncer::new(metrics_registry));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -478,6 +478,7 @@ fn start_consensus(
         join_handles.push(jh);
 
         let bouncer = Arc::new(idkg::IDkgBouncer::new(
+            metrics_registry,
             subnet_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&state_reader),

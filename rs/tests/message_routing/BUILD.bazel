@@ -23,7 +23,6 @@ system_test(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -39,7 +38,6 @@ system_test_nns(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
@@ -51,11 +49,11 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hotfix",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -68,6 +66,7 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

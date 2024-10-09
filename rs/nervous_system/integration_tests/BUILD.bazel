@@ -28,9 +28,11 @@ BASE_DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
+    "@crate_index//:futures",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
+    "@crate_index//:tokio",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [

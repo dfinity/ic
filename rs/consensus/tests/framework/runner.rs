@@ -171,8 +171,10 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let consensus_bouncer =
-            ic_consensus::consensus::ConsensusBouncer::new(deps.message_routing.clone());
+        let consensus_bouncer = ic_consensus::consensus::ConsensusBouncer::new(
+            &deps.metrics_registry,
+            deps.message_routing.clone(),
+        );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
             Arc::clone(&consensus_crypto),
