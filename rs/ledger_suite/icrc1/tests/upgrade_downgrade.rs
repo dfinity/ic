@@ -1,4 +1,4 @@
-use crate::common::{ledger_wasm, load_wasm_using_env_var};
+use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use candid::{Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
@@ -100,10 +100,6 @@ fn default_archive_options() -> ArchiveOptions {
 
 fn index_ng_mainnet_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH")
-}
-
-fn index_ng_wasm() -> Vec<u8> {
-    load_wasm_using_env_var("IC_ICRC1_INDEX_NG_WASM_PATH")
 }
 
 fn install_ledger(

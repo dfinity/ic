@@ -889,10 +889,7 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let settings = CanisterSettings {
             controllers: Some(new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
-            reserved_cycles_limit: None,
+            ..CanisterSettings::default()
         };
         call_candid_as::<(UpdateSettingsArgument,), ()>(
             self,
