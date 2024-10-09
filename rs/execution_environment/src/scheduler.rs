@@ -701,14 +701,7 @@ impl SchedulerImpl {
 
             // Update subnet available memory before taking out the canisters.
             round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
-            let mut canisters = state.take_canister_states();
-            round_schedule.charge_idle_canisters(
-                &mut canisters,
-                &mut round_fully_executed_canister_ids,
-                current_round,
-                is_first_iteration,
-            );
-
+            let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
             let (active_round_schedule, rate_limited_canister_ids) = round_schedule
                 .filter_canisters(
@@ -1913,7 +1906,7 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     executed_canister_ids: BTreeSet<CanisterId>,
-    fully_executed_canister_ids: BTreeSet<CanisterId>,
+    fully_executed_canister_ids: Vec<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,
@@ -1951,7 +1944,7 @@ fn execute_canisters_on_thread(
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut executed_canister_ids = BTreeSet::new();
-    let mut fully_executed_canister_ids = BTreeSet::new();
+    let mut fully_executed_canister_ids = vec![];
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::from(0);
     let mut total_messages_executed = NumMessages::from(0);
