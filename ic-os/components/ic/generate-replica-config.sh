@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Substitute correct configuration parameters into ic.json5. Will take IP addresses
-# from configuration file or from network interfaces.
+# Substitute correct configuration parameters into ic.json5.
 
 function usage() {
     cat <<EOF
@@ -19,43 +18,6 @@ Usage:
   -i infile: input ic.json5.template file
   -o outfile: output ic.json5 file
 EOF
-}
-
-# Get address of interface
-#
-# Arguments:
-# - $1: address family (4 or 6 for IPv4 or IPv6)
-# - $2: interface name
-function get_if_address() {
-    local FAMILY=-"$1"
-    local INTERFACE="$2"
-    ip -o "${FAMILY}" addr show up primary scope global "${INTERFACE}" | while read -r num dev family addr options; do
-        echo ${addr%/*}
-        break
-    done
-}
-
-# Get address of interface, retrying for a while
-#
-# Arguments:
-# - $1: address family (4 or 6 for IPv4 or IPv6)
-# - $2: interface name
-# - $3: number of retries, trying every second
-function get_if_address_retries() {
-    local FAMILY=-"$1"
-    local INTERFACE="$2"
-    local RETRIES="$3"
-    local ADDR=""
-    while [ "${RETRIES}" != 0 -a "$ADDR" == "" ]; do
-        ADDR=$(get_if_address "${FAMILY}" "${INTERFACE}")
-        if [ "${ADDR}" != "" ]; then
-            echo "${ADDR}"
-            break
-        fi
-        RETRIES=$(("${RETRIES}" - 1))
-        echo "Retrying ${RETRIES} ..." 1>&2
-        sleep 10
-    done
 }
 
 # XXX: the following function is duplicate with generate-network-config.sh
@@ -211,9 +173,7 @@ if [ "${JAEGER_ADDR_FILE}" != "" -a -e "${JAEGER_ADDR_FILE}" ]; then
     read_jaeger_addr_variable "${JAEGER_ADDR_FILE}"
 fi
 
-INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
-IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 IPV4_ADDRESS="${ipv4_address:-}"
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
