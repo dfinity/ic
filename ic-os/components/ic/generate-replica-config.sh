@@ -133,7 +133,8 @@ function read_query_stats_variables() {
     while IFS="=" read -r key value; do
         case "$key" in
             "query_stats_epoch_length")
-                query_stats_epoch_length="${value}" ;;
+                query_stats_epoch_length="${value}"
+                ;;
         esac
     done <"$1"
 }
