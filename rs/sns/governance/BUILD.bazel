@@ -32,8 +32,6 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
@@ -47,6 +45,7 @@ DEPENDENCIES = [
     "@crate_index//:clap_3_2_25",
     "@crate_index//:comparable",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -64,6 +63,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
