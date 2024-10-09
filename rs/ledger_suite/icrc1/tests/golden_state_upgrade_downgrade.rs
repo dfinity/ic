@@ -965,6 +965,10 @@ mod index {
         ledger_id: CanisterId,
         index_id: CanisterId,
     ) {
+        if ledger_and_archive_blocks.blocks.is_empty() {
+            println!("No blocks to retrieve from index");
+            return;
+        }
         wait_until_index_sync_is_completed(state_machine, index_id, ledger_id);
         let index_blocks = get_all_index_blocks(
             state_machine,
