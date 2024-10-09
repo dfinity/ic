@@ -69,7 +69,7 @@ pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH: &str =
 
 pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE: u64 = 2_145_241_036_770_000_u64;
 pub const USDC_ERC20_CONTRACT_ADDRESS: &str = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
-pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
+pub const MINTER_ADDRESS: &str = "0x2905F8dc216c33995b97425eF4F82cBc77929685";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
 pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
@@ -138,7 +138,7 @@ impl CkEthSetup {
         );
 
         let args = MinterInitArgs {
-            ecdsa_key_name: "master_ecdsa_public_key".parse().unwrap(),
+            ecdsa_key_name: "key_1".parse().unwrap(),
             ethereum_network: EthereumNetwork::Mainnet,
             ledger_id,
             next_transaction_nonce: 0_u8.into(),
