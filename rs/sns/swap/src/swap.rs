@@ -1017,7 +1017,7 @@ impl Swap {
     /// of transfers. For easier testing, it is given an argument that is 'false' to get
     /// the timestamp when a transfer is initiated and 'true' to get the timestamp when a transfer
     /// is successful.
-    pub async fn run_periodic_tasks(&mut self, now_fn: fn(bool) -> u64, stop_scheduling: fn()) {
+    pub async fn run_periodic_tasks(&mut self, now_fn: fn(bool) -> u64) {
         let periodic_task_start_seconds = now_fn(false);
 
         // Purge old tickets
@@ -1101,13 +1101,6 @@ impl Swap {
                     }
                 }
             }
-        } else if !self.requires_periodic_tasks() {
-            log!(
-                INFO,
-                "All work that needs to be done in Swap's periodic tasks has been completed. \
-                 Stop scheduling new periodic tasks ..."
-            );
-            stop_scheduling()
         }
     }
 

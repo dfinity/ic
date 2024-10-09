@@ -276,15 +276,20 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
     IcpLedgerCanister::<CdkRuntime>::new(id)
 }
 
-fn stop_scheduling() {
-    TIMER_ID.with(|saved_timer_id| {
-        let timer_id = saved_timer_id.borrow();
-        ic_cdk_timers::clear_timer(*timer_id);
-    });
-}
-
 async fn run_periodic_tasks() {
-    swap_mut().run_periodic_tasks(now_fn, stop_scheduling).await;
+    if swap().requires_periodic_tasks() {
+        swap_mut().run_periodic_tasks(now_fn).await;
+    } else {
+        log!(
+            INFO,
+            "All work that needs to be done in Swap's periodic tasks has been completed. \
+             Stop scheduling new periodic tasks."
+        );
+        TIMER_ID.with(|saved_timer_id| {
+            let timer_id = saved_timer_id.borrow();
+            ic_cdk_timers::clear_timer(*timer_id);
+        });
+    }
 }
 
 fn init_timers() {
