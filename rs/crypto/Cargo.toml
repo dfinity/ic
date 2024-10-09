@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 bincode = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }

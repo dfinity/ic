@@ -74,7 +74,6 @@ jobs:
             profile.json
   bazel-system-test-staging:
     name: Bazel System Test Staging
-    continue-on-error: True
     runs-on:
       group: zh1
       labels: dind-large

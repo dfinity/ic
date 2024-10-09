@@ -150,7 +150,8 @@ jobs:
     timeout-minutes: 120
     runs-on:
       labels: macOS
-    if: ${{ github.ref_protected && github.repository == 'ic' }} # Run on protected branches, but only on public repo
+    # Run on protected branches, but only on public repo
+    if: ${{ github.ref_protected && github.repository == 'dfinity/ic' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -489,4 +490,4 @@ jobs:
         run: |
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              cargo build --release
+              cargo build --release --locked

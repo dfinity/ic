@@ -29,9 +29,7 @@ members = [
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/discower_bowndary",
-    "rs/boundary_node/ic_balance_exporter",
     "rs/boundary_node/ic_boundary",
-    "rs/boundary_node/prober",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/sender",
@@ -535,7 +533,7 @@ ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-btc-validation = "0.1.0"
 ic-cbor = "2.6.0"
-ic-cdk = "0.13.5"
+ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic-certificate-verification = "2.6.0"
@@ -594,6 +592,7 @@ parking_lot = "0.12.3"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.13.0", default-features = false, features = [
+    "criterion",
     "flamegraph",
     "prost-codec",
 ] }
@@ -630,7 +629,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 rolling-file = "0.2.0"
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.13", default-features = false, features = [
+rustls = { version = "0.23.14", default-features = false, features = [
     "ring",
     "std",
     "brotli",
@@ -655,8 +654,8 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.2", features = ["derive"] }
-strum_macros = "0.26.2"
+strum = { version = "0.26.3", default-features = false }
+strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
 tar = "=0.4.39"
@@ -695,9 +694,9 @@ url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version = "0.215.0", features = ["wasmparser"] }
-wasmparser = "0.215.0"
-wasmprinter = "0.215.0"
+wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
+wasmparser = "0.217.0"
+wasmprinter = "0.217.0"
 wast = "212.0.0"
 wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

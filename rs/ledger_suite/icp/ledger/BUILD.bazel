@@ -37,6 +37,7 @@ rust_library(
         "//rs/rust_canisters/dfn_core",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:intmap",
         "@crate_index//:lazy_static",
         "@crate_index//:num-traits",
@@ -78,7 +79,9 @@ LEDGER_CANISTER_DEPS = [
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",
     "@crate_index//:serde_bytes",
 ]
@@ -113,6 +116,17 @@ rust_canister(
     deps = LEDGER_CANISTER_DEPS,
 )
 
+rust_canister(
+    name = "ledger-canister-wasm-upgrade-to-memory-manager",
+    srcs = ["src/main.rs"],
+    compile_data = LEDGER_CANISTER_DATA,
+    crate_features = ["upgrade-to-memory-manager"],
+    data = LEDGER_CANISTER_DATA,
+    rustc_env = LEDGER_CANISTER_RUSTC_ENV,
+    service_file = "//rs/ledger_suite/icp:ledger.did",
+    deps = LEDGER_CANISTER_DEPS,
+)
+
 rust_test(
     name = "ledger_canister_unit_test",
     compile_data = LEDGER_CANISTER_DATA,
@@ -130,12 +144,14 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
+        ":ledger-canister-wasm-upgrade-to-memory-manager",
         "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
+        "LEDGER_CANISTER_UPGRADE_TO_MEMORY_MANAGER_WASM_PATH": "$(rootpath :ledger-canister-wasm-upgrade-to-memory-manager)",
     },
     flaky = True,
     deps = [
