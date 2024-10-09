@@ -275,6 +275,17 @@ EOF
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
     fi
 
+    # Create guestos config.json (but not break testing)
+    if [ -f "/boot/config/config.json" ]; then
+        /opt/ic/bin/config generate-guestos-config
+        echo "* Copying 'config-guestos.json' to GuestOS config partition..."
+        if [ -f "/boot/config/config-guestos.json" ]; then
+            cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
+        # else
+            # todo: fix ERROR
+        fi
+    fi
+
     tar cf "${OUT_FILE}" \
         --sort=name \
         --owner=root:0 \
