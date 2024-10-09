@@ -1,5 +1,5 @@
 use crate::lifecycle::EthereumNetwork;
-use evm_rpc_client::types::candid::{RpcService as EvmRpcService, RpcServices as EvmRpcServices};
+use evm_rpc_client::{RpcService as EvmRpcService, RpcServices as EvmRpcServices};
 
 pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
     RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
@@ -80,7 +80,7 @@ impl SepoliaProvider {
 }
 
 fn evm_rpc_node_providers(ethereum_network: &EthereumNetwork) -> EvmRpcServices {
-    use evm_rpc_client::types::candid::RpcApi as EvmRpcApi;
+    use evm_rpc_client::RpcApi as EvmRpcApi;
 
     let providers = match ethereum_network {
         EthereumNetwork::Mainnet => MAINNET_PROVIDERS.as_slice(),
