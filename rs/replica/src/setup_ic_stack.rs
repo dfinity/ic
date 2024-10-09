@@ -9,7 +9,6 @@ use ic_consensus::certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
@@ -34,6 +33,7 @@ use ic_types::{
     messages::SignedIngress,
     Height, NodeId, PrincipalId, SubnetId,
 };
+use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::{
     str::FromStr,
@@ -257,12 +257,14 @@ pub fn construct_ic_stack(
             config.malicious_behaviour.malicious_flags.clone(),
         )
     };
+    let message_router = Arc::new(message_router);
+    let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
         rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        config.message_routing,
+        xnet_config,
         metrics_registry,
         log.clone(),
     );
@@ -335,7 +337,7 @@ pub fn construct_ic_stack(
         xnet_payload_builder,
         self_validating_payload_builder,
         query_stats_payload_builder,
-        Arc::new(message_router),
+        message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,

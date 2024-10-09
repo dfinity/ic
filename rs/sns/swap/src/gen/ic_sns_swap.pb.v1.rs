@@ -904,11 +904,11 @@ pub mod sns_neuron_recipe {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Self::Unspecified => "CLAIMED_STATUS_UNSPECIFIED",
-                Self::Pending => "CLAIMED_STATUS_PENDING",
-                Self::Success => "CLAIMED_STATUS_SUCCESS",
-                Self::Failed => "CLAIMED_STATUS_FAILED",
-                Self::Invalid => "CLAIMED_STATUS_INVALID",
+                ClaimedStatus::Unspecified => "CLAIMED_STATUS_UNSPECIFIED",
+                ClaimedStatus::Pending => "CLAIMED_STATUS_PENDING",
+                ClaimedStatus::Success => "CLAIMED_STATUS_SUCCESS",
+                ClaimedStatus::Failed => "CLAIMED_STATUS_FAILED",
+                ClaimedStatus::Invalid => "CLAIMED_STATUS_INVALID",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1584,25 +1584,25 @@ pub mod governance_error {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Self::Unspecified => "ERROR_TYPE_UNSPECIFIED",
-                Self::Ok => "ERROR_TYPE_OK",
-                Self::Unavailable => "ERROR_TYPE_UNAVAILABLE",
-                Self::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
-                Self::NotFound => "ERROR_TYPE_NOT_FOUND",
-                Self::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
-                Self::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
-                Self::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
-                Self::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
-                Self::HotKey => "ERROR_TYPE_HOT_KEY",
-                Self::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
-                Self::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
-                Self::External => "ERROR_TYPE_EXTERNAL",
-                Self::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
-                Self::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
-                Self::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
-                Self::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
-                Self::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
-                Self::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
+                ErrorType::Unspecified => "ERROR_TYPE_UNSPECIFIED",
+                ErrorType::Ok => "ERROR_TYPE_OK",
+                ErrorType::Unavailable => "ERROR_TYPE_UNAVAILABLE",
+                ErrorType::NotAuthorized => "ERROR_TYPE_NOT_AUTHORIZED",
+                ErrorType::NotFound => "ERROR_TYPE_NOT_FOUND",
+                ErrorType::InvalidCommand => "ERROR_TYPE_INVALID_COMMAND",
+                ErrorType::RequiresNotDissolving => "ERROR_TYPE_REQUIRES_NOT_DISSOLVING",
+                ErrorType::RequiresDissolving => "ERROR_TYPE_REQUIRES_DISSOLVING",
+                ErrorType::RequiresDissolved => "ERROR_TYPE_REQUIRES_DISSOLVED",
+                ErrorType::HotKey => "ERROR_TYPE_HOT_KEY",
+                ErrorType::ResourceExhausted => "ERROR_TYPE_RESOURCE_EXHAUSTED",
+                ErrorType::PreconditionFailed => "ERROR_TYPE_PRECONDITION_FAILED",
+                ErrorType::External => "ERROR_TYPE_EXTERNAL",
+                ErrorType::LedgerUpdateOngoing => "ERROR_TYPE_LEDGER_UPDATE_ONGOING",
+                ErrorType::InsufficientFunds => "ERROR_TYPE_INSUFFICIENT_FUNDS",
+                ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
+                ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
+                ErrorType::AlreadyJoinedCommunityFund => "ERROR_TYPE_ALREADY_JOINED_COMMUNITY_FUND",
+                ErrorType::NotInTheCommunityFund => "ERROR_TYPE_NOT_IN_THE_COMMUNITY_FUND",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2068,10 +2068,10 @@ pub mod error_refund_icp_response {
             /// (if the ProtoBuf definition does not change) and safe for programmatic use.
             pub fn as_str_name(&self) -> &'static str {
                 match self {
-                    Self::Unspecified => "TYPE_UNSPECIFIED",
-                    Self::InvalidRequest => "TYPE_INVALID_REQUEST",
-                    Self::Precondition => "TYPE_PRECONDITION",
-                    Self::External => "TYPE_EXTERNAL",
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::InvalidRequest => "TYPE_INVALID_REQUEST",
+                    Type::Precondition => "TYPE_PRECONDITION",
+                    Type::External => "TYPE_EXTERNAL",
                 }
             }
             /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2384,9 +2384,9 @@ pub mod get_open_ticket_response {
             /// (if the ProtoBuf definition does not change) and safe for programmatic use.
             pub fn as_str_name(&self) -> &'static str {
                 match self {
-                    Self::Unspecified => "TYPE_UNSPECIFIED",
-                    Self::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
-                    Self::SaleClosed => "TYPE_SALE_CLOSED",
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
+                    Type::SaleClosed => "TYPE_SALE_CLOSED",
                 }
             }
             /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2549,13 +2549,13 @@ pub mod new_sale_ticket_response {
             /// (if the ProtoBuf definition does not change) and safe for programmatic use.
             pub fn as_str_name(&self) -> &'static str {
                 match self {
-                    Self::Unspecified => "TYPE_UNSPECIFIED",
-                    Self::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
-                    Self::SaleClosed => "TYPE_SALE_CLOSED",
-                    Self::TicketExists => "TYPE_TICKET_EXISTS",
-                    Self::InvalidUserAmount => "TYPE_INVALID_USER_AMOUNT",
-                    Self::InvalidSubaccount => "TYPE_INVALID_SUBACCOUNT",
-                    Self::InvalidPrincipal => "TYPE_INVALID_PRINCIPAL",
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
+                    Type::SaleClosed => "TYPE_SALE_CLOSED",
+                    Type::TicketExists => "TYPE_TICKET_EXISTS",
+                    Type::InvalidUserAmount => "TYPE_INVALID_USER_AMOUNT",
+                    Type::InvalidSubaccount => "TYPE_INVALID_SUBACCOUNT",
+                    Type::InvalidPrincipal => "TYPE_INVALID_PRINCIPAL",
                 }
             }
             /// Creates an enum from field names used in the ProtoBuf definition.
@@ -2835,12 +2835,12 @@ impl Lifecycle {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "LIFECYCLE_UNSPECIFIED",
-            Self::Pending => "LIFECYCLE_PENDING",
-            Self::Adopted => "LIFECYCLE_ADOPTED",
-            Self::Open => "LIFECYCLE_OPEN",
-            Self::Committed => "LIFECYCLE_COMMITTED",
-            Self::Aborted => "LIFECYCLE_ABORTED",
+            Lifecycle::Unspecified => "LIFECYCLE_UNSPECIFIED",
+            Lifecycle::Pending => "LIFECYCLE_PENDING",
+            Lifecycle::Adopted => "LIFECYCLE_ADOPTED",
+            Lifecycle::Open => "LIFECYCLE_OPEN",
+            Lifecycle::Committed => "LIFECYCLE_COMMITTED",
+            Lifecycle::Aborted => "LIFECYCLE_ABORTED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

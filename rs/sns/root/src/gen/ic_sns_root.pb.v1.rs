@@ -274,9 +274,9 @@ impl LogVisibility {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
-            Self::Controllers => "LOG_VISIBILITY_CONTROLLERS",
-            Self::Public => "LOG_VISIBILITY_PUBLIC",
+            LogVisibility::Unspecified => "LOG_VISIBILITY_UNSPECIFIED",
+            LogVisibility::Controllers => "LOG_VISIBILITY_CONTROLLERS",
+            LogVisibility::Public => "LOG_VISIBILITY_PUBLIC",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

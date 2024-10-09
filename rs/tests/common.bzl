@@ -118,6 +118,7 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:http_0_2_12",
     "@crate_index//:humantime",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",

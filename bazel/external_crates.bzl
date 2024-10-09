@@ -187,7 +187,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.81",
             ),
             "axum": crate.spec(
-                version = "^0.7.7",
+                version = "^0.7.5",
             ),
             "axum-extra": crate.spec(
                 version = "^0.9.0",
@@ -489,6 +489,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http": crate.spec(
                 version = "^1.1.0",
             ),
+            "http_0_2_12": crate.spec(
+                package = "http",
+                version = "^0.2.12",
+            ),
             "http-body": crate.spec(
                 version = "^1.0.1",
             ),
@@ -503,6 +507,18 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
+            ),
+            "hyper_0_14_27": crate.spec(
+                package = "hyper",
+                version = "^0.14.27",
+                features = [
+                    "client",
+                    "full",
+                    "http1",
+                    "http2",
+                    "server",
+                    "tcp",
+                ],
             ),
             "hyper": crate.spec(
                 version = "^1.4.1",
@@ -945,10 +961,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12",
             ),
             "prost": crate.spec(
-                version = "^0.13.3",
+                version = "^0.13",
             ),
             "prost-build": crate.spec(
-                version = "^0.13.3",
+                version = "^0.13",
             ),
             "protobuf": crate.spec(
                 version = "^2.28.0",
@@ -1004,7 +1020,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8.37",
             ),
             "regex": crate.spec(
-                version = "^1.11.0",
+                version = "^1.10.6",
             ),
             "reqwest": crate.spec(
                 version = "^0.12.7",
@@ -1300,10 +1316,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.9",
             ),
             "tonic": crate.spec(
-                version = "^0.12.3",
+                version = "^0.12.0",
             ),
             "tonic-build": crate.spec(
-                version = "^0.12.3",
+                version = "^0.12.0",
             ),
             "tower": crate.spec(
                 version = "^0.4.13",
