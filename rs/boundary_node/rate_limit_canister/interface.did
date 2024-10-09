@@ -1,7 +1,7 @@
 type Version = nat64;           // Represents the config version number
 type Timestamp = nat64;         // Represents timestamp in nanoseconds since the epoch (1970-01-01)
 type RuleId = text;             // Unique identifier for each rule
-type SchemaVersion = nat64;     // Version of the schema encoding/decoding the rules
+type SchemaVersion = nat64;     // Version of the schema for encoding/decoding the rules
 type IncidentId = text;         // Unique identifier for each incident
 
 
