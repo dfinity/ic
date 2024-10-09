@@ -5354,7 +5354,7 @@ version = "0.9.0"
 dependencies = [
  "bincode 1.3.3",
  "byteorder",
- "clap 3.2.25",
+ "clap 4.5.19",
  "criterion",
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -6675,7 +6675,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "bincode 1.3.3",
- "clap 3.2.25",
+ "clap 4.5.19",
  "criterion",
  "hex",
  "ic-adapter-metrics-server",
@@ -10189,7 +10189,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",
@@ -13147,7 +13147,7 @@ dependencies = [
  "byte-unit",
  "candid",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "console 0.11.3",
  "futures",
  "hex",
@@ -13459,7 +13459,7 @@ dependencies = [
 name = "icp-config"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "eyre",
  "ic-config",
  "ic-replicated-state",
