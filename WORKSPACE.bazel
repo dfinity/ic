@@ -748,8 +748,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
+    sha256 = "5c49768f03f075ffd87f0f20d849897e03db58d05fb0d12f1a340b2a5f1e4f65",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.0.0/evm_rpc.wasm.gz",
 )
 
 # Haskell toolchain for spec_compliance tests

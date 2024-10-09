@@ -176,22 +176,6 @@ if [ "${IPV6_ADDRESS}" == "" ]; then
     exit 1
 fi
 
-# HACK: host names set on mercury deployment are invalid. Fix this up
-# by resetting the host name to be derived from IPv6 address.
-if [ "${hostname}" == "" ]; then
-    if [ -e "${NETWORK_CONFIG_FILE}" ]; then
-        # Derive new hostname.
-        # Hostname must start with a letter, not have two consecutive hyphens and end with an alphanumeric.
-        NEW_HOST_NAME=ip6$(echo "${IPV6_ADDRESS}" | sed -e 's/::/x/g;s/:/-/g')
-        echo "Set new hostname: ${NEW_HOST_NAME}"
-        # Substitute hostname in master config file so it persists
-        # across reboots and upgrades.
-        sed -i "${NETWORK_CONFIG_FILE}" -e "s/hostname=.*/hostname=$NEW_HOST_NAME/"
-        # Force set current hostname from master config file.
-        /opt/ic/bin/setup-hostname.sh
-    fi
-fi
-
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \

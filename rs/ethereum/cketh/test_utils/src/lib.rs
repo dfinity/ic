@@ -4,7 +4,7 @@ use crate::flow::{
 };
 use crate::mock::JsonRpcMethod;
 use assert_matches::assert_matches;
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
@@ -708,17 +708,9 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
 }
 
 fn install_evm_rpc(env: &StateMachine, evm_rpc_id: CanisterId) {
-    let args = EvmRpcInitArgs {
-        nodes_in_subnet: 28,
-    };
+    let args = evm_rpc_types::InstallArgs::default();
     env.install_existing_canister(evm_rpc_id, evm_rpc_wasm(), Encode!(&args).unwrap())
         .unwrap();
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-pub struct EvmRpcInitArgs {
-    #[serde(rename = "nodesInSubnet")]
-    pub nodes_in_subnet: u32,
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {
