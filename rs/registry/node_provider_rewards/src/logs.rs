@@ -9,7 +9,6 @@ pub enum LogEntry {
         node_type: String,
         node_operator_id: PrincipalId,
     },
-
     NodeRewards {
         node_type: String,
         node_idx: u32,
@@ -17,7 +16,6 @@ pub enum LogEntry {
         rewardable_count: u32,
         rewards_xdr_permyriad: u64,
     },
-
     DCRewards {
         dc_id: String,
         node_type: String,
