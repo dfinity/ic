@@ -88,6 +88,10 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_lowupgradeinstructionlimits() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH").unwrap()).unwrap()
+}
+
 fn archive_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -352,11 +356,6 @@ fn test_balances_overflow() {
 }
 
 #[test]
-fn test_approval_trimming() {
-    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_archive_controllers() {
     ic_icrc1_ledger_sm_tests::test_archive_controllers(ledger_wasm());
 }
@@ -423,6 +422,24 @@ fn icrc1_test_upgrade_serialization_fixed_tx() {
     ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_fixed_tx(
         ledger_mainnet_wasm(),
         ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_stable_migration_endpoints_disabled() {
+    ic_icrc1_ledger_sm_tests::icrc1_test_stable_migration_endpoints_disabled(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_incomplete_migration() {
+    ic_icrc1_ledger_sm_tests::test_incomplete_migration(
+        ledger_mainnet_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }
@@ -511,63 +528,6 @@ fn balance_of(env: &StateMachine, ledger_id: CanisterId, account: Account) -> u6
         .expect("Unable to perform icrc1_balance_of")
         .bytes();
     Decode!(&res, Nat).unwrap().0.to_u64().unwrap()
-}
-
-#[cfg_attr(feature = "u256-tokens", ignore)]
-#[test]
-fn test_upgrade_from_first_version() {
-    let env = StateMachine::new();
-
-    let ledger_wasm_first_version =
-        std::fs::read(std::env::var("IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH").unwrap()).unwrap();
-    let init_args = Encode!(&LegacyInitArgs {
-        minting_account: MINTER,
-        fee_collector_account: None,
-        initial_balances: vec![],
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
-            MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
-            MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options: ArchiveOptions {
-            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
-            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: PrincipalId::new_user_test_id(100),
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-    })
-    .unwrap();
-    let ledger_id = env
-        .install_canister(ledger_wasm_first_version, init_args, None)
-        .unwrap();
-    transfer(&env, ledger_id, MINTER, account(1), 1_000_000);
-    transfer(&env, ledger_id, MINTER, account(1), 2_000_000);
-    transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
-    transfer(&env, ledger_id, account(1), account(3), 1_000_000);
-    let balance_1 = balance_of(&env, ledger_id, account(1));
-    let balance_2 = balance_of(&env, ledger_id, account(2));
-    let balance_3 = balance_of(&env, ledger_id, account(3));
-
-    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
-    env.upgrade_canister(ledger_id, ledger_wasm(), upgrade_args)
-        .expect("Unable to upgrade the ledger canister");
-    assert_eq!(balance_1, balance_of(&env, ledger_id, account(1)));
-    assert_eq!(balance_2, balance_of(&env, ledger_id, account(2)));
-    assert_eq!(balance_3, balance_of(&env, ledger_id, account(3)));
-
-    // check that transfer works
-    transfer(&env, ledger_id, MINTER, account(1), 1_000_000);
-    transfer(&env, ledger_id, MINTER, account(1), 2_000_000);
-    transfer(&env, ledger_id, MINTER, account(2), 3_000_000);
-    transfer(&env, ledger_id, account(1), account(3), 1_000_000);
 }
 
 #[test]

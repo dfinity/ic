@@ -8861,6 +8861,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-crypto-tree-hash",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
@@ -9197,6 +9198,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
+ "ic-stable-structures",
  "num-traits",
  "serde",
  "serde_bytes",
@@ -13587,6 +13589,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-stable-structures",
  "itertools 0.12.1",
  "num-bigint 0.4.6",
  "num-traits",

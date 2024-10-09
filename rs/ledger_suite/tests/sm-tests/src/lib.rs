@@ -1,4 +1,5 @@
 use crate::in_memory_ledger::{verify_ledger_state, InMemoryLedger};
+use crate::metrics::parse_metric;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
 use ic_agent::identity::{BasicIdentity, Identity};
 use ic_base_types::PrincipalId;
@@ -34,6 +35,7 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::GetArchivesArgs;
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse,
 };
@@ -541,6 +543,29 @@ pub fn balance_of(env: &StateMachine, ledger: CanisterId, acc: impl Into<Account
     .0
     .to_u64()
     .unwrap()
+}
+
+pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16) {
+    let is_ledger_ready = || {
+        Decode!(
+            &env.query(ledger, "is_ledger_ready", Encode!().unwrap())
+                .expect("failed to call is_ledger_ready")
+                .bytes(),
+            bool
+        )
+        .expect("failed to decode balance_of response")
+    };
+    for i in 0..num_waits {
+        if is_ledger_ready() {
+            println!("ready after {} waits", i);
+            return;
+        }
+        env.advance_time(Duration::from_secs(10));
+        env.tick();
+    }
+    if !is_ledger_ready() {
+        panic!("canister not ready!");
+    }
 }
 
 pub fn fee(env: &StateMachine, ledger: CanisterId) -> u64 {
@@ -2579,7 +2604,7 @@ pub fn test_upgrade_serialization(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
-    downgrade_to_mainnet_should_succeed: bool,
+    migration_to_stable_structures: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -2589,12 +2614,7 @@ pub fn test_upgrade_serialization(
     const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 8 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
-            &(valid_transactions_strategy(
-                minter,
-                FEE,
-                TOTAL_TX_COUNT,
-                now,
-            ).no_shrink(),),
+            &(valid_transactions_strategy(minter, FEE, TOTAL_TX_COUNT, now).no_shrink(),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
@@ -2628,6 +2648,9 @@ pub fn test_upgrade_serialization(
                 let mut test_upgrade = |ledger_wasm: Vec<u8>| {
                     env.upgrade_canister(ledger_id, ledger_wasm, upgrade_args.clone())
                         .unwrap();
+                    if migration_to_stable_structures {
+                        wait_ledger_ready(&env, ledger_id, 10);
+                    }
                     add_tx_and_verify();
                 };
 
@@ -2642,43 +2665,13 @@ pub fn test_upgrade_serialization(
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
-
-                    // Current mainnet ICP wasm (V0) cannot deserialize from memory manager, but ICRC (V1) can
-                    match env.upgrade_canister(
-                        ledger_id,
-                        ledger_wasm_mainnet.clone(),
-                        upgrade_args.clone(),
-                    ) {
-                        Ok(_) => {
-                            if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
-                            } else {
-                                // In case this succeeded, we need to upgrade the ledger back to
-                                // the next version (via the current version), so that the
-                                // subsequent upgrade is from
-                                // `ledger_wasm_nextmigrationversionmemorymanager` to
-                                // `ledger_wasm_current`, rather than from `ledger_wasm_mainnet` to
-                                // `ledger_wasm_current` (currently, from V2 -> V1, rather than from
-                                // V0 -> V1).
-                                test_upgrade(ledger_wasm_current.clone());
-                                test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
-                            }
-                        }
-                        Err(e) => {
-                            if downgrade_to_mainnet_should_succeed {
-                               panic!("Downgrade from memory manager to mainnet should succeed (since mainnet is V1), but failed with error: {}", e)
-                            }
-                            assert!(
-                                e.description().contains("failed to decode ledger state")
-                                    || e.description().contains("Decoding stable memory failed")
-                            )
-                        }
-                    };
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
-                // Test downgrade to mainnet wasm
-                test_upgrade(ledger_wasm_mainnet.clone());
+                if !migration_to_stable_structures {
+                    // Test downgrade to mainnet wasm
+                    test_upgrade(ledger_wasm_mainnet.clone());
+                }
                 if verify_blocks {
                     // This will also verify the ledger blocks.
                     // The current implementation of the InMemoryLedger cannot get blocks
@@ -2725,15 +2718,11 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 
     // Setup ledger as it is deployed on the mainnet.
-    let (env, canister_id) = setup(
-        ledger_wasm_mainnet.clone(),
-        encode_init_args,
-        initial_balances,
-    );
+    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
 
     const APPROVE_AMOUNT: u64 = 150_000;
     let expiration =
-        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+        system_time_to_nanos(env.time()) + Duration::from_secs(5000 * 3600).as_nanos() as u64;
 
     let mut expected_allowances = vec![];
 
@@ -2766,6 +2755,8 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
         )
         .unwrap();
 
+        wait_ledger_ready(&env, canister_id, 10);
+
         let mut allowances = vec![];
         for i in 0..accounts.len() {
             for j in i + 1..accounts.len() {
@@ -2786,8 +2777,10 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current, balances.clone());
+
+    let stable_upgrade_migration_steps =
+        parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+    assert_eq!(stable_upgrade_migration_steps, 1);
 
     // Add some more approvals
     for a1 in &accounts {
@@ -2805,8 +2798,8 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
         }
     }
 
-    // Test downgrade to mainnet wasm
-    test_upgrade(ledger_wasm_mainnet, balances);
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current, balances);
 
     // See if the additional approvals are there
     for a1 in &accounts {
@@ -2820,6 +2813,222 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
             assert_eq!(allowance.expires_at, Some(expiration));
         }
     }
+}
+
+pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(ledger_wasm_mainnet, encode_init_args, initial_balances);
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+
+    for i in 2..40 {
+        let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+        let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+        send_approval(&env, canister_id, account.owner, &approve_args).expect("approval failed");
+    }
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    let transfer_args = TransferArg {
+        from_subaccount: None,
+        to: Account::from(PrincipalId::new_user_test_id(2).0),
+        fee: None,
+        created_at_time: None,
+        amount: Nat::from(1u64),
+        memo: None,
+    };
+    let approve_args = default_approve_args(
+        Account::from(PrincipalId::new_user_test_id(200).0),
+        APPROVE_AMOUNT,
+    );
+    let transfer_from_args = TransferFromArgs {
+        spender_subaccount: None,
+        from: account,
+        to: Account::from(PrincipalId::new_user_test_id(2).0),
+        amount: Nat::from(1u64),
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    };
+    let allowance_args = AllowanceArgs {
+        account,
+        spender: account,
+    };
+    let get_transactions_args = GetTransactionsRequest {
+        start: Nat::from(1u64),
+        length: Nat::from(1u64),
+    };
+    let get_archives_args = GetArchivesArgs { from: None };
+    let blocks_req_vec: Vec<GetBlocksRequest> = vec![];
+    let consent_msg_args = ConsentMessageRequest {
+        method: "icrc1_transfer".to_owned(),
+        arg: Encode!(&transfer_args).unwrap(),
+        user_preferences: ConsentMessageSpec {
+            metadata: ConsentMessageMetadata {
+                language: "en".to_string(),
+                utc_offset_minutes: Some(60),
+            },
+            device_spec: Some(DisplayMessageType::GenericDisplay),
+        },
+    };
+
+    let test_endpoint = |endpoint_name: &str, args: Vec<u8>, expect_error: bool| {
+        let result = env.execute_ingress_as(account.owner.into(), canister_id, endpoint_name, args);
+        if expect_error {
+            result
+                .unwrap_err()
+                .assert_contains(ErrorCode::CanisterCalledTrap, "The Ledger is not ready.");
+        } else {
+            assert!(result.is_ok());
+        }
+    };
+
+    test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), true);
+    test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), true);
+    test_endpoint(
+        "icrc2_transfer_from",
+        Encode!(&transfer_from_args).unwrap(),
+        true,
+    );
+    test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), true);
+    test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), true);
+    test_endpoint("icrc1_total_supply", Encode!().unwrap(), true);
+    test_endpoint("archives", Encode!().unwrap(), true);
+    test_endpoint(
+        "get_transactions",
+        Encode!(&get_transactions_args).unwrap(),
+        true,
+    );
+    test_endpoint("get_blocks", Encode!(&get_transactions_args).unwrap(), true);
+    test_endpoint("get_data_certificate", Encode!().unwrap(), true);
+    test_endpoint(
+        "icrc3_get_archives",
+        Encode!(&get_archives_args).unwrap(),
+        true,
+    );
+    test_endpoint("icrc3_get_tip_certificate", Encode!().unwrap(), true);
+    test_endpoint("icrc3_get_blocks", Encode!(&blocks_req_vec).unwrap(), true);
+    test_endpoint(
+        "icrc21_canister_call_consent_message",
+        Encode!(&consent_msg_args).unwrap(),
+        true,
+    );
+
+    wait_ledger_ready(&env, canister_id, 10);
+
+    test_endpoint("icrc1_transfer", Encode!(&transfer_args).unwrap(), false);
+    test_endpoint("icrc2_approve", Encode!(&approve_args).unwrap(), false);
+    test_endpoint(
+        "icrc2_transfer_from",
+        Encode!(&transfer_from_args).unwrap(),
+        false,
+    );
+    test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), false);
+    test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), false);
+    test_endpoint("icrc1_total_supply", Encode!().unwrap(), false);
+    test_endpoint("archives", Encode!().unwrap(), false);
+    test_endpoint(
+        "get_transactions",
+        Encode!(&get_transactions_args).unwrap(),
+        false,
+    );
+    test_endpoint(
+        "get_blocks",
+        Encode!(&get_transactions_args).unwrap(),
+        false,
+    );
+    test_endpoint("get_data_certificate", Encode!().unwrap(), false);
+    test_endpoint(
+        "icrc3_get_archives",
+        Encode!(&get_archives_args).unwrap(),
+        false,
+    );
+    test_endpoint("icrc3_get_tip_certificate", Encode!().unwrap(), false);
+    test_endpoint("icrc3_get_blocks", Encode!(&blocks_req_vec).unwrap(), false);
+    test_endpoint(
+        "icrc21_canister_call_consent_message",
+        Encode!(&consent_msg_args).unwrap(),
+        false,
+    );
+}
+
+pub fn test_incomplete_migration<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let account = Account::from(PrincipalId::new_user_test_id(1).0);
+    let initial_balances = vec![(account, 100_000_000u64)];
+
+    // Setup ledger as it is deployed on the mainnet.
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet.clone(),
+        encode_init_args,
+        initial_balances,
+    );
+
+    const APPROVE_AMOUNT: u64 = 150_000;
+
+    const NUM_APPROVALS: u64 = 20;
+
+    let send_approvals = || {
+        for i in 2..2 + NUM_APPROVALS {
+            let spender = Account::from(PrincipalId::new_user_test_id(i).0);
+            let approve_args = default_approve_args(spender, APPROVE_AMOUNT);
+            send_approval(&env, canister_id, account.owner, &approve_args)
+                .expect("approval failed");
+        }
+    };
+
+    send_approvals();
+
+    let check_approvals = |expected_allowance: u64| {
+        for i in 2..2 + NUM_APPROVALS {
+            let allowance = get_allowance(
+                &env,
+                canister_id,
+                account,
+                Account::from(PrincipalId::new_user_test_id(i).0),
+            );
+            assert_eq!(allowance.allowance, Nat::from(expected_allowance));
+        }
+    };
+
+    check_approvals(APPROVE_AMOUNT);
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    // Downgrade to mainnet without waiting for the migration to complete.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
+    check_approvals(APPROVE_AMOUNT);
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
