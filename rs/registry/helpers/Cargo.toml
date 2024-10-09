@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-limits = { path = "../../limits" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-common-proto = { path = "../proto" }

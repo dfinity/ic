@@ -2,6 +2,7 @@ use crate::deserialize_registry_value;
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientResult, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
+use ic_limits::{INITIAL_NOTARY_DELAY, UNIT_DELAY_APP_SUBNET};
 use ic_protobuf::{
     registry::{
         node::v1::NodeRecord,
@@ -25,6 +26,15 @@ use std::{convert::TryFrom, time::Duration};
 pub struct NotarizationDelaySettings {
     pub unit_delay: Duration,
     pub initial_notary_delay: Duration,
+}
+
+impl Default for NotarizationDelaySettings {
+    fn default() -> Self {
+        Self {
+            initial_notary_delay: INITIAL_NOTARY_DELAY,
+            unit_delay: UNIT_DELAY_APP_SUBNET,
+        }
+    }
 }
 
 pub struct IngressMessageSettings {

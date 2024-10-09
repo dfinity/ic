@@ -201,14 +201,14 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(1000));
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time_source.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(1000));
         driver.step(); // this stops before notary timeout expires after making 3rd block
 
         // Make a few more batches past the summary.
         for _ in 0..=DKG_INTERVAL_LENGTH {
-            time_source.advance_time(Duration::from_millis(2000));
+            time_source.advance_time(Duration::from_millis(1000));
             driver.step();
         }
         let batches = router.batches.read().unwrap().clone();
