@@ -156,6 +156,17 @@ pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
+/// Helper function to test that cycles are reserved for both
+/// application and verified application subnets.
+///
+/// Expects a test function that takes a `SubnetType` as an argument
+/// so it can be tested over the desired subnet types.
+pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test: T) {
+    for subnet_type in vec![SubnetType::Application, SubnetType::VerifiedApplication] {
+        test(subnet_type);
+    }
+}
+
 /// A helper for execution tests.
 ///
 /// Example usage:
