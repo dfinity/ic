@@ -453,7 +453,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
     );
 
-    let _state = make_checkpoint(
+    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
         &state,
         HEIGHT,
         &tip_channel,
@@ -462,8 +462,8 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         lsmt_config_default().lsmt_status,
     )
-    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
-    .1;
+    .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err));
+    validate_checkpoint_and_remove_unverified_marker(&cp_layout, None).unwrap();
 
     // Sanity checks.
     assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);

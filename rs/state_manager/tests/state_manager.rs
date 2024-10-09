@@ -465,6 +465,38 @@ fn skipping_flushing_is_invisible_for_state() {
 }
 
 #[test]
+fn lazy_pagemaps() {
+    fn int_metric_by_name(name: &str, env: &StateMachine) -> i64 {
+        env.metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == name)
+            .map(|x| x.get_metric()[0].get_gauge().get_value())
+            .next()
+            .unwrap() as i64
+    }
+
+    let env = StateMachineBuilder::new()
+        .with_lsmt_override(Some(lsmt_with_sharding()))
+        .build();
+    env.set_checkpoints_enabled(true);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.tick();
+    assert_eq!(
+        int_metric_by_name("state_manager_page_maps_loaded", &env),
+        0
+    );
+    assert!(int_metric_by_name("state_manager_page_maps_not_loaded", &env) > 0);
+
+    env.execute_ingress(canister_id, "write_heap_64k", vec![])
+        .unwrap();
+    assert!(int_metric_by_name("state_manager_page_maps_loaded", &env) > 0);
+}
+
+#[test]
 fn rejoining_node_doesnt_accumulate_states() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
