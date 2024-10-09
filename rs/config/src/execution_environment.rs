@@ -23,12 +23,20 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// IC protocol requires storing copies of the canister state.
 const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(700 * GIB);
 
-/// This is the upper limit on how much memory can be used by all canister
-/// messages on a given subnet.
+/// This is the upper limit on how much memory can be used by all guaranteed
+/// response canister messages on a given subnet.
 ///
-/// Message memory usage is calculated as the total size of enqueued canister
-/// responses; plus the maximum allowed response size per queue reservation.
-const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
+/// Guaranteed response message memory usage is calculated as the total size of
+/// enqueued guaranteed responses; plus the maximum allowed response size per
+/// reserved guaranteed response slot.
+const SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
+
+/// The limit on how much memory may be used by all guaranteed response messages
+/// on a given subnet at the end of a round.
+///
+/// During the round, the best-effort message memory usage may exceed the limit,
+/// but the constraint is restored at the end of the round by shedding messages.
+const SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(5 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet message memory
@@ -169,9 +177,13 @@ pub struct Config {
     /// the subnet.
     pub subnet_memory_capacity: NumBytes,
 
-    /// The maximum amount of logical storage available to canister messages
-    /// across the whole subnet.
+    /// The maximum amount of logical storage available to guaranteed response
+    /// canister messages across the whole subnet.
     pub subnet_message_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to best-effort canister
+    /// messages across the whole subnet.
+    pub best_effort_message_memory_capacity: NumBytes,
 
     /// The maximum amount of logical storage available to the ingress history
     /// across the whole subnet.
@@ -309,7 +321,8 @@ impl Default for Config {
                 MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS,
             subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
-            subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
+            subnet_message_memory_capacity: SUBNET_GUARANTEED_RESPONSE_MESSAGE_MEMORY_CAPACITY,
+            best_effort_message_memory_capacity: SUBNET_BEST_EFFORT_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,

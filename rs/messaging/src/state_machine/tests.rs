@@ -156,6 +156,7 @@ fn state_machine_populates_network_topology() {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -190,6 +191,7 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         ));
@@ -290,6 +292,7 @@ fn test_batch_time_impl(
             fixture.scheduler,
             fixture.demux,
             fixture.stream_builder,
+            Default::default(),
             log,
             fixture.metrics,
         );
