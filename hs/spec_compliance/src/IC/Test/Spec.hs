@@ -2475,7 +2475,7 @@ icTests my_sub other_sub =
                                                                                                        "sender" =: GBlob defaultUser,
                                                                                                        "paths" =: GList [GList [GBlob "request_status", GBlob rid]]
                                                                                                      ]
-                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code400
+                                                                                               delegationEnv defaultSK dels sreq >>= postReadStateCBOR cid >>= void . code403
 
                                                                                              badQuery cid req dels = do
                                                                                                req <- addExpiry req
