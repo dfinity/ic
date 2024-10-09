@@ -254,5 +254,5 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
     )
     .unwrap();
     let err = ros.construction_submit(signed).await.unwrap().unwrap_err();
-    assert_ic_error(&err, 740, 403, "does not match the public key");
+    assert_ic_error(&err, 740, 400, "does not match the public key");
 }

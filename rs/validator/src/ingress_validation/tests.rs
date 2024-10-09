@@ -491,7 +491,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
     }
 
     #[test]
@@ -504,7 +504,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.contains("Specified ingress_expiry not within expected range"))
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod validate_ingress_expiry {
 
         let result = validate_ingress_expiry(&request, current_time);
 
-        assert_matches!(result, Err(InvalidIngressExpiry(msg)) if msg.ends_with("overflows"))
+        assert_matches!(result, Err(InvalidRequestExpiry(msg)) if msg.ends_with("overflows"))
     }
 
     #[test]
