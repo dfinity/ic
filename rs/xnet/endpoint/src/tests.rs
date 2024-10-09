@@ -71,15 +71,6 @@ impl Default for EndpointTestFixture {
     }
 }
 
-// Get a free port on this host to which we can connect transport to.
-pub fn get_free_localhost_socket_addr() -> SocketAddr {
-    let socket = tokio::net::TcpSocket::new_v4().unwrap();
-    socket.set_reuseport(false).unwrap();
-    socket.set_reuseaddr(false).unwrap();
-    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-    socket.local_addr().unwrap()
-}
-
 /// Tests the `/api/v1/streams` API endpoint.
 ///
 /// Heavyweight test that starts an `XNetEndpoint` and queries it over HTTP.
@@ -89,18 +80,12 @@ fn query_streams() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let fixture = EndpointTestFixture::with_replicated_state();
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
         let xnet_endpoint = XNetEndpoint::new(
             rt.handle().clone(),
             fixture.state_manager.clone(),
             fixture.tls_handshake.clone(),
             fixture.registry_client.clone(),
-            config,
+            Default::default(),
             &fixture.metrics,
             log,
         );
@@ -130,18 +115,12 @@ fn query_stream() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let fixture = EndpointTestFixture::with_replicated_state();
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
         let xnet_endpoint = XNetEndpoint::new(
             rt.handle().clone(),
             fixture.state_manager.clone(),
             fixture.tls_handshake.clone(),
             fixture.registry_client.clone(),
-            config,
+            Default::default(),
             &fixture.metrics,
             log,
         );
@@ -200,18 +179,12 @@ fn query_stream_parallel() {
             .write()
             .unwrap() = Barrier::new(XNetEndpoint::num_workers() + 1);
 
-        let addr = get_free_localhost_socket_addr();
-        let config = Config {
-            xnet_ip_addr: addr.ip().to_string(),
-            xnet_port: addr.port(),
-        };
-
         let xnet_endpoint = XNetEndpoint::new(
             endpoint_rt.handle().clone(),
             fixture.state_manager.clone(),
             fixture.tls_handshake.clone(),
             fixture.registry_client.clone(),
-            config,
+            Default::default(),
             &fixture.metrics,
             log,
         );
