@@ -1381,7 +1381,6 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                self.metrics.validation_random_beacon_shares_count.add(1);
                 let verification = self.verify_artifact(pool_reader, &beacon);
                 if verification.is_ok() && last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
@@ -1493,7 +1492,6 @@ impl Validator {
                     // Remove if we already have a validated tape at this height
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
-                    self.metrics.validation_random_tape_shares_count.add(1);
                     let verification = self.verify_artifact(pool_reader, &tape);
                     self.compute_action_from_artifact_verification(
                         pool_reader,
