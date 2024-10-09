@@ -95,26 +95,26 @@ impl AlgorithmId {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "ALGORITHM_ID_UNSPECIFIED",
-            Self::MultiBls12381 => "ALGORITHM_ID_MULTI_BLS12_381",
-            Self::ThresBls12381 => "ALGORITHM_ID_THRES_BLS12_381",
-            Self::SchnorrSecp256k1 => "ALGORITHM_ID_SCHNORR_SECP256K1",
-            Self::StaticDhSecp256k1 => "ALGORITHM_ID_STATIC_DH_SECP256K1",
-            Self::HashSha256 => "ALGORITHM_ID_HASH_SHA256",
-            Self::Tls => "ALGORITHM_ID_TLS",
-            Self::Ed25519 => "ALGORITHM_ID_ED25519",
-            Self::Secp256k1 => "ALGORITHM_ID_SECP256K1",
-            Self::Groth20Bls12381 => "ALGORITHM_ID_GROTH20_BLS12_381",
-            Self::NidkgGroth20Bls12381 => "ALGORITHM_ID_NIDKG_GROTH20_BLS12_381",
-            Self::EcdsaP256 => "ALGORITHM_ID_ECDSA_P256",
-            Self::EcdsaSecp256k1 => "ALGORITHM_ID_ECDSA_SECP_256K1",
-            Self::IcCanisterSignature => "ALGORITHM_ID_IC_CANISTER_SIGNATURE",
-            Self::RsaSha256 => "ALGORITHM_ID_RSA_SHA256",
-            Self::ThresholdEcdsaSecp256k1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1",
-            Self::MegaSecp256k1 => "ALGORITHM_ID_MEGA_SECP_256K1",
-            Self::ThresholdEcdsaSecp256r1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1",
-            Self::ThresholdSchnorrBip340 => "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340",
-            Self::ThresholdEd25519 => "ALGORITHM_ID_THRESHOLD_ED25519",
+            AlgorithmId::Unspecified => "ALGORITHM_ID_UNSPECIFIED",
+            AlgorithmId::MultiBls12381 => "ALGORITHM_ID_MULTI_BLS12_381",
+            AlgorithmId::ThresBls12381 => "ALGORITHM_ID_THRES_BLS12_381",
+            AlgorithmId::SchnorrSecp256k1 => "ALGORITHM_ID_SCHNORR_SECP256K1",
+            AlgorithmId::StaticDhSecp256k1 => "ALGORITHM_ID_STATIC_DH_SECP256K1",
+            AlgorithmId::HashSha256 => "ALGORITHM_ID_HASH_SHA256",
+            AlgorithmId::Tls => "ALGORITHM_ID_TLS",
+            AlgorithmId::Ed25519 => "ALGORITHM_ID_ED25519",
+            AlgorithmId::Secp256k1 => "ALGORITHM_ID_SECP256K1",
+            AlgorithmId::Groth20Bls12381 => "ALGORITHM_ID_GROTH20_BLS12_381",
+            AlgorithmId::NidkgGroth20Bls12381 => "ALGORITHM_ID_NIDKG_GROTH20_BLS12_381",
+            AlgorithmId::EcdsaP256 => "ALGORITHM_ID_ECDSA_P256",
+            AlgorithmId::EcdsaSecp256k1 => "ALGORITHM_ID_ECDSA_SECP_256K1",
+            AlgorithmId::IcCanisterSignature => "ALGORITHM_ID_IC_CANISTER_SIGNATURE",
+            AlgorithmId::RsaSha256 => "ALGORITHM_ID_RSA_SHA256",
+            AlgorithmId::ThresholdEcdsaSecp256k1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256K1",
+            AlgorithmId::MegaSecp256k1 => "ALGORITHM_ID_MEGA_SECP_256K1",
+            AlgorithmId::ThresholdEcdsaSecp256r1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1",
+            AlgorithmId::ThresholdSchnorrBip340 => "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340",
+            AlgorithmId::ThresholdEd25519 => "ALGORITHM_ID_THRESHOLD_ED25519",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -158,8 +158,8 @@ impl EcdsaCurve {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
-            Self::Secp256k1 => "ECDSA_CURVE_SECP256K1",
+            EcdsaCurve::Unspecified => "ECDSA_CURVE_UNSPECIFIED",
+            EcdsaCurve::Secp256k1 => "ECDSA_CURVE_SECP256K1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -186,9 +186,9 @@ impl SchnorrAlgorithm {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "SCHNORR_ALGORITHM_UNSPECIFIED",
-            Self::Bip340secp256k1 => "SCHNORR_ALGORITHM_BIP340SECP256K1",
-            Self::Ed25519 => "SCHNORR_ALGORITHM_ED25519",
+            SchnorrAlgorithm::Unspecified => "SCHNORR_ALGORITHM_UNSPECIFIED",
+            SchnorrAlgorithm::Bip340secp256k1 => "SCHNORR_ALGORITHM_BIP340SECP256K1",
+            SchnorrAlgorithm::Ed25519 => "SCHNORR_ALGORITHM_ED25519",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

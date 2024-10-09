@@ -383,12 +383,18 @@ impl IDkgTranscriptOperation {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED",
-            Self::Random => "I_DKG_TRANSCRIPT_OPERATION_RANDOM",
-            Self::ReshareOfMasked => "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED",
-            Self::ReshareOfUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED",
-            Self::UnmaskedTimesMasked => "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED",
-            Self::RandomUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED",
+            IDkgTranscriptOperation::Unspecified => "I_DKG_TRANSCRIPT_OPERATION_UNSPECIFIED",
+            IDkgTranscriptOperation::Random => "I_DKG_TRANSCRIPT_OPERATION_RANDOM",
+            IDkgTranscriptOperation::ReshareOfMasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_MASKED"
+            }
+            IDkgTranscriptOperation::ReshareOfUnmasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_RESHARE_OF_UNMASKED"
+            }
+            IDkgTranscriptOperation::UnmaskedTimesMasked => {
+                "I_DKG_TRANSCRIPT_OPERATION_UNMASKED_TIMES_MASKED"
+            }
+            IDkgTranscriptOperation::RandomUnmasked => "I_DKG_TRANSCRIPT_OPERATION_RANDOM_UNMASKED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -440,10 +446,10 @@ impl SubnetType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "SUBNET_TYPE_UNSPECIFIED",
-            Self::Application => "SUBNET_TYPE_APPLICATION",
-            Self::System => "SUBNET_TYPE_SYSTEM",
-            Self::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
+            SubnetType::Unspecified => "SUBNET_TYPE_UNSPECIFIED",
+            SubnetType::Application => "SUBNET_TYPE_APPLICATION",
+            SubnetType::System => "SUBNET_TYPE_SYSTEM",
+            SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

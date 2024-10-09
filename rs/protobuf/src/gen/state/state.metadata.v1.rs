@@ -500,10 +500,10 @@ impl HttpMethod {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "HTTP_METHOD_UNSPECIFIED",
-            Self::Get => "HTTP_METHOD_GET",
-            Self::Post => "HTTP_METHOD_POST",
-            Self::Head => "HTTP_METHOD_HEAD",
+            HttpMethod::Unspecified => "HTTP_METHOD_UNSPECIFIED",
+            HttpMethod::Get => "HTTP_METHOD_GET",
+            HttpMethod::Post => "HTTP_METHOD_POST",
+            HttpMethod::Head => "HTTP_METHOD_HEAD",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

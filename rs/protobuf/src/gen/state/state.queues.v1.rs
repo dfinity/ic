@@ -267,10 +267,10 @@ pub mod canister_queues {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Self::Unspecified => "NEXT_INPUT_QUEUE_UNSPECIFIED",
-                Self::LocalSubnet => "NEXT_INPUT_QUEUE_LOCAL_SUBNET",
-                Self::Ingress => "NEXT_INPUT_QUEUE_INGRESS",
-                Self::RemoteSubnet => "NEXT_INPUT_QUEUE_REMOTE_SUBNET",
+                NextInputQueue::Unspecified => "NEXT_INPUT_QUEUE_UNSPECIFIED",
+                NextInputQueue::LocalSubnet => "NEXT_INPUT_QUEUE_LOCAL_SUBNET",
+                NextInputQueue::Ingress => "NEXT_INPUT_QUEUE_INGRESS",
+                NextInputQueue::RemoteSubnet => "NEXT_INPUT_QUEUE_REMOTE_SUBNET",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -304,14 +304,14 @@ impl RejectReason {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "REJECT_REASON_UNSPECIFIED",
-            Self::CanisterMigrating => "REJECT_REASON_CANISTER_MIGRATING",
-            Self::CanisterNotFound => "REJECT_REASON_CANISTER_NOT_FOUND",
-            Self::CanisterStopped => "REJECT_REASON_CANISTER_STOPPED",
-            Self::CanisterStopping => "REJECT_REASON_CANISTER_STOPPING",
-            Self::QueueFull => "REJECT_REASON_QUEUE_FULL",
-            Self::OutOfMemory => "REJECT_REASON_OUT_OF_MEMORY",
-            Self::Unknown => "REJECT_REASON_UNKNOWN",
+            RejectReason::Unspecified => "REJECT_REASON_UNSPECIFIED",
+            RejectReason::CanisterMigrating => "REJECT_REASON_CANISTER_MIGRATING",
+            RejectReason::CanisterNotFound => "REJECT_REASON_CANISTER_NOT_FOUND",
+            RejectReason::CanisterStopped => "REJECT_REASON_CANISTER_STOPPED",
+            RejectReason::CanisterStopping => "REJECT_REASON_CANISTER_STOPPING",
+            RejectReason::QueueFull => "REJECT_REASON_QUEUE_FULL",
+            RejectReason::OutOfMemory => "REJECT_REASON_OUT_OF_MEMORY",
+            RejectReason::Unknown => "REJECT_REASON_UNKNOWN",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.

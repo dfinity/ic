@@ -82,8 +82,8 @@ pub mod registry_stable_storage {
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
             match self {
-                Self::Unspecified => "VERSION_UNSPECIFIED",
-                Self::Version1 => "VERSION_1",
+                Version::Unspecified => "VERSION_UNSPECIFIED",
+                Version::Version1 => "VERSION_1",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.

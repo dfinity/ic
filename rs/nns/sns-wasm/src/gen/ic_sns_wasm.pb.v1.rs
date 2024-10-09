@@ -662,13 +662,13 @@ impl SnsCanisterType {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            Self::Unspecified => "SNS_CANISTER_TYPE_UNSPECIFIED",
-            Self::Root => "SNS_CANISTER_TYPE_ROOT",
-            Self::Governance => "SNS_CANISTER_TYPE_GOVERNANCE",
-            Self::Ledger => "SNS_CANISTER_TYPE_LEDGER",
-            Self::Swap => "SNS_CANISTER_TYPE_SWAP",
-            Self::Archive => "SNS_CANISTER_TYPE_ARCHIVE",
-            Self::Index => "SNS_CANISTER_TYPE_INDEX",
+            SnsCanisterType::Unspecified => "SNS_CANISTER_TYPE_UNSPECIFIED",
+            SnsCanisterType::Root => "SNS_CANISTER_TYPE_ROOT",
+            SnsCanisterType::Governance => "SNS_CANISTER_TYPE_GOVERNANCE",
+            SnsCanisterType::Ledger => "SNS_CANISTER_TYPE_LEDGER",
+            SnsCanisterType::Swap => "SNS_CANISTER_TYPE_SWAP",
+            SnsCanisterType::Archive => "SNS_CANISTER_TYPE_ARCHIVE",
+            SnsCanisterType::Index => "SNS_CANISTER_TYPE_INDEX",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
