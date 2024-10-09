@@ -146,7 +146,7 @@ fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
 async fn test_mock_env() {
     // Test cycle mock functions
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = Provider::new_with_default(env.btc_network());
+    let provider = providers::next_provider(env.btc_network());
     assert_eq!(
         env.cycles_accept(CHECK_TRANSACTION_CYCLES_SERVICE_FEE),
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE
@@ -222,7 +222,7 @@ fn test_try_fetch_tx() {
 #[tokio::test]
 async fn test_fetch_tx() {
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    let provider = Provider::new_with_default(env.btc_network());
+    let provider = providers::next_provider(env.btc_network());
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);

@@ -3,7 +3,7 @@ use crate::types::{
     CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
     CheckTransactionStatus,
 };
-use crate::{blocklist_contains, providers::Provider, state, BtcNetwork};
+use crate::{blocklist_contains, providers, state, BtcNetwork};
 use bitcoin::{address::FromScriptError, Address, Transaction};
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -61,7 +61,7 @@ pub trait FetchEnv {
 
     async fn http_get_tx(
         &self,
-        provider: Provider,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
@@ -77,18 +77,18 @@ pub trait FetchEnv {
         &self,
         txid: Txid,
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let default_provider = Provider::new_with_default(self.btc_network());
+        let provider = providers::next_provider(self.btc_network());
         let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
-            None => (default_provider, INITIAL_MAX_RESPONSE_BYTES),
+            None => (provider, INITIAL_MAX_RESPONSE_BYTES),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => (default_provider, max_response_bytes),
+            }) => (provider, max_response_bytes),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
             Some(FetchTxStatus::Error(err)) => {
                 if err.is_retriable() {
                     (
                         err.get_provider()
-                            .map_or(default_provider, |provider| provider.next()),
+                            .map_or(provider, |provider| provider.next()),
                         INITIAL_MAX_RESPONSE_BYTES,
                     )
                 } else {
@@ -121,7 +121,7 @@ pub trait FetchEnv {
     async fn fetch_tx(
         &self,
         _guard: Self::FetchGuard,
-        provider: Provider,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {

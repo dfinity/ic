@@ -3,7 +3,28 @@ use ic_btc_interface::Txid;
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext, TransformFunc,
 };
+use std::cell::RefCell;
 use std::fmt;
+
+/// Return the next bitcoin API provider for the given `btc_network`.
+///
+/// Internally it remembers the previously used provider in a thread local
+/// state and would iterate through all providers in a round-robin manner.
+pub fn next_provider(btc_network: BtcNetwork) -> Provider {
+    PREVIOUS_PROVIDER_ID.with(|previous| {
+        let provider = (Provider {
+            btc_network,
+            provider_id: *previous.borrow(),
+        })
+        .next();
+        *previous.borrow_mut() = provider.provider_id;
+        provider
+    })
+}
+
+thread_local! {
+    static PREVIOUS_PROVIDER_ID: RefCell<ProviderId> = const { RefCell::new(ProviderId::BtcScan) };
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ProviderId {
@@ -29,18 +50,6 @@ pub struct Provider {
 }
 
 impl Provider {
-    // Return the default provider for the given bitcoin network.
-    pub fn new_with_default(btc_network: BtcNetwork) -> Self {
-        let provider_id = match btc_network {
-            BtcNetwork::Mainnet => ProviderId::BtcScan,
-            BtcNetwork::Testnet => ProviderId::MempoolSpace,
-        };
-        Self {
-            btc_network,
-            provider_id,
-        }
-    }
-
     // Return the next provider by cycling through all available providers.
     pub fn next(&self) -> Self {
         let btc_network = self.btc_network;
