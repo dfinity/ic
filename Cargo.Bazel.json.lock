@@ -1,5 +1,5 @@
 {
-  "checksum": "0b3ea17c968956a9bf172b31f0d4f15bc9347326fecb83b91781451bc74f5308",
+  "checksum": "00da963ee861be62212b6e124369bd15335768840d00bad39144ba8cdef979d1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18350,6 +18350,10 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
+            },
+            {
+              "id": "secp256k1 0.22.2",
+              "target": "secp256k1"
             },
             {
               "id": "semver 1.0.22",
@@ -57465,6 +57469,8 @@
         ],
         "crate_features": {
           "common": [
+            "default",
+            "global-context",
             "rand",
             "rand-std",
             "recovery",
@@ -79506,6 +79512,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "secp256k1 0.22.2",
     "semver 1.0.22",
     "serde 1.0.203",
     "serde-bytes-repr 0.1.5",
