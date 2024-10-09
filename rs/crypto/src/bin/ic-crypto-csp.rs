@@ -22,7 +22,7 @@ const IC_CRYPTO_CSP_SOCKET_FILENAME: &str = "ic-crypto-csp.socket";
 )]
 struct Opts {
     /// Sets the replica configuration file
-    #[clap(long = "replica-config-file", parse(from_os_str))]
+    #[clap(long = "replica-config-file")]
     config: PathBuf,
 }
 

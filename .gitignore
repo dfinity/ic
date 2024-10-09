@@ -106,11 +106,6 @@ artifacts
 **/bin/state-tool
 **/bin/vsock_agent
 **/bin/sandbox_launcher
-**/bin/boundary-node-prober
-**/bin/ic-balance-exporter
-
-# Boundary node prober binary
-boundary-node-prober
 
 # Python pip file
 *Pipfile*
