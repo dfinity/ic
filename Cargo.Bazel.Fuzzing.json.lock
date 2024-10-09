@@ -1,5 +1,5 @@
 {
-  "checksum": "cdb449bd5fd2cc1f9625a2d8be8ff122c443aa3ad22a99eee590c03cd7b620b0",
+  "checksum": "d84a127c29d85a69368edc25cd93bc8bbd9efb5e14d5ef7849145143161f35b2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4101,7 +4101,7 @@
               "target": "log"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types"
             },
             {
@@ -8593,6 +8593,69 @@
         "MIT"
       ],
       "license_file": "LICENSE"
+    },
+    "brotli 7.0.0": {
+      "name": "brotli",
+      "version": "7.0.0",
+      "package_url": "https://github.com/dropbox/rust-brotli",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/brotli/7.0.0/download",
+          "sha256": "cc97b8f16f944bba54f0433f07e30be199b6dc2bd25937444bbad560bcea29bd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "brotli",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "brotli",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc-stdlib",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "alloc-no-stdlib 2.0.4",
+              "target": "alloc_no_stdlib"
+            },
+            {
+              "id": "alloc-stdlib 0.2.2",
+              "target": "alloc_stdlib"
+            },
+            {
+              "id": "brotli-decompressor 4.0.1",
+              "target": "brotli_decompressor"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "7.0.0"
+      },
+      "license": "BSD-3-Clause AND MIT",
+      "license_ids": [
+        "BSD-3-Clause",
+        "MIT"
+      ],
+      "license_file": "LICENSE.BSD-3-Clause"
     },
     "brotli-decompressor 2.5.0": {
       "name": "brotli-decompressor",
@@ -17976,7 +18039,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -18016,7 +18079,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.13.5",
+              "id": "ic-cdk 0.16.0",
               "target": "ic_cdk"
             },
             {
@@ -18515,16 +18578,12 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
               "id": "rustls-pemfile 2.1.2",
               "target": "rustls_pemfile"
-            },
-            {
-              "id": "rustls-pki-types 1.7.0",
-              "target": "rustls_pki_types"
             },
             {
               "id": "rusty-fork 0.3.0",
@@ -18549,10 +18608,6 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
-            },
-            {
-              "id": "secp256k1 0.22.2",
-              "target": "secp256k1"
             },
             {
               "id": "semver 1.0.22",
@@ -23647,11 +23702,11 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -27432,7 +27487,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -27562,14 +27617,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper-rustls 0.27.2": {
+    "hyper-rustls 0.27.3": {
       "name": "hyper-rustls",
-      "version": "0.27.2",
+      "version": "0.27.3",
       "package_url": "https://github.com/rustls/hyper-rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-rustls/0.27.2/download",
-          "sha256": "5ee4be2c948921a1a5320b629c4193916ed787a7f7f293fd3f7f5a6c9de74155"
+          "url": "https://static.crates.io/crates/hyper-rustls/0.27.3/download",
+          "sha256": "08afdbb5c31130e3034af566421053ab03787c640246a446327f550d11bcb333"
         }
       },
       "targets": [
@@ -27756,15 +27811,15 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.7.0",
+              "id": "rustls-native-certs 0.8.0",
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -27788,7 +27843,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.2"
+        "version": "0.27.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -28436,7 +28491,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -28444,7 +28499,7 @@
                 "target": "hyper_util"
               },
               {
-                "id": "rustls-webpki 0.102.6",
+                "id": "rustls-webpki 0.102.8",
                 "target": "webpki"
               },
               {
@@ -28614,7 +28669,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
@@ -29215,6 +29270,74 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-cdk 0.16.0": {
+      "name": "ic-cdk",
+      "version": "0.16.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.16.0/download",
+          "sha256": "dd8ecacd682fa05a985253592963306cb9799622d7b1cce4b1edb89c6ec85be1"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.23.0",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.16.0",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.16.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "ic-cdk-macros 0.8.4": {
       "name": "ic-cdk-macros",
       "version": "0.8.4",
@@ -29476,6 +29599,73 @@
         },
         "edition": "2021",
         "version": "0.14.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-cdk-macros 0.16.0": {
+      "name": "ic-cdk-macros",
+      "version": "0.16.0",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.16.0/download",
+          "sha256": "0d4d857135deef20cc7ea8f3869a30cd9cfeb1392b3a81043790b2cd82adc3e0"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ic_cdk_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.6",
+              "target": "candid"
+            },
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "serde 1.0.203",
+              "target": "serde"
+            },
+            {
+              "id": "serde_tokenstream 0.2.1",
+              "target": "serde_tokenstream"
+            },
+            {
+              "id": "syn 2.0.66",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.16.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -33118,7 +33308,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -33130,7 +33320,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types"
             },
             {
@@ -34607,7 +34797,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-rustls 0.27.2",
+              "id": "hyper-rustls 0.27.3",
               "target": "hyper_rustls"
             },
             {
@@ -34635,7 +34825,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
@@ -50272,7 +50462,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
@@ -50360,7 +50550,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
@@ -52030,7 +52220,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -53209,7 +53399,7 @@
                 "target": "hyper"
               },
               {
-                "id": "hyper-rustls 0.27.2",
+                "id": "hyper-rustls 0.27.3",
                 "target": "hyper_rustls"
               },
               {
@@ -53241,7 +53431,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.23.12",
+                "id": "rustls 0.23.14",
                 "target": "rustls"
               },
               {
@@ -53253,7 +53443,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "rustls-pki-types 1.7.0",
+                "id": "rustls-pki-types 1.9.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -55524,12 +55714,12 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.6",
+              "id": "rustls-webpki 0.102.8",
               "target": "webpki"
             },
             {
@@ -55568,14 +55758,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.12": {
+    "rustls 0.23.14": {
       "name": "rustls",
-      "version": "0.23.12",
+      "version": "0.23.14",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.12/download",
-          "sha256": "c58f8c84392efc0a126acce10fa59ff7b3d2ac06ab451a33f2741989b806b044"
+          "url": "https://static.crates.io/crates/rustls/0.23.14/download",
+          "sha256": "415d9944693cb90382053259f89fbb077ea730ad7273047ec63b19bc9b160ba8"
         }
       },
       "targets": [
@@ -55623,7 +55813,7 @@
         "deps": {
           "common": [
             {
-              "id": "brotli 6.0.0",
+              "id": "brotli 7.0.0",
               "target": "brotli"
             },
             {
@@ -55643,16 +55833,16 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
             {
-              "id": "rustls-webpki 0.102.6",
+              "id": "rustls-webpki 0.102.8",
               "target": "webpki"
             },
             {
@@ -55667,7 +55857,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.12"
+        "version": "0.23.14"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -55923,7 +56113,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -55951,6 +56141,79 @@
         },
         "edition": "2021",
         "version": "0.7.0"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "ISC",
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "rustls-native-certs 0.8.0": {
+      "name": "rustls-native-certs",
+      "version": "0.8.0",
+      "package_url": "https://github.com/rustls/rustls-native-certs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls-native-certs/0.8.0/download",
+          "sha256": "fcaf18a4f2be7326cd874a5fa579fae794320a0f388d365dca7e480e55f83f8a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_native_certs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rustls_native_certs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustls-pemfile 2.1.2",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-pki-types 1.9.0",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {
+            "cfg(all(unix, not(target_os = \"macos\")))": [
+              {
+                "id": "openssl-probe 0.1.5",
+                "target": "openssl_probe"
+              }
+            ],
+            "cfg(target_os = \"macos\")": [
+              {
+                "id": "security-framework 2.9.2",
+                "target": "security_framework"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "schannel 0.1.22",
+                "target": "schannel"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.8.0"
       },
       "license": "Apache-2.0 OR ISC OR MIT",
       "license_ids": [
@@ -56052,7 +56315,7 @@
               "target": "base64"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -56070,14 +56333,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pki-types 1.7.0": {
+    "rustls-pki-types 1.9.0": {
       "name": "rustls-pki-types",
-      "version": "1.7.0",
+      "version": "1.9.0",
       "package_url": "https://github.com/rustls/pki-types",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.7.0/download",
-          "sha256": "976295e77ce332211c0d24d92c0e83e50f5c5f046d11082cea19f3df13a3562d"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.9.0/download",
+          "sha256": "0e696e35370c65c9c541198af4543ccd580cf17fc25d8e05c5a242b202488c55"
         }
       },
       "targets": [
@@ -56108,7 +56371,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.7.0"
+        "version": "1.9.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -56176,14 +56439,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-webpki 0.102.6": {
+    "rustls-webpki 0.102.8": {
       "name": "rustls-webpki",
-      "version": "0.102.6",
+      "version": "0.102.8",
       "package_url": "https://github.com/rustls/webpki",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-webpki/0.102.6/download",
-          "sha256": "8e6b52d4fda176fd835fdc55a835d4a89b8499cad995885a21149d5ad62f852e"
+          "url": "https://static.crates.io/crates/rustls-webpki/0.102.8/download",
+          "sha256": "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
         }
       },
       "targets": [
@@ -56317,7 +56580,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -56329,7 +56592,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.102.6"
+        "version": "0.102.8"
       },
       "license": "ISC",
       "license_ids": [
@@ -57366,8 +57629,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
-            "global-context",
             "rand",
             "rand-std",
             "recovery",
@@ -66289,7 +66550,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -66350,11 +66611,11 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.12",
+              "id": "rustls 0.23.14",
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -73563,7 +73824,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.7.0",
+              "id": "rustls-pki-types 1.9.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -79186,7 +79447,7 @@
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
     "hyper 1.4.1",
-    "hyper-rustls 0.27.2",
+    "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.7",
     "ic-agent 0.37.1",
@@ -79196,7 +79457,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.0.1",
     "ic-cbor 2.6.0",
-    "ic-cdk 0.13.5",
+    "ic-cdk 0.16.0",
     "ic-cdk-macros 0.9.0",
     "ic-cdk-timers 0.7.0",
     "ic-certificate-verification 2.6.0",
@@ -79326,9 +79587,8 @@
     "rust_decimal_macros 1.32.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.12",
+    "rustls 0.23.14",
     "rustls-pemfile 2.1.2",
-    "rustls-pki-types 1.7.0",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
     "schemars 0.8.16",
@@ -79336,7 +79596,6 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
-    "secp256k1 0.22.2",
     "semver 1.0.22",
     "serde 1.0.203",
     "serde-bytes-repr 0.1.5",

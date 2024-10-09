@@ -10,6 +10,7 @@ candid = { workspace = true }
 serde = { workspace = true }
 tla_instrumentation_proc_macros = { path = "../tla_instrumentation_proc_macros" }
 sha2 = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 tokio-test = "0.4.4"

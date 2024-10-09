@@ -1,4 +1,3 @@
-use crate::pb::v1::Params;
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     environment::CanisterEnvironment,
@@ -20,7 +19,7 @@ use crate::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NeuronBasketConstructionParameters, NeuronId as SwapNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, NotifyPaymentFailureResponse, Participant,
+        NewSaleTicketResponse, NotifyPaymentFailureResponse, Params, Participant,
         RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
         SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
@@ -28,9 +27,9 @@ use crate::{
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_cdk::api::call::RejectionCode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
@@ -38,17 +37,16 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
-use ic_sns_governance::pb::v1::claim_swap_neurons_request::{
-    neuron_recipe, NeuronRecipe, NeuronRecipes,
-};
-use ic_sns_governance::pb::v1::NeuronIds;
 use ic_sns_governance::pb::v1::{
+    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
     governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    SetMode, SetModeResponse,
+    NeuronIds, SetMode, SetModeResponse,
 };
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::{storable::Blob, GrowFailed, Storable};
+use ic_stable_structures::{
+    storable::{Blob, Bound},
+    GrowFailed, Storable,
+};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
@@ -106,6 +104,15 @@ pub const CLAIM_SWAP_NEURONS_BATCH_SIZE: usize = 500;
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
         Self { code, description }
+    }
+}
+
+impl From<(RejectionCode, String)> for CanisterCallError {
+    fn from(value: (RejectionCode, String)) -> Self {
+        Self {
+            code: Some(value.0 as i32),
+            description: value.1,
+        }
     }
 }
 
@@ -1012,7 +1019,7 @@ impl Swap {
         const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
 
         self.try_purge_old_tickets(
-            dfn_core::api::time_nanos,
+            ic_cdk::api::time,
             NUMBER_OF_TICKETS_THRESHOLD,
             TWO_DAYS_IN_NANOSECONDS,
             MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
@@ -3818,11 +3825,13 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{
-        new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
-        Params,
+    use crate::{
+        pb::v1::{
+            new_sale_ticket_response::Ok, CfNeuron, CfParticipant,
+            NeuronBasketConstructionParameters, Params,
+        },
+        swap_builder::SwapBuilder,
     };
-    use crate::swap_builder::SwapBuilder;
     use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
