@@ -5319,16 +5319,6 @@ fn test_is_next_method_added_to_task_queue() {
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
-    // Add a mock task, to know if new tasks are added
-    // at the front or back of the queue.
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(1),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
-
     while test
         .canister_state_mut(canister)
         .get_next_scheduled_method()
