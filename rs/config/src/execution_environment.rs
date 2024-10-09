@@ -59,7 +59,7 @@ pub const STOP_CANISTER_TIMEOUT_DURATION: Duration = Duration::from_secs(5 * 60)
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(80 * GIB);
 
 /// The maximum number of instructions for inspect_message calls.
 const MAX_INSTRUCTIONS_FOR_MESSAGE_ACCEPTANCE_CALLS: NumInstructions =

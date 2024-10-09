@@ -57,7 +57,7 @@ use ic_replicated_state::{
 };
 use ic_types::ExecutionRound;
 
-const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
