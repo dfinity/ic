@@ -5,7 +5,7 @@ mod ecdsa_sign_share {
     use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalarBytes,
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,

@@ -8,7 +8,7 @@ mod index_and_dealing_of_dealer {
     use crate::sign::tests::REG_V1;
     use assert_matches::assert_matches;
     use ic_base_types::{PrincipalId, SubnetId};
-    use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgDealingInternal;
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_test_utils::set_of;
     use ic_types::crypto::canister_threshold_sig::idkg::{

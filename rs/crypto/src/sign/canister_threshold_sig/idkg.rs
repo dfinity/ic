@@ -189,14 +189,14 @@ pub use utils::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError
 ///     * `P(x) = P(d) * (d'-x)/(d'-d) + P(d') * (d-x)/(d-d')` and so
 ///     * `P(0) = P(d) * d'/(d'-d) + P(d') * d/(d-d')`
 ///
-/// [`hash2curve`]: ic_crypto_internal_threshold_sig_ecdsa
+/// [`hash2curve`]: ic_crypto_internal_threshold_sig_canister_threshold_sig
 /// [`IDkgTranscriptOperation::Random`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::Random
 /// [`IDkgTranscriptOperation::ReshareOfMasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfMasked
-/// [`MEGaCiphertextPair::encrypt`]: ic_crypto_internal_threshold_sig_ecdsa::MEGaCiphertextPair::encrypt
-/// [`PedersenCommitment`]: ic_crypto_internal_threshold_sig_ecdsa::PedersenCommitment
-/// [`ProofOfDLogEquivalence`]: ic_crypto_internal_threshold_sig_ecdsa::zk::ProofOfDLogEquivalence
-/// [`ProofOfEqualOpenings`]: ic_crypto_internal_threshold_sig_ecdsa::zk::ProofOfEqualOpenings
-/// [`SimpleCommitment`]: ic_crypto_internal_threshold_sig_ecdsa::SimpleCommitment
+/// [`MEGaCiphertextPair::encrypt`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::MEGaCiphertextPair::encrypt
+/// [`PedersenCommitment`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::PedersenCommitment
+/// [`ProofOfDLogEquivalence`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::zk::ProofOfDLogEquivalence
+/// [`ProofOfEqualOpenings`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::zk::ProofOfEqualOpenings
+/// [`SimpleCommitment`]: ic_crypto_internal_threshold_sig_canister_threshold_sig::SimpleCommitment
 /// [`xmd`]: ic_crypto_internal_seed::xmd
 impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
     fn create_dealing(

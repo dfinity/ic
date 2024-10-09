@@ -5,7 +5,7 @@ use ic_crypto_internal_multi_sig_bls12381::types::{PopBytes, PublicKeyBytes};
 use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
 use ic_crypto_internal_test_vectors::unhex::hex_to_48_bytes;
 use ic_crypto_internal_test_vectors::unhex::hex_to_96_bytes;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
 
 pub struct MultiBlsTestVector {
     pub seed: u64,

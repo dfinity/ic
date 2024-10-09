@@ -5,7 +5,7 @@ use ic_crypto::CryptoComponentImpl;
 use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_ecdsa::test_utils::ComplaintCorrupter;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::test_utils::ComplaintCorrupter;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, copy_dealing_in_transcript,

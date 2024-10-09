@@ -7,7 +7,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 };
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     create_transcript as idkg_create_transcript,
     verify_dealing_opening as idkg_verify_dealing_opening,
     verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
