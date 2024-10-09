@@ -23,12 +23,15 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-    dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+use crate::{
+    bouncer_metrics::BouncerMetrics,
+    consensus::{
+        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
+        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
+        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+        share_aggregator::ShareAggregator, validator::Validator,
+    },
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
@@ -586,18 +589,27 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
+    metrics: BouncerMetrics,
 }
 
 impl ConsensusBouncer {
     /// Create a new [ConsensusBouncer].
-    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
-        ConsensusBouncer { message_routing }
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing: Arc<dyn MessageRouting>,
+    ) -> Self {
+        ConsensusBouncer {
+            metrics: BouncerMetrics::new(metrics_registry, "consensus_pool"),
+            message_routing,
+        }
     }
 }
 
 impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusBouncer {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 

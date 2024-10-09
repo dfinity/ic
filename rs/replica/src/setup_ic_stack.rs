@@ -32,13 +32,10 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch, OnceCell,
@@ -48,28 +45,8 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// The subnets that should not serve synchronous responses to v3 update calls.
-/// The list contains all system subnets.
-const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 4] = [
-    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
-    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe",
-    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
-];
-
-/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
-/// update calls.
-fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
-    let subnet_is_in_disabled_list =
-        SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3
-            .iter()
-            .any(|s| match PrincipalId::from_str(s) {
-                Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
-                Err(_) => false,
-            });
-
-    !subnet_is_in_disabled_list
-}
+/// True if the node should serve synchronous responses to v3 update calls.
+const ENABLE_SYNCHRONOUS_CALL_V3: bool = false;
 
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
@@ -377,7 +354,7 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        enable_synchronous_call_handler_for_v3_endpoint(&subnet_id),
+        ENABLE_SYNCHRONOUS_CALL_V3,
     );
 
     Ok((

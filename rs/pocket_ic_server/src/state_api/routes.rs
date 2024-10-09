@@ -192,6 +192,8 @@ where
         //
         // The instance dashboard
         .api_route("/:id/_/dashboard", get(handler_dashboard))
+        // The topology to be retrieved via an HTTP gateway that cannot route `/read/topology`.
+        .api_route("/:id/_/topology", get(handler_topology))
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.

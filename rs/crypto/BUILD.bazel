@@ -39,7 +39,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:bincode",
-    "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:parking_lot",
     "@crate_index//:rustls",
