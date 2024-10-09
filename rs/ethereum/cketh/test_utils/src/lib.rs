@@ -22,6 +22,7 @@ use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
+use pocket_ic::common::rest::{CanisterHttpReject, CanisterHttpResponse, MockCanisterHttpResponse};
 use pocket_ic::{PocketIc, PocketIcBuilder, UserError, WasmResult};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -537,23 +538,22 @@ impl CkEthSetup {
             .expect("failed to stop minter");
     }
 
-    // pub fn stop_ongoing_https_outcalls(&self) {
-    //     let server_error_response = CanisterHttpResponsePayload {
-    //         status: 500_u128,
-    //         headers: vec![],
-    //         body: vec![],
-    //     };
-    //     let ongoing_https_outcalls: Vec<_> = self
-    //         .env
-    //         .canister_http_request_contexts()
-    //         .into_keys()
-    //         .collect();
-    //     let mut payload = PayloadBuilder::new();
-    //     for callback_id in ongoing_https_outcalls {
-    //         payload = payload.http_response(callback_id, &server_error_response);
-    //     }
-    //     self.env.execute_payload(payload);
-    // }
+    pub fn reject_current_https_outcalls(&self) {
+        for request in self.env.get_canister_http() {
+            self.env
+                .mock_canister_http_response(MockCanisterHttpResponse {
+                    subnet_id: request.subnet_id,
+                    request_id: request.request_id,
+                    response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
+                        reject_code: 2, //RejectCode::SysTransient
+                        message: "Canister http request timed out".to_string(),
+                    }),
+                    additional_responses: vec![],
+                });
+        }
+        self.env.tick();
+        self.env.tick();
+    }
 
     pub fn start_minter(&self) {
         self.env

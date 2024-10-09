@@ -1,8 +1,4 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
-use candid::{Decode, Encode};
-use ic_cdk::api::management_canister::http_request::{
-    HttpResponse as OutCallHttpResponse, TransformArgs,
-};
+use crate::{CkEthSetup, MAX_TICKS};
 use pocket_ic::common::rest::{
     CanisterHttpMethod, CanisterHttpReply, CanisterHttpRequest, CanisterHttpResponse,
     MockCanisterHttpResponse,
@@ -224,73 +220,6 @@ impl StubOnce {
             "id": request_id,
         }))
         .unwrap();
-
-        // if let Some(max_response_bytes) = request.max_response_bytes {
-        //     if (response_body.len() as u64) > max_response_bytes.get() {
-        //         let mut payload = PayloadBuilder::new();
-        //         payload = payload.http_response_failure(
-        //             id,
-        //             RejectCode::SysFatal,
-        //             format!(
-        //                 "Http body exceeds size limit of {} bytes.",
-        //                 max_response_bytes
-        //             ),
-        //         );
-        //         env.execute_payload(payload);
-        //         return;
-        //     }
-        // }
-        //
-        // let clean_up_context = match context.transform.clone() {
-        //     Some(transform) => transform.context,
-        //     None => vec![],
-        // };
-        // let transform_arg = TransformArgs {
-        //     response: OutCallHttpResponse {
-        //         status: 200_u8.into(),
-        //         headers: vec![],
-        //         body: response_body,
-        //     },
-        //     context: clean_up_context.to_vec(),
-        // };
-        // let canister_id_cleanup_response = context.request.sender;
-        // let clean_up_response = Decode!(
-        //     &assert_reply(
-        //         env.execute_ingress(
-        //             canister_id_cleanup_response,
-        //             "cleanup_response",
-        //             Encode!(&transform_arg).unwrap(),
-        //         )
-        //         .expect("failed to query transform http response")
-        //     ),
-        //     OutCallHttpResponse
-        // )
-        // .unwrap();
-        //
-        // if let Some(max_response_bytes) = context.max_response_bytes {
-        //     if (clean_up_response.body.len() as u64) > max_response_bytes.get() {
-        //         let mut payload = PayloadBuilder::new();
-        //         payload = payload.http_response_failure(
-        //             id,
-        //             RejectCode::SysFatal,
-        //             format!(
-        //                 "Http body exceeds size limit of {} bytes.",
-        //                 max_response_bytes
-        //             ),
-        //         );
-        //         env.execute_payload(payload);
-        //         return;
-        //     }
-        // }
-        //
-        // let http_response = CanisterHttpResponsePayload {
-        //     status: 200_u128,
-        //     headers: vec![],
-        //     body: clean_up_response.body,
-        // };
-        // let mut payload = PayloadBuilder::new();
-        // payload = payload.http_response(id, &http_response);
-        // env.execute_payload(payload);
 
         println!("JSON RPC mock response {:?}", json_rpc_request);
         println!("Matcher {:?}", self.matcher);

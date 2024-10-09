@@ -28,7 +28,9 @@ use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use num_traits::ToPrimitive;
-use pocket_ic::common::rest::RawMessageId;
+use pocket_ic::common::rest::{
+    CanisterHttpReject, CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
+};
 use pocket_ic::PocketIc;
 use serde_json::json;
 use std::convert::identity;
@@ -159,30 +161,9 @@ impl DepositFlow {
     }
 
     fn handle_deposit_until_block(&mut self, block_number: u64) {
-        println!(
-            "Time before advancing clock {:?}",
-            self.setup.env.get_time()
-        );
-        println!(
-            "HTTP requests before advancing time {:?}",
-            self.setup.env.get_canister_http()
-        );
-        self.setup.env.advance_time(Duration::from_secs(60));
-        self.setup.env.tick();
-        self.setup.env.tick();
-        println!(
-            "HTTP requests after advancing time 1 {:?}",
-            self.setup.env.get_canister_http()
-        );
-        self.setup.env.advance_time(Duration::from_secs(120));
-        self.setup.env.tick();
-        self.setup.env.tick();
-        self.setup.env.tick();
-        self.setup.env.tick();
-        println!(
-            "HTTP requests after advancing time2 {:?}",
-            self.setup.env.get_canister_http()
-        );
+        // time is advanced by more than 30s, so all current HTTPs outcalls are rejected
+        self.setup.reject_current_https_outcalls();
+        self.setup.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
