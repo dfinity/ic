@@ -328,6 +328,8 @@ pub fn encode_metrics(
     governance: &Governance,
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
 ) -> std::io::Result<()> {
+    // Space
+
     w.encode_gauge(
         "governance_stable_memory_size_bytes",
         ic_nervous_system_common::stable_memory_size_bytes() as f64,
@@ -338,6 +340,9 @@ pub fn encode_metrics(
         ic_nervous_system_common::total_memory_size_bytes() as f64,
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
+
+    // Proposals (more detailed breakdowns later).
+
     w.encode_gauge(
         "governance_proposals_total",
         governance.heap_data.proposals.len() as f64,
@@ -348,6 +353,9 @@ pub fn encode_metrics(
         governance.num_ready_to_be_settled_proposals() as f64,
         "Total number of proposals that are ready to be settled.",
     )?;
+
+    // Neurons (many many more detailed breakdowns later).
+
     w.encode_gauge(
         "governance_neurons_total",
         governance.neuron_store.len() as f64,
@@ -363,6 +371,9 @@ pub fn encode_metrics(
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
     )?;
+
+    // Rewards
+
     w.encode_gauge(
         "governance_latest_reward_event_timestamp_seconds",
         governance.latest_reward_event().actual_timestamp_seconds as f64,
@@ -402,6 +413,8 @@ pub fn encode_metrics(
         "Total number of available rewards in e8s in the latest reward event (including rollovers).",
     )?;
 
+    // Voting Power
+
     let total_voting_power = match governance
         .heap_data
         .proposals
@@ -427,6 +440,8 @@ pub fn encode_metrics(
         total_voting_power,
         "The total voting power, according to the most recent proposal.",
     )?;
+
+    // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
         subaccount: subaccount_index_len,
@@ -473,6 +488,8 @@ pub fn encode_metrics(
         "The deadline for open proposals, labelled with proposal id",
     )?;
 
+    // Detailed Proposal Breakdowns
+
     let open_proposals_deadline = governance
         .heap_data
         .proposals
@@ -509,6 +526,8 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
     if let Some(metrics) = &governance.heap_data.metrics {
         let GovernanceCachedMetrics {
@@ -555,6 +574,8 @@ pub fn encode_metrics(
             public_neuron_subset_metrics,
         } = metrics;
 
+        // ICP
+
         w.encode_gauge(
             "governance_total_locked_e8s",
             *total_locked_e8s as f64,
@@ -572,6 +593,8 @@ pub fn encode_metrics(
             *total_staked_e8s as f64,
             "Total number of e8s that are staked.",
         )?;
+
+        // Detailed Neuron Breakdowns (This section is loooong.)
 
         w.encode_gauge(
             "governance_dissolved_neurons_count",
