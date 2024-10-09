@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "fd28925a9c8d453e8786f4373d0e7d603fbc05e5d143b3fc03db8c1753f7b4de",
-=======
-  "checksum": "ab8c9b3cf6bf59bbc707fb4b0f10832b1c246dca2519d06574412d12ec8f97b9",
->>>>>>> origin/master
+  "checksum": "71cc02fd0666e6df3bb6cf4fb32642f70f4a8e7d63caee3b413dc3e892dd8580",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -18383,11 +18379,7 @@
               "target": "rustc_hash"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -23527,11 +23519,7 @@
               "target": "futures_io"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -27644,11 +27632,7 @@
               "target": "log"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -28502,11 +28486,7 @@
               "target": "reqwest"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -34733,11 +34713,7 @@
               "target": "pem"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -50414,11 +50390,7 @@
               "target": "rustc_hash"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -50506,11 +50478,7 @@
               "target": "rustc_hash"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -53435,11 +53403,7 @@
                 "target": "pin_project_lite"
               },
               {
-<<<<<<< HEAD
-                "id": "rustls 0.23.13",
-=======
                 "id": "rustls 0.23.14",
->>>>>>> origin/master
                 "target": "rustls"
               },
               {
@@ -55889,16 +55853,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-<<<<<<< HEAD
-    "rustls 0.23.13": {
-      "name": "rustls",
-      "version": "0.23.13",
-      "package_url": "https://github.com/rustls/rustls",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.13/download",
-          "sha256": "f2dabaac7466917e566adb06783a81ca48944c6898a1b08b9374106dd671f4c8"
-=======
     "rustls 0.23.14": {
       "name": "rustls",
       "version": "0.23.14",
@@ -55907,7 +55861,6 @@
         "Http": {
           "url": "https://static.crates.io/crates/rustls/0.23.14/download",
           "sha256": "415d9944693cb90382053259f89fbb077ea730ad7273047ec63b19bc9b160ba8"
->>>>>>> origin/master
         }
       },
       "targets": [
@@ -55975,11 +55928,7 @@
               "target": "ring"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "build_script_build"
             },
             {
@@ -56003,11 +55952,7 @@
           "selects": {}
         },
         "edition": "2021",
-<<<<<<< HEAD
-        "version": "0.23.13"
-=======
         "version": "0.23.14"
->>>>>>> origin/master
       },
       "build_script_attrs": {
         "data_glob": [
@@ -56336,11 +56281,7 @@
               "target": "rustls_pemfile"
             },
             {
-<<<<<<< HEAD
-              "id": "rustls-pki-types 1.7.0",
-=======
               "id": "rustls-pki-types 1.9.0",
->>>>>>> origin/master
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -66765,11 +66706,7 @@
         "deps": {
           "common": [
             {
-<<<<<<< HEAD
-              "id": "rustls 0.23.13",
-=======
               "id": "rustls 0.23.14",
->>>>>>> origin/master
               "target": "rustls"
             },
             {
@@ -79818,11 +79755,7 @@
     "rust_decimal_macros 1.30.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-<<<<<<< HEAD
-    "rustls 0.23.13",
-=======
     "rustls 0.23.14",
->>>>>>> origin/master
     "rustls-pemfile 2.1.2",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
