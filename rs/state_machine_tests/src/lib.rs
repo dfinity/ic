@@ -1719,8 +1719,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
@@ -1737,8 +1739,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdEd25519,
