@@ -225,6 +225,7 @@ enum Method {
     Update,
     Query,
     CompositeQuery,
+    OnLowWasmMemory,
 }
 
 struct WatFunc {
@@ -250,6 +251,9 @@ impl fmt::Display for WatFunc {
             Method::Heartbeat => r#"func $heartbeat (export "canister_heartbeat")"#.to_string(),
             Method::GlobalTimer => {
                 r#"func $global_timer (export "canister_global_timer")"#.to_string()
+            }
+            Method::OnLowWasmMemory => {
+                r#"func $global_timer (export "canister_on_low_wasm_memory")"#.to_string()
             }
             Method::Update => format!(
                 r#"func ${} (export "canister_update {}")"#,
@@ -338,6 +342,11 @@ impl WatCanisterBuilder {
     /// Add `canister_global_timer` exported function to the WAT canister.
     pub fn global_timer(&mut self, code: WatFnCode) -> &mut Self {
         self.process_method(Method::GlobalTimer, "global_timer", code)
+    }
+
+    /// Add `canister_on_low_wasm_memory` exported function to the WAT canister.
+    pub fn on_low_wasm_memory(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::OnLowWasmMemory, "on_low_wasm_memory", code)
     }
 
     /// Add `canister_update <name>` exported function to the WAT canister.
@@ -644,6 +653,7 @@ mod tests {
             r#"(func $inspect_message (export "canister_inspect_message"))"#,
             r#"(func $heartbeat (export "canister_heartbeat"))"#,
             r#"(func $global_timer (export "canister_global_timer"))"#,
+            r#"(func $on_low_wasm_memory (export "canister_on_low_wasm_memory"))"#,
             r#"(func $custom_name (export "canister_update custom_name"))"#,
             r#"(func $custom_name (export "canister_query custom_name"))"#,
             r#"(func $custom_name (export "canister_composite_query custom_name"))"#,
@@ -793,6 +803,10 @@ mod tests {
             )
 
             (func $global_timer (export "canister_global_timer")
+                (call $ic0_debug_print (i32.const 1056) (i32.const 12))
+            )
+
+            (func $on_low_wasm_memory (export "canister_on_low_wasm_memory")
                 (call $ic0_debug_print (i32.const 1056) (i32.const 12))
             )
 
