@@ -14,7 +14,7 @@ on:
   workflow_call:
 # runs for the same workflow are cancelled on PRs but not on master
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 permissions: read-all
 env:
