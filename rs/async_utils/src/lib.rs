@@ -1,11 +1,13 @@
 use slog::{info, Logger};
 
 pub mod axum;
+mod http;
 mod hyper;
 mod join_map;
 mod unix;
 
 pub use self::{
+    http::{receive_body, receive_body_without_timeout, BodyReceiveError},
     hyper::ExecuteOnTokioRuntime,
     join_map::JoinMap,
     unix::{
