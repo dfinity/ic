@@ -5,7 +5,7 @@ use ic_execution_environment::RoundSchedule;
 use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
 use ic_state_machine_tests::Cycles;
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 fn main() {
     let mut canisters = BTreeMap::new();
@@ -53,6 +53,7 @@ fn main() {
                 &canisters,
                 heap_delta_rate_limit,
                 rate_limiting_of_heap_delta,
+                &BTreeSet::new(),
             );
         });
     });

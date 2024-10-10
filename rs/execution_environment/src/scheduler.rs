@@ -715,6 +715,7 @@ impl SchedulerImpl {
                     &canisters,
                     self.config.heap_delta_rate_limit,
                     self.rate_limiting_of_heap_delta,
+                    &round_executed_canister_ids,
                 );
             round_filtered_canisters
                 .add_canisters(&active_round_schedule, &rate_limited_canister_ids);
