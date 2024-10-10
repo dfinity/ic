@@ -357,15 +357,6 @@ pub struct OpenedWasm {
     wasm_id: WasmId,
 }
 
-impl OpenedWasm {
-    fn new(sandbox_process: Weak<SandboxProcess>, wasm_id: WasmId) -> Self {
-        Self {
-            sandbox_process,
-            wasm_id,
-        }
-    }
-}
-
 impl Drop for OpenedWasm {
     fn drop(&mut self) {
         if let Some(sandbox_process) = self.sandbox_process.upgrade() {
@@ -966,12 +957,6 @@ impl WasmExecutor for SandboxedExecutionController {
             .start_timer();
         observe_metrics(&self.metrics, &serialized_module.imports_details);
 
-        cache_opened_wasm(
-            &mut wasm_binary.embedder_cache.lock().unwrap(),
-            &sandbox_process,
-            wasm_id,
-        );
-
         // Step 5. Create the execution state.
         let mut wasm_memory = Memory::new(wasm_page_map, memory_modifications.size);
         wasm_memory
@@ -1470,18 +1455,6 @@ impl SandboxedExecutionController {
     }
 }
 
-/// Cache the sandbox process and wasm id of the opened wasm in the embedder
-/// cache.
-fn cache_opened_wasm(
-    embedder_cache: &mut Option<EmbedderCache>,
-    sandbox_process: &Arc<SandboxProcess>,
-    wasm_id: WasmId,
-) {
-    let opened_wasm: HypervisorResult<OpenedWasm> =
-        Ok(OpenedWasm::new(Arc::downgrade(sandbox_process), wasm_id));
-    *embedder_cache = Some(EmbedderCache::new(opened_wasm));
-}
-
 /// Cache an error from compilation so that we don't try to recompile just to
 /// get the same error.
 fn cache_errored_wasm(embedder_cache: &mut Option<EmbedderCache>, err: HypervisorError) {
@@ -1553,7 +1526,6 @@ fn open_wasm(
                             serialized_module: Arc::clone(&serialized_module.bytes),
                         })
                         .on_completion(|_| ());
-                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
                     observe_metrics(metrics, &serialized_module.imports_details);
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
@@ -1583,7 +1555,6 @@ fn open_wasm(
                     serialized_module: Arc::clone(&serialized_module.bytes),
                 })
                 .on_completion(|_| ());
-            cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
             Ok((wasm_id, None))
         }
     }
