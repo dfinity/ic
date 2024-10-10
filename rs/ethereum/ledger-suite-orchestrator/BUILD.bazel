@@ -146,11 +146,11 @@ rust_ic_test(
     data = [
         "ledger_suite_orchestrator_canister.wasm.gz",
         "ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz",
+        "//:pocket-ic-server",
         "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
-        "//:pocket-ic-server",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",

@@ -185,11 +185,11 @@ rust_binary(
         srcs = glob(["tests/**/*.rs"]),
         data = [
             ":cketh_minter_debug.wasm",
+            "//:pocket-ic-server",
             "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
-            "//:pocket-ic-server",
         ] + extra_data,
         env = {
             "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
