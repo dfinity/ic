@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Wrapper around unshare and chroot that does some extra setup e.g. mounts
 # /dev, /proc. and other API filesystems.
 #
@@ -134,6 +136,10 @@ run_with_chroot() {
     $pid_unshare /usr/sbin/chroot "$CHROOT_DIR" "${COMMAND[@]}"
 }
 
+run_without_chroot() {
+    "${COMMAND[@]}"
+}
+
 usage() {
     echo "Usage: $0 [--mount] [--chroot <directory>] <command>"
     echo "Runs <command> in a separate namespace optionally under chroot."
@@ -181,7 +187,8 @@ fi
 
 if [[ -n "$CHROOT_DIR" ]]; then
     [[ -d "$CHROOT_DIR" ]] || die "Error: $CHROOT_DIR is not a valid directory."
-    $mount_unshare bash -c "$(declare_all); run_with_chroot"
+    $mount_unshare /bin/bash -c "$(declare_all); run_with_chroot"
 else
-    $mount_unshare bash -c "$(declare_all);" "${COMMAND[@]}"
+    echo "$(declare_all); ${COMMAND[@]}"
+    $mount_unshare /bin/bash -c "$(declare_all); run_without_chroot"
 fi
