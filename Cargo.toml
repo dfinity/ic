@@ -523,7 +523,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.7", features = ["full"] }
+hyper-util = { version = "0.1.9", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
     "hyper",

@@ -1,5 +1,5 @@
 {
-  "checksum": "5bca50c20d4ecff35f96e32a7c630c92d07dfdb19741b568d20a8fc577b7f52e",
+  "checksum": "841d56a8eabcb020f851c79d827832d458369d2c3de65b0131f0ec5dc61c345b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4602,7 +4602,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -5241,7 +5241,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -18051,7 +18051,7 @@
               "target": "hyper_socks2"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -27566,7 +27566,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -27878,7 +27878,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -27972,7 +27972,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -28096,7 +28096,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -28124,14 +28124,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "hyper-util 0.1.7": {
+    "hyper-util 0.1.9": {
       "name": "hyper-util",
-      "version": "0.1.7",
+      "version": "0.1.9",
       "package_url": "https://github.com/hyperium/hyper-util",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper-util/0.1.7/download",
-          "sha256": "cde7055719c54e36e95e8719f95883f22072a48ede39db7fc17a4e1d5281e9b9"
+          "url": "https://static.crates.io/crates/hyper-util/0.1.9/download",
+          "sha256": "41296eb09f183ac68eec06e03cdbea2e759633d4067b2f6552fc2e009bcad08b"
         }
       },
       "targets": [
@@ -28208,10 +28208,6 @@
               "target": "tokio"
             },
             {
-              "id": "tower 0.4.13",
-              "target": "tower"
-            },
-            {
               "id": "tower-service 0.3.3",
               "target": "tower_service"
             },
@@ -28223,7 +28219,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.7"
+        "version": "0.1.9"
       },
       "license": "MIT",
       "license_ids": [
@@ -28570,7 +28566,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.7",
+                "id": "hyper-util 0.1.9",
                 "target": "hyper_util"
               },
               {
@@ -28712,7 +28708,7 @@
               "target": "hyper"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -33387,7 +33383,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -34880,7 +34876,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -38848,7 +38844,7 @@
               "target": "hyper_rustls"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -53478,7 +53474,7 @@
                 "target": "hyper_rustls"
               },
               {
-                "id": "hyper-util 0.1.7",
+                "id": "hyper-util 0.1.9",
                 "target": "hyper_util"
               },
               {
@@ -67529,7 +67525,7 @@
               "target": "hyper_timeout"
             },
             {
-              "id": "hyper-util 0.1.7",
+              "id": "hyper-util 0.1.9",
               "target": "hyper_util"
             },
             {
@@ -79525,7 +79521,7 @@
     "hyper 1.4.1",
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
-    "hyper-util 0.1.7",
+    "hyper-util 0.1.9",
     "ic-agent 0.37.1",
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.2",
