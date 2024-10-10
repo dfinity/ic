@@ -194,6 +194,8 @@ pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
 
 pub const MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE: u64 = 3600 / MAX_SUSTAINED_NEURONS_PER_HOUR;
 
+pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
+
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
 
@@ -1595,7 +1597,7 @@ impl Default for NeuronRateLimits {
     fn default() -> Self {
         Self {
             // Post-upgrade, we reset to max neurons per hour
-            available_allowances: MAX_SUSTAINED_NEURONS_PER_HOUR,
+            available_allowances: MAX_NEURON_CREATION_SPIKE,
             last_allowance_increase: 0,
         }
     }
@@ -6517,7 +6519,7 @@ impl Governance {
     fn maybe_increase_neuron_allowances(&mut self) {
         // We  increase the allowance over the maximum per hour to account
         // for natural variations in rates, but not leaving too much spare capacity.
-        if self.neuron_rate_limits.available_allowances < MAX_SUSTAINED_NEURONS_PER_HOUR * 6 {
+        if self.neuron_rate_limits.available_allowances < MAX_NEURON_CREATION_SPIKE {
             let time_elapsed_since_last_allowance_increase = self
                 .env
                 .now()
