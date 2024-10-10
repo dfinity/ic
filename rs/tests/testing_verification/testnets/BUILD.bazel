@@ -92,7 +92,7 @@ system_test_nns(
         "@nns_dapp_canister//file",
         "@subnet_rental_canister//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + ["//rs/tests/nns/nns_dapp"],
 )
 
 system_test_nns(
@@ -140,7 +140,7 @@ system_test_nns(
         "@sns_aggregator//file",
         "@subnet_rental_canister//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + ["//rs/tests/nns/nns_dapp"],
 )
 
 system_test_nns(
@@ -177,7 +177,7 @@ system_test_nns(
         "@sns_aggregator//file",
         "@subnet_rental_canister//file",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + ["//rs/tests/nns/nns_dapp"],
 )
 
 system_test_nns(
@@ -205,7 +205,7 @@ system_test_nns(
     ],
     deps = DEPENDENCIES + [
         "//rs/rosetta-api/tvl/xrc_mock",
-        "//rs/tests",
+        "//rs/tests/nns/nns_dapp",
         "@crate_index//:ic-xrc-types",
     ],
 )
