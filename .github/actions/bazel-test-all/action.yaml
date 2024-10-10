@@ -47,6 +47,9 @@ runs:
           ${GITHUB_WORKSPACE}/ci/bazel-scripts/main.sh
           BAZEL_EXIT_CODE="$?"
 
+
+          echo "::notice title=$CI_JOB_NAME buildevent upload start::$(date)"
+
           if [ -n "$BUILDEVENT_APIKEY" ] && [ -f ./bazel-bep.pb ]; then
               # avoid output unless an error occurs during bes export. This ensures
               # only the (more relevant) output from the main bazel command is shown.
@@ -57,6 +60,7 @@ runs:
               fi
               rm "$exportout"
           fi
+          echo "::notice title=$CI_JOB_NAME buildevent upload finished::$(date)"
 
           exit "$BAZEL_EXIT_CODE"
         env:
