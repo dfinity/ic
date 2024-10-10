@@ -1,3 +1,5 @@
+exports_files(["build-guestos-configs.sh"])
+
 genrule(
     name = "icos_deploy",
     testonly = True,
