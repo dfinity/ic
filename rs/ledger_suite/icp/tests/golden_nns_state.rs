@@ -55,6 +55,8 @@ fn should_create_state_machine_with_golden_nns_state() {
     setup.verify_ledger_archive_index_block_parity();
 
     setup.perform_transactions();
+
+    setup.verify_ledger_archive_index_block_parity();
 }
 
 struct Wasms {
