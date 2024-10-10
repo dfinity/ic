@@ -212,12 +212,14 @@ pub fn default_signed_eip_1559_transaction() -> (
         .max_fee_per_gas(33_003_708_258_u64)
         .chain_id(1_u64);
     let sig = ethers_core::types::Signature {
-        r: ethers_core::types::U256::from_dec_str(
-            "80728915039673634151963281987194499535727562641034879173530654129915839382129",
+        r: ethers_core::types::U256::from_str_radix(
+            "250d54132666af50da7df66e7b8a4330a844b029e7bbd2526536e31cca98bc12",
+            16,
         )
         .unwrap(),
-        s: ethers_core::types::U256::from_dec_str(
-            "54281815563936592133007646348951747532427232100340298742740287107883437683286",
+        s: ethers_core::types::U256::from_str_radix(
+            "3ebb681b3acea495818d166a30164bf3372155103432d3fcedf5bc827ed1209d",
+            16,
         )
         .unwrap(),
         v: 1,
