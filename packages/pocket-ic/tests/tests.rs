@@ -1564,6 +1564,58 @@ fn test_canister_http_with_one_additional_response() {
 }
 
 #[test]
+fn test_canister_http_timeout() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the test canister wasm file on the canister.
+    let test_wasm = test_canister_wasm();
+    pic.install_canister(can_id, test_wasm, vec![], None);
+
+    // Submit an update call to the test canister making a canister http outcall
+    // and mock a canister http outcall response.
+    let call_id = pic
+        .submit_call(
+            can_id,
+            Principal::anonymous(),
+            "canister_http",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // We need a pair of ticks for the test canister method to make the http outcall
+    // and for the management canister to start processing the http outcall.
+    pic.tick();
+    pic.tick();
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 1);
+
+    // Advance time so that the canister http outcall times out.
+    pic.advance_time(std::time::Duration::from_secs(180));
+
+    // The canister http outcall should time out by now.
+    let canister_http_requests = pic.get_canister_http();
+    assert_eq!(canister_http_requests.len(), 0);
+
+    // Now the test canister will receive the http outcall response
+    // and reply to the ingress message from the test driver.
+    let reply = pic.await_call(call_id).unwrap();
+    match reply {
+        WasmResult::Reply(data) => {
+            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+                decode_one(&data).unwrap();
+            let (reject_code, err) = http_response.unwrap_err();
+            assert_eq!(reject_code, RejectionCode::SysTransient);
+            assert_eq!(err, "Canister http request timed out");
+        }
+        WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
+    };
+}
+
+#[test]
 fn subnet_metrics() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
     let pic = PocketIcBuilder::new().with_application_subnet().build();
