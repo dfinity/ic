@@ -23,21 +23,21 @@ pub fn next_provider(btc_network: BtcNetwork) -> Provider {
 }
 
 thread_local! {
-    static PREVIOUS_PROVIDER_ID: RefCell<ProviderId> = const { RefCell::new(ProviderId::BtcScan) };
+    static PREVIOUS_PROVIDER_ID: RefCell<ProviderId> = const { RefCell::new(ProviderId::Btcscan) };
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum ProviderId {
-    BtcScan,
-    BlockStream,
+    Btcscan,
+    Blockstream,
     MempoolSpace,
 }
 
 impl fmt::Display for ProviderId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::BtcScan => write!(f, "btcscan.org"),
-            Self::BlockStream => write!(f, "blockstream.info"),
+            Self::Btcscan => write!(f, "btcscan.org"),
+            Self::Blockstream => write!(f, "blockstream.info"),
             Self::MempoolSpace => write!(f, "mempool.space"),
         }
     }
@@ -54,11 +54,11 @@ impl Provider {
     pub fn next(&self) -> Self {
         let btc_network = self.btc_network;
         let provider_id = match (self.btc_network, self.provider_id) {
-            (BtcNetwork::Mainnet, ProviderId::BtcScan) => ProviderId::BlockStream,
-            (BtcNetwork::Mainnet, ProviderId::BlockStream) => ProviderId::MempoolSpace,
-            (BtcNetwork::Mainnet, ProviderId::MempoolSpace) => ProviderId::BtcScan,
-            (BtcNetwork::Testnet, ProviderId::BlockStream) => ProviderId::MempoolSpace,
-            (BtcNetwork::Testnet, _) => ProviderId::BlockStream,
+            (BtcNetwork::Mainnet, ProviderId::Btcscan) => ProviderId::Blockstream,
+            (BtcNetwork::Mainnet, ProviderId::Blockstream) => ProviderId::MempoolSpace,
+            (BtcNetwork::Mainnet, ProviderId::MempoolSpace) => ProviderId::Btcscan,
+            (BtcNetwork::Testnet, ProviderId::Blockstream) => ProviderId::MempoolSpace,
+            (BtcNetwork::Testnet, _) => ProviderId::Blockstream,
         };
         Self {
             btc_network,
@@ -72,7 +72,7 @@ impl Provider {
         max_response_bytes: u32,
     ) -> CanisterHttpRequestArgument {
         match (self.provider_id, self.btc_network) {
-            (ProviderId::BlockStream, _) => make_request(
+            (ProviderId::Blockstream, _) => make_request(
                 "blockstream.info",
                 self.btc_network,
                 txid,
@@ -81,7 +81,7 @@ impl Provider {
             (ProviderId::MempoolSpace, _) => {
                 make_request("mempool.space", self.btc_network, txid, max_response_bytes)
             }
-            (ProviderId::BtcScan, BtcNetwork::Mainnet) => btcscan_request(txid, max_response_bytes),
+            (ProviderId::Btcscan, BtcNetwork::Mainnet) => btcscan_request(txid, max_response_bytes),
             (provider, btc_network) => {
                 panic!(
                     "Provider {} does not support bitcoin {}",
