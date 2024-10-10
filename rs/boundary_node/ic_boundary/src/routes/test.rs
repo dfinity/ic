@@ -164,7 +164,7 @@ async fn test_middleware_validate_canister_request() -> Result<(), Error> {
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
     let expected_failure =
-        format!("malformed_request: value of '{X_REQUEST_ID}' header is not in UUID format\n");
+        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
 
     let request = Request::builder()
         .method("GET")
@@ -261,7 +261,7 @@ async fn test_middleware_validate_subnet_request() -> Result<(), Error> {
     // case 3: 'x-request-id' header contains an invalid uuid
     #[allow(clippy::borrow_interior_mutable_const)]
     let expected_failure =
-        format!("malformed_request: value of '{X_REQUEST_ID}' header is not in UUID format\n");
+        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
 
     let request = Request::builder()
         .method("GET")
