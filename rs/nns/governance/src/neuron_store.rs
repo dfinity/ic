@@ -1009,6 +1009,10 @@ impl NeuronStore {
 
     // Census
 
+    pub fn heap_neuron_store_len(&self) -> usize {
+        self.heap_neurons.len()
+    }
+
     pub fn stable_neuron_store_len(&self) -> usize {
         with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len())
     }

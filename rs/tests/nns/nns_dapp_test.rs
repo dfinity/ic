@@ -27,10 +27,10 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use ic_tests::nns_dapp::{
+use libflate::gzip::Decoder;
+use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
-use libflate::gzip::Decoder;
 use std::io::Read;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
