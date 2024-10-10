@@ -158,7 +158,7 @@
     // ===================================
     logger: {
         // The node id to append to log lines.
-        node_id: {{ 0 }},
+        node_id: {{ "0" }},
         // The log level to use.
         level: "info",
         // The format of emitted log lines
