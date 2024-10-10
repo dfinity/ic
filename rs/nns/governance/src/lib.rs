@@ -343,7 +343,7 @@ pub fn encode_metrics(
     w.encode_gauge(
         "governance_latest_gc_timestamp_seconds",
         governance.latest_gc_timestamp_seconds as f64,
-        "Timestamp of the last proposal gc, in seconds since the Unix epoch.",
+        "Timestamp of the last proposal garbage collection event, in seconds since the Unix epoch.",
     )?;
 
     // Proposals (more detailed breakdowns later).
@@ -374,12 +374,12 @@ pub fn encode_metrics(
     w.encode_gauge(
         "governance_heap_neuron_count",
         governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in heap.",
+        "The number of neurons in NNS Governance canister's heap memory.",
     )?;
     w.encode_gauge(
         "governance_stable_memory_neuron_count",
         governance.neuron_store.stable_neuron_store_len() as f64,
-        "The number of neurons in stable memory.",
+        "The number of neurons in NNS Governance canister's stable memory.",
     )?;
 
     // Rewards
