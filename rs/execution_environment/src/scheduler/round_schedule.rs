@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use crate::{
+    scheduler::{SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN, SCHEDULER_CORES_INVARIANT_BROKEN},
+    util::debug_assert_or_critical_error,
+};
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
-
-use crate::{
-    scheduler::{SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN, SCHEDULER_CORES_INVARIANT_BROKEN},
-    util::debug_assert_or_critical_error,
-};
+use std::collections::BTreeSet;
 
 use super::SchedulerMetrics;
 
