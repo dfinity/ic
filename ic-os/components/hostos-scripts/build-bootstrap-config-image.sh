@@ -281,7 +281,7 @@ EOF
         echo "* Copying 'config-guestos.json' to GuestOS config partition..."
         if [ -f "/boot/config/config-guestos.json" ]; then
             cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
-        # else
+            # else
             # todo: fix ERROR
         fi
     fi
