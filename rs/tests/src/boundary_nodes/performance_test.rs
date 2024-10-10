@@ -380,7 +380,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
         .unwrap();
     let logger = env.logger();
 
-    let bn_addr = SocketAddrV6::new(bn_ipv6, 443, 0, 0).into();
+    let bn_addr = SocketAddrV6::new(bn_ipv6, 0, 0, 0).into();
 
     let mut http_clients = vec![];
     for _ in 0..NUM_AGENTS {
