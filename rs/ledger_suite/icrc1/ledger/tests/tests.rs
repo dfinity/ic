@@ -409,11 +409,9 @@ fn icrc1_test_upgrade_serialization() {
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
         ledger_mainnet_wasm(),
         ledger_wasm(),
-        None,
         init_args,
         upgrade_args,
         minter,
-        true,
         true,
     );
 }
@@ -460,7 +458,6 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
             encode_init_args,
             encode_upgrade_args,
         );

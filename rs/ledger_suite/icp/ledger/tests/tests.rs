@@ -46,14 +46,6 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm_upgrade_to_memory_manager() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister-upgrade-to-memory-manager",
-        &[],
-    )
-}
-
 fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -1235,11 +1227,9 @@ fn test_upgrade_serialization() {
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
         ledger_wasm_mainnet,
         ledger_wasm_current,
-        Some(ledger_wasm_upgrade_to_memory_manager()),
         init_args,
         upgrade_args,
         minter,
-        false,
         false,
     );
 }
@@ -1249,7 +1239,6 @@ fn test_upgrade_serialization_fixed_tx() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
-    let ledger_wasm_upgradetomemorymanager = ledger_wasm_upgrade_to_memory_manager();
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
@@ -1319,12 +1308,6 @@ fn test_upgrade_serialization_fixed_tx() {
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone());
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current.clone());
-    // Test serializing to the memory manager
-    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
-    // Test upgrade to memory manager again
-    test_upgrade(ledger_wasm_upgradetomemorymanager);
-    // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
     test_upgrade(ledger_wasm_mainnet);
@@ -1694,9 +1677,7 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{
-        encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgrade_to_memory_manager,
-    };
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1728,7 +1709,6 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            Some(ledger_wasm_upgrade_to_memory_manager()),
             encode_init_args,
             encode_upgrade_args,
         );
