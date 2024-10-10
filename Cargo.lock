@@ -3928,12 +3928,28 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
+ "evm_rpc_types",
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-cdk 0.16.0",
  "mockall 0.13.0",
  "serde",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "evm_rpc_types"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d393282cc061a25958d3a177fd95e49d94eee54e3e59371f33ef3d4a2dc24431"
+dependencies = [
+ "candid",
+ "hex",
+ "ic-cdk 0.16.0",
+ "num-bigint 0.4.6",
+ "serde",
+ "strum",
+ "thiserror",
 ]
 
 [[package]]
@@ -6415,6 +6431,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "ethers-core",
+ "evm_rpc_types",
  "hex",
  "ic-base-types",
  "ic-canisters-http-types",
@@ -11435,8 +11452,6 @@ dependencies = [
  "candid_parser",
  "clap 3.2.25",
  "comparable",
- "dfn_candid",
- "dfn_core",
  "futures",
  "hex",
  "ic-base-types",
@@ -11444,6 +11459,8 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
  "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "ic-crypto-sha2",
  "ic-icrc1-ledger",
  "ic-ledger-core",
@@ -11714,6 +11731,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-canisters",
@@ -13324,6 +13342,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-subnet-splitting",
  "ic-system-test-driver",
@@ -15307,10 +15326,45 @@ name = "nns-ui-canister"
 version = "0.9.0"
 
 [[package]]
+name = "nns_dapp"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-icrc1-ledger",
+ "ic-ledger-core",
+ "ic-nns-constants",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "icp-ledger",
+ "serde",
+ "slog",
+]
+
+[[package]]
 name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
+name = "node-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-registry-canister-api",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "indoc",
+ "k256",
+ "registry-canister",
+ "slog",
+ "tokio",
+]
 
 [[package]]
 name = "nom"
@@ -18313,10 +18367,10 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic_consensus_system_test_utils",
+ "nns_dapp",
  "reqwest 0.12.8",
  "serde_json",
  "slog",
- "tests",
 ]
 
 [[package]]
@@ -19699,6 +19753,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "nns_dapp",
  "os_qualification_utils",
  "reqwest 0.12.8",
  "serde",

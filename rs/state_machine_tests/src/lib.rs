@@ -832,7 +832,13 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
+    // the time used to derive the time of the next round:
+    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
+    //  - equal to `time`       otherwise.
     time: AtomicU64,
+    // the time of the last round
+    // (equal to `time` when this `StateMachine` is initialized)
+    time_of_last_round: RwLock<SystemTime>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
@@ -1822,6 +1828,7 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
+            time_of_last_round: RwLock::new(time.into()),
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
@@ -2295,8 +2302,6 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure time is strictly monotone)
     /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
-        self.advance_time(Self::EXECUTE_ROUND_TIME_INCREMENT);
-
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -2333,7 +2338,7 @@ impl StateMachine {
             idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
-            time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
+            time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         };
@@ -2352,6 +2357,10 @@ impl StateMachine {
         );
 
         self.check_critical_errors();
+
+        let time_of_next_round = self.time_of_next_round();
+        self.set_time(time_of_next_round);
+        *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
     }
@@ -2442,9 +2451,16 @@ impl StateMachine {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
-    /// Returns the state machine time at the beginning of next round.
+    /// Returns the state machine time at the beginning of next round
+    /// under the assumption that time won't be advanced before that
+    /// round is finalized.
     pub fn time_of_next_round(&self) -> SystemTime {
-        self.time() + Self::EXECUTE_ROUND_TIME_INCREMENT
+        let time = self.time();
+        if time == *self.time_of_last_round.read().unwrap() {
+            time + Self::EXECUTE_ROUND_TIME_INCREMENT
+        } else {
+            time
+        }
     }
 
     /// Returns the current state machine time.
