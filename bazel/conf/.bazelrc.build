@@ -120,9 +120,6 @@ build:afl --run_under="/ic/bin/afl_wrapper.sh"
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
 
-# In bazel 7+ bzlmod is the default, though our repo doesn't support it yet
-common --noenable_bzlmod
-
 # The default value makes rules_rust pick a dummy toolchain that breaks
 # our canister that depend on C deps
 #   https://github.com/bazelbuild/rules_rust/issues/2764
