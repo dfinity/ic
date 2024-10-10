@@ -50,7 +50,7 @@ pub struct FetchedTx {
     pub input_addresses: Vec<Option<Address>>,
 }
 
-/// Instead of storing the full Transaction data, we only
+/// Instead of storing the full transaction data, we only
 /// store relevant bits, including inputs (which are previous
 /// outputs) and output addresses.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
