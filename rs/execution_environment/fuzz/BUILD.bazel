@@ -1,15 +1,8 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
 
 MACRO_DEPENDENCIES = []
-
-UPDATE_SETTINGS_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/execution_environment",
-    "//rs/types/management_canister_types",
-    "@crate_index//:libfuzzer-sys",
-]
 
 rust_fuzz_test_binary(
     name = "execute_subnet_message_update_settings",
@@ -17,5 +10,42 @@ rust_fuzz_test_binary(
         "fuzz_targets/execute_subnet_message_update_settings.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = UPDATE_SETTINGS_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/test_utilities/execution_environment",
+        "//rs/types/management_canister_types",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)
+
+SYSTEM_API_FUZZ_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/embedders/fuzz:wasm_fuzzers",
+    "//rs/registry/subnet_type",
+    "//rs/state_machine_tests",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:wat",
+]
+
+rust_fuzz_test_binary(
+    name = "execute_with_wasm_executor_system_api_call",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_system_api_call.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES,
+)
+
+rust_fuzz_test_binary_afl(
+    name = "execute_with_wasm_executor_system_api_call_afl",
+    testonly = True,
+    srcs = [
+        "fuzz_targets/execute_system_api_call.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = SYSTEM_API_FUZZ_DEPENDENCIES,
 )
