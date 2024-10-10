@@ -52,4 +52,3 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 [features]
 notify-method = []
 icp-allowance-getter = []
-upgrade-to-memory-manager = []
