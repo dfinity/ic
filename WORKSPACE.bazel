@@ -68,7 +68,6 @@ oci_register_toolchains(name = "oci")
 
 load("@rules_oci//oci:pull.bzl", "oci_pull")
 load("//bazel:mainnet-canisters.bzl", "canisters")
-
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly

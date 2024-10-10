@@ -6,9 +6,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 # the prost crate expects PROTOC_INCLUDE to point to a directory containing
 # various .proto files. Creating a directory is not straightforward in Bazel
-# so as a workaround we simply point to the sources. Unfortunately
-# needs to be updated whenever we bump protobuf.
-PROTOC_INCLUDE = "external/protobuf~28.2/src"
+# so as a workaround we simply point to the sources.
+PROTOC_INCLUDE = "external/protobuf~/src"
 
 def generated_files_check(name, srcs, deps, data, manifest_dir):
     rust_test(
