@@ -621,11 +621,13 @@ impl PocketIc {
 
         // Sync the time on the subnets (if only the NNS subnet is loaded
         // from a snapshot, then its time might diverge).
-        // Since time must be strictly monotone, we pick the maximum time and add one nanosecond to that.
+        // Since time must be monotone, we pick the maximum time.
         let mut max_time = GENESIS;
         for subnet in subnets.read().unwrap().values() {
             max_time = max(max_time, subnet.get_state_time());
         }
+        // Since calling `StateMachine::set_time` with the maximum time might make the `StateMachine` believe
+        // that time already progressed, we add one nanosecond to make time strictly monotone on all subnets.
         max_time += Duration::from_nanos(1);
         for subnet in subnets.read().unwrap().values() {
             subnet.set_time(max_time.into());

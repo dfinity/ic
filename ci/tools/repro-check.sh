@@ -405,7 +405,7 @@ compare_hashes() {
     local ci_hash_value=${!ci_hash_var}
 
     if [ "$local_hash_value" != "$ci_hash_value" ]; then
-        log_stderr "Error! The sha256 sum from the proposal/CDN does not match the one we just built for $os_type. \n\tThe sha256 sum we just built:\t\t$local_hash_value\n\tThe sha256 sum from the CDN: $ci_hash_value."
+        log_stderr "Error! The sha256 sum from the proposal/CDN does not match the one we just built for $os_type. \n\tThe sha256 sum we just built:\t\t$local_hash_value\n\tThe sha256 sum from the CDN:\t\t$ci_hash_value."
     else
         log_success "Verification successful for $os_type!"
         log_success "The shasum for $os_type from the artifact built locally and the one fetched from the proposal/CDN match:\n\t\t\t\t\t\tLocal = $local_hash_value\n\t\t\t\t\t\tCDN   = $ci_hash_value\n\n"
@@ -417,8 +417,6 @@ log "Check hash of locally built artifact matches the one fetched from the propo
 compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
 compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
 compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
-
-log_success "All images are validated successfully"
 
 log "Total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
 
