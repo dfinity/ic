@@ -135,7 +135,7 @@ while getopts "m:n:c:i:o:" OPT; do
     esac
 done
 
-if [ "${CONFIG_FILE}" == "" -o "${IN_FILE}" == "" -o "${OUT_FILE}" == "" ]; then
+if [ "${IN_FILE}" == "" -o "${OUT_FILE}" == "" ]; then
     usage
     exit 1
 fi
