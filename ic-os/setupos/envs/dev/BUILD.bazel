@@ -19,7 +19,7 @@ icos_build(
     vuln_scan = False,
 )
 
-launch_bare_metal(
-    name = "launch_bare_metal",
-    image_zst_file = ":disk-img.tar.zst",
-)
+# launch_bare_metal(
+#     name = "launch_bare_metal",
+#     image_zst_file = ":disk-img.tar.zst",
+# )
