@@ -228,36 +228,11 @@ ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 ${DOMAIN:+domain=$DOMAIN}
 EOF
-    if [ "${ELASTICSEARCH_HOSTS}" != "" ]; then
-        echo "elasticsearch_hosts=$ELASTICSEARCH_HOSTS" >"${BOOTSTRAP_TMPDIR}/filebeat.conf"
-    fi
-    if [ "${ELASTICSEARCH_TAGS}" != "" ]; then
-        echo "elasticsearch_tags=$ELASTICSEARCH_TAGS" >>"${BOOTSTRAP_TMPDIR}/filebeat.conf"
-    fi
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
-    if [ "${NNS_URL}" != "" ]; then
-        echo "nns_url=${NNS_URL}" >"${BOOTSTRAP_TMPDIR}/nns.conf"
-    fi
-    if [ "${BACKUP_RETENTION_TIME_SECS}" != "" ] || [ "${BACKUP_PURGING_INTERVAL_SECS}" != "" ]; then
-        echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
-        echo "backup_puging_interval_secs=${BACKUP_PURGING_INTERVAL_SECS}" >>"${BOOTSTRAP_TMPDIR}/backup.conf"
-    fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
-    fi
-    if [ "${QUERY_STATS_EPOCH_LENGTH}" != "" ]; then
-        echo "query_stats_epoch_length=${QUERY_STATS_EPOCH_LENGTH}" >"${BOOTSTRAP_TMPDIR}/query_stats.conf"
-    fi
-    if [ "${BITCOIND_ADDR}" != "" ]; then
-        echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
-    fi
-    if [ "${JAEGER_ADDR}" != "" ]; then
-        echo "jaeger_addr=http://${JAEGER_ADDR}" >"${BOOTSTRAP_TMPDIR}/jaeger_addr.conf"
-    fi
-    if [ "${SOCKS_PROXY}" != "" ]; then
-        echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
