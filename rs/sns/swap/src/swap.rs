@@ -671,6 +671,15 @@ impl Swap {
         self.lifecycle().is_terminal()
     }
 
+    /// Determines if Swap still has work that might need to be done in periodic tasks.
+    ///
+    /// See also: `Swap.run_periodic_tasks`.
+    pub fn requires_periodic_tasks(&self) -> bool {
+        // Practically, already_tried_to_auto_finalize should never be None, but we err towards
+        // caution, which in this case means to continue scheduling periodic tasks.
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(false)
+    }
+
     //
     // --- state transition functions ------------------------------------------
     //
@@ -681,8 +690,8 @@ impl Swap {
         if !self.can_open(now_seconds) {
             return false;
         }
-        // set the purge_old_ticket last principal so that the routine can start
-        // in the next heartbeat
+        // set the purge_old_ticket last principal so that the next periodic task can start
+        // the routine.
         self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
         self.update_derived_fields();
         self.set_lifecycle(Lifecycle::Open);
@@ -1003,15 +1012,14 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
-    /// Runs those tasks that should be run on canister heartbeat.
+    /// Runs those tasks that should be run periodically.
     ///
-    /// The argument 'now_fn' is a function that returns the current time
-    /// for bookkeeping of transfers. For easier testing, it is given
-    /// an argument that is 'false' to get the timestamp when a
-    /// transfer is initiated and 'true' to get the timestamp when a
-    /// transfer is successful.
-    pub async fn heartbeat(&mut self, now_fn: fn(bool) -> u64) {
-        let heartbeat_start_seconds = now_fn(false);
+    /// The argument 'now_fn' is a function that returns the current time for bookkeeping
+    /// of transfers. For easier testing, it is given an argument that is 'false' to get
+    /// the timestamp when a transfer is initiated and 'true' to get the timestamp when a transfer
+    /// is successful.
+    pub async fn run_periodic_tasks(&mut self, now_fn: fn(bool) -> u64) {
+        let periodic_task_start_seconds = now_fn(false);
 
         // Purge old tickets
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
@@ -1025,32 +1033,36 @@ impl Swap {
             MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
         );
 
-        // Automatically transition the state. Only one state transition per heartbeat.
+        // Automatically transition the state. Only one state transition per periodic task.
 
         // Auto-open the swap
-        if self.try_open(heartbeat_start_seconds) {
-            log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
+        if self.try_open(periodic_task_start_seconds) {
+            log!(
+                INFO,
+                "Swap opened at timestamp {}",
+                periodic_task_start_seconds
+            );
         }
         // Auto-commit the swap
-        else if self.try_commit(heartbeat_start_seconds) {
+        else if self.try_commit(periodic_task_start_seconds) {
             log!(
                 INFO,
                 "Swap committed at timestamp {}",
-                heartbeat_start_seconds
+                periodic_task_start_seconds
             );
         }
         // Auto-abort the swap
-        else if self.try_abort(heartbeat_start_seconds) {
+        else if self.try_abort(periodic_task_start_seconds) {
             log!(
                 INFO,
                 "Swap aborted at timestamp {}",
-                heartbeat_start_seconds
+                periodic_task_start_seconds
             );
         }
         // Auto-finalize the swap
-        // We discard the error, if there is one, because to log it would mean
-        // it would be logged every heartbeat where we fall through to this
-        // point (and we don't want to spam the logs).
+        // We discard the error, if there is one, because to log it would mean it would be logged
+        // every time a periodic task is executed where we fall through to this point (and we don't
+        // want to spam the logs).
         else if self.can_auto_finalize().is_ok() {
             // First, record when the finalization started, in case this function is
             // refactored to `await` before this point.
@@ -2615,10 +2627,9 @@ impl Swap {
                 max_number_to_inspect,
             ) {
                 Some(new_next_principal) => {
-                    // If a principal is returned then there are some principals
-                    // that haven't been checked yet by purge_old_tickets. We record
-                    // the next principal so that the next heartbeat can continue the
-                    // work.
+                    // If a principal is returned then there are some principals that haven't been
+                    // checked yet by purge_old_tickets. We record the next principal so that
+                    // the next periodic task can continue the work.
                     self.purge_old_tickets_next_principal = Some(new_next_principal);
                     Some(false)
                 }

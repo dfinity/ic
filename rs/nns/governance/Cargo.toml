@@ -92,6 +92,10 @@ strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 canbench-rs = { version = "0.1.7", optional = true }
 
+local_key = { path = "../../tla_instrumentation/local_key", optional = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
+tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 csv = "1.1"
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
@@ -110,11 +114,14 @@ ic-config = { path = "../../config" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+local_key = { path = "../../tla_instrumentation/local_key" }
 proptest = { workspace = true }
 tempfile = { workspace = true }
+tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
 tokio = { workspace = true }
 tokio-test = "0.4.2"
 
 [features]
 test = ["ic-sns-swap/test"]
 canbench-rs = ["dep:canbench-rs"]
+tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]
