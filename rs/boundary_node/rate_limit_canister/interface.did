@@ -56,11 +56,6 @@ type GetConfigResponse = variant {
   Err: text;
 };
 
-type DiscloseRulesResponse = variant {
-  Ok;
-  Err: text;
-};
-
 type OverwriteConfigResponse = variant {
   Ok;
   Err: text;
