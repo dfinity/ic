@@ -165,6 +165,7 @@ jobs:
           name: bazel-module-lock-apple-intel
       - name: check and push
         run: |
+          set -e
           echo git status
           git status
           echo checking state
