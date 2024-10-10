@@ -7,7 +7,7 @@ type IncidentId = text;         // Unique identifier for each incident
 
 // Input structure for defining a rule with mandatory fields within a config
 type InputRule = record {
-  incident_id: IncidentId; // Unique identifier for the incident
+  incident_id: IncidentId; // Identifier for the incident, to which the rule is related
   rule_raw: blob;          // Raw rule data (in binary format), expected to be a valid json object
   description: text;       // Textual description of the rule
 };
@@ -15,13 +15,15 @@ type InputRule = record {
 // Output structure for rules
 // Optional fields rule_raw and description may remain hidden while the rule is under confidentiality restrictions
 type OutputRule = record {
-  id: RuleId;                        // Unique identifier for the rule
+  rule_id: RuleId;                   // Unique identifier for the rule
+  incident_id: IncidentId;           // Identifier for the incident, to which the rule is related
   rule_raw: opt blob;                // Raw rule data (in binary format), expected to be a valid json object, none if the rule is currently confidential
   description: opt text;             // Textual description of the rule, none if the rule is currently confidential
   disclosed_at: opt Timestamp;       // Timestamp when the rule was disclosed, none if the rule is still confidential
 };
 
 type OutputConfig = record {
+  schema_version: SchemaVersion; // schema version needed to deserialize the rules
   rules: vec OutputRule;
 };
 
@@ -35,7 +37,8 @@ type OutputConfigResponse = record {
 // Verbose details of an individual rule
 // Optional rule_raw and description fields are for restricted publicly viewing access
 type OutputRuleMetadata = record {
-  id: RuleId;                      // Unique identifier for the rule
+  rule_id: RuleId;                 // Unique identifier for the rule
+  incident_id: IncidentId;         // Identifier for the incident, to which the rule is related
   rule_raw: opt blob;              // Raw rule data (binary format), expected to be a valid json object, none if the rule is currently confidential
   description: opt text;           // Textual description of the rule, none if the rule is currently confidential
   disclosed_at: opt Timestamp;     // Timestamp when the rule was disclosed, none if the rule is still confidential
