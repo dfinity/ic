@@ -3,6 +3,9 @@ Enumerate every component file dependency for SetupOS
 """
 
 component_files = {
+    # commit-time is checked in the setupOS installation to verify that images are not too old.
+    Label("//ic-os/components:commit_timestamp_txt"): "/commit-time",
+
     # setupos-scripts
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",
