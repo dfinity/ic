@@ -495,11 +495,13 @@ impl InMemoryLedger<ApprovalKey, Account, Tokens> {
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
             }
-            self.validate_invariants();
         }
-        self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-            blocks.last().unwrap().timestamp,
-        ));
+        if !blocks.is_empty() {
+            self.validate_invariants();
+            self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
+                blocks.last().unwrap().timestamp,
+            ));
+        }
     }
 
     pub fn apply_arg_with_caller(
