@@ -500,6 +500,14 @@ http_file(
     url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
 )
 
+# VirtualDisk FOO
+http_file(
+    name = "VirtualDiskExpansionREDFISH.py",
+    downloaded_file_path = "VirtualDiskExpansionREDFISH.py",
+    sha256 = "28985dd59a0d1c37131c2498855ee331395be25cb4bb87707dce669b4958163d",
+    url = "https://raw.githubusercontent.com/dell/iDRAC-Redfish-Scripting/refs/heads/master/Redfish%20Python/VirtualDiskExpansionREDFISH.py",
+)
+
 # Old version of wallet canister
 
 http_file(
