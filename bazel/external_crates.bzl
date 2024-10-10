@@ -293,10 +293,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.1.4",
+                version = "^0.1.7",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.1.4",
+                version = "^0.1.7",
             ),
             "candid": crate.spec(
                 version = "^0.10.6",
@@ -421,6 +421,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ethnum": crate.spec(
                 version = "^1.3.2",
                 features = ["serde"],
+            ),
+            "evm_rpc_types": crate.spec(
+                version = "^1.0.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
