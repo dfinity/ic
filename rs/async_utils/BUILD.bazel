@@ -5,6 +5,9 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "async_utils",
     srcs = glob(["src/**"]),
+    aliases = {
+        "@crate_index//:hyper_0_14_27": "hyper_legacy",
+    },
     crate_name = "ic_async_utils",
     version = "0.9.0",
     deps = [
@@ -20,13 +23,10 @@ rust_library(
         "@crate_index//:hyper_0_14_27",
         "@crate_index//:slog",
         "@crate_index//:sync_wrapper",
-        "@crate_index//:thiserror", 
+        "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],
-    aliases = {
-        "@crate_index//:hyper_0_14_27": "hyper_legacy",
-    },
 )
 
 rust_test(
