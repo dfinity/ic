@@ -11,7 +11,6 @@ hex = { workspace = true }
 ic-crypto-prng = { path = "../../crypto/prng" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
