@@ -1,3 +1,7 @@
+pub fn index_ng_wasm() -> Vec<u8> {
+    load_wasm_using_env_var("IC_ICRC1_INDEX_NG_WASM_PATH")
+}
+
 pub fn ledger_wasm() -> Vec<u8> {
     load_wasm_using_env_var("IC_ICRC1_LEDGER_WASM_PATH")
 }

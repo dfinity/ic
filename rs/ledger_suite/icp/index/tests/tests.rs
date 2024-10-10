@@ -975,8 +975,6 @@ fn expected_block_timestamp(rounds: u32, phase: u32, start_time: SystemTime) -> 
             .expect("checked_add should not overflow")
             .checked_add(
                 SYNC_STEP_SECONDS
-                    .checked_add(Duration::from_nanos(1)) // timestamp increases by 1ns every phase
-                    .expect("checked_mul should not overflow")
                     .checked_mul(phase)
                     .expect("checked_mul should not overflow"),
             )

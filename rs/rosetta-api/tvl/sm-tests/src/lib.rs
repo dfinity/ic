@@ -64,26 +64,3 @@ fn tvl_init_args(governance_id: CanisterId, xrc_id: CanisterId) -> TVLInitArgs {
         xrc_id: Some(xrc_id.get()),
     }
 }
-
-pub fn test_tvl(tvl_wasm: Vec<u8>, xrc_wasm: Vec<u8>) {
-    let (env, governance_id, xrc_id) = setup(xrc_wasm);
-
-    let tvl_id = install_tvl(&env, tvl_wasm.clone(), governance_id, xrc_id);
-
-    env.run_until_completion(10_000);
-
-    env.advance_time(std::time::Duration::from_secs(60));
-    env.tick();
-
-    let get_tvl_result: TvlResult = get_tvl(&env, tvl_id).unwrap();
-    // 3 neurons with respectively 10 ICP, 1 ICP and 0.1 ICP locked.
-    // ICP price is 10$, hence tvl should be 111$.
-    assert_eq!(get_tvl_result.tvl, Nat::from(111_u8));
-
-    let upgrade_args = tvl_init_args(governance_id, xrc_id);
-    env.upgrade_canister(tvl_id, tvl_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the tvl canister");
-
-    let get_tvl_result_after_upgrade: TvlResult = get_tvl(&env, tvl_id).unwrap();
-    assert_eq!(get_tvl_result, get_tvl_result_after_upgrade);
-}

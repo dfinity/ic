@@ -16,16 +16,16 @@ use ic_pocket_ic_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
-use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
@@ -50,6 +50,14 @@ fn ledger_wasm_upgrade_to_memory_manager() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-upgrade-to-memory-manager",
+        &[],
+    )
+}
+
+fn ledger_wasm_allowance_getter() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-allowance-getter",
         &[],
     )
 }
@@ -343,6 +351,78 @@ fn test_anonymous_approval() {
         string_from_bytes_result,
         Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
     );
+}
+
+#[test]
+fn test_icp_allowance_getter_unavailable_in_prod() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(ledger_wasm(), encode_init_args, vec![]);
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+    let error = response.unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterMethodNotFound);
+}
+
+#[test]
+fn test_get_icp_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+    );
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, p2.0));
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p2.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc2_approve",
+        Encode!(&approve_args).unwrap(),
+    );
+    assert!(response.is_ok());
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+
+    let result = Decode!(
+        &response.expect("failed to get allowance").bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response");
+    assert_eq!(result.allowance.0.to_u64(), Some(APPROVE_AMOUNT));
 }
 
 #[test]

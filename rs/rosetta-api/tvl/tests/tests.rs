@@ -88,8 +88,6 @@ impl TvlSetup {
 #[test]
 fn test_tvl() {
     let tvl = TvlSetup::new();
-
-    tvl.env.run_until_completion(10_000);
     tvl.env
         .advance_time(std::time::Duration::from_secs(DEFAULT_UPDATE_PERIOD));
     tvl.env.tick();
@@ -115,7 +113,6 @@ fn test_tvl() {
 #[test]
 fn test_multiple_currencies() {
     let tvl = TvlSetup::new();
-    tvl.env.run_until_completion(100);
     tvl.env
         .advance_time(std::time::Duration::from_secs(24 * 60 * 60));
     tvl.env.tick();
@@ -211,7 +208,6 @@ fn test_multiple_currencies() {
 #[test]
 fn test_fiat_updates() {
     let tvl = TvlSetup::new();
-    tvl.env.run_until_completion(100);
     tvl.env
         .advance_time(std::time::Duration::from_secs(24 * 60 * 60));
     tvl.env.tick();

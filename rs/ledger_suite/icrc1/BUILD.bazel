@@ -118,16 +118,24 @@ rust_test(
         crate_features = features,
         crate_root = "tests/golden_state_upgrade_downgrade.rs",
         data = [
+            "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+            "@mainnet_ckbtc-index-ng//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_cketh-index-ng//file",
             "@mainnet_cketh_ic-icrc1-ledger-u256//file",
+            "@mainnet_ic-icrc1-index-ng//file",
             "@mainnet_ic-icrc1-ledger//file",
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1",
+            "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc-index-ng//file)",
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-ledger//file)",
+            "CKETH_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh-index-ng//file)",
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-ledger-u256//file)",
+            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-index-ng//file)",
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
         },
         tags = [
@@ -138,8 +146,8 @@ rust_test(
         deps = [
             # Keep sorted.
             "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
-            "//rs/nns/test_utils",
             "//rs/nns/test_utils/golden_nns_state",
             "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_core",
