@@ -84,8 +84,9 @@ pub trait XNetSlicePool: Send + Sync {
     fn take_slice(
         &self,
         subnet_id: SubnetId,
+        state: &ReplicatedState,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        //msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>>;
 
@@ -697,7 +698,9 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
+            if let Some(msg_limit) =
+                get_msg_limit(subnet_id, state, Some(expected), slice.header().begin())
+            {
                 if messages.len() > msg_limit {
                     warn!(
                         self.log,
@@ -822,11 +825,12 @@ impl XNetPayloadBuilderImpl {
                     break;
                 }
 
-                let msg_limit = get_msg_limit(subnet_id, &state);
+                //let msg_limit = get_msg_limit(subnet_id, &state);
                 let (slice, slice_bytes) = match self.slice_pool.take_slice(
                     subnet_id,
+                    &state,
                     Some(&begin),
-                    msg_limit,
+                    //msg_limit,
                     Some(bytes_left),
                 ) {
                     Ok(Some(slice)) => slice,
@@ -879,11 +883,24 @@ impl XNetPayloadBuilderImpl {
 ///
 /// In order to prevent mutual stalling, only applies to incoming NNS
 /// streams; and to `Application`-subnet-to-`System`-subnet streams.
-pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usize> {
+pub fn get_msg_limit(
+    subnet_id: SubnetId,
+    state: &ReplicatedState,
+    expected: Option<&ExpectedIndices>,
+    slice_begin: StreamIndex,
+) -> Option<usize> {
+    let get_limit = || -> Option<usize> {
+        const MAX_SIGNALS_STREAM_COUNT: usize = 50_000;
+        let delta = expected.map_or(0, |expected| {
+            (expected.message_index.get() - slice_begin.get()) as usize
+        });
+        Some(MAX_SIGNALS_STREAM_COUNT - delta)
+    };
+
     use SubnetType::*;
     match state.metadata.own_subnet_type {
         // No limits for now on application subnets.
-        Application | VerifiedApplication => None,
+        Application | VerifiedApplication => get_limit(),
 
         System => {
             // If this is not the NNS subnet and the remote subnet is a system subnet, don't enforce the limit.
@@ -895,7 +912,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                     .get(&subnet_id)
                     .map_or(Application, |subnet| subnet.subnet_type); // Technically map().unwrap() would work here, but this is safer.
                 if remote_subnet_type == System {
-                    return None;
+                    return get_limit();
                 }
             }
 
@@ -1402,12 +1419,14 @@ impl XNetSlicePool for XNetSlicePoolImpl {
     fn take_slice(
         &self,
         subnet_id: SubnetId,
+        state: &ReplicatedState,
         begin: Option<&ExpectedIndices>,
-        msg_limit: Option<usize>,
+        //msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> Result<Option<(CertifiedStreamSlice, usize)>, CertifiedSliceError> {
         let mut slice_pool = self.slice_pool.lock().unwrap();
-        slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
+        slice_pool.take_slice(subnet_id, state, begin, byte_limit)
+        //slice_pool.take_slice(subnet_id, begin, msg_limit, byte_limit)
     }
 
     fn observe_pool_size_bytes(&self) {
