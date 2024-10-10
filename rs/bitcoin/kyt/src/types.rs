@@ -55,8 +55,8 @@ pub enum CheckTransactionRetriable {
 pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
-    InvalidTransaction(String),
+    /// Invalid transaction id because it fails to decode.
+    InvalidTransactionId(String),
 }
 
 impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {

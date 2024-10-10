@@ -130,7 +130,7 @@ fn test_pagination() {
         state::set_fetch_status(
             txid,
             state::FetchTxStatus::Fetched(state::FetchedTx {
-                tx: mock_transaction.clone(),
+                tx: mock_transaction.clone().try_into().unwrap(),
                 input_addresses: vec![],
             }),
         );
