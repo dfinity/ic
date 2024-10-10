@@ -52,8 +52,7 @@ jobs:
       options: >-
         -e NODE_NAME -v /cache:/cache
     runs-on:
-      group: zh1
-      labels: dind-large
+      labels: dind-small
     needs: bazel-bzlmod-lockfile-apple-silicon
     steps:
       - name: Checkout
