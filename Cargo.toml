@@ -363,6 +363,7 @@ members = [
     "rs/tests/nested",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/nns/nns_dapp",
     "rs/tests/node",
     "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
