@@ -9,7 +9,6 @@ use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
-use std::collections::BTreeSet;
 
 use super::SchedulerMetrics;
 
