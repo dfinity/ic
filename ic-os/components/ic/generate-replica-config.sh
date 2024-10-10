@@ -61,6 +61,7 @@ function get_if_address_retries() {
 function read_config_variables() {
     ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
     ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
     ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
     domain=$(get_config_value '.network_settings.ipv4_config.domain')
     nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
@@ -154,7 +155,11 @@ fi
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
-IPV4_ADDRESS="${ipv4_address:-}"
+if [[ -n "$ipv4_address" && "$ipv4_address" != "null" && -n "$ipv4_prefix_length" && "$ipv4_prefix_length" != "null" ]]; then
+  IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
+else
+  IPV4_ADDRESS=""
+fi
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
 NNS_URLS="${nns_urls:-http://[::1]:8080}"
