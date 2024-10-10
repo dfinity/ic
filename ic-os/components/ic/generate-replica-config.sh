@@ -145,8 +145,11 @@ fi
 if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" ]; then
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
+if [ "${CONFIG_FILE}" != "" -a -e "${CONFIG_FILE}" ]; then
+    read_config_variables "${CONFIG_FILE}"
+fi
 
-read_config_variables "${CONFIG_FILE}"
+
 
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
