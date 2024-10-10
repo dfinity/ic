@@ -188,6 +188,8 @@ thread_local! {
     static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+
+    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -216,6 +218,20 @@ pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
 /// Only integration tests should use this.
 pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
+}
+
+pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
+    ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
