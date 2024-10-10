@@ -20,5 +20,9 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+         # Keep sorted.
+         "//rs/tests/driver:ic-system-test-driver",
+         "@crate_index//:anyhow",
+    ],
 )
