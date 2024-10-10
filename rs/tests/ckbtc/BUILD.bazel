@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/tests:__subpackages__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/bitcoin/ckbtc/kyt",
+    "//rs/bitcoin/ckbtc/minter",
+    "//rs/canister_client",
+    "//rs/config",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/test_utils",
+    "//rs/registry/canister",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/tests/consensus/tecdsa/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:slog",
+]
+
+rust_library(
+    name = "ckbtc",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_tests_ckbtc",
+    deps = DEPENDENCIES,
+    testonly = True,
+)
