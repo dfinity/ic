@@ -206,7 +206,7 @@ fn main() {
         let local_store = prep_dir.join("ic_registry_local_store");
         Command::new(build_bootstrap_script)
             .arg(&config_path)
-            .arg("--nns_url")
+            .arg("--nns_urls")
             .arg(ipv6_addr.to_string())
             .arg("--ic_crypto")
             .arg(node.crypto_path())

@@ -446,7 +446,7 @@ fn create_config_disk_image(
         .nodes()
         .next()
     {
-        cmd.arg("--nns_url")
+        cmd.arg("--nns_urls")
             .arg(format!("http://[{}]:8080", node.get_ip_addr()));
     }
 
