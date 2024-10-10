@@ -150,15 +150,13 @@ if [ "${CONFIG_FILE}" != "" -a -e "${CONFIG_FILE}" ]; then
     read_config_variables "${CONFIG_FILE}"
 fi
 
-
-
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
 IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 if [[ -n "$ipv4_address" && "$ipv4_address" != "null" && -n "$ipv4_prefix_length" && "$ipv4_prefix_length" != "null" ]]; then
-  IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
+    IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
 else
-  IPV4_ADDRESS=""
+    IPV4_ADDRESS=""
 fi
 IPV4_GATEWAY="${ipv4_gateway:-}"
 DOMAIN="${domain:-}"
