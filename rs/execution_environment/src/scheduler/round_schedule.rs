@@ -1,9 +1,12 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
-use ic_types::{AccumulatedPriority, ComputeAllocation, LongExecutionMode};
+use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
+
+/// Limits the total number of canisters executed in a round.
+const SCHEDULER_MAX_EXECUTED_CANISTERS_PER_ROUND: usize = 900;
 
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
@@ -42,6 +45,8 @@ pub struct RoundSchedule {
     pub scheduler_cores: usize,
     /// Number of cores dedicated for long executions.
     pub long_execution_cores: usize,
+    // Sum of all canisters compute allocation in percent.
+    pub total_compute_allocation_percent: i64,
     /// Ordered Canister IDs with new executions.
     pub ordered_new_execution_canister_ids: Vec<CanisterId>,
     /// Ordered Canister IDs with long executions.
@@ -52,6 +57,7 @@ impl RoundSchedule {
     pub fn new(
         scheduler_cores: usize,
         long_execution_cores: usize,
+        total_compute_allocation_percent: i64,
         ordered_new_execution_canister_ids: Vec<CanisterId>,
         ordered_long_execution_canister_ids: Vec<CanisterId>,
     ) -> Self {
@@ -59,6 +65,7 @@ impl RoundSchedule {
             scheduler_cores,
             long_execution_cores: long_execution_cores
                 .min(ordered_long_execution_canister_ids.len()),
+            total_compute_allocation_percent,
             ordered_new_execution_canister_ids,
             ordered_long_execution_canister_ids,
         }
@@ -100,6 +107,40 @@ impl RoundSchedule {
         }
     }
 
+    /// Marks idle canisters in front of the schedule as fully executed.
+    pub fn charge_idle_canisters(
+        &self,
+        canisters: &mut BTreeMap<CanisterId, CanisterState>,
+        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
+        round_id: ExecutionRound,
+        is_first_iteration: bool,
+    ) {
+        for canister_id in self.ordered_new_execution_canister_ids.iter() {
+            let canister = canisters.get_mut(canister_id);
+            if let Some(canister) = canister {
+                let next_execution = canister.next_execution();
+                match next_execution {
+                    NextExecution::None => {
+                        Self::finish_canister_execution(
+                            canister,
+                            fully_executed_canister_ids,
+                            round_id,
+                            is_first_iteration,
+                            0,
+                        );
+                    }
+                    // Skip install code canisters.
+                    NextExecution::ContinueInstallCode => {}
+
+                    NextExecution::StartNew | NextExecution::ContinueLong => {
+                        // Stop searching after the first non-idle canister.
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     /// Returns a round schedule covering active canisters only; and the set of
     /// rate limited canisters.
     pub fn filter_canisters(
@@ -107,12 +148,14 @@ impl RoundSchedule {
         canisters: &BTreeMap<CanisterId, CanisterState>,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
+        executed_canister_ids: &BTreeSet<CanisterId>,
     ) -> (Self, Vec<CanisterId>) {
         let mut rate_limited_canister_ids = vec![];
 
         // Collect all active canisters and their next executions.
         //
         // It is safe to use a `HashMap`, as we'll only be doing lookups.
+        let mut total_executed_canister_ids = executed_canister_ids.len();
         let canister_next_executions: HashMap<_, _> = canisters
             .iter()
             .filter_map(|(canister_id, canister)| {
@@ -130,7 +173,16 @@ impl RoundSchedule {
                     NextExecution::None | NextExecution::ContinueInstallCode => None,
 
                     NextExecution::StartNew | NextExecution::ContinueLong => {
-                        Some((canister_id, next_execution))
+                        if executed_canister_ids.contains(canister_id) {
+                            Some((canister_id, next_execution))
+                        } else if total_executed_canister_ids
+                            < SCHEDULER_MAX_EXECUTED_CANISTERS_PER_ROUND
+                        {
+                            total_executed_canister_ids += 1;
+                            Some((canister_id, next_execution))
+                        } else {
+                            None
+                        }
                     }
                 }
             })
@@ -174,6 +226,7 @@ impl RoundSchedule {
             RoundSchedule::new(
                 self.scheduler_cores,
                 self.long_execution_cores,
+                self.total_compute_allocation_percent,
                 ordered_new_execution_canister_ids,
                 ordered_long_execution_canister_ids,
             ),
@@ -228,5 +281,65 @@ impl RoundSchedule {
         }
 
         (canisters_partitioned_by_cores, canisters)
+    }
+
+    pub fn finish_canister_execution(
+        canister: &mut CanisterState,
+        fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
+        round_id: ExecutionRound,
+        is_first_iteration: bool,
+        rank: usize,
+    ) {
+        let full_message_execution = match canister.next_execution() {
+            NextExecution::None => true,
+            NextExecution::StartNew => false,
+            // We just finished a full slice of executions.
+            NextExecution::ContinueLong => true,
+            NextExecution::ContinueInstallCode => false,
+        };
+        let scheduled_first = is_first_iteration && rank == 0;
+
+        // The very first canister is considered to have a full execution round for
+        // scheduling purposes even if it did not complete within the round.
+        if full_message_execution || scheduled_first {
+            canister.scheduler_state.last_full_execution_round = round_id;
+
+            // We schedule canisters (as opposed to individual messages),
+            // and we charge for every full execution round.
+            fully_executed_canister_ids.insert(canister.canister_id());
+        }
+    }
+
+    pub(crate) fn finish_round(
+        &self,
+        canister_states: &mut BTreeMap<CanisterId, CanisterState>,
+        fully_executed_canister_ids: BTreeSet<CanisterId>,
+    ) {
+        let scheduler_cores = self.scheduler_cores;
+        let number_of_canisters = canister_states.len();
+        let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
+
+        // Charge canisters for full executions in this round.
+        let mut total_charged_priority = 0;
+        for canister_id in fully_executed_canister_ids {
+            if let Some(canister) = canister_states.get_mut(&canister_id) {
+                total_charged_priority += 100 * multiplier;
+                canister.scheduler_state.priority_credit += (100 * multiplier).into();
+            }
+        }
+
+        let total_allocated = self.total_compute_allocation_percent * multiplier;
+        // Free capacity per canister in multiplied percent.
+        let free_capacity_per_canister = total_charged_priority.saturating_sub(total_allocated)
+            / number_of_canisters.max(1) as i64;
+        // Fully divide the free allocation across all canisters.
+        for canister in canister_states.values_mut() {
+            // De-facto compute allocation includes bonus allocation
+            let factual = canister.scheduler_state.compute_allocation.as_percent() as i64
+                * multiplier
+                + free_capacity_per_canister;
+            // Increase accumulated priority by de-facto compute allocation.
+            canister.scheduler_state.accumulated_priority += factual.into();
+        }
     }
 }
