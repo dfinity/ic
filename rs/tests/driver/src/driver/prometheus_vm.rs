@@ -21,8 +21,8 @@ use crate::driver::{
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
-        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
-        TopologySnapshot,
+        get_dependency_path, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+        RetrieveIpv4Addr, SshSession, TopologySnapshot,
     },
     test_setup::{GroupSetup, InfraProvider},
     universal_vm::{UniversalVm, UniversalVms},
@@ -103,7 +103,8 @@ impl PrometheusVm {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
-                }),
+                })
+                .enable_ipv4(),
             scrape_interval: Duration::from_secs(10),
         }
     }
@@ -130,18 +131,18 @@ impl PrometheusVm {
         self
     }
 
-    pub fn enable_ipv4(mut self) -> Self {
-        self.universal_vm.has_ipv4 = true;
+    pub fn disable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = false;
         self
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
-        let vm_name = String::from(PROMETHEUS_VM_NAME);
+        let vm_name = &self.universal_vm.name;
         let log = env.logger();
         let config_dir = env
             .single_activate_script_config_dir(
-                &vm_name,
+                vm_name,
                 &format!(
                     r#"#!/bin/sh
 mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
@@ -179,7 +180,7 @@ fi
         let (prometheus_fqdn, grafana_fqdn) = match InfraProvider::read_attribute(env) {
             InfraProvider::Farm => {
                 // Log the Prometheus URL so users can browse to it while the test is running.
-                let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
+                let deployed_prometheus_vm = env.get_deployed_universal_vm(vm_name).unwrap();
                 let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
                 let ipv6 = prometheus_vm.ipv6.to_string();
                 let suffix = env.create_dns_records(vec![
@@ -194,6 +195,21 @@ fi
                         records: vec![ipv6],
                     },
                 ]);
+                if self.universal_vm.has_ipv4 {
+                    let ipv4 = deployed_prometheus_vm.block_on_ipv4()?.to_string();
+                    env.create_dns_records(vec![
+                        DnsRecord {
+                            name: PROMETHEUS_DOMAIN_NAME.to_string(),
+                            record_type: DnsRecordType::A,
+                            records: vec![ipv4.clone()],
+                        },
+                        DnsRecord {
+                            name: GRAFANA_DOMAIN_NAME.to_string(),
+                            record_type: DnsRecordType::A,
+                            records: vec![ipv4],
+                        },
+                    ]);
+                }
                 (
                     format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}"),
                     format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
