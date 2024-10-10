@@ -42,6 +42,7 @@ type AddNodePayload = record {
   transport_tls_cert : blob;
   ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
+  node_type : opt text;
 };
 
 type AddNodesToSubnetPayload = record {

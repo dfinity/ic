@@ -9,8 +9,10 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
-use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus::dkg::{make_registry_cup, make_registry_cup_from_cup_contents};
+use ic_consensus::{
+    consensus::payload_builder::PayloadBuilderImpl,
+    dkg::{make_registry_cup, make_registry_cup_from_cup_contents},
+};
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
@@ -23,17 +25,16 @@ use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
-use ic_interfaces::batch_payload::BatchPayloadBuilder;
-use ic_interfaces::ingress_pool::IngressPoolObject;
 use ic_interfaces::{
-    batch_payload::{IntoMessages, PastPayload, ProposalContext},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload, ProposalContext},
     canister_http::{CanisterHttpChangeAction, CanisterHttpPool},
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
     execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     ingress_pool::{
-        IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
     p2p::consensus::MutablePool,
     validation::ValidationResult,
@@ -56,7 +57,6 @@ pub use ic_management_canister_types::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::types::v1 as pb;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -68,7 +68,10 @@ use ic_protobuf::{
         },
         subnet::v1::CatchUpPackageContents,
     },
-    types::v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    types::{
+        v1 as pb,
+        v1::{PrincipalId as PrincipalIdIdProto, SubnetId as SubnetIdProto},
+    },
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::{
@@ -143,8 +146,7 @@ pub use ic_types::{
         CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
         CanisterHttpResponseMetadata,
     },
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, HttpRequestError, MessageId},
     signature::BasicSignature,
@@ -329,6 +331,7 @@ fn make_nodes_registry(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_type: None,
         };
         registry_data_provider
             .add(
