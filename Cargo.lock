@@ -15360,6 +15360,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "nns-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "ic-agent",
+ "ic-btc-interface",
+ "ic-config",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-tests-ckbtc",
+ "ic_consensus_system_test_utils",
+ "libflate",
+ "nns_dapp",
+ "reqwest 0.12.8",
+ "slog",
+]
+
+[[package]]
 name = "nns-ui-canister"
 version = "0.9.0"
 

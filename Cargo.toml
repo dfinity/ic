@@ -362,6 +362,7 @@ members = [
     "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
     "rs/tests/nested",
+    "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/nns_dapp",
