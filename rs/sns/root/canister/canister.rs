@@ -390,19 +390,6 @@ fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::
     Ok(())
 }
 
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, which means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    include_str!("root.did").to_string()
-}
-
 fn main() {
     // This block is intentionally left blank.
 }

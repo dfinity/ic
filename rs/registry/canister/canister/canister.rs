@@ -1109,13 +1109,6 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("registry.did").to_string())
-}
-
 fn main() {
     // This block is intentionally left blank.
 }
