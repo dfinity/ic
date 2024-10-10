@@ -34,8 +34,8 @@ DEPENDENCIES = [
 
 rust_library(
     name = "ckbtc",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_tests_ckbtc",
     deps = DEPENDENCIES,
-    testonly = True,
 )
