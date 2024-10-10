@@ -3,7 +3,7 @@
 # For each platform we support, we run a dry (--nobuild) Bazel build, and then
 # upload the resulting lockfile as an artifact. The next platform downloads the
 # lockfile artifact, and then also runs a dry build, rinse, repeat.
-name: Update MODULE.bazel.lock
+name: Update Bazel Lockfile
 on:
   # Merge groups should be checked for up-to-date lockfile
   merge_group:
