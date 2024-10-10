@@ -12,10 +12,6 @@ SCRIPT="$(basename $0)[$$]"
 # Get keyword arguments
 for argument in "${@}"; do
     case ${argument} in
-        -c=* | --config=*)
-            CONFIG="${argument#*=}"
-            shift
-            ;;
         -f=* | --file=*)
             FILE="${argument#*=}"
             shift
@@ -25,7 +21,6 @@ for argument in "${@}"; do
 Set Transient Or Persistent Hostname
 
 Arguments:
-  -c=, --config=        optional: specify the config.ini configuration file (Default: /boot/config/config.ini)
   -f=, --file=          optional: specify the file containing the node-id (Default: /boot/config/node-id)
   -h, --help            show this help message and exit
   -t=, --type=          mandatory: specify the node type (Examples: host, guest, boundary...)
@@ -44,24 +39,12 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/boot/config/config.ini}"
 FILE="${FILE:=/boot/config/node-id}"
 
 function validate_arguments() {
-    if [ "${CONFIG}" == "" -o "${FILE}" == "" -o "${TYPE}" == "" ]; then
+    if [ "${FILE}" == "" -o "${TYPE}" == "" ]; then
         $0 --help
     fi
-}
-
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_prefix") ipv6_prefix="${value}" ;;
-            "ipv6_gateway") ipv6_gateway="${value}" ;;
-        esac
-    done <"${CONFIG}"
 }
 
 function construct_hostname() {
@@ -98,9 +81,7 @@ function setup_hostname() {
 }
 
 function main() {
-    # Establish run order
     validate_arguments
-    read_variables
     construct_hostname
     setup_hostname
 }
