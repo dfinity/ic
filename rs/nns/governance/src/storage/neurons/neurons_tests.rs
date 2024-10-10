@@ -512,3 +512,22 @@ fn test_abridged_neuron_size() {
     // headroom.
     assert_eq!(abridged_neuron.encoded_len(), 184);
 }
+
+#[test]
+fn test_range_neurons_reconstitutes_fully() {
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store.range_neurons(..).collect::<Vec<_>>();
+
+    assert_eq!(result, neurons);
+    assert_ne!(result, neurons);
+}
