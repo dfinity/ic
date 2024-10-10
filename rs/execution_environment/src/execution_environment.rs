@@ -3224,7 +3224,6 @@ impl ExecutionEnvironment {
                     .task_queue
                     .replace_paused_with_aborted_task(aborted_task);
             }
-
             canister.apply_priority_credit();
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
