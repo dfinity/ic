@@ -145,6 +145,8 @@ impl Environment for CanisterEnv {
             /* message: */ String,
         ),
     > {
+        // Due to object safety constraints in Rust, call_canister sends and returns bytes, so we are using
+        // call_raw here instead of call, which requires known candid types.
         ic_cdk::api::call::call_raw(canister_id.get().0, method_name, &arg, 0)
             .await
             .map_err(|(rejection_code, message)| (Some(rejection_code as i32), message))
