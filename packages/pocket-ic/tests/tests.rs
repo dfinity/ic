@@ -558,9 +558,11 @@ fn test_get_and_set_and_advance_time() {
     let unix_time_secs = 1630328630;
     let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
     pic.set_time(set_time);
+    pic.tick();
     assert_eq!(pic.get_time(), set_time);
 
     pic.advance_time(std::time::Duration::from_secs(420));
+    pic.tick();
     assert_eq!(
         pic.get_time(),
         set_time + std::time::Duration::from_secs(420)
