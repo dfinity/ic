@@ -31,6 +31,9 @@ rust_library(
 
 rust_test(
     name = "async_utils_test",
+    aliases = {
+        "@crate_index//:hyper_0_14_27": "hyper_legacy",
+    },
     crate = ":async_utils",
     deps = [
         # Keep sorted.
