@@ -16,6 +16,7 @@ ic-agent = { workspace = true }
 ic-backup = { path = "../../backup" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-limits = { path = "../../limits" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
