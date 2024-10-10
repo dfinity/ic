@@ -8,11 +8,10 @@ source /opt/ic/bin/config.sh
 function usage() {
     cat <<EOF
 Usage:
-  generate-replica-config -c config.json -i ic.json5.template -o ic.json5
+  generate-replica-config -i ic.json5.template -o ic.json5
 
   Generate replica config from template file.
 
-  -c config.json: config object
   -n network.conf: Optional, network configuration description file
   -m malicious_behavior.conf: Optional, malicious behavior parameters
 
@@ -119,9 +118,6 @@ while getopts "m:n:c:i:o:" OPT; do
         m)
             MALICIOUS_BEHAVIOR_CONFIG_FILE="${OPTARG}"
             ;;
-        c)
-            CONFIG_FILE="${OPTARG}"
-            ;;
         i)
             IN_FILE="${OPTARG}"
             ;;
@@ -146,9 +142,8 @@ fi
 if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" ]; then
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
-if [ "${CONFIG_FILE}" != "" -a -e "${CONFIG_FILE}" ]; then
-    read_config_variables "${CONFIG_FILE}"
-fi
+
+read_config_variables
 
 INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
