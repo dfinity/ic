@@ -607,10 +607,12 @@ fn query_call_after_advance_time() {
     query_and_check_time(&pic, canister);
 
     pic.advance_time(std::time::Duration::from_secs(420));
+    pic.tick();
 
     query_and_check_time(&pic, canister);
 
     pic.advance_time(std::time::Duration::from_secs(0));
+    pic.tick();
 
     query_and_check_time(&pic, canister);
 }
@@ -1595,6 +1597,7 @@ fn test_canister_http_timeout() {
 
     // Advance time so that the canister http outcall times out.
     pic.advance_time(std::time::Duration::from_secs(180));
+    pic.tick();
 
     // The canister http outcall should time out by now.
     let canister_http_requests = pic.get_canister_http();

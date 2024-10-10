@@ -39,7 +39,7 @@ async fn test_get_upgrade_journal() {
             assert_eq!(
                 pocket_ic.get_time().await,
                 now + Duration::from_secs(sleep_duration_seconds)
-                    + Duration::from_nanos(TICKS_PER_TASK)
+                    + Duration::from_nanos(TICKS_PER_TASK.saturating_sub(1))
             );
         }
     };
@@ -101,7 +101,7 @@ async fn test_get_upgrade_journal() {
             .expect("upgrade_steps should be Some")
             .versions;
         assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-        assert_eq!(response_timestamp_seconds, Some(1620501447));
+        assert_eq!(response_timestamp_seconds, Some(1620501459));
     }
 
     wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
