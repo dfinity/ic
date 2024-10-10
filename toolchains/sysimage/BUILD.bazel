@@ -50,3 +50,12 @@ sh_binary(
     name = "run_in_namespace",
     srcs = ["run_in_namespace.sh"],
 )
+
+sh_test(
+    name = "run_in_namespace_test",
+    srcs = ["run_in_namespace_test.sh"],
+    data = ["@ubuntu-base-24.04.1-base-amd64.tar.gz//file"],
+    env = {"UBUNTU_BASE_PATH": "$(location @ubuntu-base-24.04.1-base-amd64.tar.gz//file)"},
+    tags = ["local"],
+    deps = [":run_in_namespace"],
+)
