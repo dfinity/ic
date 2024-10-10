@@ -368,10 +368,6 @@ name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
 [[bin]]
-name = "ic-systest-nns-dapp"
-path = "gix/nns_dapp_test.rs"
-
-[[bin]]
 name = "ic-systest-small"
 path = "testing_verification/testnets/small.rs"
 
