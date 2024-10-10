@@ -101,7 +101,7 @@ async fn test_get_upgrade_journal() {
             .expect("upgrade_steps should be Some")
             .versions;
         assert_eq!(upgrade_steps, vec![initial_sns_version.clone()]);
-        assert_eq!(response_timestamp_seconds, Some(1620501456));
+        assert_eq!(response_timestamp_seconds, Some(1620501447));
     }
 
     wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
