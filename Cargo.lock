@@ -17377,7 +17377,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
- "ic-cdk 0.13.5",
+ "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-stable-structures",
