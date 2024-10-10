@@ -46,7 +46,7 @@ pub enum FetchTxStatus {
 /// input address will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
-    pub tx: TransactionInputOutput,
+    pub tx: TransactionKytData,
     pub input_addresses: Vec<Option<Address>>,
 }
 
@@ -54,7 +54,7 @@ pub struct FetchedTx {
 /// store relevant bits, including inputs (which are previous
 /// outputs) and output addresses.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TransactionInputOutput {
+pub struct TransactionKytData {
     pub inputs: Vec<PreviousOutput>,
     pub outputs: Vec<Address>,
 }
@@ -65,7 +65,7 @@ pub struct PreviousOutput {
     pub vout: u32,
 }
 
-impl TryFrom<Transaction> for TransactionInputOutput {
+impl TryFrom<Transaction> for TransactionKytData {
     type Error = bitcoin::address::FromScriptError;
 
     fn try_from(tx: Transaction) -> Result<Self, Self::Error> {

@@ -1,6 +1,4 @@
-use crate::state::{
-    FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError, TransactionInputOutput,
-};
+use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError, TransactionKytData};
 use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
 use crate::{blocklist_contains, state};
 use bitcoin::Transaction;
@@ -112,7 +110,7 @@ pub trait FetchEnv {
         match self.http_get_tx(txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionInputOutput::try_from(tx) {
+                match TransactionKytData::try_from(tx) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,
