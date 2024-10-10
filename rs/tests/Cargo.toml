@@ -368,34 +368,6 @@ name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
 [[bin]]
-name = "ic-systest-small"
-path = "testing_verification/testnets/small.rs"
-
-[[bin]]
-name = "ic-systest-small-with-query-stats"
-path = "testing_verification/testnets/small_with_query_stats.rs"
-
-[[bin]]
-name = "ic-systest-small-nns"
-path = "testing_verification/testnets/small_nns.rs"
-
-[[bin]]
-name = "ic-systest-sns-testing"
-path = "testing_verification/testnets/sns_testing.rs"
-
-[[bin]]
-name = "ic-systest-medium"
-path = "testing_verification/testnets/medium.rs"
-
-[[bin]]
-name = "ic-systest-large"
-path = "testing_verification/testnets/large.rs"
-
-[[bin]]
-name = "ic-systest-single-app-large-node-with-nns"
-path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
-
-[[bin]]
 name = "ic-systest-bn-performance"
 path = "boundary_nodes/bn_performance_test.rs"
 
