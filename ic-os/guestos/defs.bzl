@@ -2,6 +2,7 @@
 Hold manifest common to all GuestOS variants.
 """
 
+load("//ic-os/base:custom_packages.bzl", "filebeat", "node_exporter")
 load("//ic-os/components:guestos.bzl", "component_files")
 load("//ic-os/guestos:packages.bzl", "common_packages", "dev_packages")
 
@@ -25,7 +26,7 @@ def image_deps(mode, malicious = False):
         "base_dockerfile": "//ic-os/guestos/context:Dockerfile.base",
         "dockerfile": "//ic-os/guestos/context:Dockerfile",
         "apt_packages": common_packages + (dev_packages if mode == "dev" else []),
-        "custom_packages": ["node_exporter", "filebeat"],
+        "custom_packages": [node_exporter, filebeat],
         "setup_script": "//ic-os/guestos/context:setup.sh",
 
         # Extra files to be added to rootfs and bootfs

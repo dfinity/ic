@@ -1,8 +1,9 @@
 load("@bazel_skylib//lib:paths.bzl", "paths")
+load("//ic-os/base:custom_packages.bzl", "filebeat", "linux_6_1_0_snp_kernel", "node_exporter")
 load("//ic-os/components:hostos.bzl", "component_files")
 
 CUSTOM_PACKAGE_DEFS_ = {
-    "node_exporter": {
+    node_exporter: {
         "src": "@node_exporter-1.8.1.linux-amd64.tar.gz//file",
         "install": """
             mkdir -p $$CONTAINER_DIR/etc/node_exporter
@@ -11,7 +12,7 @@ CUSTOM_PACKAGE_DEFS_ = {
               node_exporter-1.8.1.linux-amd64/node_exporter
         """,
     },
-    "filebeat": {
+    filebeat: {
         "src": "@filebeat-oss-8.9.1-linux-x86_64.tar.gz//file",
         "install": """
             mkdir -p $$CONTAINER_DIR/var/lib/filebeat \
@@ -19,6 +20,24 @@ CUSTOM_PACKAGE_DEFS_ = {
             tar --strip-components=1 -C $$CONTAINER_DIR/usr/local/bin/ \
                 -zvxf $(location @filebeat-oss-8.9.1-linux-x86_64.tar.gz//file) \
                 filebeat-8.9.1-linux-x86_64/filebeat
+        """,
+    },
+    linux_6_1_0_snp_kernel: {
+        "src": "@linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb//file",
+        "install": """
+            cp $(location @linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb//file) $$ICOS_BUILD_DIR
+            $(location //toolchains/sysimage:run_in_namespace) --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
+                dpkg -i /icos_build/linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb
+                ln -sf vmlinuz-6.1.0-rc4-snp-host-93fa8c5918a4 /boot/vmlinuz
+                ln -sf initrd.img-6.1.0-rc4-snp-host-93fa8c5918a4 /boot/initrd.img
+                find /boot -name "*.old" | xargs -L 1 unlink
+                find /boot -name "initrd*generic" \
+                    -o -name "vmlinuz*generic" \
+                    -o -name "config*generic" \
+                    -o -name "System*generic" \
+                    | xargs rm
+                find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf
+EOF
         """,
     },
 }
@@ -42,6 +61,10 @@ def icos_container_filesystem(name, apt_packages, component_files, build_args, c
             # Create container directory
             CONTAINER_DIR=$$(mktemp -d "/tmp/tmpfs/icosbuildXXXX")
             trap 'rm -rf $$CONTAINER_DIR' INT TERM EXIT
+
+            # We put all shared files required in the setup into ICOS_BUILD_DIR
+            export ICOS_BUILD_DIR="$$CONTAINER_DIR/icos_build"
+            mkdir $$ICOS_BUILD_DIR
 
             # Untar the Ubuntu base image
             $(location //toolchains/sysimage:run_in_namespace) /bin/bash -x << EOF
@@ -73,6 +96,7 @@ EOF
             # Export root
             $(location //toolchains/sysimage:run_in_namespace) --chroot $$CONTAINER_DIR /bin/bash -x << 'EOF'
                 tar -c \
+                  --exclude=icos_build \
                   --sort=name --mtime='UTC 1970-01-01' --sparse --hole-detection=raw \
                   -f out.tar *
 EOF

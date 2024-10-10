@@ -1006,3 +1006,9 @@ http_file(
     sha256 = "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011",
     url = "https://github.com/prometheus/node_exporter/releases/download/v1.8.1/node_exporter-1.8.1.linux-amd64.tar.gz",
 )
+
+http_file(
+    name = "linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb",
+    sha256 = "6ad9e60761adc6615957d99a470a484aaa85eed8d921c8dd050c3af706e524da",
+    url = "https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb",
+)

@@ -4,7 +4,9 @@ Hold manifest common to all SetupOS variants.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("//ic-os/base:custom_packages.bzl", "linux_6_1_0_snp_kernel")
 load("//ic-os/components:setupos.bzl", "component_files")
+load("//ic-os/setupos:packages.bzl", "common_packages", "dev_packages")
 load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -26,6 +28,9 @@ def image_deps(mode, _malicious = False):
     deps = {
         "base_dockerfile": "//ic-os/setupos/context:Dockerfile.base",
         "dockerfile": "//ic-os/setupos/context:Dockerfile",
+        "custom_packages": [linux_6_1_0_snp_kernel],
+        "apt_packages": common_packages + (dev_packages if mode == "dev" else []),
+        "setup_script": "//ic-os/setupos/context:setup.sh",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
