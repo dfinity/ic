@@ -75,6 +75,9 @@ const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
 
+// The max amount of memory to use for sandboxes in KiB. This is equivalent to 50 GiB.
+const SOME_CONSTANT: u64 = 20 * 1024 * 1024;
+
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
     sandboxed_execution_replica_execute_prepare_duration: HistogramVec,
@@ -459,7 +462,8 @@ enum Backend {
 
 #[derive(Clone)]
 struct SandboxProcessStats {
-    last_used: std::time::Instant,
+    pub last_used: std::time::Instant,
+    pub anon_rss: u64,
 }
 
 enum SandboxProcessStatus {
@@ -1135,7 +1139,7 @@ impl SandboxedExecutionController {
         stop_request: Receiver<bool>,
     ) {
         loop {
-            let sandbox_processes = get_sandbox_process_stats(&backends);
+            let mut sandbox_processes = get_sandbox_process_stats(&backends);
 
             #[cfg(target_os = "linux")]
             {
@@ -1145,12 +1149,14 @@ impl SandboxedExecutionController {
 
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (sandbox_process, stats, status) in &sandbox_processes {
+                for (sandbox_process, stats, status) in sandbox_processes.iter_mut() {
                     let pid = sandbox_process.pid;
                     let mut process_rss = 0;
                     if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
                         total_anon_rss += kib;
                         process_rss += kib;
+                        // Update the process stats to contain the anon rss of the current sandbox process.
+                        stats.anon_rss = process_rss;
                         metrics
                             .sandboxed_execution_subprocess_anon_rss
                             .observe(kib as f64);
@@ -1259,17 +1265,25 @@ impl SandboxedExecutionController {
                 } => sandbox_process.upgrade().map(|p| (p, stats)),
                 Backend::Empty => None,
             };
-            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
+            if let Some((sandbox_process, stats)) = sandbox_process_and_stats {
                 let now = std::time::Instant::now();
                 if self.max_sandbox_count > 0 {
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            // Use the old memory usage.
+                            anon_rss: stats.anon_rss,
+                        },
                     };
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            // Use the old memory usage.
+                            anon_rss: stats.anon_rss,
+                        },
                     };
                 }
                 return sandbox_process;
@@ -1277,16 +1291,16 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        if guard.len() > self.max_sandbox_count {
-            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
-            evict_sandbox_processes(
-                &mut guard,
-                self.min_sandbox_count,
-                max_active_sandboxes,
-                self.max_sandbox_idle_time,
-            );
-        }
+        // if guard.len() > self.max_sandbox_count {
+        //     let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+        //     let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+        //     evict_sandbox_processes(
+        //         &mut guard,
+        //         self.min_sandbox_count,
+        //         max_active_sandboxes,
+        //         self.max_sandbox_idle_time,
+        //     );
+        // }
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -1310,7 +1324,12 @@ impl SandboxedExecutionController {
         let now = std::time::Instant::now();
         let backend = Backend::Active {
             sandbox_process: Arc::clone(&sandbox_process),
-            stats: SandboxProcessStats { last_used: now },
+            stats: SandboxProcessStats {
+                last_used: now,
+                // New process, we can use 0 because there shouldn't be much memory usage
+                // yet and it will be update later in the monitoring thread.
+                anon_rss: 0,
+            },
         };
         (*guard).insert(canister_id, backend);
 
@@ -1655,12 +1674,63 @@ fn evict_sandbox_processes(
             sandbox_process, ..
         } => {
             // Once `strong_count` reaches zero, then `upgrade()` will always
-            // return `None`. This means that such entries never be used again,
+            // return `None`. This means that such entries will never be used again,
             // so it is safe to remove them from the hash map.
             sandbox_process.strong_count() > 0
         }
         Backend::Empty => false,
     });
+
+    let mut local_min_active_sandboxes = min_active_sandboxes;
+    let mut local_max_active_sandboxes = max_active_sandboxes;
+
+    // We implement the logic of evicting sandboxes based on their memory usage only
+    // on Linux, which is the production platform. On MacOS, we don't have access to
+    // the memory usage of the sandbox processes, so we only evict based on the number of sandboxes.
+    #[cfg(target_os = "linux")]
+    {
+        // Compute the total memory usage of all active sandboxes.
+        let total_anon_rss = backends
+            .iter()
+            .filter_map(|(_, backend)| match backend {
+                Backend::Active { stats, .. } => Some(stats.anon_rss),
+                Backend::Evicted { .. } | Backend::Empty { .. } => Some(0),
+            })
+            .sum::<u64>();
+
+        // We don't need to evict anything if we have memory headroom and we are not over
+        // the max number of active sandboxes.
+        if total_anon_rss < SOME_CONSTANT && backends.len() <= max_active_sandboxes {
+            return;
+        }
+
+        // If we are over the memory limit, we need to evict some sandboxes.
+        // However, we need to recompute the min/max limits such that we fit into the memory limit.
+        if total_anon_rss >= SOME_CONSTANT {
+            // Check how many sandboxes we can keep to stay under the memory limit.
+            let mut new_max_active_sandboxes = 0;
+            let mut current_anon_rss = 0;
+            for (_, backend) in backends.iter() {
+                current_anon_rss += match backend {
+                    Backend::Active { stats, .. } => stats.anon_rss,
+                    Backend::Evicted { .. } | Backend::Empty { .. } => 0,
+                };
+                new_max_active_sandboxes += 1;
+                if current_anon_rss >= SOME_CONSTANT {
+                    break;
+                }
+            }
+            if new_max_active_sandboxes < local_min_active_sandboxes {
+                local_min_active_sandboxes = new_max_active_sandboxes;
+            }
+            local_max_active_sandboxes = new_max_active_sandboxes;
+        }
+
+        println!(
+            "Total anon rss: {}, local_min = {}, local_max = {}",
+            total_anon_rss, local_min_active_sandboxes, local_max_active_sandboxes
+        );
+    }
 
     let candidates: Vec<_> = backends
         .iter()
@@ -1688,8 +1758,8 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        min_active_sandboxes,
-        max_active_sandboxes,
+        local_min_active_sandboxes,
+        local_max_active_sandboxes,
         last_used_threshold,
     );
 
