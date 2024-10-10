@@ -28,9 +28,7 @@ use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use num_traits::ToPrimitive;
-use pocket_ic::common::rest::{
-    CanisterHttpReject, CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
-};
+use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::PocketIc;
 use serde_json::json;
 use std::convert::identity;

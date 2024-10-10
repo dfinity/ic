@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
-use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
@@ -37,7 +36,6 @@ use num_traits::cast::ToPrimitive;
 use pocket_ic::{ErrorCode, UserError};
 use serde_json::json;
 use std::str::FromStr;
-use std::time::SystemTime;
 
 #[test]
 fn should_deposit_and_withdraw() {
@@ -460,8 +458,7 @@ fn should_reimburse() {
 
     let reimbursed_amount = Nat::from(tx.value.unwrap().as_u128());
     let reimbursed_in_block = withdrawal_id.clone() + Nat::from(1_u8);
-    let failed_tx_hash =
-        "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string();
+    let failed_tx_hash = DEFAULT_WITHDRAWAL_TRANSACTION_HASH.to_string();
     assert_eq!(
         cketh.retrieve_eth_status(&withdrawal_id),
         RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
@@ -495,7 +492,7 @@ fn should_reimburse() {
                 ledger_burn_index: withdrawal_id.clone(),
                 from: caller,
                 from_subaccount: None,
-                created_at: Some(time_at_withdrawal),
+                created_at: Some(time_at_withdrawal + 1),
             },
             EventPayload::CreatedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
@@ -513,7 +510,7 @@ fn should_reimburse() {
             },
             EventPayload::SignedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
-                raw_transaction: "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256".to_string(),
+                raw_transaction: DEFAULT_WITHDRAWAL_TRANSACTION.to_string(),
             },
             EventPayload::FinalizedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
@@ -523,12 +520,11 @@ fn should_reimburse() {
                     effective_gas_price: Nat::from(4277923390u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Failure,
-                    transaction_hash:
-                    "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string(),
+                    transaction_hash: failed_tx_hash.clone(),
                 },
             },
             EventPayload::ReimbursedEthWithdrawal {
-                transaction_hash: Some("0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5".to_string()),
+                transaction_hash: Some(failed_tx_hash),
                 reimbursed_amount,
                 withdrawal_id: withdrawal_id.clone(),
                 reimbursed_in_block: withdrawal_id + Nat::from(1_u8),
