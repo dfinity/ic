@@ -5,11 +5,11 @@ use ic_interfaces_state_manager::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification, AccumulatedPriority, CanisterId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height,
 };
 use mockall::*;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 mock! {
     pub StateManager {}
@@ -21,6 +21,7 @@ mock! {
 
         fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
 
+
         fn latest_state_height(&self) -> Height;
 
         fn latest_certified_height(&self) -> Height;
@@ -31,6 +32,9 @@ mock! {
         ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
 
         fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;
+
+        fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority>;
+
     }
 
     impl StateManager for StateManager {

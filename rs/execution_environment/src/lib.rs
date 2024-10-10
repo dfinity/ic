@@ -113,6 +113,7 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
             Arc::clone(&fd_factory),
+            Arc::clone(&state_reader),
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(
