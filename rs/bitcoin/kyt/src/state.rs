@@ -73,7 +73,7 @@ impl TryFrom<Transaction> for TransactionInputOutput {
             .input
             .iter()
             .map(|input| PreviousOutput {
-                txid: Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32])),
+                txid: Txid::from(*(input.previous_output.txid.as_ref())),
                 vout: input.previous_output.vout,
             })
             .collect();
