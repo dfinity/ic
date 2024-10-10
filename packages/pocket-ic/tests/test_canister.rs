@@ -242,6 +242,11 @@ async fn canister_http_with_transform() -> HttpResponse {
     canister_http_outcall(arg, cycles).await.unwrap().0
 }
 
+#[query]
+fn time() -> u64 {
+    ic_cdk::api::time()
+}
+
 fn main() {}
 
 #[cfg(test)]

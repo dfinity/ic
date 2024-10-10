@@ -974,12 +974,24 @@ pub struct SetTime {
 
 impl Operation for SetTime {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        // Sets the time on all subnets.
-        for subnet in pic.subnets.read().unwrap().values() {
-            subnet.set_time(self.time.into());
-            subnet.tick();
+        // Time is kept in sync across subnets, so one can take any subnet.
+        let current_time: SystemTime = pic.any_subnet().time().into();
+        let set_time: SystemTime = self.time.into();
+        if current_time > set_time {
+            OpOut::Error(PocketIcError::SettingTimeIntoPast((
+                systemtime_to_unix_epoch_nanos(current_time),
+                systemtime_to_unix_epoch_nanos(set_time),
+            )))
+        } else if current_time == set_time {
+            OpOut::NoOutput
+        } else {
+            // Sets the time on all subnets.
+            for subnet in pic.subnets.read().unwrap().values() {
+                subnet.set_time(set_time);
+                subnet.tick();
+            }
+            OpOut::NoOutput
         }
-        OpOut::NoOutput
     }
 
     fn id(&self) -> OpId {

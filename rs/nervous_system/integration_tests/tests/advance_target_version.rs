@@ -39,7 +39,7 @@ async fn test_get_upgrade_journal() {
             assert_eq!(
                 pocket_ic.get_time().await,
                 now + Duration::from_secs(sleep_duration_seconds)
-                    + Duration::from_nanos(TICKS_PER_TASK.saturating_sub(1))
+                    + Duration::from_nanos(TICKS_PER_TASK)
             );
         }
     };

@@ -14,7 +14,7 @@ use pocket_ic::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         SubnetKind,
     },
-    update_candid, PocketIc, PocketIcBuilder, WasmResult,
+    query_candid, update_candid, PocketIc, PocketIcBuilder, WasmResult,
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -554,19 +554,65 @@ fn test_multiple_large_xnet_payloads() {
 #[test]
 fn test_get_and_set_and_advance_time() {
     let pic = PocketIc::new();
+
     let unix_time_secs = 1630328630;
-    pic.set_time(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs));
-    let time = pic.get_time();
-    assert_eq!(
-        time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs)
-    );
+    let set_time = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs);
+    pic.set_time(set_time);
+    assert_eq!(pic.get_time(), set_time);
+
     pic.advance_time(std::time::Duration::from_secs(420));
-    let time = pic.get_time();
     assert_eq!(
-        time,
-        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(unix_time_secs + 420)
+        pic.get_time(),
+        set_time + std::time::Duration::from_secs(420)
     );
+}
+
+#[test]
+#[should_panic(expected = "SettingTimeIntoPast")]
+fn set_time_into_past() {
+    let pic = PocketIc::new();
+
+    let now = SystemTime::now();
+    pic.set_time(now + std::time::Duration::from_secs(1));
+
+    pic.set_time(now);
+}
+
+fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
+    let current_time = pic
+        .get_time()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
+    assert_eq!(
+        pic.get_time()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+        current_time
+    );
+    assert_eq!(current_time, t.0 as u128);
+}
+
+#[test]
+fn query_call_after_advance_time() {
+    let pic = PocketIc::new();
+
+    // We create a test canister.
+    let canister = pic.create_canister();
+    pic.add_cycles(canister, INIT_CYCLES);
+    pic.install_canister(canister, test_canister_wasm(), vec![], None);
+
+    query_and_check_time(&pic, canister);
+
+    pic.advance_time(std::time::Duration::from_secs(420));
+
+    query_and_check_time(&pic, canister);
+
+    pic.advance_time(std::time::Duration::from_secs(0));
+
+    query_and_check_time(&pic, canister);
 }
 
 #[test]
