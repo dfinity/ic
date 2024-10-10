@@ -29,11 +29,19 @@ fi
 
 echo "Test: We are root inside"
 $run_in_namespace /bin/bash -x <<'EOF'
-  if [[ $(id) != "*uid=0(root) gid=0(root)" ]]; then
+  if [[ $(id) != "uid=0(root) gid=0(root)"* ]]; then
     echo "We should be root in namespace but we are $(id)"
     exit 1
   fi
 EOF
+
+echo "Test: Files created inside are owned by current user outside"
+$run_in_namespace /bin/bash -c "touch without_chroot.txt"
+owner=$(stat -c "%U" "without_chroot.txt")
+if [[ $owner != $(whoami) ]]; then
+    echo "Wrong ownership: $owner, expected $(whoami)"
+    exit 1
+fi
 
 echo "Test: Inside can read files that were created outside"
 echo "foo" >new_root/file_from_outside.txt
