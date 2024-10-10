@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# focal-20240216
-FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
+# noble-20240605
+FROM ubuntu@sha256:2e863c44b718727c860746568e1d54afd13b2fa71b160f5cd9058fc436217b30
 ENV TZ=UTC
 
 COPY --chmod=0700 ./ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
@@ -28,7 +28,7 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
     curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
     apt -yq update && \
@@ -54,6 +54,25 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-mark hold google-android-platform-tools-installer && \
     cd .. && \
     rm -rf e2fsdroid
+
+# Install an older libtinfo for rules_haskell
+RUN mkdir libtinfo && \
+    cd libtinfo && \
+    wget "http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.4-2ubuntu0.1_amd64.deb" && \
+    apt -yqq install ./libtinfo5_6.4-2ubuntu0.1_amd64.deb && \
+    cd .. && \
+    rm -rf libtinfo
+
+# Build libunwind from source. The packaged version breaks linking
+RUN apt -yqq install libtool && \
+    git clone --branch v1.8.1 --depth 1 "https://github.com/libunwind/libunwind" && \
+    cd libunwind && \
+    autoreconf -i && \
+    ./configure --libdir=/lib/x86_64-linux-gnu --includedir=/usr/include/x86_64-linux-gnu --disable-tests && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf libunwind
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
@@ -84,9 +103,8 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version}
 
-RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu && \
-    # needed for github actions runner \
-    groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 buildifier && \
+# needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
@@ -125,9 +143,9 @@ RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.4.1
+ARG MOLD_VERSION=2.31.0
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "557c1f19b575e42714771727afa6c4f7fa9b98e41c65f281f7d6cd8f9863a817  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 # Add kubectl

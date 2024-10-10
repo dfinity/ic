@@ -1,6 +1,6 @@
 ---
 - name: Create directories
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
 
     mkdir -v -p /var/local/ic/{disk,media}/{{ ic_deployment_name }}/{{ ic_git_revision }}/
@@ -18,13 +18,13 @@
   tags: [ic_guest]
 
 - name: Install GNU parallel
-  apt:
+  ansible.builtin.apt:
     name: parallel
     state: present
   tags: [ic_guest]
 
 - name: Install zstd
-  apt:
+  ansible.builtin.apt:
     name: zstd
     state: present
   tags: [ic_guest]
