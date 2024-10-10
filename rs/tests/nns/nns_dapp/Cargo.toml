@@ -13,7 +13,11 @@ ic-icrc1 = { path = "../../../ledger_suite/icrc1" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
-ic-base-types = { path = "../types/base_types" }
+ic-base-types = { path = "../../../types/base_types" }
 candid = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
+
+[lib]
+name = "nns_dapp"
+path = "nns_dapp.rs"

@@ -15327,6 +15327,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nns-dapp"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "ic-nns-constants",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "icp-ledger",
+ "serde",
+ "slog",
+]
+
+[[package]]
 name = "nns-ui-canister"
 version = "0.9.0"
 
