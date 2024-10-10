@@ -2,11 +2,11 @@
 set -eEuo pipefail
 
 bazel query --universe_scope=//... \
-  "kind(test, //rs/...) except kind(test, allrdeps(attr('tags', 'canister', //rs/...)))" \
-  > cov_targets.txt
+    "kind(test, //rs/...) except kind(test, allrdeps(attr('tags', 'canister', //rs/...)))" \
+    >cov_targets.txt
 
 # shellcheck disable=SC2046,SC2086
-bazel --output_base=/var/tmp/bazel-output/ coverage --config=ci --combined_report=lcov --test_timeout=3000 \
-    --combined_report=lcov $(<cov_targets.txt) || true
+bazel --output_base=/var/tmp/bazel-output/ coverage --config=ci --combined_report=lcov \
+    --test_timeout=3000 --combined_report=lcov $(<cov_targets.txt) || true
 cp bazel-out/_coverage/_coverage_report.dat cov_report.dat
 genhtml --output cov_html cov_report.dat
