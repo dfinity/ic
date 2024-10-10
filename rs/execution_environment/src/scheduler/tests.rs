@@ -2107,7 +2107,6 @@ fn execute_heartbeat_before_messages() {
     assert_eq!(test.ingress_queue_size(canister), 3);
 }
 
-//do same
 #[test]
 fn execute_global_timer_before_messages() {
     let mut test = SchedulerTestBuilder::new()
