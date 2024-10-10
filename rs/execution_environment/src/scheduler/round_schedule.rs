@@ -13,6 +13,9 @@ use crate::{
 
 use super::SchedulerMetrics;
 
+/// Limits the total number of canisters executed in a round.
+const SCHEDULER_MAX_EXECUTED_CANISTERS_PER_ROUND: usize = 900;
+
 /// Round metrics required to prioritize a canister.
 #[derive(Clone, Debug)]
 pub(super) struct CanisterRoundState {
@@ -153,12 +156,14 @@ impl RoundSchedule {
         canisters: &BTreeMap<CanisterId, CanisterState>,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
+        executed_canister_ids: &BTreeSet<CanisterId>,
     ) -> (Self, Vec<CanisterId>) {
         let mut rate_limited_canister_ids = vec![];
 
         // Collect all active canisters and their next executions.
         //
         // It is safe to use a `HashMap`, as we'll only be doing lookups.
+        let mut total_executed_canister_ids = executed_canister_ids.len();
         let canister_next_executions: HashMap<_, _> = canisters
             .iter()
             .filter_map(|(canister_id, canister)| {
@@ -176,7 +181,16 @@ impl RoundSchedule {
                     NextExecution::None | NextExecution::ContinueInstallCode => None,
 
                     NextExecution::StartNew | NextExecution::ContinueLong => {
-                        Some((canister_id, next_execution))
+                        if executed_canister_ids.contains(canister_id) {
+                            Some((canister_id, next_execution))
+                        } else if total_executed_canister_ids
+                            < SCHEDULER_MAX_EXECUTED_CANISTERS_PER_ROUND
+                        {
+                            total_executed_canister_ids += 1;
+                            Some((canister_id, next_execution))
+                        } else {
+                            None
+                        }
                     }
                 }
             })
