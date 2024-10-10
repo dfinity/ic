@@ -202,6 +202,7 @@ members = [
     "rs/nns/inspector",
     "rs/nns/integration_tests",
     "rs/nns/nns-ui",
+    "rs/nns/node-provider-rewards",
     "rs/nns/test_utils",
     "rs/nns/test_utils/golden_nns_state",
     "rs/nns/test_utils_macros",

@@ -1,0 +1,241 @@
+type Cycles = nat;
+type BlockIndex = nat64;
+type log_visibility = variant {
+  controllers;
+  public;
+};
+type CanisterSettings = record {
+  controllers : opt vec principal;
+  compute_allocation : opt nat;
+  memory_allocation : opt nat;
+  freezing_threshold : opt nat;
+  reserved_cycles_limit : opt nat;
+  log_visibility : opt log_visibility;
+  wasm_memory_limit : opt nat;
+  wasm_memory_threshold : opt nat;
+};
+type Subaccount = opt blob;
+type Memo = opt blob;
+
+// The argument of the [notify_top_up] method.
+type NotifyTopUpArg = record {
+  // Index of the block on the ICP ledger that contains the payment.
+  block_index : BlockIndex;
+
+  // The canister to top up.
+  canister_id : principal;
+};
+
+type SubnetSelection = variant {
+  /// Choose a specific subnet
+  Subnet : record {
+    subnet : principal;
+  };
+  /// Choose a random subnet that fulfills the specified properties
+  Filter : SubnetFilter;
+};
+
+type SubnetFilter = record {
+  subnet_type : opt text;
+};
+
+// The argument of the [create_canister] method.
+type CreateCanisterArg = record {
+  // Optional canister settings that, if set, are applied to the newly created canister.
+  // If not specified, the caller is the controller of the canister and the other settings are set to default values.
+  settings : opt CanisterSettings;
+
+  // An optional subnet type that, if set, determines what type of subnet
+  // the new canister will be created on.
+  // Deprecated. Use subnet_selection instead.
+  subnet_type : opt text;
+
+  // Optional instructions to select on which subnet the new canister will be created on.
+  subnet_selection : opt SubnetSelection;
+};
+
+// The argument of the [notify_create_canister] method.
+type NotifyCreateCanisterArg = record {
+  // Index of the block on the ICP ledger that contains the payment.
+  block_index : BlockIndex;
+
+  // The controller of canister to create.
+  controller : principal;
+
+  // An optional subnet type that, if set, determines what type of subnet
+  // the new canister will be created on.
+  // Deprecated. Use subnet_selection instead.
+  subnet_type : opt text;
+
+  // Optional instructions to select on which subnet the new canister will be created on.
+  // vec may contain no more than one element.
+  subnet_selection : opt SubnetSelection;
+
+  // Optional canister settings that, if set, are applied to the newly created canister.
+  // If not specified, the caller is the controller of the canister and the other settings are set to default values.
+  settings : opt CanisterSettings;
+};
+
+// Canister creation failed and the cycles attached to the call were returned to the calling canister.
+// A small fee may be charged.
+type CreateCanisterError = variant {
+  Refunded : record {
+    // The amount of cycles returned to the calling canister
+    refund_amount : nat;
+
+    // The reason why creating a canister failed.
+    create_error : text;
+  };
+};
+
+type NotifyError = variant {
+  // The payment processing failed and the payment was returned the caller.
+  // This is a non-retriable error.
+  Refunded : record {
+    // The reason for the refund.
+    reason : text;
+    // The index of the block containing the refund.
+    block_index : opt BlockIndex;
+  };
+
+  // The same payment is already being processed by a concurrent request.
+  // This is a retriable error.
+  Processing;
+
+  // The payment was too old to be processed.
+  // The value of the variant is the oldest block index that can still be processed.
+  // This a non-retriable error.
+  TransactionTooOld : BlockIndex;
+
+  // The transaction does not satisfy the cycle minting canister payment protocol.
+  // The text contains the description of the problem.
+  // This is a non-retriable error.
+  InvalidTransaction : text;
+
+  // Other error.
+  Other : record { error_code : nat64; error_message : text };
+};
+
+type NotifyTopUpResult = variant {
+  // The amount of cycles sent to the specified canister.
+  Ok : Cycles;
+  Err : NotifyError;
+};
+
+type CreateCanisterResult = variant {
+  // The principal of the newly created canister.
+  Ok : principal;
+  Err : CreateCanisterError;
+};
+
+type NotifyCreateCanisterResult = variant {
+  // The principal of the newly created canister.
+  Ok : principal;
+  Err : NotifyError;
+};
+
+type IcpXdrConversionRate = record {
+  // The time for which the market data was queried, expressed in UNIX epoch
+  // time in seconds.
+  timestamp_seconds : nat64;
+
+  // The number of 10,000ths of IMF SDR (currency code XDR) that corresponds
+  // to 1 ICP. This value reflects the current market price of one ICP token.
+  xdr_permyriad_per_icp : nat64;
+};
+
+type IcpXdrConversionRateResponse = record {
+  // The latest ICP/XDR conversion rate.
+  data : IcpXdrConversionRate;
+
+  // CBOR-serialized hash tree as specified in
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
+  // The hash tree is used for certification and hash the following structure:
+  // ```
+  // *
+  // |
+  // +-- ICP_XDR_CONVERSION_RATE -- [ Candid encoded IcpXdrConversionRate ]
+  // |
+  // `-- AVERAGE_ICP_XDR_CONVERSION_RATE -- [ Candid encoded IcpXdrConversionRate ]
+  // ```
+  hash_tree : blob;
+
+  // System certificate as specified in
+  // https://internetcomputer.org/docs/interface-spec/index.html#certification-encoding
+  certificate : blob;
+};
+
+type SubnetTypesToSubnetsResponse = record {
+  data : vec record { text; vec principal };
+};
+
+type PrincipalsAuthorizedToCreateCanistersToSubnetsResponse = record {
+  data : vec record { principal; vec principal };
+};
+
+type AccountIdentifier = text;
+
+type ExchangeRateCanister = variant {
+  /// Enables the exchange rate canister with the given canister ID.
+  Set : principal;
+  /// Disable the exchange rate canister.
+  Unset;
+};
+
+type CyclesCanisterInitPayload = record {
+  ledger_canister_id : opt principal;
+  governance_canister_id : opt principal;
+  minting_account_id : opt AccountIdentifier;
+  last_purged_notification : opt nat64;
+  exchange_rate_canister : opt ExchangeRateCanister;
+  cycles_ledger_canister_id : opt principal;
+};
+
+type NotifyMintCyclesArg = record {
+  block_index : BlockIndex;
+  to_subaccount : Subaccount;
+  deposit_memo : Memo;
+};
+
+type NotifyMintCyclesResult = variant {
+  Ok : NotifyMintCyclesSuccess;
+  Err : NotifyError;
+};
+
+type NotifyMintCyclesSuccess = record {
+  // Cycles ledger block index of deposit
+  block_index : nat;
+  // Amount of cycles that were minted and deposited to the cycles ledger
+  minted : nat;
+  // New balance of the cycles ledger account
+  balance : nat;
+};
+
+service : (opt CyclesCanisterInitPayload) -> {
+  // Prompts the cycles minting canister to process a payment by converting ICP
+  // into cycles and sending the cycles the specified canister.
+  notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
+
+  // Creates a canister using the cycles attached to the function call.
+  create_canister : (CreateCanisterArg) -> (CreateCanisterResult);
+
+  // Prompts the cycles minting canister to process a payment for canister creation.
+  notify_create_canister : (NotifyCreateCanisterArg) -> (NotifyCreateCanisterResult);
+
+  // Mints cycles and deposits them to the cycles ledger
+  notify_mint_cycles : (NotifyMintCyclesArg) -> (NotifyMintCyclesResult);
+
+  // Returns the ICP/XDR conversion rate.
+  get_icp_xdr_conversion_rate : () -> (IcpXdrConversionRateResponse) query;
+
+  // Returns the current mapping of subnet types to subnets.
+  get_subnet_types_to_subnets : () -> (SubnetTypesToSubnetsResponse) query;
+
+  // Returns the mapping from principals to subnets in which they are authorized
+  // to create canisters.
+  get_principals_authorized_to_create_canisters_to_subnets : () -> (PrincipalsAuthorizedToCreateCanistersToSubnetsResponse) query;
+
+  get_default_subnets: () -> (vec principal) query;
+
+  get_build_metadata : () -> (text) query;
+};

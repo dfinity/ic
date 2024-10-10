@@ -1,0 +1,40 @@
+[package]
+name = "node-provider-rewards"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+build-info = { workspace = true }
+
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-stable-structures = { workspace = true }
+itertools = { workspace = true }
+futures = { workspace = true }
+anyhow = { workspace = true }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-protobuf = { path = "../../protobuf" }
+ic-nns-common = { path = "../common" }
+dfn_core = { path = "../../rust_canisters/dfn_core" }
+ic-base-types = { path = "../../types/base_types" }
+ic-registry-keys = { path = "../../registry/keys" }
+rust_decimal = { version = "1.25" }
+rust_decimal_macros = "1.25"
+num-traits = { workspace = true }
+ic-nns-constants = { path = "../constants" }
+ic-nns-governance-api = { path = "../governance/api" }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[[bin]]
+name = "node-provider-rewards"
+path = "src/main.rs"
+
+[build-dependencies]
+build-info-build = { workspace = true }
