@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: group: ${{ github.head_ref || github.ref }}
+  group: group: $${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
