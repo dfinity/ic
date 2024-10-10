@@ -95,8 +95,65 @@ load("@rules_oci//oci:repositories.bzl", "oci_register_toolchains")
 oci_register_toolchains(name = "oci")
 
 load("@rules_oci//oci:pull.bzl", "oci_pull")
+load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
+
+# We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
+# from the canister names because we use inconsistent repo names. Same goes for filenames.
+# For each new canister defined in the source JSON file (see `path`) a mapping can be added
+# from canister name (as per JSON) to filename (and to repo name, resp.).
+canisters(
+    name = "canisters",
+    filenames = {
+        "registry": "registry-canister.wasm.gz",
+        "governance": "governance-canister.wasm.gz",
+        "ledger": "ledger-canister_notify-method.wasm.gz",
+        "archive": "ledger-archive-node-canister.wasm.gz",
+        "index": "ic-icp-index-canister.wasm.gz",
+        "root": "root-canister.wasm.gz",
+        "lifeline": "lifeline_canister.wasm.gz",
+        "genesis-token": "genesis-token-canister.wasm.gz",
+        "cycles-minting": "cycles-minting-canister.wasm.gz",
+        "sns-wasm": "sns-wasm-canister.wasm.gz",
+        "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
+        "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
+        "sns_root": "sns-root-canister.wasm.gz",
+        "sns_governance": "sns-governance-canister.wasm.gz",
+        "swap": "sns-swap-canister.wasm.gz",
+        "sns_ledger": "ic-icrc1-ledger.wasm.gz",
+        "sns_archive": "ic-icrc1-archive.wasm.gz",
+        "sns_index": "ic-icrc1-index-ng.wasm.gz",
+    },
+    path = "//:mainnet-canisters.json",
+    reponames = {
+        "registry": "mainnet_nns_registry_canister",
+        "governance": "mainnet_nns_governance_canister",
+        "ledger": "mainnet_icp_ledger_canister",
+        "archive": "mainnet_icp_ledger-archive-node-canister",
+        "index": "mainnet_icp_index_canister",
+        "root": "mainnet_nns_root-canister",
+        "lifeline": "mainnet_nns_lifeline_canister",
+        "genesis-token": "mainnet_nns_genesis-token-canister",
+        "cycles-minting": "mainnet_nns_cycles-minting-canister",
+        "sns-wasm": "mainnet_nns_sns-wasm-canister",
+        "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
+        "ck_btc_index": "mainnet_ckbtc-index-ng",
+        "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
+        "ck_eth_index": "mainnet_cketh-index-ng",
+        "sns_root": "mainnet_sns-root-canister",
+        "sns_governance": "mainnet_sns-governance-canister",
+        "swap": "mainnet_sns-swap-canister",
+        "sns_ledger": "mainnet_ic-icrc1-ledger",
+        "sns_archive": "mainnet_ic-icrc1-archive",
+        "sns_index": "mainnet_ic-icrc1-index-ng",
+    },
+)
+
+load("@canisters//:defs.bzl", "canister_deps")
+
+canister_deps()
 
 # file server used in tests
 oci_pull(
@@ -517,12 +574,6 @@ http_archive(
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
 
-mainnet_core_nns_canisters()
-
-mainnet_ck_canisters()
-
-mainnet_sns_canisters()
-
 # Asset canister
 
 http_file(
@@ -697,8 +748,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
+    sha256 = "5c49768f03f075ffd87f0f20d849897e03db58d05fb0d12f1a340b2a5f1e4f65",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.0.0/evm_rpc.wasm.gz",
 )
 
 # Haskell toolchain for spec_compliance tests

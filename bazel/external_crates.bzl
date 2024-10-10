@@ -422,6 +422,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.2",
                 features = ["serde"],
             ),
+            "evm_rpc_types": crate.spec(
+                version = "^1.0.0",
+            ),
             "exec": crate.spec(
                 version = "^0.3.1",
             ),
@@ -522,7 +525,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper-rustls": crate.spec(
                 default_features = False,
-                version = "^0.27.2",
+                version = "^0.27.3",
                 features = [
                     "http1",
                     "http2",
@@ -571,7 +574,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "2.6.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.13.5",
+                version = "^0.16.0",
             ),
             "ic-cdk-timers": crate.spec(
                 version = "^0.7.0",
@@ -1065,7 +1068,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.23.12",
+                version = "^0.23.14",
                 default_features = False,
                 features = [
                     "ring",
@@ -1075,12 +1078,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rustls-pemfile": crate.spec(
                 version = "^2.1.2",
-            ),
-            "rustls-pki-types": crate.spec(
-                version = "^1.7.0",
-                features = [
-                    "alloc",
-                ],
             ),
             "rustversion": crate.spec(
                 version = "^1.0",

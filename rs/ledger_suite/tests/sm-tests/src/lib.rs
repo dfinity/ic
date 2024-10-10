@@ -1496,8 +1496,6 @@ fn test_controllers<T>(
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
 
-    env.run_until_completion(/*max_ticks=*/ 10);
-
     let archive_info = list_archives(&env, ledger_id);
     assert_eq!(archive_info.len(), 1);
 
@@ -1633,7 +1631,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, ledger_id);
     let first_archive = ArchiveInfo {
@@ -1671,7 +1668,6 @@ where
     for i in 0..NUM_BLOCKS_TO_ARCHIVE {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
     let archive_info = list_archives(&env, ledger_id);
     let second_archive = ArchiveInfo {
         canister_id: "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap(),
@@ -1714,8 +1710,6 @@ pub fn test_archiving<T>(
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
@@ -1840,8 +1834,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i * 10_000).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
     assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));

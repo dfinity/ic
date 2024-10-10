@@ -1,14 +1,14 @@
-use crate::common::{ledger_wasm, load_wasm_using_env_var};
+use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_icrc1_ledger_sm_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, TransactionGenerationParameters,
 };
-use ic_nns_test_utils::governance::bump_gzip_timestamp;
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
@@ -32,67 +32,104 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(not(feature = "u256-tokens"))]
 lazy_static! {
-    pub static ref MAINNET_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+    pub static ref MAINNET_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MASTER_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(index_ng_wasm()),
+        Wasm::from_bytes(ledger_wasm())
+    );
 }
 
 #[cfg(feature = "u256-tokens")]
 lazy_static! {
-    pub static ref MAINNET_U256_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-    pub static ref MAINNET_U64_WASM: Wasm = Wasm::from_bytes(load_wasm_using_env_var(
-        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-    ));
-    pub static ref MASTER_WASM: Wasm = Wasm::from_bytes(ledger_wasm());
+    pub static ref MAINNET_U256_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKETH_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MAINNET_U64_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MASTER_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(index_ng_wasm()),
+        Wasm::from_bytes(ledger_wasm())
+    );
+}
+
+pub struct Wasms {
+    index_wasm: Wasm,
+    ledger_wasm: Wasm,
+}
+
+impl Wasms {
+    fn new(index_wasm: Wasm, ledger_wasm: Wasm) -> Self {
+        Self {
+            index_wasm,
+            ledger_wasm,
+        }
+    }
 }
 
 struct LedgerSuiteConfig {
     ledger_id: &'static str,
+    index_id: &'static str,
     canister_name: &'static str,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
     extended_testing: bool,
-    mainnet_wasm: &'static Wasm,
-    master_wasm: &'static Wasm,
+    mainnet_wasms: &'static Wasms,
+    master_wasms: &'static Wasms,
 }
 
 impl LedgerSuiteConfig {
     fn new(
-        canister_id_and_name: (&'static str, &'static str),
-        mainnet_wasm: &'static Wasm,
-        master_wasm: &'static Wasm,
+        canister_ids_and_name: (&'static str, &'static str, &'static str),
+        mainnet_wasms: &'static Wasms,
+        master_wasms: &'static Wasms,
     ) -> Self {
-        let (canister_id, canister_name) = canister_id_and_name;
+        let (ledger_id, index_id, canister_name) = canister_ids_and_name;
         Self {
-            ledger_id: canister_id,
+            ledger_id,
+            index_id,
             canister_name,
             burns_without_spender: None,
             extended_testing: false,
-            mainnet_wasm,
-            master_wasm,
+            mainnet_wasms,
+            master_wasms,
         }
     }
 
     fn new_with_params(
-        canister_id_and_name: (&'static str, &'static str),
-        mainnet_wasm: &'static Wasm,
-        master_wasm: &'static Wasm,
+        canister_ids_and_name: (&'static str, &'static str, &'static str),
+        mainnet_wasms: &'static Wasms,
+        master_wasms: &'static Wasms,
         burns_without_spender: Option<BurnsWithoutSpender<Account>>,
         extended_testing: bool,
     ) -> Self {
         Self {
             burns_without_spender,
             extended_testing,
-            ..Self::new(canister_id_and_name, mainnet_wasm, master_wasm)
+            ..Self::new(canister_ids_and_name, mainnet_wasms, master_wasms)
         }
     }
 
     fn perform_upgrade_downgrade_testing(&self, state_machine: &StateMachine) {
         println!(
-            "Processing {} ledger, id {}",
-            self.ledger_id, self.canister_name
+            "Processing {}, ledger id: {}, index id: {}",
+            self.canister_name, self.ledger_id, self.index_id
         );
         let ledger_canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
@@ -105,9 +142,8 @@ impl LedgerSuiteConfig {
                 None,
             ));
         }
-        self.upgrade_canister(state_machine, self.master_wasm.clone());
-        // Upgrade again with bumped wasm timestamp to test pre_upgrade
-        self.upgrade_canister(state_machine, bump_gzip_timestamp(self.master_wasm));
+        // Upgrade to the new canister versions
+        self.upgrade_to_master(state_machine);
         if self.extended_testing {
             previous_ledger_state = Some(LedgerState::verify_state_and_generate_transactions(
                 state_machine,
@@ -116,8 +152,8 @@ impl LedgerSuiteConfig {
                 previous_ledger_state,
             ));
         }
-        // Downgrade back to the mainnet ledger version
-        self.upgrade_canister(state_machine, self.mainnet_wasm.clone());
+        // Downgrade back to the mainnet canister versions
+        self.upgrade_to_mainnet(state_machine);
         if self.extended_testing {
             let _ = LedgerState::verify_state_and_generate_transactions(
                 state_machine,
@@ -128,15 +164,48 @@ impl LedgerSuiteConfig {
         }
     }
 
-    fn upgrade_canister(&self, state_machine: &StateMachine, wasm: Wasm) {
+    fn upgrade_index(&self, state_machine: &StateMachine, wasm: &Wasm) {
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
+        let index_upgrade_arg = IndexArg::Upgrade(IndexUpgradeArg {
+            ledger_id: None,
+            retrieve_blocks_from_ledger_interval_seconds: None,
+        });
+        let args = Encode!(&index_upgrade_arg).unwrap();
+        state_machine
+            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
+            .expect("should successfully upgrade index canister");
+        println!("Upgraded {} index '{}'", self.canister_name, self.index_id);
+    }
+
+    fn upgrade_ledger(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
         let args = ic_icrc1_ledger::LedgerArgument::Upgrade(None);
         let args = Encode!(&args).unwrap();
         state_machine
-            .upgrade_canister(canister_id, wasm.bytes(), args)
+            .upgrade_canister(canister_id, wasm.clone().bytes(), args.clone())
             .expect("should successfully upgrade ledger canister");
-        println!("Upgraded {} '{}'", self.canister_name, self.ledger_id);
+        println!(
+            "Upgraded {} ledger '{}'",
+            self.canister_name, self.ledger_id
+        );
+    }
+
+    fn upgrade_to_mainnet(&self, state_machine: &StateMachine) {
+        // Upgrade each canister twice to exercise pre-upgrade
+        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
+        self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
+        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
+        self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
+    }
+
+    fn upgrade_to_master(&self, state_machine: &StateMachine) {
+        // Upgrade each canister twice to exercise pre-upgrade
+        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
+        self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
     }
 }
 
@@ -257,6 +326,7 @@ impl LedgerState {
 #[test]
 fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     const CK_BTC_LEDGER_CANISTER_ID: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+    const CK_BTC_INDEX_CANISTER_ID: &str = "n5wcd-faaaa-aaaar-qaaea-cai";
     const CK_BTC_LEDGER_CANISTER_NAME: &str = "ckBTC";
 
     let ck_btc_minter = icrc_ledger_types::icrc1::account::Account {
@@ -275,9 +345,13 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
     LedgerSuiteConfig::new_with_params(
-        (CK_BTC_LEDGER_CANISTER_ID, CK_BTC_LEDGER_CANISTER_NAME),
-        &MAINNET_WASM,
-        &MASTER_WASM,
+        (
+            CK_BTC_LEDGER_CANISTER_ID,
+            CK_BTC_INDEX_CANISTER_ID,
+            CK_BTC_LEDGER_CANISTER_NAME,
+        ),
+        &MAINNET_WASMS,
+        &MASTER_WASMS,
         Some(burns_without_spender),
         true,
     )
@@ -288,22 +362,82 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     // u256 testnet ledgers
-    const CK_SEPOLIA_LINK_LEDGER: (&str, &str) = ("r52mc-qaaaa-aaaar-qafzq-cai", "ckSepoliaLINK");
-    const CK_SEPOLIA_PEPE_LEDGER: (&str, &str) = ("hw4ru-taaaa-aaaar-qagdq-cai", "ckSepoliaPEPE");
-    const CK_SEPOLIA_USDC_LEDGER: (&str, &str) = ("yfumr-cyaaa-aaaar-qaela-cai", "ckSepoliaUSDC");
+    const CK_SEPOLIA_LINK_LEDGER_SUITE: (&str, &str, &str) = (
+        "r52mc-qaaaa-aaaar-qafzq-cai",
+        "ri55p-riaaa-aaaar-qaf2a-cai",
+        "ckSepoliaLINK",
+    );
+    const CK_SEPOLIA_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
+        "hw4ru-taaaa-aaaar-qagdq-cai",
+        "g3sv2-4iaaa-aaaar-qagea-cai",
+        "ckSepoliaPEPE",
+    );
+    const CK_SEPOLIA_USDC_LEDGER_SUITE: (&str, &str, &str) = (
+        "yfumr-cyaaa-aaaar-qaela-cai",
+        "ycvkf-paaaa-aaaar-qaelq-cai",
+        "ckSepoliaUSDC",
+    );
     // u256 production ledgers
-    const CK_ETH_LEDGER: (&str, &str) = ("ss2fx-dyaaa-aaaar-qacoq-cai", "ckETH");
-    const CK_EURC_LEDGER: (&str, &str) = ("pe5t5-diaaa-aaaar-qahwa-cai", "ckEURC");
-    const CK_USDC_LEDGER: (&str, &str) = ("xevnm-gaaaa-aaaar-qafnq-cai", "ckUSDC");
-    const CK_LINK_LEDGER: (&str, &str) = ("g4tto-rqaaa-aaaar-qageq-cai", "ckLINK");
-    const CK_OCT_LEDGER: (&str, &str) = ("ebo5g-cyaaa-aaaar-qagla-cai", "ckOCT");
-    const CK_PEPE_LEDGER: (&str, &str) = ("etik7-oiaaa-aaaar-qagia-cai", "ckPEPE");
-    const CK_SHIB_LEDGER: (&str, &str) = ("fxffn-xiaaa-aaaar-qagoa-cai", "ckSHIB");
-    const CK_UNI_LEDGER: (&str, &str) = ("ilzky-ayaaa-aaaar-qahha-cai", "ckUNI");
-    const CK_USDT_LEDGER: (&str, &str) = ("cngnf-vqaaa-aaaar-qag4q-cai", "ckUSDT");
-    const CK_WBTC_LEDGER: (&str, &str) = ("bptq2-faaaa-aaaar-qagxq-cai", "ckWBTC");
-    const CK_WSTETH_LEDGER: (&str, &str) = ("j2tuh-yqaaa-aaaar-qahcq-cai", "ckWSTETH");
-    const CK_XAUT_LEDGER: (&str, &str) = ("nza5v-qaaaa-aaaar-qahzq-cai", "ckXAUT");
+    const CK_ETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "ss2fx-dyaaa-aaaar-qacoq-cai",
+        "s3zol-vqaaa-aaaar-qacpa-cai",
+        "ckETH",
+    );
+    const CK_EURC_LEDGER_SUITE: (&str, &str, &str) = (
+        "pe5t5-diaaa-aaaar-qahwa-cai",
+        "pd4vj-oqaaa-aaaar-qahwq-cai",
+        "ckEURC",
+    );
+    const CK_LINK_LEDGER_SUITE: (&str, &str, &str) = (
+        "g4tto-rqaaa-aaaar-qageq-cai",
+        "gvqys-hyaaa-aaaar-qagfa-cai",
+        "ckLINK",
+    );
+    const CK_OCT_LEDGER_SUITE: (&str, &str, &str) = (
+        "ebo5g-cyaaa-aaaar-qagla-cai",
+        "egp3s-paaaa-aaaar-qaglq-cai",
+        "ckOCT",
+    );
+    const CK_PEPE_LEDGER_SUITE: (&str, &str, &str) = (
+        "etik7-oiaaa-aaaar-qagia-cai",
+        "eujml-dqaaa-aaaar-qagiq-cai",
+        "ckPEPE",
+    );
+    const CK_SHIB_LEDGER_SUITE: (&str, &str, &str) = (
+        "fxffn-xiaaa-aaaar-qagoa-cai",
+        "fqedz-2qaaa-aaaar-qagoq-cai",
+        "ckSHIB",
+    );
+    const CK_UNI_LEDGER_SUITE: (&str, &str, &str) = (
+        "ilzky-ayaaa-aaaar-qahha-cai",
+        "imymm-naaaa-aaaar-qahhq-cai",
+        "ckUNI",
+    );
+    const CK_USDC_LEDGER_SUITE: (&str, &str, &str) = (
+        "xevnm-gaaaa-aaaar-qafnq-cai",
+        "xrs4b-hiaaa-aaaar-qafoa-cai",
+        "ckUSDC",
+    );
+    const CK_USDT_LEDGER_SUITE: (&str, &str, &str) = (
+        "cngnf-vqaaa-aaaar-qag4q-cai",
+        "cefgz-dyaaa-aaaar-qag5a-cai",
+        "ckUSDT",
+    );
+    const CK_WBTC_LEDGER_SUITE: (&str, &str, &str) = (
+        "bptq2-faaaa-aaaar-qagxq-cai",
+        "dso6s-wiaaa-aaaar-qagya-cai",
+        "ckWBTC",
+    );
+    const CK_WSTETH_LEDGER_SUITE: (&str, &str, &str) = (
+        "j2tuh-yqaaa-aaaar-qahcq-cai",
+        "jtq73-oyaaa-aaaar-qahda-cai",
+        "ckWSTETH",
+    );
+    const CK_XAUT_LEDGER_SUITE: (&str, &str, &str) = (
+        "nza5v-qaaaa-aaaar-qahzq-cai",
+        "nmhmy-riaaa-aaaar-qah2a-cai",
+        "ckXAUT",
+    );
 
     let ck_eth_minter = icrc_ledger_types::icrc1::account::Account {
         owner: PrincipalId::from_str("sv3dd-oaaaa-aaaar-qacoa-cai")
@@ -320,33 +454,33 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     };
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
-        CK_ETH_LEDGER,
-        &MAINNET_U256_WASM,
-        &MASTER_WASM,
+        CK_ETH_LEDGER_SUITE,
+        &MAINNET_U256_WASMS,
+        &MASTER_WASMS,
         Some(ck_eth_burns_without_spender),
         true,
     )];
     for canister_id_and_name in vec![
-        CK_SEPOLIA_LINK_LEDGER,
-        CK_SEPOLIA_LINK_LEDGER,
-        CK_SEPOLIA_PEPE_LEDGER,
-        CK_SEPOLIA_USDC_LEDGER,
-        CK_EURC_LEDGER,
-        CK_USDC_LEDGER,
-        CK_LINK_LEDGER,
-        CK_OCT_LEDGER,
-        CK_PEPE_LEDGER,
-        CK_SHIB_LEDGER,
-        CK_UNI_LEDGER,
-        CK_USDT_LEDGER,
-        CK_WBTC_LEDGER,
-        CK_WSTETH_LEDGER,
-        CK_XAUT_LEDGER,
+        CK_SEPOLIA_LINK_LEDGER_SUITE,
+        CK_SEPOLIA_LINK_LEDGER_SUITE,
+        CK_SEPOLIA_PEPE_LEDGER_SUITE,
+        CK_SEPOLIA_USDC_LEDGER_SUITE,
+        CK_EURC_LEDGER_SUITE,
+        CK_USDC_LEDGER_SUITE,
+        CK_LINK_LEDGER_SUITE,
+        CK_OCT_LEDGER_SUITE,
+        CK_PEPE_LEDGER_SUITE,
+        CK_SHIB_LEDGER_SUITE,
+        CK_UNI_LEDGER_SUITE,
+        CK_USDT_LEDGER_SUITE,
+        CK_WBTC_LEDGER_SUITE,
+        CK_WSTETH_LEDGER_SUITE,
+        CK_XAUT_LEDGER_SUITE,
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &MAINNET_U256_WASM,
-            &MASTER_WASM,
+            &MAINNET_U256_WASMS,
+            &MASTER_WASMS,
         ));
     }
 
@@ -361,78 +495,193 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
-    const BOOMDAO: (&str, &str) = ("vtrom-gqaaa-aaaaq-aabia-cai", "BoomDAO");
-    const CATALYZE: (&str, &str) = ("uf2wh-taaaa-aaaaq-aabna-cai", "Catalyze");
-    const CYCLES_TRANSFER_STATION: (&str, &str) =
-        ("itgqj-7qaaa-aaaaq-aadoa-cai", "CyclesTransferStation");
-    const DECIDEAI: (&str, &str) = ("xsi2v-cyaaa-aaaaq-aabfq-cai", "DecideAI");
-    const DOGMI: (&str, &str) = ("np5km-uyaaa-aaaaq-aadrq-cai", "DOGMI");
-    const DRAGGINZ: (&str, &str) = ("zfcdd-tqaaa-aaaaq-aaaga-cai", "DRAGGINZ");
-    const ELNAAI: (&str, &str) = ("gemj7-oyaaa-aaaaq-aacnq-cai", "ELNA AI");
-    const ESTATEDAO: (&str, &str) = ("bliq2-niaaa-aaaaq-aac4q-cai", "EstateDAO");
-    const GOLDDAO: (&str, &str) = ("tyyy3-4aaaa-aaaaq-aab7a-cai", "GoldDAO");
-    const ICGHOST: (&str, &str) = ("4c4fd-caaaa-aaaaq-aaa3a-cai", "ICGhost");
-    const ICLIGHTHOUSE: (&str, &str) = ("hhaaz-2aaaa-aaaaq-aacla-cai", "ICLighthouse DAO");
-    const ICPANDA: (&str, &str) = ("druyg-tyaaa-aaaaq-aactq-cai", "ICPanda DAO");
-    const ICPCC: (&str, &str) = ("lrtnw-paaaa-aaaaq-aadfa-cai", "ICPCC DAO LLC");
-    const ICPSWAP: (&str, &str) = ("ca6gz-lqaaa-aaaaq-aacwa-cai", "ICPSwap");
-    const ICVC: (&str, &str) = ("m6xut-mqaaa-aaaaq-aadua-cai", "ICVC");
-    const KINIC: (&str, &str) = ("73mez-iiaaa-aaaaq-aaasq-cai", "Kinic");
-    const MOTOKO: (&str, &str) = ("k45jy-aiaaa-aaaaq-aadcq-cai", "Motoko");
-    const NEUTRINITE: (&str, &str) = ("f54if-eqaaa-aaaaq-aacea-cai", "Neutrinite");
-    const NUANCE: (&str, &str) = ("rxdbk-dyaaa-aaaaq-aabtq-cai", "Nuance");
-    const OPENCHAT: (&str, &str) = ("2ouva-viaaa-aaaaq-aaamq-cai", "OpenChat");
-    const OPENFPL: (&str, &str) = ("ddsp7-7iaaa-aaaaq-aacqq-cai", "OpenFPL");
-    const ORIGYN: (&str, &str) = ("lkwrt-vyaaa-aaaaq-aadhq-cai", "Origyn");
-    const SEERS: (&str, &str) = ("rffwt-piaaa-aaaaq-aabqq-cai", "Seers");
-    const SNEED: (&str, &str) = ("hvgxa-wqaaa-aaaaq-aacia-cai", "Sneed");
-    const SONIC: (&str, &str) = ("qbizb-wiaaa-aaaaq-aabwq-cai", "Sonic");
-    const TRAX: (&str, &str) = ("emww2-4yaaa-aaaaq-aacbq-cai", "Trax");
-    const WATERNEURON: (&str, &str) = ("jcmow-hyaaa-aaaaq-aadlq-cai", "WaterNeuron");
-    const YRAL: (&str, &str) = ("6rdgd-kyaaa-aaaaq-aaavq-cai", "YRAL");
-    const YUKU: (&str, &str) = ("atbfz-diaaa-aaaaq-aacyq-cai", "Yuku DAO");
+    const BOOMDAO_LEDGER_SUITE: (&str, &str, &str) = (
+        "vtrom-gqaaa-aaaaq-aabia-cai",
+        "v5tde-5aaaa-aaaaq-aabja-cai",
+        "BoomDAO",
+    );
+    const CATALYZE_LEDGER_SUITE: (&str, &str, &str) = (
+        "uf2wh-taaaa-aaaaq-aabna-cai",
+        "ux4b6-7qaaa-aaaaq-aaboa-cai",
+        "Catalyze",
+    );
+    const CYCLES_TRANSFER_STATION_LEDGER_SUITE: (&str, &str, &str) = (
+        "itgqj-7qaaa-aaaaq-aadoa-cai",
+        "i5e5b-eaaaa-aaaaq-aadpa-cai",
+        "CyclesTransferStation",
+    );
+    const DECIDEAI_LEDGER_SUITE: (&str, &str, &str) = (
+        "xsi2v-cyaaa-aaaaq-aabfq-cai",
+        "xaonm-oiaaa-aaaaq-aabgq-cai",
+        "DecideAI",
+    );
+    const DOGMI_LEDGER_SUITE: (&str, &str, &str) = (
+        "np5km-uyaaa-aaaaq-aadrq-cai",
+        "n535v-yiaaa-aaaaq-aadsq-cai",
+        "DOGMI",
+    );
+    const DRAGGINZ_LEDGER_SUITE: (&str, &str, &str) = (
+        "zfcdd-tqaaa-aaaaq-aaaga-cai",
+        "zlaol-iaaaa-aaaaq-aaaha-cai",
+        "DRAGGINZ",
+    );
+    const ELNAAI_LEDGER_SUITE: (&str, &str, &str) = (
+        "gemj7-oyaaa-aaaaq-aacnq-cai",
+        "gwk6g-ciaaa-aaaaq-aacoq-cai",
+        "ELNA AI",
+    );
+    const ESTATEDAO_LEDGER_SUITE: (&str, &str, &str) = (
+        "bliq2-niaaa-aaaaq-aac4q-cai",
+        "bfk5s-wyaaa-aaaaq-aac5q-cai",
+        "EstateDAO",
+    );
+    const GOLDDAO_LEDGER_SUITE: (&str, &str, &str) = (
+        "tyyy3-4aaaa-aaaaq-aab7a-cai",
+        "efv5g-kqaaa-aaaaq-aacaa-cai",
+        "GoldDAO",
+    );
+    const ICGHOST_LEDGER_SUITE: (&str, &str, &str) = (
+        "4c4fd-caaaa-aaaaq-aaa3a-cai",
+        "5ithz-aqaaa-aaaaq-aaa4a-cai",
+        "ICGhost",
+    );
+    const ICLIGHTHOUSE_LEDGER_SUITE: (&str, &str, &str) = (
+        "hhaaz-2aaaa-aaaaq-aacla-cai",
+        "gnpcd-yqaaa-aaaaq-aacma-cai",
+        "ICLighthouse DAO",
+    );
+    const ICPANDA_LEDGER_SUITE: (&str, &str, &str) = (
+        "druyg-tyaaa-aaaaq-aactq-cai",
+        "c3324-riaaa-aaaaq-aacuq-cai",
+        "ICPanda DAO",
+    );
+    const ICPCC_LEDGER_SUITE: (&str, &str, &str) = (
+        "lrtnw-paaaa-aaaaq-aadfa-cai",
+        "ldv2p-dqaaa-aaaaq-aadga-cai",
+        "ICPCC DAO LLC",
+    );
+    const ICPSWAP_LEDGER_SUITE: (&str, &str, &str) = (
+        "ca6gz-lqaaa-aaaaq-aacwa-cai",
+        "co4lr-qaaaa-aaaaq-aacxa-cai",
+        "ICPSwap",
+    );
+    const ICVC_LEDGER_SUITE: (&str, &str, &str) = (
+        "m6xut-mqaaa-aaaaq-aadua-cai",
+        "mqvz3-xaaaa-aaaaq-aadva-cai",
+        "ICVC",
+    );
+    const KINIC_LEDGER_SUITE: (&str, &str, &str) = (
+        "73mez-iiaaa-aaaaq-aaasq-cai",
+        "7vojr-tyaaa-aaaaq-aaatq-cai",
+        "Kinic",
+    );
+    const MOTOKO_LEDGER_SUITE: (&str, &str, &str) = (
+        "k45jy-aiaaa-aaaaq-aadcq-cai",
+        "ks7eq-3yaaa-aaaaq-aaddq-cai",
+        "Motoko",
+    );
+    const NEUTRINITE_LEDGER_SUITE: (&str, &str, &str) = (
+        "f54if-eqaaa-aaaaq-aacea-cai",
+        "ft6fn-7aaaa-aaaaq-aacfa-cai",
+        "Neutrinite",
+    );
+    const NUANCE_LEDGER_SUITE: (&str, &str, &str) = (
+        "rxdbk-dyaaa-aaaaq-aabtq-cai",
+        "q5mdq-biaaa-aaaaq-aabuq-cai",
+        "Nuance",
+    );
+    const OPENCHAT_LEDGER_SUITE: (&str, &str, &str) = (
+        "2ouva-viaaa-aaaaq-aaamq-cai",
+        "2awyi-oyaaa-aaaaq-aaanq-cai",
+        "OpenChat",
+    );
+    const OPENFPL_LEDGER_SUITE: (&str, &str, &str) = (
+        "ddsp7-7iaaa-aaaaq-aacqq-cai",
+        "dnqcx-eyaaa-aaaaq-aacrq-cai",
+        "OpenFPL",
+    );
+    const ORIGYN_LEDGER_SUITE: (&str, &str, &str) = (
+        "lkwrt-vyaaa-aaaaq-aadhq-cai",
+        "jqkzp-liaaa-aaaaq-aadiq-cai",
+        "Origyn",
+    );
+    const SEERS_LEDGER_SUITE: (&str, &str, &str) = (
+        "rffwt-piaaa-aaaaq-aabqq-cai",
+        "rlh33-uyaaa-aaaaq-aabrq-cai",
+        "Seers",
+    );
+    const SNEED_LEDGER_SUITE: (&str, &str, &str) = (
+        "hvgxa-wqaaa-aaaaq-aacia-cai",
+        "h3e2i-naaaa-aaaaq-aacja-cai",
+        "Sneed",
+    );
+    const SONIC_LEDGER_SUITE: (&str, &str, &str) = (
+        "qbizb-wiaaa-aaaaq-aabwq-cai",
+        "qpkuj-nyaaa-aaaaq-aabxq-cai",
+        "Sonic",
+    );
+    const TRAX_LEDGER_SUITE: (&str, &str, &str) = (
+        "emww2-4yaaa-aaaaq-aacbq-cai",
+        "e6qbd-qiaaa-aaaaq-aaccq-cai",
+        "Trax",
+    );
+    const WATERNEURON_LEDGER_SUITE: (&str, &str, &str) = (
+        "jcmow-hyaaa-aaaaq-aadlq-cai",
+        "iidmm-fiaaa-aaaaq-aadmq-cai",
+        "WaterNeuron",
+    );
+    const YRAL_LEDGER_SUITE: (&str, &str, &str) = (
+        "6rdgd-kyaaa-aaaaq-aaavq-cai",
+        "6dfr2-giaaa-aaaaq-aaawq-cai",
+        "YRAL",
+    );
+    const YUKU_LEDGER_SUITE: (&str, &str, &str) = (
+        "atbfz-diaaa-aaaaq-aacyq-cai",
+        "a5dir-yyaaa-aaaaq-aaczq-cai",
+        "Yuku DAO",
+    );
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
-        OPENCHAT,
-        &MAINNET_U64_WASM,
-        &MASTER_WASM,
+        OPENCHAT_LEDGER_SUITE,
+        &MAINNET_U64_WASMS,
+        &MASTER_WASMS,
         None,
         true,
     )];
     for canister_id_and_name in vec![
-        BOOMDAO,
-        CATALYZE,
-        CYCLES_TRANSFER_STATION,
-        DECIDEAI,
-        DOGMI,
-        DRAGGINZ,
-        ELNAAI,
-        ESTATEDAO,
-        GOLDDAO,
-        ICGHOST,
-        ICLIGHTHOUSE,
-        ICPANDA,
-        ICPCC,
-        ICPSWAP,
-        ICVC,
-        KINIC,
-        MOTOKO,
-        NEUTRINITE,
-        NUANCE,
-        OPENFPL,
-        ORIGYN,
-        SEERS,
-        SNEED,
-        SONIC,
-        TRAX,
-        WATERNEURON,
-        YRAL,
-        YUKU,
+        BOOMDAO_LEDGER_SUITE,
+        CATALYZE_LEDGER_SUITE,
+        CYCLES_TRANSFER_STATION_LEDGER_SUITE,
+        DECIDEAI_LEDGER_SUITE,
+        DOGMI_LEDGER_SUITE,
+        DRAGGINZ_LEDGER_SUITE,
+        ELNAAI_LEDGER_SUITE,
+        ESTATEDAO_LEDGER_SUITE,
+        GOLDDAO_LEDGER_SUITE,
+        ICGHOST_LEDGER_SUITE,
+        ICLIGHTHOUSE_LEDGER_SUITE,
+        ICPANDA_LEDGER_SUITE,
+        ICPCC_LEDGER_SUITE,
+        ICPSWAP_LEDGER_SUITE,
+        ICVC_LEDGER_SUITE,
+        KINIC_LEDGER_SUITE,
+        MOTOKO_LEDGER_SUITE,
+        NEUTRINITE_LEDGER_SUITE,
+        NUANCE_LEDGER_SUITE,
+        OPENFPL_LEDGER_SUITE,
+        ORIGYN_LEDGER_SUITE,
+        SEERS_LEDGER_SUITE,
+        SNEED_LEDGER_SUITE,
+        SONIC_LEDGER_SUITE,
+        TRAX_LEDGER_SUITE,
+        WATERNEURON_LEDGER_SUITE,
+        YRAL_LEDGER_SUITE,
+        YUKU_LEDGER_SUITE,
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &MAINNET_U64_WASM,
-            &MASTER_WASM,
+            &MAINNET_U64_WASMS,
+            &MASTER_WASMS,
         ));
     }
 
