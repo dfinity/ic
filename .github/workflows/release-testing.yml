@@ -5,6 +5,10 @@ on:
       - "hotfix-*"
       - "rc--*"
   workflow_dispatch:
+# new commits interrupt any running workflow on the same branch
+concurrency:
+  group: ${{ github.head_ref }}
+  cancel-in-progress: true
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
