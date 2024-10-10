@@ -134,7 +134,6 @@ function read_query_stats_variables() {
         case "$key" in
             "query_stats_epoch_length")
                 query_stats_epoch_length="${value}"
-                query_stats_aggregation="\"Enabled\""
                 ;;
         esac
     done <"$1"
@@ -225,8 +224,6 @@ BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
 BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
-# Defaults to enabled
-QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Enabled\"}"
 # Default is 600 blocks i.e. around 10min
 QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
@@ -246,7 +243,6 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
-    -e "s@{{ query_stats_aggregation }}@${QUERY_STATS_AGGREGATION}@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
