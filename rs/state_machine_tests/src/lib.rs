@@ -2359,7 +2359,7 @@ impl StateMachine {
         self.check_critical_errors();
 
         let time_of_next_round = self.time_of_next_round();
-        self.set_time(time_of_next_round);
+        self.set_time_internal(time_of_next_round);
         *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
@@ -2431,9 +2431,7 @@ impl StateMachine {
         replicated_state.metadata.batch_time
     }
 
-    /// Sets the time that the state machine will use for executing next
-    /// messages.
-    pub fn set_time(&self, time: SystemTime) {
+    fn set_time_internal(&self, time: SystemTime) {
         let t = time
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -2441,9 +2439,26 @@ impl StateMachine {
         let time = Time::from_nanos_since_unix_epoch(t);
         self.consensus_time.set(time);
         self.time.store(t, Ordering::Relaxed);
-        self.time_source
-            .set_time(time)
-            .unwrap_or_else(|_| error!(self.replica_logger, "Time went backwards."));
+        self.time_source.set_time(time).unwrap();
+    }
+
+    /// Sets the time that the state machine will use for executing next
+    /// messages.
+    pub fn set_time(&self, time: SystemTime) {
+        match self.time().cmp(&time) {
+            std::cmp::Ordering::Greater => {
+                error!(self.replica_logger, "Time went backwards.");
+            }
+            std::cmp::Ordering::Equal => (),
+            std::cmp::Ordering::Less => {
+                self.set_time_internal(time);
+                if self.payload_builder.read().unwrap().is_none() {
+                    self.tick();
+                } else {
+                    self.execute_round();
+                }
+            }
+        }
     }
 
     /// Returns the current state machine time.

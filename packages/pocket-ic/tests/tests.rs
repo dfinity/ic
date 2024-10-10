@@ -1503,7 +1503,7 @@ fn test_canister_http_with_diverging_responses() {
                 decode_one(&data).unwrap();
             let (reject_code, err) = http_response.unwrap_err();
             assert_eq!(reject_code, RejectionCode::SysTransient);
-            let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
+            let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000006, hashes: [e340878b3bf516de1aa03c7095693528d7915bc4241f5956ed8f565fb20d22c7: 2], [c51fd3b8ded63205d767e9ac6cb344a6506165333bf924aec992ed577aa17405: 2], [9d77fb058eb6de121188a0a6960deebff2e93b1b790701b95f43d420a7e87d18: 2], [9ca450a18e3bffb98f0ef3e985e30a5ad5d469486ae4158e31244f3e70af7d75: 2], [22ee87cb407c66ffe662af422a37a21aaa06bf5f2cec073068fba0efb7c9ba59: 2], [2064f0c135ceb62807f5e47c0979bf3efbc7d7654297d8bd76780e52ff06f87c: 2], [c2269476ad778187e28ce81a7d8ef4e466ac94e0ffae2750d510a28927ef0764: 1]";
             assert_eq!(err, expected);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject {}", msg),
