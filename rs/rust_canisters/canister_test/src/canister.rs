@@ -15,9 +15,9 @@ use on_wire::{FromWire, IntoWire, NewType};
 use ic_management_canister_types::{
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_replica_tests::{canister_test_async, LocalTestRuntime};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_state_machine_tests::StateMachine;
 use std::{
     convert::{AsRef, TryFrom},
     env, fmt,

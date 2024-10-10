@@ -25,7 +25,7 @@ use ic_nns_test_utils::{
         setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use ic_types::time::GENESIS;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
 use std::time::Duration;

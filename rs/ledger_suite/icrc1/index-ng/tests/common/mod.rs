@@ -4,7 +4,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_pocket_ic_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -81,7 +81,7 @@ pub fn install_ledger(
         ledger_wasm(),
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }
@@ -92,7 +92,7 @@ pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterI
         index_ng_wasm(),
         Encode!(&args).unwrap(),
         None,
-        ic_state_machine_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+        ic_pocket_ic_tests::Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )
     .unwrap()
 }

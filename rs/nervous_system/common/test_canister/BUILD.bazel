@@ -63,8 +63,8 @@ rust_ic_test(
     },
     deps = [
         # Keep sorted.
+        "//rs/pocket_ic_tests",
         "//rs/rust_canisters/canister_test",
-        "//rs/state_machine_tests",
         "//rs/types/types",
         "@crate_index//:candid",
     ],

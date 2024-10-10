@@ -11,6 +11,7 @@ use ic_nns_test_utils::{
         sns_wait_for_proposal_execution, update,
     },
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_governance::pb::v1::{
     proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
     NeuronPermissionList, NeuronPermissionType, Proposal,
@@ -21,7 +22,6 @@ use ic_sns_test_utils::{
         setup_sns_canisters, state_machine_builder_for_sns_tests, SnsTestCanisterIds,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use num_traits::cast::ToPrimitive;
 

@@ -10,7 +10,7 @@ use ic_nns_governance_api::pb::v1::{
     install_code::CanisterInstallMode, manage_neuron_response::Command, InstallCodeRequest,
     MakeProposalRequest, Neuron, ProposalActionRequest,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use std::collections::HashMap;
 
 const INVALID_NEURON_ID: u64 = 0;

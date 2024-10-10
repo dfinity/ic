@@ -9,7 +9,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{setup_nns_canisters, state_machine_builder_for_nns_tests},
 };
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_pocket_ic_tests::{StateMachine, WasmResult};
 use serde_bytes::ByteBuf;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {

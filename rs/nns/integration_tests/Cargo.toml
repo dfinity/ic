@@ -92,7 +92,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-wasm = { path = "../sns-wasm" }
-ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../pocket_ic_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
