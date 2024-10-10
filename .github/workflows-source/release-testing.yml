@@ -9,7 +9,7 @@ on:
 
 # new commits interrupt any running workflow on the same branch
 concurrency:
-  group: ${{ github.ref }}
+  group: ${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 env:
