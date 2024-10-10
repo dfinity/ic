@@ -1446,7 +1446,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 80, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
             .resolve(host, bn_addr.into())
