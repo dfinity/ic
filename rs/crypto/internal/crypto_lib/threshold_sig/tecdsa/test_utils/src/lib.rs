@@ -1,3 +1,4 @@
+use bitcoin::hashes::hex::FromHex;
 use ic_crypto_internal_threshold_sig_ecdsa::{
     EccCurveType, EccPoint, EccScalar, PedersenCommitment, PolynomialCommitment,
     PolynomialCommitmentType, SimpleCommitment,
@@ -49,6 +50,32 @@ pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg
         .expect("failed to parse public key");
     let signature = Signature::<Public>::from_bytes(sig_array).unwrap();
     schnorr.verify(&public_key, Message::<Secret>::raw(msg), &signature)
+}
+
+pub fn verify_taproot_signature_using_third_party(
+    sec1_pk: &[u8],
+    sig: &[u8],
+    msg: &[u8],
+    taproot_hash: &[u8],
+) -> bool {
+    if msg.len() != 32 {
+        // The bitcoin Rust library doesn't support arbitrary hash inputs yet
+        return true;
+    }
+    use bitcoin::schnorr::TapTweak;
+    use bitcoin::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
+    use bitcoin::util::taproot::TapBranchHash;
+
+    let secp256k1 = Secp256k1::new();
+    let pk = XOnlyPublicKey::from_slice(&sec1_pk[1..]).unwrap();
+
+    let tnh = TapBranchHash::from_hex(&hex::encode(taproot_hash)).unwrap();
+
+    let dk = pk.tap_tweak(&secp256k1, Some(tnh)).0.to_inner();
+
+    let msg = Message::from_slice(msg).unwrap();
+    let sig = Signature::from_slice(sig).unwrap();
+    sig.verify(&msg, &dk).is_ok()
 }
 
 pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
@@ -1106,6 +1133,7 @@ pub struct Bip340SignatureProtocolExecution {
     signed_message: Vec<u8>,
     random_beacon: Randomness,
     derivation_path: DerivationPath,
+    taproot_tree_root: Option<Vec<u8>>,
 }
 
 impl Bip340SignatureProtocolExecution {
@@ -1120,6 +1148,23 @@ impl Bip340SignatureProtocolExecution {
             signed_message,
             random_beacon,
             derivation_path,
+            taproot_tree_root: None,
+        }
+    }
+
+    pub fn new_with_taproot(
+        setup: SchnorrSignatureProtocolSetup,
+        signed_message: Vec<u8>,
+        taproot_tree_root: Vec<u8>,
+        random_beacon: Randomness,
+        derivation_path: DerivationPath,
+    ) -> Self {
+        Self {
+            setup,
+            signed_message,
+            random_beacon,
+            derivation_path,
+            taproot_tree_root: Some(taproot_tree_root),
         }
     }
 
@@ -1132,6 +1177,7 @@ impl Bip340SignatureProtocolExecution {
             let share = create_bip340_signature_share(
                 &self.derivation_path,
                 &self.signed_message,
+                self.taproot_tree_root.as_deref(),
                 self.random_beacon,
                 &self.setup.key.transcript,
                 &self.setup.presig.transcript,
@@ -1144,6 +1190,7 @@ impl Bip340SignatureProtocolExecution {
                 &share,
                 &self.derivation_path,
                 &self.signed_message,
+                self.taproot_tree_root.as_deref(),
                 self.random_beacon,
                 node_index as u32,
                 &self.setup.key.transcript,
@@ -1167,6 +1214,7 @@ impl Bip340SignatureProtocolExecution {
         combine_bip340_signature_shares(
             &self.derivation_path,
             &self.signed_message,
+            self.taproot_tree_root.as_deref(),
             self.random_beacon,
             &self.setup.key.transcript,
             &self.setup.presig.transcript,
@@ -1183,21 +1231,34 @@ impl Bip340SignatureProtocolExecution {
             sig,
             &self.derivation_path,
             &self.signed_message,
+            self.taproot_tree_root.as_deref(),
             self.random_beacon,
             &self.setup.presig.transcript,
             &self.setup.key.transcript,
         )?;
 
         // If verification succeeded, check with RustCrypto's version also
+
         let pk = self.setup.public_key(&self.derivation_path)?;
 
-        assert!(verify_bip340_signature_using_third_party(
-            &pk,
-            &sig.serialize().map_err(|e| {
-                ThresholdBip340VerifySignatureInternalError::InternalError(format!("{e:?}"))
-            })?,
-            &self.signed_message
-        ));
+        let sig = &sig.serialize().map_err(|e| {
+            ThresholdBip340VerifySignatureInternalError::InternalError(format!("{e:?}"))
+        })?;
+
+        if let Some(h) = &self.taproot_tree_root {
+            assert!(verify_taproot_signature_using_third_party(
+                &pk,
+                sig,
+                &self.signed_message,
+                h,
+            ));
+        } else {
+            assert!(verify_bip340_signature_using_third_party(
+                &pk,
+                sig,
+                &self.signed_message,
+            ));
+        }
 
         Ok(())
     }

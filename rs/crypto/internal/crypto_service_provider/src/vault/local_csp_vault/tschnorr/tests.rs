@@ -296,6 +296,7 @@ mod create_schnorr_sig_share {
                     vault.create_schnorr_sig_share(
                         parameters.derivation_path.clone(),
                         parameters.message.clone(),
+                        parameters.taproot_tree_root.clone(),
                         parameters.nonce,
                         transcript_key,
                         transcript_presig,
@@ -367,6 +368,7 @@ mod utils {
     pub struct SchnorrSignShareParameters {
         pub derivation_path: ExtendedDerivationPath,
         pub message: Vec<u8>,
+        pub taproot_tree_root: Option<Vec<u8>>,
         pub nonce: Randomness,
         pub key: IDkgTranscriptInternal,
         pub key_opening: CspSecretKey,
@@ -390,6 +392,7 @@ mod utils {
                 derivation_path: some_derivation_path(),
                 message: "some message".as_bytes().to_vec(),
                 nonce: Randomness::from([0; 32]),
+                taproot_tree_root: None,
                 key,
                 key_opening,
                 presig,
@@ -406,6 +409,7 @@ mod utils {
             vault.create_schnorr_sig_share(
                 self.derivation_path.clone(),
                 self.message.clone(),
+                self.taproot_tree_root.clone(),
                 self.nonce,
                 transcript_to_bytes(&self.key),
                 transcript_to_bytes(&self.presig),
