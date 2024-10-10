@@ -1081,18 +1081,6 @@ fn add_proposal_id_to_add_wasm_request(
     Ok(payload)
 }
 
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    #[cfg(not(feature = "test"))]
-    let declared_interface = include_str!("governance.did");
-    #[cfg(feature = "test")]
-    let declared_interface = include_str!("governance_test.did");
-
-    declared_interface.to_string()
-}
-
 fn main() {
     // This block is intentionally left blank.
 }
