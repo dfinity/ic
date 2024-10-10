@@ -706,7 +706,7 @@ pub struct Governance {
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
 /// non-WASM environments that are used for testing.  This only actually spawns in the case where
 /// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
-/// immediately executes.s
+/// immediately executes.
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
