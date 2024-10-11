@@ -7,7 +7,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 # WASM metadata is a 2-tuple of git commit ID and WASM hash.
 CANISTER_NAME_TO_WASM_METADATA = {
     "governance": ("87343a880050ca72b1361138535211f5770dd52e", "8665830c50c9a0dddd996008e537d060a380ac7b6c22237679bd0cecc4ee1044"),
-    "ledger": ("6dcfafb491092704d374317d9a72a7ad2475d7c9", "4fe38a91a3130e9d8b39e3413ae3b3f46c40d3fbd507df1b6092f962d970a7ea"),
+    "ledger": ("b0ade55f7e8999e2842fe3f49df163ba224b71a2", "d0ec2cdeee48e2dbee07c59dfdc3928413de86930242fef0704ab7c1be6c7664"),
     "archive": ("b43280208c32633a29657a1051660324e88a373d", "db0f094005a0e84e243f8f300236be879dcefa412c2fd36d675390caa689d88d"),
     "index": ("b43280208c32633a29657a1051660324e88a373d", "62bbbada301838ad0f6e371415be990ce70e36c6f11267d4ba9fac8ff09aa32d"),
     "root": ("a0207146be211cdff83321c99e9e70baa62733c7", "c280a25dc565f8a42429cb5b969906c4c5a789381e98f6e11c247c91c4dfaac5"),
