@@ -119,6 +119,9 @@ pub mod native_action_ids {
 
     /// ManageDappCanisterSettings Action.
     pub const MANAGE_DAPP_CANISTER_SETTINGS: u64 = 14;
+
+    /// ResetTimers Action.
+    pub const RESET_TIMERS: u64 = 15;
 }
 
 impl governance::Mode {
@@ -1177,6 +1180,15 @@ impl NervousSystemFunction {
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
+
+    fn reset_timers() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::RESET_TIMERS,
+            name: "Reset timers".to_string(),
+            description: Some("Proposal to reset SNS framework canister timers.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
 }
 
 impl From<Action> for NervousSystemFunction {
@@ -1217,6 +1229,7 @@ impl From<Action> for NervousSystemFunction {
             Action::ManageDappCanisterSettings(_) => {
                 NervousSystemFunction::manage_dapp_canister_settings()
             }
+            Action::ResetTimers(_) => NervousSystemFunction::reset_timers(),
         }
     }
 }
@@ -1671,6 +1684,7 @@ impl Action {
             | ManageSnsMetadata(_)
             | ManageLedgerParameters(_)
             | RegisterDappCanisters(_)
+            | ResetTimers(_)
             | ManageDappCanisterSettings(_) => ProposalCriticality::Normal,
         }
     }
@@ -1854,6 +1868,7 @@ impl From<&Action> for u64 {
             Action::ManageDappCanisterSettings(_) => {
                 native_action_ids::MANAGE_DAPP_CANISTER_SETTINGS
             }
+            Action::ResetTimers(_) => native_action_ids::RESET_TIMERS,
         }
     }
 }
@@ -3138,6 +3153,7 @@ pub(crate) mod tests {
                 Action::Motion(Default::default()),
                 Action::AddGenericNervousSystemFunction(Default::default()),
                 Action::RemoveGenericNervousSystemFunction(Default::default()),
+                Action::ResetTimers(Default::default()),
             ]; 
 
             let disallowed_in_pre_initialization_swap = vec! [

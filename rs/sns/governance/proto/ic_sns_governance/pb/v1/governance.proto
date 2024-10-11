@@ -404,6 +404,9 @@ message RegisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
+// A proposal function to reset the SNS framework canisters' timers.
+message ResetTimers {}
+
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
 message DeregisterDappCanisters {
   // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
@@ -546,6 +549,11 @@ message Proposal {
     //
     // Id = 14.
     ManageDappCanisterSettings manage_dapp_canister_settings = 18;
+
+    // Reset the timers of this SNS's framework canisters.
+    //
+    // Id = 15.
+    ResetTimers reset_timers = 19;
   }
 }
 

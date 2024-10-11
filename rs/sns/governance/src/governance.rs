@@ -2086,6 +2086,7 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
+            Action::ResetTimers(_) => self.perform_reset_timers().await,
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2244,6 +2245,23 @@ impl Governance {
                     format!("Canister method call failed: {err:?}"),
                 )
             })
+    }
+
+    async fn perform_reset_timers(&self) -> Result<(), GovernanceError> {
+        let swap_canister_id = self.proto.swap_canister_id_or_panic();
+        let arg = candid::Encode!().unwrap();
+        let reset_timers_result = self
+            .env
+            .call_canister(swap_canister_id, "reset_timers", arg)
+            .await;
+
+        if let Err(err) = reset_timers_result {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Error resetting Swap canister's timers: {:?}", err),
+            ));
+        }
+        Ok(())
     }
 
     /// Sets the controllers of registered dapp canisters in root.

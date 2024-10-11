@@ -10,6 +10,7 @@ type Action = variant {
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
   RegisterDappCanisters : RegisterDappCanisters;
+  ResetTimers : record {};
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;

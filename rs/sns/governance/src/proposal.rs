@@ -405,6 +405,7 @@ pub(crate) async fn validate_and_render_action(
                 &disallowed_target_canister_ids,
             )
         }
+        proposal::Action::ResetTimers(_) => validate_and_render_reset_timers(),
         proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
@@ -1449,6 +1450,10 @@ fn validate_and_render_register_dapp_canisters(
         );
         Err(err_msg)
     }
+}
+
+fn validate_and_render_reset_timers() -> Result<String, String> {
+    Ok("# Proposal to reset SNS framework canister timers.".to_string())
 }
 
 fn validate_and_render_deregister_dapp_canisters(

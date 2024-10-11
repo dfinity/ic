@@ -568,6 +568,17 @@ pub struct RegisterDappCanisters {
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
+/// A proposal function to reset the SNS framework canisters' timers.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimers {}
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(
     candid::CandidType,
@@ -641,7 +652,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -746,6 +757,11 @@ pub mod proposal {
         /// Id = 14.
         #[prost(message, tag = "18")]
         ManageDappCanisterSettings(super::ManageDappCanisterSettings),
+        /// Reset the timers of this SNS's framework canisters.
+        ///
+        /// Id = 15.
+        #[prost(message, tag = "19")]
+        ResetTimers(super::ResetTimers),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
