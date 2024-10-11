@@ -466,4 +466,5 @@ service : (Init) -> {
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );
+  reset_timers : (record {}) -> (record {});
 }
