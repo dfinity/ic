@@ -36,33 +36,16 @@ fn index_wasm_u256() -> Vec<u8> {
 #[test]
 #[should_panic(expected = "assertion `left == right` failed: u256 representation is 32-bytes long")]
 fn should_fail_to_upgrade_index_ng_from_u64_to_u256_wasm() {
-    let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
-    let env = &StateMachine::new();
-    let minter = minter_identity().sender().unwrap();
-    let ledger_id = install_ledger(
-        env,
-        initial_balances,
-        default_archive_options(),
-        None,
-        minter,
-    );
-    let index_init_arg = IndexArg::Init(IndexInitArg {
-        ledger_id: Principal::from(ledger_id),
-        retrieve_blocks_from_ledger_interval_seconds: None,
-    });
-    let index_id = env
-        .install_canister(index_wasm_u64(), Encode!(&index_init_arg).unwrap(), None)
-        .unwrap();
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    let upgrade_args = Encode!(&None::<IndexArg>).unwrap();
-    env.upgrade_canister(index_id, index_wasm_u256(), upgrade_args.clone())
-        .unwrap();
+    index_install_and_upgrade_test(index_wasm_u64(), index_wasm_u256());
 }
 
 #[test]
 #[should_panic(expected = "called `Result::unwrap()` on an `Err` value: TryFromSliceError(())")]
 fn should_fail_to_upgrade_index_ng_from_u256_to_u64_wasm() {
+    index_install_and_upgrade_test(index_wasm_u256(), index_wasm_u64());
+}
+
+fn index_install_and_upgrade_test(index_install_wasm: Vec<u8>, index_upgrade_wasm: Vec<u8>) {
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
     let minter = minter_identity().sender().unwrap();
@@ -78,11 +61,11 @@ fn should_fail_to_upgrade_index_ng_from_u256_to_u64_wasm() {
         retrieve_blocks_from_ledger_interval_seconds: None,
     });
     let index_id = env
-        .install_canister(index_wasm_u256(), Encode!(&index_init_arg).unwrap(), None)
+        .install_canister(index_install_wasm, Encode!(&index_init_arg).unwrap(), None)
         .unwrap();
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let upgrade_args = Encode!(&None::<IndexArg>).unwrap();
-    env.upgrade_canister(index_id, index_wasm_u64(), upgrade_args.clone())
+    env.upgrade_canister(index_id, index_upgrade_wasm, upgrade_args.clone())
         .unwrap();
 }
