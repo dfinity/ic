@@ -225,7 +225,7 @@ fn write_checkpoint(
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
     validate_checkpoint_and_remove_unverified_marker(&cp_layout, Some(thread_pool))
-        .map_err(|e| format!("Falied to validate checkpoint: {}", e))?;
+        .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
 
     Ok(())
 }
