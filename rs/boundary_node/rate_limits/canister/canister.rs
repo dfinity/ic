@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::{init, update};
+use ic_cdk_macros::{init, query};
 use rate_limits_api::{GetConfigResponse, InitArg, Version};
 use storage::{get_stable_version, set_stable_version};
 use types::{ConfigResponse, OutputConfig};
@@ -14,8 +14,8 @@ fn init(_init_arg: InitArg) {
     // TODO: init periodic timer for fetching API BNs principals.
 }
 
-#[update(name = "get_config")]
-#[candid_method(update, rename = "get_config")]
+#[query(name = "get_config")]
+#[candid_method(query, rename = "get_config")]
 fn get_config(_version: Option<Version>) -> GetConfigResponse {
     let version = get_stable_version();
 
