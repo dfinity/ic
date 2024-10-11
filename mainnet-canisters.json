@@ -8,16 +8,16 @@
     "sha256": "612410c71e893bb64772ab8131d77264740398f3932d873cb4f640fc257f9e61"
   },
   "ck_btc_ledger": {
-    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
-    "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
+    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
+    "sha256": "10265a7d88461317953030fb0e6da20b9035260a11d077a1b249d4a18a5b8577"
   },
   "ck_eth_index": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "de250f08dc7e699144b73514f55fbbb3a3f8cd97abf0f7ae31d9fb7494f55234"
   },
   "ck_eth_ledger": {
-    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
-    "sha256": "e6072806ae22868ee09c07923d093b1b0b687dba540d22cfc1e1a5392bfcca46"
+    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
+    "sha256": "566f1c1ae68cca5618e74cdb2239d989084d92237b04a31f7898182ad0547a93"
   },
   "cycles-minting": {
     "rev": "77f48ae63af09b6538b1bf33d3accc3bc74d14f8",
