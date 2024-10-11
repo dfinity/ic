@@ -17,7 +17,7 @@ fn main() {
         CandidSource::File(&old_did_file),
     ) {
         panic!(
-            "The new interface at {} is not compatible with the old interface at {}:\n{}",
+            "The new interface at {} is not compatible with the old interface at {}:\n{:#?}",
             new_did_file.display(),
             old_did_file.display(),
             e,
