@@ -9156,6 +9156,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
+ "ic-stable-structures",
  "num-traits",
  "serde",
  "serde_bytes",
