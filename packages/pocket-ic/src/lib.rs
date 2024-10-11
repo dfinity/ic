@@ -66,7 +66,7 @@ use tracing::{instrument, warn};
 pub mod common;
 pub mod nonblocking;
 
-const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0\n";
+const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -1298,10 +1298,11 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         .stdout;
     let version_str = String::from_utf8(version)
         .unwrap_or_else(|e| panic!("Failed to parse PocketIC binary version string: {}", e));
-    if version_str != EXPECTED_SERVER_VERSION {
+    let version_line = version_str.trim_end_matches('\n');
+    if version_line != EXPECTED_SERVER_VERSION {
         panic!(
             "Incompatible PocketIC server version: got {}; expected {}.",
-            version_str, EXPECTED_SERVER_VERSION
+            version_line, EXPECTED_SERVER_VERSION
         );
     }
 
