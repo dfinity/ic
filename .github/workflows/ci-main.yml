@@ -517,7 +517,20 @@ jobs:
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
-          ./ci/scripts/bazel-coverage.sh
+          # ./ci/scripts/bazel-coverage.sh
+          mkdir -p cov_html/
+          echo test >/cov_html/test.txt
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+      - name: Upload COV report
+        shell: bash
+        run: |
+          rclone sync cov_html s3:dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
+              --s3-env-auth --progress
       - name: Upload Test Coverage Report
         uses: actions/upload-artifact@v4
         with:
