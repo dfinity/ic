@@ -90,7 +90,16 @@ fn test_swap_disabled_eventually() {
         );
     }
 
+    // Each periodic tasks performs at most one action, so we need to wait for all the following
+    // actions to complete:
+    // (1) advance the Swap lifecycle
+    // (2) set already_tried_to_auto_finalize
+    // (3) unset requires_periodic_tasks
     state_machine.advance_time(Duration::from_secs(TWO_WEEKS_SECONDS));
+    state_machine.tick();
+    state_machine.advance_time(Duration::from_secs(100));
+    state_machine.tick();
+    state_machine.advance_time(Duration::from_secs(100));
     state_machine.tick();
 
     // Inspect the final state.
@@ -152,7 +161,9 @@ fn test_swap_reset_timers() {
             last_spawned_timestamp_seconds: None,
         }) => last_reset_timestamp_seconds);
 
-        state_machine.advance_time(Duration::from_secs(100));
+        // Resetting the timers cannot be done sooner than `RESET_TIMERS_COOL_DOWN_INTERVAL` after
+        // the canister is initialized.
+        state_machine.advance_time(Duration::from_secs(1000));
         state_machine.tick();
 
         let timers_before_reset = {
@@ -175,7 +186,7 @@ fn test_swap_reset_timers() {
 
         assert_eq!(
             last_spawned_timestamp_seconds,
-            last_reset_timestamp_seconds + 100
+            last_reset_timestamp_seconds + 1000
         );
         last_spawned_timestamp_seconds
     };
@@ -241,4 +252,89 @@ fn test_swap_reset_timers() {
             last_spawned_before_reset_timestamp_seconds + 100
         );
     }
+}
+
+#[test]
+fn test_swap_reset_timers_cannot_be_spammed() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    // Install the swap canister.
+    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
+    let args = Encode!(&swap_init(state_machine.time())).unwrap();
+    let canister_id = state_machine
+        .install_canister(wasm.clone(), args, None)
+        .unwrap();
+
+    state_machine.advance_time(Duration::from_secs(600));
+    state_machine.tick();
+
+    let get_last_spawned_timestamp_seconds = || {
+        let timers = {
+            let payload = Encode!(&GetStateRequest {}).unwrap();
+            let response = state_machine
+                .execute_ingress(canister_id, "get_state", payload)
+                .expect("Unable to call get_state on the Swap canister");
+            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+            response.swap.unwrap().timers
+        };
+
+        let last_reset_timestamp_seconds = assert_matches!(timers, Some(Timers {
+            last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
+            ..
+        }) => last_reset_timestamp_seconds);
+
+        last_reset_timestamp_seconds
+    };
+
+    // Reset the timers.
+    {
+        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let response = state_machine
+            .execute_ingress(canister_id, "reset_timers", payload)
+            .expect("Unable to call reset_timers on the Swap canister");
+        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+    }
+
+    let last_spawned_timestamp_seconds_1 = get_last_spawned_timestamp_seconds();
+
+    state_machine.advance_time(Duration::from_secs(500));
+    state_machine.tick();
+
+    // Attempt to reset the timers again, after a small delay.
+    {
+        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let response = state_machine
+            .execute_ingress(canister_id, "reset_timers", payload)
+            .unwrap_err();
+        assert!(&response
+            .to_string()
+            .contains("Reset has already been called within the past 600 seconds"));
+    }
+
+    let last_spawned_timestamp_seconds_2 = get_last_spawned_timestamp_seconds();
+
+    assert_eq!(
+        last_spawned_timestamp_seconds_1,
+        last_spawned_timestamp_seconds_2
+    );
+
+    state_machine.advance_time(Duration::from_secs(101));
+    state_machine.tick();
+
+    // Attempt to reset the timers again, after a small delay.
+    {
+        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let response = state_machine
+            .execute_ingress(canister_id, "reset_timers", payload)
+            .expect("Unable to call reset_timers on the Swap canister");
+        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+    }
+
+    let last_spawned_timestamp_seconds_3 = get_last_spawned_timestamp_seconds();
+
+    // Waited for 500 + 101 seconds after the last reset.
+    assert_eq!(
+        last_spawned_timestamp_seconds_3,
+        last_spawned_timestamp_seconds_2 + 601
+    );
 }
