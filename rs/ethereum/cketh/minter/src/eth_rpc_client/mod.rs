@@ -62,11 +62,14 @@ impl EthRpcClient {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
                 EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
             };
-            //TODO XC-207: min in threshold should be 2 for Sepolia and 3 for Mainnet
-            let threshold_3_out_of_4 = EvmRpcConfig {
+            let min_threshold = match client.chain {
+                EthereumNetwork::Mainnet => 3_u8,
+                EthereumNetwork::Sepolia => 2_u8,
+            };
+            let threshold_strategy = EvmRpcConfig {
                 response_consensus: Some(ConsensusStrategy::Threshold {
-                    total: Some(4),
-                    min: 3,
+                    total: None,
+                    min: min_threshold,
                 }),
                 ..EvmRpcConfig::default()
             };
@@ -76,17 +79,17 @@ impl EthRpcClient {
                     .with_evm_canister_id(evm_rpc_id)
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
-                        eth_get_block_by_number: Some(threshold_3_out_of_4.clone()),
+                        eth_get_block_by_number: Some(threshold_strategy.clone()),
                         eth_get_logs: Some(EvmRpcConfig {
                             response_size_estimate: Some(
                                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                             ),
-                            ..threshold_3_out_of_4.clone()
+                            ..threshold_strategy.clone()
                         }),
-                        eth_fee_history: Some(threshold_3_out_of_4.clone()),
-                        eth_get_transaction_receipt: Some(threshold_3_out_of_4.clone()),
-                        eth_get_transaction_count: Some(threshold_3_out_of_4.clone()),
-                        eth_send_raw_transaction: Some(threshold_3_out_of_4),
+                        eth_fee_history: Some(threshold_strategy.clone()),
+                        eth_get_transaction_receipt: Some(threshold_strategy.clone()),
+                        eth_get_transaction_count: Some(threshold_strategy.clone()),
+                        eth_send_raw_transaction: Some(threshold_strategy),
                     })
                     .build(),
             );
