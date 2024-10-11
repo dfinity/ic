@@ -16,7 +16,7 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
-use crate::boundary_nodes::{
+use ic_boundary_nodes_system_test_utils::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
     helpers::{
         create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
