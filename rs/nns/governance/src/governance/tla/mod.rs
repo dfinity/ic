@@ -125,7 +125,7 @@ pub fn check_traces() {
 
     // Construct paths to the data files
     let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/nns/governance/tla");
+    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/nns/governance/tla");
 
     let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {

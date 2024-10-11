@@ -2650,7 +2650,7 @@ pub mod sns {
             status: SwapFinalizationStatus,
         ) -> Result<GetAutoFinalizationStatusResponse, String> {
             let mut last_auto_finalization_status = None;
-            for _attempt_count in 1..=100 {
+            for _attempt_count in 1..=1000 {
                 pocket_ic.tick().await;
                 pocket_ic.advance_time(Duration::from_secs(1)).await;
                 let auto_finalization_status =
