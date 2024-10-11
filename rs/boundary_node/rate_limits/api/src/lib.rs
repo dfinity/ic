@@ -26,3 +26,8 @@ pub struct OutputRule {
     pub description: Option<String>,
     pub disclosed_at: Option<Timestamp>,
 }
+
+#[derive(CandidType, Deserialize, Debug)]
+pub struct InitArg {
+    registry_polling_period_secs: u64,
+}
