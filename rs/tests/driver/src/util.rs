@@ -1406,7 +1406,6 @@ pub fn get_config() -> ConfigOptional {
     // Make the string parsable by filling the template placeholders with dummy values
     let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
         .to_string()
-        .replace("{{ node_index }}", "0")
         .replace("{{ ipv6_address }}", "::")
         .replace("{{ backup_retention_time_secs }}", "0")
         .replace("{{ backup_purging_interval_secs }}", "0")
