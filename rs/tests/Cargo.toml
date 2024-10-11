@@ -293,10 +293,6 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-bn-integration-on-playnet"
-path = "boundary_nodes/bn_integration_on_playnet_test.rs"
-
-[[bin]]
 name = "ic-systest-bn-update-workload-test"
 path = "boundary_nodes/bn_update_workload_test.rs"
 

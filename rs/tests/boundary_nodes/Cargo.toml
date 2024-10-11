@@ -1,0 +1,19 @@
+[package]
+name = "ic_boundary_node_system_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ic-system-test-driver = { path = "../driver" }
+
+[[bin]]
+name = "ic-systest-bn-integration"
+path = "bn_integration_test.rs"
+
+[[bin]]
+name = "ic-systest-bn-integration-on-playnet"
+path = "boundary_nodes/bn_integration_on_playnet_test.rs"
