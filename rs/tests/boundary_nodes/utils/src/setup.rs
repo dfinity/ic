@@ -27,9 +27,8 @@ use slog::{debug, info};
 
 use crate::helpers::BoundaryNodeHttpsConfig;
 
-pub(crate) const TEST_PRINCIPAL: &str =
-    "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
-pub(crate) const TEST_PRIVATE_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
+pub const TEST_PRINCIPAL: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
+pub const TEST_PRIVATE_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
 MHQCAQEEIIBzyyJ32Kdjixx+ZJvNeUWsqAzSQZfLsOyXKgxc7aH9oAcGBSuBBAAK
 oUQDQgAECWc6ZRn9bBP96RM1G6h8ZAtbryO65dKg6cw0Oij2XbnAlb6zSPhU+4hh
 gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
