@@ -236,6 +236,27 @@ pub struct Swap {
     /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
     #[prost(uint64, optional, tag = "20")]
     pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Information about the timers that perform periodic tasks of this Swap canister.
+    #[prost(message, optional, tag = "22")]
+    pub timers: ::core::option::Option<Timers>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Timers {
+    #[prost(bool, optional, tag = "1")]
+    pub requires_periodic_tasks: ::core::option::Option<bool>,
+    #[prost(uint64, optional, tag = "2")]
+    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -977,6 +998,28 @@ pub struct GetStateResponse {
     #[prost(message, optional, tag = "2")]
     pub derived: ::core::option::Option<DerivedState>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersResponse {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
