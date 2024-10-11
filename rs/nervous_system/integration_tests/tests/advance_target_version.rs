@@ -18,35 +18,42 @@ use std::time::Duration;
 
 const TICKS_PER_TASK: u64 = 2;
 
-#[test]
-fn test_get_upgrade_journal() {
+#[tokio::test]
+async fn test_get_upgrade_journal() {
     let pocket_ic = PocketIcBuilder::new()
         .with_nns_subnet()
         .with_sns_subnet()
-        .build();
+        .build_async()
+        .await;
 
     let wait_for_next_periodic_task = |sleep_duration_seconds| {
-        let now = pocket_ic.get_time();
-        pocket_ic.advance_time(Duration::from_secs(sleep_duration_seconds));
-        for _ in 0..TICKS_PER_TASK {
-            pocket_ic.tick();
+        let pocket_ic = &pocket_ic;
+        async move {
+            let now = pocket_ic.get_time().await;
+            pocket_ic
+                .advance_time(Duration::from_secs(sleep_duration_seconds))
+                .await;
+            for _ in 0..TICKS_PER_TASK {
+                pocket_ic.tick().await;
+            }
+            assert_eq!(
+                pocket_ic.get_time().await,
+                now + Duration::from_secs(sleep_duration_seconds)
+                    + Duration::from_nanos(TICKS_PER_TASK.saturating_sub(1))
+            );
         }
-        assert_eq!(
-            pocket_ic.get_time(),
-            now + Duration::from_secs(sleep_duration_seconds)
-                + Duration::from_nanos(TICKS_PER_TASK)
-        );
     };
 
     // Install the (master) NNS canisters.
     let with_mainnet_nns_canisters = false;
-    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]);
+    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
 
     // Publish (master) SNS Wasms to SNS-W.
     let with_mainnet_sns_wasms = false;
-    let deployed_sns_starting_info =
-        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
-    let initial_sns_version = nns::sns_wasm::get_lastest_sns_version(&pocket_ic);
+    let deployed_sns_starting_info = add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)
+        .await
+        .unwrap();
+    let initial_sns_version = nns::sns_wasm::get_latest_sns_version(&pocket_ic).await;
 
     // Deploy an SNS instance via proposal.
     let sns = {
@@ -69,14 +76,18 @@ fn test_get_upgrade_journal() {
             &pocket_ic,
             create_service_nervous_system,
             sns_instance_label,
-        );
+        )
+        .await;
 
-        sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open).unwrap();
+        sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+            .await
+            .unwrap();
         sns::swap::smoke_test_participate_and_finalize(
             &pocket_ic,
             sns.swap.canister_id,
             swap_parameters,
-        );
+        )
+        .await;
         sns
     };
 
@@ -85,7 +96,7 @@ fn test_get_upgrade_journal() {
         let sns_pb::GetUpgradeJournalResponse {
             upgrade_steps,
             response_timestamp_seconds,
-        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
+        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
         let upgrade_steps = upgrade_steps
             .expect("upgrade_steps should be Some")
             .versions;
@@ -93,12 +104,12 @@ fn test_get_upgrade_journal() {
         assert_eq!(response_timestamp_seconds, Some(1620501459));
     }
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
+    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
 
     // State B: after the first periodic task's completion. No changes expected yet.
     {
         let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
         let upgrade_steps = upgrade_steps
             .expect("upgrade_steps should be Some")
             .versions;
@@ -113,7 +124,9 @@ fn test_get_upgrade_journal() {
 
         let new_sns_version_1 = {
             let ledger_wasm = create_modified_sns_wasm(original_ledger_wasm, Some(1));
-            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone()).unwrap();
+            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone())
+                .await
+                .unwrap();
             let ledger_wasm_hash = ledger_wasm.sha256_hash().to_vec();
             sns_pb::governance::Version {
                 ledger_wasm_hash,
@@ -123,7 +136,9 @@ fn test_get_upgrade_journal() {
 
         let new_sns_version_2 = {
             let ledger_wasm = create_modified_sns_wasm(original_ledger_wasm, Some(2));
-            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone()).unwrap();
+            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone())
+                .await
+                .unwrap();
             let ledger_wasm_hash = ledger_wasm.sha256_hash().to_vec();
             sns_pb::governance::Version {
                 ledger_wasm_hash,
@@ -131,18 +146,18 @@ fn test_get_upgrade_journal() {
             }
         };
 
-        let sns_version = nns::sns_wasm::get_lastest_sns_version(&pocket_ic);
+        let sns_version = nns::sns_wasm::get_latest_sns_version(&pocket_ic).await;
         assert_ne!(sns_version, initial_sns_version);
 
         (new_sns_version_1, new_sns_version_2)
     };
 
-    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS);
+    wait_for_next_periodic_task(UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS).await;
 
     // State C: after the second periodic task's completion.
     {
         let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
-            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id);
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
         let upgrade_steps = upgrade_steps.expect("cached_upgrade_steps should be Some");
 
         assert_eq!(

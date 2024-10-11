@@ -4,34 +4,6 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 
-# Skylib helpers, loaded first in order to avoid inheriting potential versions pulled in by other deps
-http_archive(
-    name = "bazel_skylib",
-    sha256 = "bc283cdfcd526a52c3201279cda4bc298652efa898b10b4db0837dc51652756f",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz",
-    ],
-)
-
-load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
-
-bazel_skylib_workspace()
-
-# Bazel helpers by Aspect
-http_archive(
-    name = "aspect_bazel_lib",
-    sha256 = "688354ee6beeba7194243d73eb0992b9a12e8edeeeec5b6544f4b531a3112237",
-    strip_prefix = "bazel-lib-2.8.1",
-    url = "https://github.com/aspect-build/bazel-lib/releases/download/v2.8.1/bazel-lib-v2.8.1.tar.gz",
-)
-
-load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies", "aspect_bazel_lib_register_toolchains")
-
-aspect_bazel_lib_dependencies()
-
-aspect_bazel_lib_register_toolchains()
-
 # Rules used to build Ubuntu systems
 http_archive(
     name = "rules_distroless",
@@ -95,8 +67,65 @@ load("@rules_oci//oci:repositories.bzl", "oci_register_toolchains")
 oci_register_toolchains(name = "oci")
 
 load("@rules_oci//oci:pull.bzl", "oci_pull")
+load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
+
+# We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
+# from the canister names because we use inconsistent repo names. Same goes for filenames.
+# For each new canister defined in the source JSON file (see `path`) a mapping can be added
+# from canister name (as per JSON) to filename (and to repo name, resp.).
+canisters(
+    name = "canisters",
+    filenames = {
+        "registry": "registry-canister.wasm.gz",
+        "governance": "governance-canister.wasm.gz",
+        "ledger": "ledger-canister_notify-method.wasm.gz",
+        "archive": "ledger-archive-node-canister.wasm.gz",
+        "index": "ic-icp-index-canister.wasm.gz",
+        "root": "root-canister.wasm.gz",
+        "lifeline": "lifeline_canister.wasm.gz",
+        "genesis-token": "genesis-token-canister.wasm.gz",
+        "cycles-minting": "cycles-minting-canister.wasm.gz",
+        "sns-wasm": "sns-wasm-canister.wasm.gz",
+        "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
+        "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
+        "sns_root": "sns-root-canister.wasm.gz",
+        "sns_governance": "sns-governance-canister.wasm.gz",
+        "swap": "sns-swap-canister.wasm.gz",
+        "sns_ledger": "ic-icrc1-ledger.wasm.gz",
+        "sns_archive": "ic-icrc1-archive.wasm.gz",
+        "sns_index": "ic-icrc1-index-ng.wasm.gz",
+    },
+    path = "//:mainnet-canisters.json",
+    reponames = {
+        "registry": "mainnet_nns_registry_canister",
+        "governance": "mainnet_nns_governance_canister",
+        "ledger": "mainnet_icp_ledger_canister",
+        "archive": "mainnet_icp_ledger-archive-node-canister",
+        "index": "mainnet_icp_index_canister",
+        "root": "mainnet_nns_root-canister",
+        "lifeline": "mainnet_nns_lifeline_canister",
+        "genesis-token": "mainnet_nns_genesis-token-canister",
+        "cycles-minting": "mainnet_nns_cycles-minting-canister",
+        "sns-wasm": "mainnet_nns_sns-wasm-canister",
+        "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
+        "ck_btc_index": "mainnet_ckbtc-index-ng",
+        "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
+        "ck_eth_index": "mainnet_cketh-index-ng",
+        "sns_root": "mainnet_sns-root-canister",
+        "sns_governance": "mainnet_sns-governance-canister",
+        "swap": "mainnet_sns-swap-canister",
+        "sns_ledger": "mainnet_ic-icrc1-ledger",
+        "sns_archive": "mainnet_ic-icrc1-archive",
+        "sns_index": "mainnet_ic-icrc1-index-ng",
+    },
+)
+
+load("@canisters//:defs.bzl", "canister_deps")
+
+canister_deps()
 
 # file server used in tests
 oci_pull(
@@ -204,33 +233,6 @@ sol_register_toolchains(
 )
 
 http_archive(
-    name = "io_bazel_rules_go",
-    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-    ],
-)
-
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
-    ],
-)
-
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
-
-go_rules_dependencies()
-
-go_register_toolchains(go_version = "1.20.5")
-
-gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
-
-http_archive(
     name = "rules_rust",
     integrity = "sha256-JLN47ZcAbx9wEr5Jiib4HduZATGLiDgK7oUi/fvotzU=",
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.42.1/rules_rust-v0.42.1.tar.gz"],
@@ -268,26 +270,6 @@ http_archive(
 load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 
 rules_foreign_cc_dependencies()
-
-http_archive(
-    name = "rules_proto",
-    sha256 = "66bfdf8782796239d3875d37e7de19b1d94301e8972b3cbd2446b332429b4df1",
-    strip_prefix = "rules_proto-4.0.0",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-    ],
-)
-
-load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
-load("//:go_deps.bzl", "go_dependencies")
-
-# gazelle:repository_macro go_deps.bzl%go_dependencies
-go_dependencies()
-
-rules_proto_dependencies()
-
-rules_proto_toolchains()
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
 load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
@@ -329,20 +311,6 @@ filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:p
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
-
-# Support for constructing archives
-http_archive(
-    name = "rules_pkg",
-    sha256 = "8f9ee2dc10c1ae514ee599a8b42ed99fa262b757058f65ad3c384289ff70c4b8",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-        "https://github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-    ],
-)
-
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-
-rules_pkg_dependencies()
 
 # Third party dependencies that require special treatment
 
@@ -414,7 +382,13 @@ http_archive(
 
 load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
 
-rules_closure_dependencies()
+# we instruct rules_closure to omit some dependencies that we already
+# pull via MODULE.bazel
+rules_closure_dependencies(
+    omit_com_google_protobuf = True,
+    omit_rules_java = True,
+    omit_rules_proto = True,
+)
 
 rules_closure_toolchains()
 
@@ -516,12 +490,6 @@ http_archive(
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
-
-mainnet_core_nns_canisters()
-
-mainnet_ck_canisters()
-
-mainnet_sns_canisters()
 
 # Asset canister
 
@@ -640,35 +608,6 @@ http_file(
     url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.1.0/subnet_rental_canister.wasm",
 )
 
-# Import Python rules
-
-http_archive(
-    name = "rules_python",
-    sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
-    strip_prefix = "rules_python-0.26.0",
-    url = "https://github.com/bazelbuild/rules_python/releases/download/0.26.0/rules_python-0.26.0.tar.gz",
-)
-
-load("@rules_python//python:repositories.bzl", "python_register_toolchains")
-
-python_register_toolchains(
-    name = "python3_10",
-    python_version = "3.10",
-)
-
-load("@python3_10//:defs.bzl", "interpreter")
-load("@rules_python//python:pip.bzl", "pip_parse")
-
-pip_parse(
-    name = "python_deps",
-    python_interpreter_target = interpreter,
-    requirements_lock = "//:requirements.txt",
-)
-
-load("@python_deps//:requirements.bzl", "install_deps")
-
-install_deps()
-
 # Financial Integration artifacts for upgrade testing
 
 # first ic-icrc1-ledger release (see https://dashboard.internetcomputer.org/proposal/104499)
@@ -697,14 +636,16 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
+    sha256 = "5c49768f03f075ffd87f0f20d849897e03db58d05fb0d12f1a340b2a5f1e4f65",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.0.0/evm_rpc.wasm.gz",
 )
 
 # Haskell toolchain for spec_compliance tests
-
+# (patched to work around https://github.com/tweag/rules_haskell/issues/2254)
 http_archive(
     name = "rules_haskell",
+    patch_args = ["-p1"],
+    patches = ["//bazel:rules_haskell.patch"],
     sha256 = "4cae22bc84f327bf3cb7605021c3663160ff6bc8a0b7b6266062366bcbd19e79",
     strip_prefix = "rules_haskell-1.0",
     urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],

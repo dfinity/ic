@@ -304,12 +304,12 @@ fn migrate_next_part(instruction_limit: u64) {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable64_size() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "ledger_stable_memory_bytes",
-        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(

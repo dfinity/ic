@@ -13,6 +13,11 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 slog = { workspace = true }
 tests = { path = ".." }
+candid = { workspace = true }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+nns_dapp = { path = "nns_dapp" }
+libflate = { workspace = true }
+reqwest = { workspace = true }
 
 [[bin]]
 name = "nns_upgrade_test"
@@ -49,3 +54,7 @@ path = "nns_upgrade_test.rs"
 [[bin]]
 name = "node_removal_from_registry_test"
 path = "node_removal_from_registry_test.rs"
+
+[[bin]]
+name = "nns_dapp_test"
+path = "nns_dapp_test.rs"
