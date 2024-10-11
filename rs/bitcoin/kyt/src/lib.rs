@@ -23,11 +23,9 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
     fn from((txid, err): (Txid, HttpGetTxError)) -> CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
-            HttpGetTxError::Rejected {
-                message,
-                code: RejectionCode::SysTransient,
-                ..
-            } => CheckTransactionRetriable::TransientInternalError(message).into(),
+            HttpGetTxError::Rejected { message, .. } => {
+                CheckTransactionRetriable::TransientInternalError(message).into()
+            }
             HttpGetTxError::ResponseTooLarge => {
                 (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
             }
