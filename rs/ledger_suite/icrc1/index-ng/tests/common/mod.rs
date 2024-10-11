@@ -34,6 +34,15 @@ const NAT_META_VALUE: u128 = u128::MAX;
 const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
+pub fn account(owner: u64, subaccount: u128) -> Account {
+    let mut sub: [u8; 32] = [0; 32];
+    sub[..16].copy_from_slice(&subaccount.to_be_bytes());
+    Account {
+        owner: PrincipalId::new_user_test_id(owner).0,
+        subaccount: Some(sub),
+    }
+}
+
 pub fn default_archive_options() -> ArchiveOptions {
     ArchiveOptions {
         trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -47,6 +56,7 @@ pub fn default_archive_options() -> ArchiveOptions {
     }
 }
 
+#[allow(dead_code)]
 pub fn index_ng_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -86,6 +96,7 @@ pub fn install_ledger(
     .unwrap()
 }
 
+#[allow(dead_code)]
 pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     let args = IndexArg::Init(init_arg);
     env.install_canister_with_cycles(
