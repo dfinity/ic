@@ -155,6 +155,23 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//rs/tests:kubeconfig_extension.bzl%kubeconfig_extension": {
+      "general": {
+        "bzlTransitiveDigest": "xEGrJHac1Q0AeSsq47wmCUw9/QuvIsSjn2H4zlg7RgM=",
+        "usagesDigest": "nx/HYUUCtKW9bl/h/wrK069HawIvbPlJo+fUzOBVDlQ=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "kubeconfig": {
+            "bzlFile": "@@//rs/tests:kubeconfig.bzl",
+            "ruleClassName": "kubeconfig_rule",
+            "attributes": {}
+          }
+        },
+        "recordedRepoMappingEntries": []
+      }
+    },
     "@@apple_support~//crosstool:setup.bzl%apple_cc_configure_extension": {
       "general": {
         "bzlTransitiveDigest": "Co35oEwSoYZFy42IHjYfE7VkKR1WykyxhRlbUGSa3XA=",
