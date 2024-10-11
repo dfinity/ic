@@ -186,11 +186,14 @@ fn add_neuron_inactive_maximum() -> BenchResult {
 #[bench(raw)]
 fn range_neurons_performance() -> BenchResult {
     let mut rng = new_rng();
-    let neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let _neuron_store = set_up_neuron_store(&mut rng, 100, 200);
 
     bench_fn(|| {
-        for _ in 0..100 {
-            let _ = neuron_store.range_neurons(0..100);
-        }
+        let _ = with_stable_neuron_store(|stable_store| {
+            let iter = stable_store.range_neurons(NeuronId::from_u64(0)..NeuronId::from_u64(100));
+            for n in iter {
+                let n = n.id();
+            }
+        });
     })
 }

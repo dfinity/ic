@@ -527,9 +527,7 @@ fn test_range_neurons_reconstitutes_fully() {
         neurons
     };
 
-    let result =
-        with_stable_neuron_store(|stable_store| stable_store.range_neurons(..).collect::<Vec<_>>());
+    let result = store.range_neurons(..).collect::<Vec<_>>();
 
     assert_eq!(result, neurons);
-    assert_ne!(result, neurons);
 }
