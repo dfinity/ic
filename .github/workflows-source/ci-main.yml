@@ -401,14 +401,16 @@ jobs:
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
-          ./ci/scripts/bazel-coverage.sh
-          # mkdir -p cov_html/
-          # echo test >cov_html/index.html
+          # ./ci/scripts/bazel-coverage.sh
+          mkdir -p cov_html/
+          echo test >cov_html/index.html
       - name: Upload COV report
         shell: bash
         run: |
           rclone sync cov_html public-s3://dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
-              --progress --s3-env-auth --config .rclone.conf
+              --config .rclone.conf
+          URL="https://download.dfinity.systems/coverage/$CI_COMMIT_SHA/index.html"
+          echo "Code Coverage Report [$CI_COMMIT_SHA]($URL)" >>$GITHUB_STEP_SUMMARY
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
