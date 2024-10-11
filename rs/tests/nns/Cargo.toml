@@ -63,5 +63,5 @@ name = "nns_dapp_test"
 path = "nns_dapp_test.rs"
 
 [[bin]]
-name = "bitcoin-set-config-proposal-test"
+name = "ic-systest-bitcoin-set-config-proposal-test"
 path = "bitcoin_set_config_proposal_test.rs"
