@@ -412,5 +412,5 @@ mod tests {
         for account in accounts {
             assert_eq!(Account::from_bytes(account.to_bytes()), account);
         }
-    }    
+    }
 }
