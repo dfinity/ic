@@ -531,6 +531,9 @@ jobs:
         run: |
           rclone sync cov_html public-s3://dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
               --progress --s3-env-auth --config .rclone.conf
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       - name: Upload Test Coverage Report
         uses: actions/upload-artifact@v4
         with:
