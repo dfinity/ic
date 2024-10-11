@@ -56,12 +56,13 @@ impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
-            const MIN_ATTACHED_CYCLES: u128 = 400_000_000_000;
+            const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
             let providers = match client.chain {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
                 EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
             };
+            //TODO XC-207: min in threshold should be 2 for Sepolia and 3 for Mainnet
             let threshold_3_out_of_4 = EvmRpcConfig {
                 response_consensus: Some(ConsensusStrategy::Threshold {
                     total: Some(4),

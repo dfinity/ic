@@ -19,7 +19,9 @@ mod eth_rpc_client {
             providers,
             &[
                 RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
-                RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode)
+                RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
+                RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
+                RpcNodeProvider::Sepolia(SepoliaProvider::RpcSepolia)
             ]
         );
     }
@@ -35,7 +37,8 @@ mod eth_rpc_client {
             &[
                 RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
                 RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
-                RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes)
+                RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
+                RpcNodeProvider::Ethereum(EthereumProvider::Alchemy)
             ]
         );
     }
