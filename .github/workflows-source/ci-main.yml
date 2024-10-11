@@ -401,9 +401,9 @@ jobs:
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
-          # ./ci/scripts/bazel-coverage.sh
-          mkdir -p cov_html/
-          echo test >cov_html/index.html
+          ./ci/scripts/bazel-coverage.sh
+          # mkdir -p cov_html/
+          # echo test >cov_html/index.html
       - name: Upload COV report
         shell: bash
         run: |
