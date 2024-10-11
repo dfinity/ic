@@ -5622,6 +5622,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-boundary-nodes-integration-test-common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-agent",
+ "ic-boundary-nodes-system-test-utils",
+ "ic-system-test-driver",
+ "reqwest 0.12.8",
+ "serde",
+ "serde_cbor",
+ "slog",
+ "tokio",
+ "wat",
+]
+
+[[package]]
+name = "ic-boundary-nodes-system-test-utils"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-agent",
+ "ic-base-types",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-utils 0.37.0",
+ "slog",
+ "url",
+]
+
+[[package]]
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
@@ -13290,6 +13328,14 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "ic_boundary_node_system_tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-system-test-driver",
 ]
 
 [[package]]
