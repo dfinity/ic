@@ -389,6 +389,7 @@ jobs:
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
 
+  # CI job is also executed in Schedule Hourly
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *dind-large-setup
@@ -401,27 +402,7 @@ jobs:
       - name: Run Bazel Test Coverage
         shell: bash
         run: |
-          # ./ci/scripts/bazel-coverage.sh
-          mkdir -p cov_html/
-          echo test >cov_html/index.html
-      - name: Upload COV report
-        shell: bash
-        run: |
-          rclone sync cov_html public-s3://dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
-              --config .rclone.conf
-          URL="https://download.dfinity.systems/coverage/$CI_COMMIT_SHA/index.html"
-          echo "Code Coverage Report [$CI_COMMIT_SHA]($URL)" >>$GITHUB_STEP_SUMMARY
+          ./ci/scripts/bazel-coverage.sh
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      - name: Upload Test Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          compression-level: 9
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            cov_targets.txt
-            cov_report.dat
-            cov_html/

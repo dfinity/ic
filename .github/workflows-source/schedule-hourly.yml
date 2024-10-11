@@ -99,6 +99,7 @@ jobs:
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - <<: *bazel-bep
 
+  # CI job is also executed in PR on use of 'CI_COVERAGE' label
   bazel-test-coverage:
     name: Bazel Test Coverage
     <<: *dind-large-setup
@@ -109,14 +110,6 @@ jobs:
         shell: bash
         run: |
           ./ci/scripts/bazel-coverage.sh
-      - name: Upload Test Coverage Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          compression-level: 9
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            cov_targets.txt
-            cov_report.dat
-            cov_html/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
