@@ -403,7 +403,7 @@ jobs:
         run: |
           # ./ci/scripts/bazel-coverage.sh
           mkdir -p cov_html/
-          echo test >/cov_html/test.txt
+          echo test >cov_html/test.txt
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -413,7 +413,7 @@ jobs:
       - name: Upload COV report
         shell: bash
         run: |
-          rclone sync ./cov_html s3:dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
+          rclone sync cov_html s3:dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
               --s3-env-auth --progress
       - name: Upload Test Coverage Report
         uses: actions/upload-artifact@v4
