@@ -15,7 +15,6 @@ use crate::{
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
     metrics::{CallTreeMetrics, CallTreeMetricsImpl, IngressFilterMetrics},
-    RoundSchedule,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -3153,48 +3152,41 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
-    fn abort_paused_executions_and_return_tasks(
+    fn abort_paused_execution_and_return_task(
         &self,
-        paused_tasks: Vec<&ExecutionTask>,
+        paused_task: &ExecutionTask,
         log: &ReplicaLogger,
-    ) -> HashMap<PausedExecutionId, ExecutionTask> {
-        paused_tasks
-            .into_iter()
-            .map(|paused_task| match *paused_task {
-                ExecutionTask::PausedExecution { id, .. } => {
-                    let paused = self.take_paused_execution(id).unwrap();
-                    let (input, prepaid_execution_cycles) = paused.abort(log);
-                    (
-                        id,
-                        ExecutionTask::AbortedExecution {
-                            input,
-                            prepaid_execution_cycles,
-                        },
-                    )
+    ) -> ExecutionTask {
+        match *paused_task {
+            ExecutionTask::PausedExecution { id, .. } => {
+                let paused = self.take_paused_execution(id).unwrap();
+                let (input, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedExecution {
+                    input,
+                    prepaid_execution_cycles,
                 }
-                ExecutionTask::PausedInstallCode(id) => {
-                    let paused = self.take_paused_install_code(id).unwrap();
-                    let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
-                    (
-                        id,
-                        ExecutionTask::AbortedInstallCode {
-                            message,
-                            call_id,
-                            prepaid_execution_cycles,
-                        },
-                    )
+            }
+            ExecutionTask::PausedInstallCode(id) => {
+                let paused = self.take_paused_install_code(id).unwrap();
+                let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedInstallCode {
+                    message,
+                    call_id,
+                    prepaid_execution_cycles,
                 }
-                ExecutionTask::AbortedExecution { .. }
-                | ExecutionTask::AbortedInstallCode { .. }
-                | ExecutionTask::Heartbeat
-                | ExecutionTask::GlobalTimer
-                | ExecutionTask::OnLowWasmMemory => {
-                    unreachable!("Function abort_paused_executions_and_return_tasks is only called after 
-                    the paused tasks are returned from TaskQueue, hence no task other than PausedExecution 
-                    and PausedInstallCode should appear in paused_tasks except if there is a bug.")
-                }
-            })
-            .collect()
+            }
+            ExecutionTask::AbortedExecution { .. }
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory => {
+                unreachable!("Function abort_paused_execution_and_return_task is only called after 
+                the paused task is returned from TaskQueue, hence no task other than PausedExecution 
+                and PausedInstallCode should appear in paused_task except if there is a bug.")
+            }
+        }
     }
 
     /// Registers the given paused execution and returns its id.
@@ -3221,22 +3213,18 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let paused_tasks = canister.system_state.task_queue.get_all_paused_tasks();
+            if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
+                self.metrics.executions_aborted.inc();
+                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
+                // paused execution on the canister without requesting ID from TaskQueue.
+                let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
 
-            self.metrics
-                .executions_aborted
-                .inc_by(paused_tasks.len().try_into().unwrap());
-
-            // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local
-            // we can abort all executions on it without `paused_tasks`.
-            let aborted_tasks = self.abort_paused_executions_and_return_tasks(paused_tasks, log);
-
-            canister
-                .system_state
-                .task_queue
-                .replace_paused_with_aborted_tasks(aborted_tasks);
-
-            RoundSchedule::apply_priority_credit(canister);
+                canister
+                    .system_state
+                    .task_queue
+                    .replace_paused_with_aborted_task(aborted_task);
+            }
+            canister.apply_priority_credit();
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,

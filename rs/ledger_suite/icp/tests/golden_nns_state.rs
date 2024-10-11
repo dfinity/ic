@@ -1,6 +1,7 @@
 use candid::{Decode, Encode};
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
+use ic_icrc1_ledger_sm_tests::{generate_transactions, TransactionGenerationParameters};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
@@ -16,10 +17,17 @@ use ic_nns_constants::{
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
+use std::time::Instant;
 
-const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
+const LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
+const NUM_TRANSACTIONS_PER_TYPE: usize = 200;
+const MINT_MULTIPLIER: u64 = 10_000;
+const TRANSFER_MULTIPLIER: u64 = 1000;
+const APPROVE_MULTIPLIER: u64 = 100;
+const TRANSFER_FROM_MULTIPLIER: u64 = 10;
+const BURN_MULTIPLIER: u64 = 1;
 
 /// Create a state machine with the golden NNS state, then upgrade and downgrade the ICP
 /// ledger canister suite.
@@ -38,10 +46,16 @@ fn should_create_state_machine_with_golden_nns_state() {
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
 
+    setup.perform_transactions();
+
     // Downgrade all the canisters to the mainnet version
     setup.downgrade_to_mainnet();
 
     // Verify ledger, archives, and index block parity
+    setup.verify_ledger_archive_index_block_parity();
+
+    setup.perform_transactions();
+
     setup.verify_ledger_archive_index_block_parity();
 }
 
@@ -92,6 +106,24 @@ impl Setup {
         self.upgrade_index(&self.mainnet_wasms.index);
         self.upgrade_ledger(&self.mainnet_wasms.ledger);
         self.upgrade_archive_canisters(&self.mainnet_wasms.archive);
+    }
+
+    pub fn perform_transactions(&self) {
+        generate_transactions(
+            &self.state_machine,
+            LEDGER_CANISTER_ID,
+            TransactionGenerationParameters {
+                mint_multiplier: MINT_MULTIPLIER,
+                transfer_multiplier: TRANSFER_MULTIPLIER,
+                approve_multiplier: APPROVE_MULTIPLIER,
+                transfer_from_multiplier: TRANSFER_FROM_MULTIPLIER,
+                burn_multiplier: BURN_MULTIPLIER,
+                num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
+            },
+        );
+        let start = Instant::now();
+        wait_until_sync_is_completed(&self.state_machine, INDEX_CANISTER_ID, LEDGER_CANISTER_ID);
+        println!("Time taken for index to sync: {:?}", start.elapsed());
     }
 
     pub fn verify_ledger_archive_index_block_parity(&self) {

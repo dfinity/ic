@@ -419,7 +419,7 @@ fn test_check_transaction_error() {
     assert!(matches!(
         decode::<CheckTransactionResponse>(&result),
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
-            CheckTransactionIrrecoverableError::InvalidTransaction(_)
+            CheckTransactionIrrecoverableError::InvalidTransactionId(_)
         ))
     ));
 

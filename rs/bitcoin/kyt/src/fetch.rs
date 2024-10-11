@@ -1,13 +1,13 @@
-use crate::state::{FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError};
-use crate::types::{
-    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus,
+use crate::state::{
+    FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
+    TransactionKytData,
 };
+use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
 use crate::{blocklist_contains, providers, state, BtcNetwork};
-use bitcoin::{address::FromScriptError, Address, Transaction};
+use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
-use std::convert::Infallible;
+use std::convert::{Infallible, TryFrom};
 
 #[cfg(test)]
 mod tests;
@@ -127,12 +127,28 @@ pub trait FetchEnv {
         match self.http_get_tx(provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                let fetched = FetchedTx {
-                    tx,
-                    input_addresses,
-                };
-                state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
-                Ok(FetchResult::Fetched(fetched))
+                match TransactionKytData::try_from(tx) {
+                    Ok(tx) => {
+                        let fetched = FetchedTx {
+                            tx,
+                            input_addresses,
+                        };
+                        state::set_fetch_status(txid, FetchTxStatus::Fetched(fetched.clone()));
+                        Ok(FetchResult::Fetched(fetched))
+                    }
+                    Err(err) => {
+                        let err = HttpGetTxError::TxEncoding(err.to_string());
+                        state::set_fetch_status(
+                            txid,
+                            FetchTxStatus::Error(FetchTxStatusError {
+                                provider,
+                                max_response_bytes,
+                                error: err.clone(),
+                            }),
+                        );
+                        Ok(FetchResult::Error(err))
+                    }
+                }
             }
             Err(HttpGetTxError::ResponseTooLarge)
                 if max_response_bytes < RETRY_MAX_RESPONSE_BYTES =>
@@ -193,26 +209,17 @@ pub trait FetchEnv {
 
         let mut futures = vec![];
         let mut jobs = vec![];
-        for (index, input) in fetched.tx.input.iter().enumerate() {
+        for (index, input) in fetched.tx.inputs.iter().enumerate() {
             if fetched.input_addresses[index].is_none() {
                 use TryFetchResult::*;
-                let input_txid = Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32]));
-                match self.try_fetch_tx(input_txid) {
+                match self.try_fetch_tx(input.txid) {
                     ToFetch(do_fetch) => {
-                        jobs.push((index, input_txid, input.previous_output.vout));
+                        jobs.push((index, input.txid, input.vout));
                         futures.push(do_fetch)
                     }
                     Fetched(fetched) => {
-                        let vout = input.previous_output.vout;
-                        match transaction_output_address(self.btc_network(), &fetched.tx, vout) {
-                            Ok(address) => state::set_fetched_address(txid, index, address),
-                            Err(err) => {
-                                return CheckTransactionIrrecoverableError::InvalidTransaction(
-                                    err.to_string(),
-                                )
-                                .into()
-                            }
-                        }
+                        let address = &fetched.tx.outputs[input.vout as usize];
+                        state::set_fetched_address(txid, index, address.clone());
                     }
                     Pending => continue,
                     HighLoad | NotEnoughCycles => break,
@@ -238,18 +245,8 @@ pub trait FetchEnv {
             let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    match transaction_output_address(self.btc_network(), &fetched.tx, vout) {
-                        Ok(address) => state::set_fetched_address(txid, index, address),
-                        Err(err) => {
-                            error = Some(
-                                CheckTransactionIrrecoverableError::InvalidTransaction(format!(
-                                    "{:?}",
-                                    err
-                                ))
-                                .into(),
-                            );
-                        }
-                    }
+                    let address = &fetched.tx.outputs[vout as usize];
+                    state::set_fetched_address(txid, index, address.clone());
                 }
                 FetchResult::Error(err) => error = Some((input_txid, err).into()),
                 FetchResult::RetryWithBiggerBuffer => (),
@@ -267,13 +264,4 @@ pub trait FetchEnv {
             None => CheckTransactionRetriable::Pending.into(),
         }
     }
-}
-
-fn transaction_output_address(
-    network: BtcNetwork,
-    tx: &Transaction,
-    vout: u32,
-) -> Result<Address, FromScriptError> {
-    let output = &tx.output[vout as usize];
-    Address::from_script(&output.script_pubkey, bitcoin::Network::from(network))
 }
