@@ -15369,6 +15369,7 @@ dependencies = [
  "ic-agent",
  "ic-btc-interface",
  "ic-config",
+ "ic-mainnet-nns-recovery",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
