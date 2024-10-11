@@ -3,6 +3,7 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{abridged_neuron::DissolveState, Vote},
+    storage::with_stable_neuron_store,
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -526,7 +527,8 @@ fn test_range_neurons_reconstitutes_fully() {
         neurons
     };
 
-    let result = store.range_neurons(..).collect::<Vec<_>>();
+    let result =
+        with_stable_neuron_store(|stable_store| stable_store.range_neurons(..).collect::<Vec<_>>());
 
     assert_eq!(result, neurons);
     assert_ne!(result, neurons);
