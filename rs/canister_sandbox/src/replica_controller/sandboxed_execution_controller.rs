@@ -61,7 +61,7 @@ const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(1);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
-const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
+//  SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -76,7 +76,7 @@ const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_com
 const CACHE_MISS: &str = "cache_miss";
 
 // The max amount of memory to use for sandboxes in KiB. This is equivalent to 50 GiB.
-const SOME_CONSTANT: u64 = 20 * 1024 * 1024;
+const SANDBOX_PROCESSES_MAX_ANON_KIB: u64 = 20 * 1024 * 1024;
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -464,6 +464,7 @@ enum Backend {
 struct SandboxProcessStats {
     pub last_used: std::time::Instant,
     pub anon_rss: u64,
+    pub memfd_rss: u64,
 }
 
 enum SandboxProcessStatus {
@@ -641,9 +642,9 @@ pub struct SandboxedExecutionController {
     /// - An entry is removed from the registry only if it is in the `evicted`
     ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
-    min_sandbox_count: usize,
+    //min_sandbox_count: usize,
     max_sandbox_count: usize,
-    max_sandbox_idle_time: Duration,
+    //max_sandbox_idle_time: Duration,
     trace_execution: FlagStatus,
     logger: ReplicaLogger,
     /// Executable and arguments to be passed to `canister_sandbox` which are
@@ -1112,9 +1113,9 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
-            min_sandbox_count,
+            //min_sandbox_count,
             max_sandbox_count,
-            max_sandbox_idle_time,
+            //max_sandbox_idle_time,
             trace_execution,
             logger,
             sandbox_exec_argv,
@@ -1139,7 +1140,7 @@ impl SandboxedExecutionController {
         stop_request: Receiver<bool>,
     ) {
         loop {
-            let mut sandbox_processes = get_sandbox_process_stats(&backends);
+            let mut sandbox_processes = get_sandbox_process_stats(&backends, logger.clone());
 
             #[cfg(target_os = "linux")]
             {
@@ -1149,29 +1150,18 @@ impl SandboxedExecutionController {
 
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (sandbox_process, stats, status) in sandbox_processes.iter_mut() {
-                    let pid = sandbox_process.pid;
-                    let mut process_rss = 0;
-                    if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
-                        total_anon_rss += kib;
-                        process_rss += kib;
-                        // Update the process stats to contain the anon rss of the current sandbox process.
-                        stats.anon_rss = process_rss;
-                        metrics
-                            .sandboxed_execution_subprocess_anon_rss
-                            .observe(kib as f64);
-                    } else {
-                        warn!(logger, "Unable to get anon RSS for pid {}", pid);
-                    }
-                    if let Ok(kib) = process_os_metrics::get_page_allocator_rss(pid) {
-                        total_memfd_rss += kib;
-                        process_rss += kib;
-                        metrics
-                            .sandboxed_execution_subprocess_memfd_rss
-                            .observe(kib as f64);
-                    } else {
-                        warn!(logger, "Unable to get memfd RSS for pid {}", pid);
-                    }
+                for (_, stats, status) in sandbox_processes.iter_mut() {
+                    let process_rss = stats.anon_rss + stats.memfd_rss;
+                    total_anon_rss += stats.anon_rss;
+                    total_memfd_rss += stats.memfd_rss;
+
+                    metrics
+                        .sandboxed_execution_subprocess_anon_rss
+                        .observe(stats.anon_rss as f64);
+                    metrics
+                        .sandboxed_execution_subprocess_memfd_rss
+                        .observe(stats.memfd_rss as f64);
+
                     metrics
                         .sandboxed_execution_subprocess_rss
                         .observe(process_rss as f64);
@@ -1274,6 +1264,7 @@ impl SandboxedExecutionController {
                             last_used: now,
                             // Use the old memory usage.
                             anon_rss: stats.anon_rss,
+                            memfd_rss: stats.memfd_rss,
                         },
                     };
                 } else {
@@ -1283,6 +1274,7 @@ impl SandboxedExecutionController {
                             last_used: now,
                             // Use the old memory usage.
                             anon_rss: stats.anon_rss,
+                            memfd_rss: stats.memfd_rss,
                         },
                     };
                 }
@@ -1329,6 +1321,7 @@ impl SandboxedExecutionController {
                 // New process, we can use 0 because there shouldn't be much memory usage
                 // yet and it will be update later in the monitoring thread.
                 anon_rss: 0,
+                memfd_rss: 0,
             },
         };
         (*guard).insert(canister_id, backend);
@@ -1693,20 +1686,31 @@ fn evict_sandbox_processes(
         let total_anon_rss = backends
             .iter()
             .filter_map(|(_, backend)| match backend {
-                Backend::Active { stats, .. } => Some(stats.anon_rss),
+                Backend::Active {
+                    sandbox_process,
+                    stats,
+                } => {
+                    println!(
+                        "[in evict:] canister with pid {} has anon rss of {}",
+                        sandbox_process.pid, stats.anon_rss
+                    );
+                    Some(stats.anon_rss)
+                }
                 Backend::Evicted { .. } | Backend::Empty { .. } => Some(0),
             })
             .sum::<u64>();
 
         // We don't need to evict anything if we have memory headroom and we are not over
         // the max number of active sandboxes.
-        if total_anon_rss < SOME_CONSTANT && backends.len() <= max_active_sandboxes {
+        if total_anon_rss < SANDBOX_PROCESSES_MAX_ANON_KIB && backends.len() <= max_active_sandboxes
+        {
+            println!("ups!");
             return;
         }
 
         // If we are over the memory limit, we need to evict some sandboxes.
         // However, we need to recompute the min/max limits such that we fit into the memory limit.
-        if total_anon_rss >= SOME_CONSTANT {
+        if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
             // Check how many sandboxes we can keep to stay under the memory limit.
             let mut new_max_active_sandboxes = 0;
             let mut current_anon_rss = 0;
@@ -1716,7 +1720,7 @@ fn evict_sandbox_processes(
                     Backend::Evicted { .. } | Backend::Empty { .. } => 0,
                 };
                 new_max_active_sandboxes += 1;
-                if current_anon_rss >= SOME_CONSTANT {
+                if current_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
                     break;
                 }
             }
@@ -1725,11 +1729,6 @@ fn evict_sandbox_processes(
             }
             local_max_active_sandboxes = new_max_active_sandboxes;
         }
-
-        println!(
-            "Total anon rss: {}, local_min = {}, local_max = {}",
-            total_anon_rss, local_min_active_sandboxes, local_max_active_sandboxes
-        );
     }
 
     let candidates: Vec<_> = backends
@@ -1785,19 +1784,41 @@ fn evict_sandbox_processes(
 // Returns all processes that are still alive.
 fn get_sandbox_process_stats(
     backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    #[allow(unused_variables)] logger: ReplicaLogger,
 ) -> Vec<(
     Arc<SandboxProcess>,
     SandboxProcessStats,
     SandboxProcessStatus,
 )> {
-    let guard = backends.lock().unwrap();
+    let mut guard = backends.lock().unwrap();
     let mut result = vec![];
-    for backend in guard.values() {
+    for backend in guard.values_mut() {
         match backend {
             Backend::Active {
                 sandbox_process,
-                stats,
+                ref mut stats,
             } => {
+                #[cfg(target_os = "linux")]
+                {
+                    if let Ok(kib) = process_os_metrics::get_anon_rss(sandbox_process.pid) {
+                        stats.anon_rss = kib;
+                    } else {
+                        warn!(
+                            logger,
+                            "Unable to get anon RSS for pid {}", sandbox_process.pid,
+                        );
+                    }
+                    if let Ok(kib) = process_os_metrics::get_page_allocator_rss(sandbox_process.pid)
+                    {
+                        stats.memfd_rss = kib;
+                    } else {
+                        warn!(
+                            logger,
+                            "Unable to get anon RSS for pid {}", sandbox_process.pid,
+                        );
+                    }
+                }
+
                 result.push((
                     Arc::clone(sandbox_process),
                     stats.clone(),
@@ -1806,9 +1827,30 @@ fn get_sandbox_process_stats(
             }
             Backend::Evicted {
                 sandbox_process,
-                stats,
+                ref mut stats,
             } => {
                 if let Some(strong_reference) = sandbox_process.upgrade() {
+                    #[cfg(target_os = "linux")]
+                    {
+                        if let Ok(kib) = process_os_metrics::get_anon_rss(strong_reference.pid) {
+                            stats.anon_rss = kib;
+                        } else {
+                            warn!(
+                                logger,
+                                "Unable to get anon RSS for pid {}", strong_reference.pid,
+                            );
+                        }
+                        if let Ok(kib) =
+                            process_os_metrics::get_page_allocator_rss(strong_reference.pid)
+                        {
+                            stats.memfd_rss = kib;
+                        } else {
+                            warn!(
+                                logger,
+                                "Unable to get anon RSS for pid {}", strong_reference.pid,
+                            );
+                        }
+                    }
                     result.push((
                         strong_reference,
                         stats.clone(),
