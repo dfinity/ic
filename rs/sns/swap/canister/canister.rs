@@ -25,7 +25,8 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        ResetTimersRequest, ResetTimersResponse, Swap, Timers,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -277,23 +278,39 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
 }
 
 async fn run_periodic_tasks() {
+    if let Some(ref mut timers) = swap_mut().timers {
+        timers.last_spawned_timestamp_seconds = Some(now_seconds());
+    };
+
     swap_mut().run_periodic_tasks(now_fn).await;
 
     if !swap().requires_periodic_tasks() {
+        if let Some(ref mut timers) = swap_mut().timers {
+            timers.requires_periodic_tasks = Some(false);
+        };
+        TIMER_ID.with(|saved_timer_id| {
+            let timer_id = saved_timer_id.borrow();
+            ic_cdk_timers::clear_timer(*timer_id);
+        });
         log!(
             INFO,
             "All work that needs to be done in Swap's periodic tasks has been completed. \
              Stop scheduling new periodic tasks."
         );
-        TIMER_ID.with(|saved_timer_id| {
-            let timer_id = saved_timer_id.borrow();
-            ic_cdk_timers::clear_timer(*timer_id);
-        });
     }
 }
 
 fn init_timers() {
-    if swap().requires_periodic_tasks() {
+    let last_reset_timestamp_seconds = Some(now_seconds());
+    let requires_periodic_tasks = swap().requires_periodic_tasks();
+
+    swap_mut().timers = Some(Timers {
+        requires_periodic_tasks: Some(requires_periodic_tasks),
+        last_reset_timestamp_seconds,
+        ..Default::default()
+    });
+
+    if requires_periodic_tasks {
         let timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
             ic_cdk::spawn(run_periodic_tasks())
         });
@@ -308,30 +325,6 @@ fn init_timers() {
         );
     }
 }
-
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-struct ResetTimersRequest {}
-
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-struct ResetTimersResponse {}
 
 #[update]
 async fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
