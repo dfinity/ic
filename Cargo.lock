@@ -9299,7 +9299,6 @@ dependencies = [
  "reqwest 0.12.8",
  "serde",
  "slog",
- "tests",
  "url",
 ]
 
@@ -11491,8 +11490,6 @@ dependencies = [
  "candid_parser",
  "clap 3.2.25",
  "comparable",
- "dfn_candid",
- "dfn_core",
  "futures",
  "hex",
  "ic-base-types",
@@ -11500,6 +11497,8 @@ dependencies = [
  "ic-canister-log 0.2.0",
  "ic-canister-profiler",
  "ic-canisters-http-types",
+ "ic-cdk 0.16.0",
+ "ic-cdk-macros 0.9.0",
  "ic-crypto-sha2",
  "ic-icrc1-ledger",
  "ic-ledger-core",
@@ -11770,6 +11769,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-canisters",
@@ -12725,6 +12725,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tests-ckbtc"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-btc-interface",
+ "ic-canister-client",
+ "ic-ckbtc-kyt",
+ "ic-ckbtc-minter",
+ "ic-config",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-types-test-utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "icp-ledger",
+ "registry-canister",
+ "slog",
+]
+
+[[package]]
 name = "ic-tracing"
 version = "0.9.0"
 dependencies = [
@@ -13347,6 +13379,7 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-recovery",
  "ic-registry-routing-table",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-subnet-splitting",
  "ic-system-test-driver",
@@ -15326,14 +15359,74 @@ dependencies = [
 ]
 
 [[package]]
+name = "nns-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "ic-agent",
+ "ic-btc-interface",
+ "ic-config",
+ "ic-mainnet-nns-recovery",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-tests-ckbtc",
+ "ic_consensus_system_test_utils",
+ "libflate",
+ "nns_dapp",
+ "reqwest 0.12.8",
+ "slog",
+ "tests",
+]
+
+[[package]]
 name = "nns-ui-canister"
 version = "0.9.0"
+
+[[package]]
+name = "nns_dapp"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-icrc1-ledger",
+ "ic-ledger-core",
+ "ic-nns-constants",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "icp-ledger",
+ "serde",
+ "slog",
+]
 
 [[package]]
 name = "no-std-compat"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b93853da6d84c2e3c7d730d6473e8817692dd89be387eb01b94d7f108ecb5b8c"
+
+[[package]]
+name = "node-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-nns-constants",
+ "ic-registry-canister-api",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "indoc",
+ "k256",
+ "registry-canister",
+ "slog",
+ "tokio",
+]
 
 [[package]]
 name = "nom"
@@ -18336,10 +18429,10 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic_consensus_system_test_utils",
+ "nns_dapp",
  "reqwest 0.12.8",
  "serde_json",
  "slog",
- "tests",
 ]
 
 [[package]]
@@ -19722,6 +19815,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "nns_dapp",
  "os_qualification_utils",
  "reqwest 0.12.8",
  "serde",
@@ -19838,6 +19932,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
+ "ic-tests-ckbtc",
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",

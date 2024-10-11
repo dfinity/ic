@@ -1,7 +1,8 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{api::time, caller, heartbeat, id, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{api::time, caller, id, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_timers::TimerId;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -24,15 +25,22 @@ use ic_sns_swap::{
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
         ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
         NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
+        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        ResetTimersRequest, ResetTimersResponse, Swap, Timers,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
 use prost::Message;
 use std::{
+    cell::RefCell,
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(60);
+
+/// This guarantees that timers cannot be restarted more often than once every 10 intervals.
+const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(600);
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
@@ -43,6 +51,10 @@ use std::{
 
 /// The global state of the this canister.
 static mut SWAP: Option<Swap> = None;
+
+thread_local! {
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
+}
 
 /// Returns an immutable reference to the global state.
 ///
@@ -244,15 +256,6 @@ fn notify_payment_failure(_request: NotifyPaymentFailureRequest) -> NotifyPaymen
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
 
-/// Tries to commit or abort the swap if the parameters have been satisfied.
-#[heartbeat]
-fn canister_heartbeat() {
-    let future = swap_mut().heartbeat(now_fn);
-
-    // The canister_heartbeat must be synchronous, so we cannot .await the future.
-    ic_cdk::spawn(future);
-}
-
 fn now_nanoseconds() -> u64 {
     if cfg!(target_arch = "wasm32") {
         time()
@@ -277,6 +280,82 @@ fn create_real_icp_ledger(id: CanisterId) -> IcpLedgerCanister<CdkRuntime> {
     IcpLedgerCanister::<CdkRuntime>::new(id)
 }
 
+async fn run_periodic_tasks() {
+    if let Some(ref mut timers) = swap_mut().timers {
+        timers.last_spawned_timestamp_seconds.replace(now_seconds());
+    };
+
+    swap_mut().run_periodic_tasks(now_fn).await;
+
+    if !swap().requires_periodic_tasks() {
+        if let Some(ref mut timers) = swap_mut().timers {
+            timers.requires_periodic_tasks.replace(false);
+        };
+        TIMER_ID.with(|saved_timer_id| {
+            let saved_timer_id = saved_timer_id.borrow();
+            if let Some(saved_timer_id) = *saved_timer_id {
+                ic_cdk_timers::clear_timer(saved_timer_id);
+            }
+        });
+        log!(
+            INFO,
+            "All work that needs to be done in Swap's periodic tasks has been completed. \
+             Stop scheduling new periodic tasks."
+        );
+    }
+}
+
+fn init_timers() {
+    let last_reset_timestamp_seconds = Some(now_seconds());
+    let requires_periodic_tasks = swap().requires_periodic_tasks();
+
+    swap_mut().timers.replace(Timers {
+        requires_periodic_tasks: Some(requires_periodic_tasks),
+        last_reset_timestamp_seconds,
+        ..Default::default()
+    });
+
+    if requires_periodic_tasks {
+        let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
+            ic_cdk::spawn(run_periodic_tasks())
+        });
+        TIMER_ID.with(|saved_timer_id| {
+            let mut saved_timer_id = saved_timer_id.borrow_mut();
+            if let Some(saved_timer_id) = *saved_timer_id {
+                ic_cdk_timers::clear_timer(saved_timer_id);
+            }
+            saved_timer_id.replace(new_timer_id);
+        });
+    } else {
+        log!(
+            INFO,
+            "Periodic tasks are not required for this Swap anymore."
+        );
+    }
+}
+
+#[update]
+fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
+
+    if let Some(timers) = swap_mut().timers {
+        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
+            if now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                < reset_timers_cool_down_interval_seconds
+            {
+                panic!(
+                    "Reset has already been called within the past {:?} seconds",
+                    reset_timers_cool_down_interval_seconds
+                );
+            }
+        }
+    }
+
+    init_timers();
+
+    ResetTimersResponse {}
+}
+
 /// In contrast to canister_init(), this method does not do deserialization.
 #[init]
 fn canister_init(init_payload: Init) {
@@ -288,6 +367,7 @@ fn canister_init(init_payload: Init) {
         );
         SWAP = Some(swap);
     }
+    init_timers();
     log!(INFO, "Initialized");
 }
 
@@ -372,6 +452,8 @@ fn canister_post_upgrade() {
             err
         )
     });
+
+    init_timers();
 }
 
 /// Serve an HttpRequest made to this canister

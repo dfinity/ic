@@ -108,6 +108,7 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-tests-ckbtc = { path = "ckbtc" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
@@ -368,38 +369,6 @@ name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
 
 [[bin]]
-name = "ic-systest-nns-dapp"
-path = "gix/nns_dapp_test.rs"
-
-[[bin]]
-name = "ic-systest-small"
-path = "testing_verification/testnets/small.rs"
-
-[[bin]]
-name = "ic-systest-small-with-query-stats"
-path = "testing_verification/testnets/small_with_query_stats.rs"
-
-[[bin]]
-name = "ic-systest-small-nns"
-path = "testing_verification/testnets/small_nns.rs"
-
-[[bin]]
-name = "ic-systest-sns-testing"
-path = "testing_verification/testnets/sns_testing.rs"
-
-[[bin]]
-name = "ic-systest-medium"
-path = "testing_verification/testnets/medium.rs"
-
-[[bin]]
-name = "ic-systest-large"
-path = "testing_verification/testnets/large.rs"
-
-[[bin]]
-name = "ic-systest-single-app-large-node-with-nns"
-path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
-
-[[bin]]
 name = "ic-systest-bn-performance"
 path = "boundary_nodes/bn_performance_test.rs"
 
@@ -410,10 +379,6 @@ path = "boundary_nodes/api_bn_decentralization_test.rs"
 [[bin]]
 name = "ic-systest-mainnet-bn-performance"
 path = "boundary_nodes/mainnet_bn_performance_test.rs"
-
-[[bin]]
-name = "ic-systest-ipv4-integration"
-path = "node/ipv4_integration_test.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"
