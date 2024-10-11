@@ -15,7 +15,7 @@ fn init(_init_arg: InitArg) {
 }
 
 #[query(name = "get_config")]
-#[candid_method(query, rename = "get_config")]
+#[candid_method(query)]
 fn get_config(_version: Option<Version>) -> GetConfigResponse {
     let version = get_stable_version();
 
