@@ -49,10 +49,10 @@ use ic_nns_governance::{
         },
         Environment, Governance, HeapGrowthPotential, RngError,
         EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, INITIAL_NEURON_DISSOLVE_DELAY,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_SUSTAINED_NEURONS_PER_HOUR,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     is_private_neuron_enforcement_enabled,
@@ -5027,10 +5027,10 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 
 #[test]
 fn test_rate_limiting_neuron_creation() {
-    let current_limit_per_hour = MAX_SUSTAINED_NEURONS_PER_HOUR;
+    let current_peak = MAX_NEURON_CREATION_SPIKE;
 
     // Some neurons with maturity and stake so we can spawn and split
-    let staked_neurons = (1..=(current_limit_per_hour - 1))
+    let staked_neurons = (1..=(current_peak - 1))
         .map(|i| {
             let controller = PrincipalId::new_user_test_id(i);
             let nonce = 1234u64;
@@ -5054,7 +5054,7 @@ fn test_rate_limiting_neuron_creation() {
 
     let (driver, mut gov) = governance_with_neurons(&staked_neurons);
 
-    for i in 1..=(current_limit_per_hour - 1) {
+    for i in 1..=(current_peak - 1) {
         let neuron_id = NeuronId::from_u64(i);
         // Split
         let controller = gov
@@ -5131,7 +5131,7 @@ fn test_rate_limiting_neuron_creation() {
     }
 
     // Advance time by just enough to reset the rate limit
-    driver.advance_time_by(3600.div(current_limit_per_hour));
+    driver.advance_time_by(3600.div(current_peak));
     gov.run_periodic_tasks().now_or_never().unwrap();
 
     // Now we should be able to again claim a neuron.
