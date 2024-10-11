@@ -1,5 +1,3 @@
-// TODO: Delete items marked as pub/* (crate) */ if they are not actually used.
-
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
@@ -35,36 +33,38 @@ use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
+        ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
             get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
             IcNodeSnapshot, NnsInstallationBuilder, SubnetSnapshot,
         },
+        universal_vm::{UniversalVm, UniversalVms},
     },
     nns::vote_and_execute_proposal,
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
+use ic_types::Height;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::{debug, info, Logger};
-use std::{env, str::FromStr, time::Duration};
-use ic_system_test_driver::driver::universal_vm::UniversalVms;
-use ic_system_test_driver::{
-    driver::ic::{InternetComputer, Subnet},
-    driver::universal_vm::UniversalVm,
+use std::{
+    env,
+    fs::File,
+    io::Write,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+    time::Duration,
 };
-use ic_types::Height;
-use std::net::{IpAddr, SocketAddr};
-use std::{fs::File, io::Write};
 
-pub/* (crate) */ const TEST_KEY_LOCAL: &str = "dfx_test_key";
+pub const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
-pub/* (crate) */ const ADDRESS_LENGTH: usize = 44;
+pub const ADDRESS_LENGTH: usize = 44;
 
-pub/* (crate) */ const TRANSFER_FEE: u64 = 1_000;
+pub const TRANSFER_FEE: u64 = 1_000;
 
-pub/* (crate) */ const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
+pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
@@ -174,7 +174,7 @@ fn check_nodes_health(env: &TestEnv) {
 }
 
 // By default ECDSA signature is not activated, we need to activate it explicitly.
-pub/* (crate) */ async fn activate_ecdsa_signature(
+pub async fn activate_ecdsa_signature(
     sys_node: IcNodeSnapshot,
     app_subnet_id: SubnetId,
     key_name: &str,
@@ -289,17 +289,14 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
     }
 }
 
-pub/* (crate) */ fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
+pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
     env.topology_snapshot()
         .subnets()
         .find(|s| s.subnet_type() == SubnetType::System)
         .unwrap()
 }
 
-pub/* (crate) */ async fn create_canister_at_id(
-    runtime: &Runtime,
-    specified_id: PrincipalId,
-) -> Canister<'_> {
+pub async fn create_canister_at_id(runtime: &Runtime, specified_id: PrincipalId) -> Canister<'_> {
     let canister_id_record: CanisterIdRecord = runtime
         .get_management_canister()
         .update_(
@@ -318,14 +315,14 @@ pub/* (crate) */ async fn create_canister_at_id(
 }
 
 /// Create an empty canister.
-pub/* (crate) */ async fn create_canister(runtime: &Runtime) -> Canister<'_> {
+pub async fn create_canister(runtime: &Runtime) -> Canister<'_> {
     runtime
         .create_canister_max_cycles_with_retries()
         .await
         .expect("Unable to create canister")
 }
 
-pub/* (crate) */ async fn install_ledger(
+pub async fn install_ledger(
     canister: &mut Canister<'_>,
     minting_user: PrincipalId,
     logger: &Logger,
@@ -352,7 +349,7 @@ pub/* (crate) */ async fn install_ledger(
     canister.canister_id()
 }
 
-pub/* (crate) */ async fn install_minter(
+pub async fn install_minter(
     canister: &mut Canister<'_>,
     ledger_id: CanisterId,
     logger: &Logger,
@@ -388,7 +385,7 @@ pub/* (crate) */ async fn install_minter(
     canister.canister_id()
 }
 
-pub/* (crate) */ async fn install_kyt(
+pub async fn install_kyt(
     kyt_canister: &mut Canister<'_>,
     logger: &Logger,
     minter_id: Principal,
@@ -412,11 +409,7 @@ pub/* (crate) */ async fn install_kyt(
     kyt_canister.canister_id()
 }
 
-pub/* (crate) */ async fn set_kyt_api_key(
-    agent: &ic_agent::Agent,
-    kyt_canister: &Principal,
-    api_key: String,
-) {
+pub async fn set_kyt_api_key(agent: &ic_agent::Agent, kyt_canister: &Principal, api_key: String) {
     agent
         .update(kyt_canister, "set_api_key")
         .with_arg(candid::Encode!(&SetApiKeyArg { api_key }).unwrap())
@@ -425,7 +418,7 @@ pub/* (crate) */ async fn set_kyt_api_key(
         .expect("failed to set api key");
 }
 
-pub/* (crate) */ async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> CanisterId {
+pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> CanisterId {
     let kyt_upgrade_arg = LifecycleArg::UpgradeArg(KytUpgradeArg {
         mode: Some(mode),
         maintainers: None,
@@ -439,7 +432,7 @@ pub/* (crate) */ async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: Kyt
     kyt_canister.canister_id()
 }
 
-pub/* (crate) */ async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
+pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
     install_bitcoin_canister_with_network(runtime, logger, Network::Regtest).await
 }
 

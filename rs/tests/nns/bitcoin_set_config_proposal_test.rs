@@ -1,4 +1,3 @@
-use ic_tests_ckbtc::install_bitcoin_canister_with_network;
 use anyhow::Result;
 use candid::{Decode, Encode};
 use canister_test::Canister;
@@ -25,6 +24,7 @@ use ic_system_test_driver::{
     nns::{get_governance_canister, vote_execute_proposal_assert_failed},
     util::{block_on, runtime_from_url},
 };
+use ic_tests_ckbtc::install_bitcoin_canister_with_network;
 use slog::info;
 use std::str::FromStr;
 
