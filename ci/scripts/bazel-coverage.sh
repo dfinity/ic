@@ -8,7 +8,7 @@ bazel query --universe_scope=//... \
 # shellcheck disable=SC2046,SC2086
 bazel --output_base=/var/tmp/bazel-output/ coverage --config=ci --combined_report=lcov \
     --test_timeout=3000 --combined_report=lcov $(<cov_targets.txt) || true
-    # some tests may fail, but we still want to generate coverage report
+# some tests may fail, but we still want to generate coverage report
 cp bazel-out/_coverage/_coverage_report.dat cov_report.dat
 genhtml --output cov_html cov_report.dat
 
