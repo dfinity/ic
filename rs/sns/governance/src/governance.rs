@@ -4857,16 +4857,16 @@ impl Governance {
                 refresh_deployed_version_attempts
             );
             self.proto.deployed_version = Some(expected_version.clone());
-            self.proto
-                .cached_upgrade_steps
-                .as_mut()
-                .map(|cached_upgrade_steps| {
-                    cached_upgrade_steps
-                        .upgrade_steps
-                        .as_mut()
-                        .map(|upgrade_steps| upgrade_steps.versions.remove(0));
-                });
-            // TODO: check invariant cached_upgrade_steps[0] == expected_version
+
+            // TODO: refresh_cached_upgrade_steps the only producer/modifier of the cached upgrade steps, so this is unnecessary
+            if let Some(CachedUpgradeSteps {
+                upgrade_steps: Some(ref mut upgrade_steps),
+                ..
+            }) = self.proto.cached_upgrade_steps.as_mut()
+            {
+                upgrade_steps.versions.remove(0);
+                // TODO: check invariant cached_upgrade_steps[0] == expected_version
+            }
             *released_timestamp_seconds = Some(self.env.now());
         } else {
             dfn_core::println!(
