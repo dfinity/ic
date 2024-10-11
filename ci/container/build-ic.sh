@@ -105,6 +105,10 @@ validate_build_env() {
 }
 
 echo_green "Validating build environment"
+echo_blue git status
+git status
+echo_blue git diff
+git diff
 validate_build_env
 
 echo_blue "Purging artifact directories"
