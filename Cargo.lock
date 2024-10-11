@@ -9299,7 +9299,6 @@ dependencies = [
  "reqwest 0.12.8",
  "serde",
  "slog",
- "tests",
  "url",
 ]
 
