@@ -301,7 +301,45 @@ fn init_timers() {
             let mut saved_timer_id = saved_timer_id.borrow_mut();
             *saved_timer_id = timer_id;
         });
+    } else {
+        log!(
+            INFO,
+            "Periodic tasks are not required for this Swap anymore."
+        );
     }
+}
+
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+struct ResetTimersRequest {}
+
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+struct ResetTimersResponse {}
+
+#[update]
+async fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let sns_governance_canister_id = &swap().init_or_panic().sns_governance_canister_id;
+    let sns_governance_canister_id = PrincipalId::from_str(sns_governance_canister_id).unwrap();
+    assert_eq!(caller_principal_id(), sns_governance_canister_id);
+    init_timers();
+    ResetTimersResponse {}
 }
 
 /// In contrast to canister_init(), this method does not do deserialization.
