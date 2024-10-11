@@ -8,7 +8,30 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
+certificate_orchestrator_interface = { path = "../../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
+discower_bowndary = { path = "../../boundary_node/discower_bowndary" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-boundary-nodes-system-test-utils = { path = "utils" }
+ic-boundary-nodes-integration-test-common = { path = "integration_test_common" }
+ic-boundary-nodes-performance-test-common = { path = "performance_test_common" }
+ic-canister-client = { path = "../../canister_client" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nns-common = { path = "../../nns/common" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+itertools = { workspace = true }
+k256 = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
+slog = { workspace = true }
+tokio = { workspace = true }
+wat = { workspace = true }
 
 [[bin]]
 name = "ic-systest-bn-integration"
@@ -16,20 +39,20 @@ path = "bn_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-bn-integration-on-playnet"
-path = "boundary_nodes/bn_integration_on_playnet_test.rs"
+path = "bn_integration_on_playnet_test.rs"
 
 [[bin]]
 name = "ic-systest-certificate-orchestrator"
-path = "boundary_nodes/certificate_orchestrator_test.rs"
+path = "certificate_orchestrator_test.rs"
 
 [[bin]]
 name = "ic-systest-api-bn-decentralization"
-path = "boundary_nodes/api_bn_decentralization_test.rs"
+path = "api_bn_decentralization_test.rs"
 
 [[bin]]
 name = "ic-systest-bn-performance"
-path = "boundary_nodes/bn_performance_test.rs"
+path = "bn_performance_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet-bn-performance"
-path = "boundary_nodes/mainnet_bn_performance_test.rs"
+path = "mainnet_bn_performance_test.rs"

@@ -27,8 +27,8 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common:integration_test_common",
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/integration_test_common",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -50,8 +50,8 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/integration_test_common:integration_test_common",
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/integration_test_common",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -117,8 +117,8 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common:performance_test_common",
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/performance_test_common",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -143,7 +143,7 @@ system_test(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common:performance_test_common",
+        "//rs/tests/boundary_nodes/performance_test_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -168,7 +168,7 @@ system_test(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/performance_test_common:performance_test_common",
+        "//rs/tests/boundary_nodes/performance_test_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -203,7 +203,6 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/types/base_types",
         "//rs/boundary_node/discower_bowndary:discower-bowndary",
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
@@ -212,8 +211,9 @@ system_test_nns(
         "//rs/nns/governance/api",
         "//rs/nns/test_utils",
         "//rs/registry/canister",
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

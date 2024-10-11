@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
+
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
@@ -13,7 +14,7 @@ rust_library(
         "//rs/registry/nns_data_provider",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -23,6 +24,6 @@ rust_library(
         "@crate_index//:rand",
         "@crate_index//:reqwest",
         "@crate_index//:slog",
-        "@crate_index//:tokio"
+        "@crate_index//:tokio",
     ],
 )

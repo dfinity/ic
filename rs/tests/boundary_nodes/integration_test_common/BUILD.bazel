@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
+
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
@@ -8,7 +9,7 @@ rust_library(
     crate_name = "ic_boundary_nodes_integration_test_common",
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/utils:utils",
+        "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",

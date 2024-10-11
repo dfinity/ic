@@ -29,10 +29,13 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
+                .add_test(systest!(asset_canister_test))
                 .add_test(systest!(canister_test))
+                .add_test(systest!(canister_routing_test))
                 .add_test(systest!(http_canister_test))
                 .add_test(systest!(prefix_canister_id_test))
                 .add_test(systest!(proxy_http_canister_test))
+                .add_test(systest!(read_state_via_subnet_path_test))
                 .add_test(systest!(redirect_http_to_https_test))
                 .add_test(systest!(redirect_to_dashboard_test))
                 .add_test(systest!(http_endpoint_test))
