@@ -235,9 +235,9 @@ fn start_server(
 
                             let io = TokioIo::new(stream);
                             let conn = http.serve_connection(io, hyper_service);
-                                if let Err(err) = conn.await {
-                                    warn!(logger, "failed to serve connection: {err}");
-                                }
+                            if let Err(err) = conn.await {
+                                warn!(logger, "failed to serve connection: {err}");
+                            }
                         }
 
                         #[cfg(not(test))]
@@ -265,10 +265,10 @@ fn start_server(
                                 Ok(tls_stream) => {
                                     let io = TokioIo::new(tls_stream);
                                     let conn = http.serve_connection(io, hyper_service);
-                                        if let Err(err) = conn.await {
-                                            warn!(logger, "failed to serve connection: {err}");
-                                            metrics.closed_connections_total.inc();
-                                        }
+                                    if let Err(err) = conn.await {
+                                        warn!(logger, "failed to serve connection: {err}");
+                                        metrics.closed_connections_total.inc();
+                                    }
                                 }
                                 Err(err) => {
                                     warn!(logger, "Error setting up TLS stream: {err}");
