@@ -842,7 +842,6 @@ mod tests {
         // Make the string parsable by filling the template placeholders with dummy values
         let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
             .unwrap()
-            .replace("{{ node_index }}", "0")
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
