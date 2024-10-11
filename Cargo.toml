@@ -351,6 +351,7 @@ members = [
     "rs/tests",
     "rs/tests/boundary_nodes",
     "rs/tests/boundary_nodes/integration_test_common",
+    "rs/tests/boundary_nodes/performance_test_common",
     "rs/tests/boundary_nodes/utils",
     "rs/tests/ckbtc",
     "rs/tests/consensus",

@@ -17,3 +17,15 @@ path = "bn_integration_test.rs"
 [[bin]]
 name = "ic-systest-bn-integration-on-playnet"
 path = "boundary_nodes/bn_integration_on_playnet_test.rs"
+
+[[bin]]
+name = "ic-systest-api-bn-decentralization"
+path = "boundary_nodes/api_bn_decentralization_test.rs"
+
+[[bin]]
+name = "ic-systest-bn-performance"
+path = "boundary_nodes/bn_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-mainnet-bn-performance"
+path = "boundary_nodes/mainnet_bn_performance_test.rs"
