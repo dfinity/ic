@@ -34,6 +34,7 @@ const NAT_META_VALUE: u128 = u128::MAX;
 const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
+#[allow(dead_code)]
 pub fn account(owner: u64, subaccount: u128) -> Account {
     let mut sub: [u8; 32] = [0; 32];
     sub[..16].copy_from_slice(&subaccount.to_be_bytes());
