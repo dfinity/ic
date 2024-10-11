@@ -22,7 +22,6 @@ build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 # lockfile for MODULE.bazel
 common --lockfile_mode=off
 
-
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
