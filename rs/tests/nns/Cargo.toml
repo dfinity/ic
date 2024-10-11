@@ -7,7 +7,11 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
+ic-agent = { workspace = true }
+ic-btc-interface = { workspace = true }
 ic-config = { path = "../../config" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
@@ -16,13 +20,8 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../tests/driver" }
 ic-tests-ckbtc = { path = "../../tests/ckbtc" }
 ic_consensus_system_test_utils = { path = "../../tests/consensus/utils" }
-nns_dapp = { path = "../../tests/nns/nns_dapp" }
-
-anyhow = { workspace = true }
-candid = { workspace = true }
-ic-agent = { workspace = true }
-ic-btc-interface = { workspace = true }
 libflate = { workspace = true }
+nns_dapp = { path = "../../tests/nns/nns_dapp" }
 reqwest = { workspace = true }
 slog = { workspace = true }
 

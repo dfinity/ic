@@ -7,14 +7,16 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-ckbtc-kyt = { path = "../../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../../bitcoin/ckbtc/minter" }
 ic-config = { path = "../../config" }
-ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/tecdsa/utils" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
@@ -27,10 +29,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../tests/driver" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/tecdsa/utils" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 registry-canister = { path = "../../registry/canister" }
-
-candid = { workspace = true }
-ic-agent = { workspace = true }
-ic-btc-interface = { workspace = true }
 slog = { workspace = true }
