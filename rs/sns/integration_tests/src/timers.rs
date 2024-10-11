@@ -47,7 +47,7 @@ fn swap_init(now: SystemTime) -> Init {
 }
 
 #[test]
-fn test_swap_disabled_eventually() {
+fn test_swap_periodic_tasks_disabled_eventually() {
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     // Install the swap canister.
