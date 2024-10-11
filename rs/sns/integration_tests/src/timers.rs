@@ -57,38 +57,38 @@ fn test_swap_periodic_tasks_disabled_eventually() {
         .install_canister(wasm.clone(), args, None)
         .unwrap();
 
+    // Helpers.
+    let get_relevant_state_components = || {
+        let payload = Encode!(&GetStateRequest {}).unwrap();
+        let response = state_machine
+            .execute_ingress(canister_id, "get_state", payload)
+            .expect("Unable to call get_state on the Swap canister");
+        let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+        let swap_state = response.swap.unwrap();
+        (
+            swap_state.timers,
+            swap_state.lifecycle(),
+            swap_state.already_tried_to_auto_finalize,
+        )
+    };
+
+    // This first tick brings us to the Open lifecycle state.
     state_machine.advance_time(Duration::from_secs(100));
     state_machine.tick();
 
     // Inspect the initial state.
-    {
-        let (timers, lifecycle, already_tried_to_auto_finalize) = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            let swap_state = response.swap.unwrap();
-            (
-                swap_state.timers,
-                swap_state.lifecycle(),
-                swap_state.already_tried_to_auto_finalize,
-            )
-        };
-
-        assert_eq!(lifecycle, Lifecycle::Open);
-
-        assert_eq!(already_tried_to_auto_finalize, Some(false));
-
-        assert_matches!(
-            timers,
+    assert_matches!(
+        get_relevant_state_components(),
+        (
             Some(Timers {
                 requires_periodic_tasks: Some(true),
                 last_reset_timestamp_seconds: Some(_),
                 last_spawned_timestamp_seconds: Some(_),
-            })
-        );
-    }
+            }),
+            Lifecycle::Open,
+            Some(false),
+        )
+    );
 
     // Each periodic tasks performs at most one action, so we need to wait for all the following
     // actions to complete:
@@ -103,35 +103,18 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     state_machine.tick();
 
     // Inspect the final state.
-    {
-        let (timers, lifecycle, already_tried_to_auto_finalize) = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            let swap_state = response.swap.unwrap();
-            (
-                swap_state.timers,
-                swap_state.lifecycle(),
-                swap_state.already_tried_to_auto_finalize,
-            )
-        };
-
-        assert_eq!(lifecycle, Lifecycle::Aborted);
-
-        assert_eq!(already_tried_to_auto_finalize, Some(true));
-
-        assert_matches!(
-            timers,
+    assert_matches!(
+        get_relevant_state_components(),
+        (
             Some(Timers {
-                // This is the main postcondition of this test.
                 requires_periodic_tasks: Some(false),
                 last_reset_timestamp_seconds: Some(_),
                 last_spawned_timestamp_seconds: Some(_),
-            })
-        );
-    }
+            }),
+            Lifecycle::Aborted,
+            Some(true),
+        )
+    );
 }
 
 #[test]
@@ -145,17 +128,18 @@ fn test_swap_reset_timers() {
         .install_canister(wasm.clone(), args, None)
         .unwrap();
 
-    let last_spawned_timestamp_seconds = {
-        let timers_right_after_init = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            response.swap.unwrap().timers
-        };
+    // Helpers.
+    let get_timers = || {
+        let payload = Encode!(&GetStateRequest {}).unwrap();
+        let response = state_machine
+            .execute_ingress(canister_id, "get_state", payload)
+            .expect("Unable to call get_state on the Swap canister");
+        let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+        response.swap.unwrap().timers
+    };
 
-        let last_reset_timestamp_seconds = assert_matches!(timers_right_after_init, Some(Timers {
+    let last_spawned_timestamp_seconds = {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
@@ -166,16 +150,7 @@ fn test_swap_reset_timers() {
         state_machine.advance_time(Duration::from_secs(1000));
         state_machine.tick();
 
-        let timers_before_reset = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            response.swap.unwrap().timers
-        };
-
-        let last_spawned_timestamp_seconds = assert_matches!(timers_before_reset, Some(Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
@@ -204,16 +179,7 @@ fn test_swap_reset_timers() {
     {
         let last_spawned_before_reset_timestamp_seconds = last_spawned_timestamp_seconds;
 
-        let timers_right_after_reset = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            response.swap.unwrap().timers
-        };
-
-        let last_reset_timestamp_seconds = assert_matches!(timers_right_after_reset, Some(Timers {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
@@ -229,16 +195,7 @@ fn test_swap_reset_timers() {
         state_machine.advance_time(Duration::from_secs(100));
         state_machine.tick();
 
-        let timers_a_while_after_reset = {
-            let payload = Encode!(&GetStateRequest {}).unwrap();
-            let response = state_machine
-                .execute_ingress(canister_id, "get_state", payload)
-                .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
-            response.swap.unwrap().timers
-        };
-
-        let last_spawned_timestamp_seconds = assert_matches!(timers_a_while_after_reset, Some(Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
@@ -265,6 +222,16 @@ fn test_swap_reset_timers_cannot_be_spammed() {
         .install_canister(wasm.clone(), args, None)
         .unwrap();
 
+    // Helpers.
+    let try_reset_timers = || -> Result<ResetTimersResponse, String> {
+        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let response = state_machine.execute_ingress(canister_id, "reset_timers", payload);
+        match response {
+            Ok(response) => Ok(Decode!(&response.bytes(), ResetTimersResponse).unwrap()),
+            Err(err) => Err(err.to_string()),
+        }
+    };
+
     state_machine.advance_time(Duration::from_secs(600));
     state_machine.tick();
 
@@ -287,13 +254,7 @@ fn test_swap_reset_timers_cannot_be_spammed() {
     };
 
     // Reset the timers.
-    {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
-        let response = state_machine
-            .execute_ingress(canister_id, "reset_timers", payload)
-            .expect("Unable to call reset_timers on the Swap canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
-    }
+    try_reset_timers().expect("Unable to call reset_timers on the Swap canister");
 
     let last_spawned_timestamp_seconds_1 = get_last_spawned_timestamp_seconds();
 
@@ -302,13 +263,8 @@ fn test_swap_reset_timers_cannot_be_spammed() {
 
     // Attempt to reset the timers again, after a small delay.
     {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
-        let response = state_machine
-            .execute_ingress(canister_id, "reset_timers", payload)
-            .unwrap_err();
-        assert!(&response
-            .to_string()
-            .contains("Reset has already been called within the past 600 seconds"));
+        let err_text = try_reset_timers().unwrap_err();
+        assert!(err_text.contains("Reset has already been called within the past 600 seconds"));
     }
 
     let last_spawned_timestamp_seconds_2 = get_last_spawned_timestamp_seconds();
@@ -322,13 +278,7 @@ fn test_swap_reset_timers_cannot_be_spammed() {
     state_machine.tick();
 
     // Attempt to reset the timers again, after a small delay.
-    {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
-        let response = state_machine
-            .execute_ingress(canister_id, "reset_timers", payload)
-            .expect("Unable to call reset_timers on the Swap canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
-    }
+    try_reset_timers().expect("Unable to call reset_timers on the Swap canister");
 
     let last_spawned_timestamp_seconds_3 = get_last_spawned_timestamp_seconds();
 
