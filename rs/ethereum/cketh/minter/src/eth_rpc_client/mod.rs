@@ -62,19 +62,30 @@ impl EthRpcClient {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
                 EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
             };
+            let threshold_3_out_of_4 = EvmRpcConfig {
+                response_consensus: Some(ConsensusStrategy::Threshold {
+                    total: Some(4),
+                    min: 3,
+                }),
+                ..EvmRpcConfig::default()
+            };
             client.evm_rpc_client = Some(
                 EvmRpcClient::builder_for_ic(TRACE_HTTP)
                     .with_providers(providers)
                     .with_evm_canister_id(evm_rpc_id)
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
+                        eth_get_block_by_number: Some(threshold_3_out_of_4.clone()),
                         eth_get_logs: Some(EvmRpcConfig {
                             response_size_estimate: Some(
                                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                             ),
-                            response_consensus: Some(ConsensusStrategy::Equality),
+                            ..threshold_3_out_of_4.clone()
                         }),
-                        ..Default::default()
+                        eth_fee_history: Some(threshold_3_out_of_4.clone()),
+                        eth_get_transaction_receipt: Some(threshold_3_out_of_4.clone()),
+                        eth_get_transaction_count: Some(threshold_3_out_of_4.clone()),
+                        eth_send_raw_transaction: Some(threshold_3_out_of_4),
                     })
                     .build(),
             );
