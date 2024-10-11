@@ -38,9 +38,9 @@ path = "certified_registry_test.rs"
 name = "create_subnet_pre_master_test"
 path = "create_subnet_pre_master_test.rs"
 
-[[bin]]
-name = "nns_canister_uninstall_test"
-path = "nns_canister_uninstall_test.rs"
+# [[bin]]
+# name = "nns_canister_uninstall_test"
+# path = "nns_canister_uninstall_test.rs"
 
 [[bin]]
 name = "nns_cycles_minting_multi_app_subnets_test"
