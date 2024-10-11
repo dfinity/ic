@@ -9299,7 +9299,6 @@ dependencies = [
  "reqwest 0.12.8",
  "serde",
  "slog",
- "tests",
  "url",
 ]
 
@@ -12726,6 +12725,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tests-ckbtc"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-btc-interface",
+ "ic-canister-client",
+ "ic-ckbtc-kyt",
+ "ic-ckbtc-minter",
+ "ic-config",
+ "ic-icrc1-ledger",
+ "ic-management-canister-types",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-types-test-utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "icp-ledger",
+ "registry-canister",
+ "slog",
+]
+
+[[package]]
 name = "ic-tracing"
 version = "0.9.0"
 dependencies = [
@@ -15325,6 +15356,31 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "memoffset 0.9.1",
+]
+
+[[package]]
+name = "nns-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "ic-agent",
+ "ic-btc-interface",
+ "ic-config",
+ "ic-mainnet-nns-recovery",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-tests-ckbtc",
+ "ic_consensus_system_test_utils",
+ "libflate",
+ "nns_dapp",
+ "reqwest 0.12.8",
+ "slog",
+ "tests",
 ]
 
 [[package]]
@@ -19876,6 +19932,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
+ "ic-tests-ckbtc",
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
