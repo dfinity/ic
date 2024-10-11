@@ -413,8 +413,8 @@ jobs:
       - name: Upload COV report
         shell: bash
         run: |
-          rclone sync cov_html public-s3:dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
-              --progress
+          rclone sync cov_html s3://dfinity-download-public/coverage/${CI_COMMIT_SHA}/ \
+              --progress --s3-env-auth
       - name: Upload Test Coverage Report
         uses: actions/upload-artifact@v4
         with:
