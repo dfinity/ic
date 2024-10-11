@@ -42,8 +42,8 @@ type CheckTransactionRetriable = variant {
 type CheckTransactionIrrecoverableError = variant {
     // Response size is too large (>400kB) when fetching transaction data.
     ResponseTooLarge : record { txid: blob };
-    // Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
-    InvalidTransaction : text;
+    // Invalid transaction id.
+    InvalidTransactionId : text;
 };
 
 type InitArg = record {
