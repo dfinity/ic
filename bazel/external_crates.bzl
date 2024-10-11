@@ -1101,11 +1101,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.17.1",
             ),
             "secp256k1": crate.spec(
-               version = "^0.22",
-               features = [
+                version = "^0.22",
+                features = [
                     "global-context",
                     "rand-std",
-               ],
+                ],
             ),
             "semver": crate.spec(
                 version = "^1.0.9",
