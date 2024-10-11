@@ -66,6 +66,8 @@ use tracing::{instrument, warn};
 pub mod common;
 pub mod nonblocking;
 
+const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0\n";
+
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
 
@@ -1280,6 +1282,27 @@ or place it in your current working directory (you are running PocketIC from {:?
 
 To download the binary, please visit https://github.com/dfinity/pocketic."
 , &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
+    }
+
+    // check PocketIC server version compatibility
+    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    cmd.arg("--version");
+    let version = cmd
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to get version of PocketIC binary ({}): {}",
+                bin_path, e
+            )
+        })
+        .stdout;
+    let version_str = String::from_utf8(version)
+        .unwrap_or_else(|e| panic!("Failed to parse PocketIC binary version string: {}", e));
+    if version_str != EXPECTED_SERVER_VERSION {
+        panic!(
+            "Incompatible PocketIC server version: got {}; expected {}.",
+            version_str, EXPECTED_SERVER_VERSION
+        );
     }
 
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
