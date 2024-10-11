@@ -26,6 +26,14 @@ libflate = { workspace = true }
 reqwest = { workspace = true }
 slog = { workspace = true }
 
+# TODO: Delete this. We can delete once we finish migrating all [[bin]]s (in
+# this file) as described in Notion:
+#
+#   https://www.notion.so/dfinityorg/How-to-Break-Up-rs-tests-11bef9d9b80c80b0a0bfdd03a21d45e9?showMoveTo=true&saveParent=true
+#
+# (The name of migrated [[bin]]s begin with "ic-systest-".)
+tests = { path = ".." }
+
 [[bin]]
 name = "nns_upgrade_test"
 path = "nns_upgrade_test.rs"
