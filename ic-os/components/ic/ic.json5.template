@@ -3,7 +3,7 @@
     // Global Replica Configuration
     // ============================================
 
-    node_id: "{{ node_index }}",
+    node_id: "0",
 
     // =======================================================
     // Configuration of transport parameters and node identity
