@@ -443,19 +443,7 @@ where
                 main: abridged_neuron,
                 hot_keys,
                 recent_ballots: ballots,
-                followees: followees
-                    .into_iter()
-                    .group_by(|(followees_key, _followee_id)| followees_key.topic)
-                    .into_iter()
-                    .map(|(topic, group)| {
-                        let followees = group
-                            .sorted_by_key(|(followees_key, _)| followees_key.index)
-                            .map(|(_, followee_id)| followee_id)
-                            .collect::<Vec<_>>();
-
-                        (i32::from(topic), Followees { followees })
-                    })
-                    .collect(),
+                followees: self.reconstitute_followees_from_range(followees.into_iter()),
                 known_neuron_data: current_known_neuron_data,
                 transfer: current_transfer,
             })
@@ -550,6 +538,13 @@ where
         };
         let range = self.followees_map.range(first..=last);
 
+        self.reconstitute_followees_from_range(range)
+    }
+
+    fn reconstitute_followees_from_range(
+        &self,
+        range: impl Iterator<Item = (FolloweesKey, NeuronId)>,
+    ) -> HashMap</* topic ID */ i32, Followees> {
         range
             // create groups for topics
             .group_by(|(followees_key, _followee_id)| followees_key.topic)
