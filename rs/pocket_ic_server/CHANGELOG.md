@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PocketIC HTTP gateway routes requests whose paths start with `/_/` and for which no canister ID can be found
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
+- The certified time of a round is only bumped by `1ns` if the time of the corresponding PocketIC instance did not increase since the last round.
+- The endpoint `/instances/<instance_id>/update/set_time` returns an error if the time of a PocketIC instance is set into the past.
 
 
 

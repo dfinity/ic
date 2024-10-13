@@ -94,4 +94,5 @@ service : {
   canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
+  time : () -> (nat64) query;
 }
