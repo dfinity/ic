@@ -110,6 +110,7 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
+        validate_ingress_expiry(request, current_time)?;
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -132,6 +133,9 @@ where
         current_time: Time,
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
+        if !request.sender().get().is_anonymous() {
+            validate_ingress_expiry(request, current_time)?;
+        }
         let delegation_targets = validate_request_content(
             request,
             self.validator.as_ref(),
@@ -155,6 +159,9 @@ where
         root_of_trust_provider: &R,
     ) -> Result<CanisterIdSet, RequestValidationError> {
         validate_paths_width_and_depth(&request.content().paths)?;
+        if !request.sender().get().is_anonymous() {
+            validate_ingress_expiry(request, current_time)?;
+        }
         validate_request_content(
             request,
             self.validator.as_ref(),
@@ -192,7 +199,6 @@ where
     R::Error: std::error::Error,
 {
     validate_nonce(request)?;
-    validate_ingress_expiry(request, current_time)?;
     validate_user_id_and_signature(
         ingress_signature_verifier,
         &request.sender(),
