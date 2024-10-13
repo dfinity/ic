@@ -27,6 +27,7 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  LABELS: ${{ github.event.pull_request.labels.*.name }}
 jobs:
   bazel-test-all:
     name: Bazel Test All
