@@ -154,6 +154,7 @@ impl<T> Reference<T> {
         Id::from(self).kind()
     }
 
+    #[cfg(test)]
     fn context(&self) -> Context {
         Id::from(self).context()
     }
@@ -249,54 +250,6 @@ impl From<Id> for SomeReference {
         match id.context() {
             Context::Inbound => SomeReference::Inbound(Reference(id.0, PhantomData)),
             Context::Outbound => SomeReference::Outbound(Reference(id.0, PhantomData)),
-        }
-    }
-}
-
-impl<T> From<&Reference<T>> for pb_queues::canister_queue::QueueItem {
-    fn from(item: &Reference<T>) -> Self {
-        use pb_queues::canister_queue::queue_item::R;
-
-        Self {
-            r: Some(R::Reference(item.0)),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queue::QueueItem> for InboundReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
-        match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
-                let reference = Reference(id, PhantomData);
-                if reference.context() == Context::Inbound {
-                    Ok(reference)
-                } else {
-                    Err(ProxyDecodeError::Other(
-                        "Not an inbound reference".to_string(),
-                    ))
-                }
-            }
-            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
-        match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
-                let reference = Reference(id, PhantomData);
-                if reference.context() == Context::Outbound {
-                    Ok(reference)
-                } else {
-                    Err(ProxyDecodeError::Other(
-                        "Not an outbound reference".to_string(),
-                    ))
-                }
-            }
-            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
         }
     }
 }
