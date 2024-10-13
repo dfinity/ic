@@ -49,8 +49,10 @@ fn compute_bouncer(
     }
     // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
     // This prevents nodes that have fallen behind to exceed their validated pool bounds.
-    if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
-        && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
+    if !matches!(
+        id.hash,
+        ConsensusMessageHash::CatchUpPackage(_) | ConsensusMessageHash::CatchUpPackageShare(_)
+    ) && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
     {
         return MaybeWantsLater;
     }
@@ -99,15 +101,8 @@ fn compute_bouncer(
                 MaybeWantsLater
             }
         }
-        ConsensusMessageHash::CatchUpPackage(_) => Wants,
-        ConsensusMessageHash::CatchUpPackageShare(_) => {
-            if height <= cup_height {
-                Unwanted
-            } else if height <= finalized_height {
-                Wants
-            } else {
-                MaybeWantsLater
-            }
+        ConsensusMessageHash::CatchUpPackage(_) | ConsensusMessageHash::CatchUpPackageShare(_) => {
+            Wants
         }
     }
 }

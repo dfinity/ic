@@ -368,8 +368,9 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(registry_version, subnet_id)
-            .map(pb::CatchUpPackage::from)
-            .ok();
+            .ok()
+            .filter(|cup| cup.height().get() == 0 || !cup.content.state_hash.get_ref().0.is_empty())
+            .map(pb::CatchUpPackage::from);
 
         // Select the latest CUP based on the height of the CUP *proto*. This is to avoid falling
         // back to an outdated registry CUP if the local CUP can't be deserialized. If this is the

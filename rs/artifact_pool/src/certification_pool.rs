@@ -372,6 +372,12 @@ impl CertificationPool for CertificationPoolImpl {
             .map(|certification| certification.height)
             .collect()
     }
+
+    fn max_certified_height(&self) -> Option<Height> {
+        let max_cert_height = self.persistent_pool.certifications().max_height();
+        let max_share_height = self.persistent_pool.certification_shares().max_height();
+        max_cert_height.max(max_share_height)
+    }
 }
 
 impl ValidatedPoolReader<CertificationMessage> for CertificationPoolImpl {

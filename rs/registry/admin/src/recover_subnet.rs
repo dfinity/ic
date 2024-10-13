@@ -33,9 +33,9 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// The block time to start from (nanoseconds from Epoch)
     pub time_ns: u64,
 
-    #[clap(long, required = true)]
+    #[clap(long, required = false)]
     /// The hash of the state
-    pub state_hash: String,
+    pub state_hash: Option<String>,
 
     #[clap(long, multiple_values(true))]
     /// Replace the members of the given subnet with these nodes
@@ -164,8 +164,12 @@ impl ProposeToUpdateRecoveryCupCmd {
         &self,
         subnet_id: SubnetId,
     ) -> do_recover_subnet::RecoverSubnetPayload {
-        let state_hash = hex::decode(self.state_hash.clone())
-            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {}", err));
+        let state_hash = if let Some(state_hash) = self.state_hash.clone() {
+            hex::decode(state_hash)
+                .unwrap_or_else(|err| panic!("The provided state hash was invalid: {}", err))
+        } else {
+            vec![]
+        };
 
         let replacement_nodes = self
             .replacement_nodes

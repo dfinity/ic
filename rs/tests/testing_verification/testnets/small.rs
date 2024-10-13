@@ -44,8 +44,14 @@ use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
+    test_env_api::{
+        await_boundary_node_healthy, get_ic_os_update_img_sha256, get_ic_os_update_img_test_sha256,
+        get_ic_os_update_img_test_url, get_ic_os_update_img_url, HasTopologySnapshot,
+        NnsCustomizations,
+    },
 };
+use ic_types::Height;
+use slog::{info, Logger};
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -61,22 +67,31 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("Failed to start prometheus VM");
     InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(1)
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(1)
+                .with_dkg_interval_length(Height::from(29)),
+        )
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(13))
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
     env.sync_with_prometheus();
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+
+    let log = env.logger();
+    info!(log, "UPDATE URL: {:?}", get_ic_os_update_img_url());
+    info!(log, "UPDATE SHA: {:?}", get_ic_os_update_img_sha256());
+    info!(
+        log,
+        "UPDATE TEST URL: {:?}",
+        get_ic_os_update_img_test_url()
+    );
+    info!(
+        log,
+        "UPDATE TEST SHA: {:?}",
+        get_ic_os_update_img_test_sha256()
+    );
 }
