@@ -394,7 +394,6 @@ impl IDkgPoolImpl {
             self.insert(UnvalidatedArtifact {
                 message: IDkgMessage::Dealing(signed_dealing.clone()),
                 peer_id: signed_dealing.dealer_id(),
-                timestamp: time_source.get_relative_time(),
             })
         }
     }

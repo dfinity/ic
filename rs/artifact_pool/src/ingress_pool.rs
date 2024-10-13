@@ -1,12 +1,10 @@
 /// Ingress Pool provides storage for all ingress messages in artifact_pool
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
-use crate::{
-    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    HasTimestamp,
-};
+use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
+    consensus_pool::HasTimestamp,
     ingress_pool::{
         ChangeAction, IngressPool, IngressPoolObject, IngressPoolThrottler, Mutations, PoolSection,
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
@@ -18,6 +16,7 @@ use ic_interfaces::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_types::time::current_time;
 use ic_types::{
     artifact::IngressMessageId,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
@@ -244,7 +243,7 @@ impl MutablePool<SignedIngress> for IngressPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
         let peer_id = artifact.peer_id;
         let ingress_pool_obj = IngressPoolObject::new(peer_id, artifact.message);
-        let timestamp = artifact.timestamp;
+        let timestamp = current_time();
         let size = ingress_pool_obj.count_bytes();
 
         debug!(
