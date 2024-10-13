@@ -4,10 +4,11 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::num::Saturating;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// `AmountOf<Unit>` provides a type-safe way to keep an amount of
-/// some `Unit`.
+/// some `Unit` with saturating arithmetics.
 ///
 ///  E.g. the following code must not compile:
 ///
@@ -149,7 +150,7 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
 ///
 /// assert!(ASTRONOMICAL_UNIT > Distance::from(0));
 /// ```
-pub struct AmountOf<Unit, Repr>(Repr, PhantomData<Unit>);
+pub struct AmountOf<Unit, Repr>(Saturating<Repr>, PhantomData<Unit>);
 
 impl<Unit, Repr: Default> Default for AmountOf<Unit, Repr> {
     /// Returns the default amount if the value implements `Default`.
@@ -182,7 +183,7 @@ impl<Unit, Repr: Copy> AmountOf<Unit, Repr> {
     /// assert_eq!(9, (three_apples * 3).get());
     /// ```
     pub fn get(&self) -> Repr {
-        self.0
+        self.0 .0
     }
 }
 
@@ -191,7 +192,7 @@ impl<Unit, Repr> AmountOf<Unit, Repr> {
     /// compile time. The main use-case of this functions is defining
     /// constants.
     pub const fn new(repr: Repr) -> AmountOf<Unit, Repr> {
-        AmountOf(repr, PhantomData)
+        AmountOf(Saturating(repr), PhantomData)
     }
 }
 
@@ -288,7 +289,7 @@ impl<Unit, Repr: Hash> Hash for AmountOf<Unit, Repr> {
 
 impl<Unit, Repr> Add for AmountOf<Unit, Repr>
 where
-    Repr: Add<Output = Repr>,
+    Saturating<Repr>: Add<Output = Saturating<Repr>>,
 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
@@ -320,7 +321,7 @@ where
 
 impl<Unit, Repr> AddAssign for AmountOf<Unit, Repr>
 where
-    Repr: AddAssign,
+    Saturating<Repr>: AddAssign,
 {
     fn add_assign(&mut self, rhs: Self) {
         self.0 += rhs.0
@@ -330,17 +331,19 @@ where
 // TODO(MR-32): Implement `Step` trait once it's stabilised.
 impl<Unit, Repr> AmountOf<Unit, Repr>
 where
-    Repr: Add<Output = Repr> + From<u8>,
+    Repr: From<u8>,
+    Saturating<Repr>: Add<Output = Saturating<Repr>>,
 {
     /// Returns the amount incremented by 1.
     pub fn increment(self) -> AmountOf<Unit, Repr> {
-        Self(self.0 + Repr::from(1_u8), PhantomData)
+        Self(self.0 + Saturating(Repr::from(1_u8)), PhantomData)
     }
 }
 
 impl<Unit, Repr> AmountOf<Unit, Repr>
 where
-    Repr: AddAssign + From<u8>,
+    Repr: From<u8>,
+    Saturating<Repr>: AddAssign<Repr>,
 {
     /// Increments the amount by 1.
     pub fn inc_assign(&mut self) {
@@ -350,18 +353,20 @@ where
 
 impl<Unit, Repr> AmountOf<Unit, Repr>
 where
-    Repr: Sub<Output = Repr> + From<u8>,
+    Repr: From<u8>,
+    Saturating<Repr>: Sub<Output = Saturating<Repr>>,
 {
     /// Returns the amount decremented by 1. Like regular subtraction, panics in
     /// debug mode if `Repr` is an unsigned integer type and the amount is zero.
     pub fn decrement(self) -> AmountOf<Unit, Repr> {
-        Self(self.0 - Repr::from(1_u8), PhantomData)
+        Self(self.0 - Saturating(Repr::from(1_u8)), PhantomData)
     }
 }
 
 impl<Unit, Repr> AmountOf<Unit, Repr>
 where
-    Repr: SubAssign + From<u8>,
+    Repr: From<u8>,
+    Saturating<Repr>: SubAssign<Repr>,
 {
     /// Decrements the amount by 1. Like regular subtraction, panics in debug
     /// mode if `Repr` is an unsigned integer type and the amount is zero.
@@ -372,7 +377,7 @@ where
 
 impl<Unit, Repr> SubAssign for AmountOf<Unit, Repr>
 where
-    Repr: SubAssign,
+    Saturating<Repr>: SubAssign,
 {
     fn sub_assign(&mut self, rhs: Self) {
         self.0 -= rhs.0
@@ -381,7 +386,7 @@ where
 
 impl<Unit, Repr> Sub for AmountOf<Unit, Repr>
 where
-    Repr: Sub<Output = Repr>,
+    Saturating<Repr>: Sub<Output = Saturating<Repr>>,
 {
     type Output = Self;
 
@@ -392,7 +397,7 @@ where
 
 impl<Unit, Repr> MulAssign<Repr> for AmountOf<Unit, Repr>
 where
-    Repr: MulAssign,
+    Saturating<Repr>: MulAssign<Repr>,
 {
     fn mul_assign(&mut self, rhs: Repr) {
         self.0 *= rhs;
@@ -401,40 +406,42 @@ where
 
 impl<Unit, Repr> Mul<Repr> for AmountOf<Unit, Repr>
 where
-    Repr: Mul<Output = Repr>,
+    Saturating<Repr>: Mul<Output = Saturating<Repr>>,
 {
     type Output = Self;
 
     fn mul(self, rhs: Repr) -> Self {
-        Self(self.0 * rhs, PhantomData)
+        Self(self.0 * Saturating(rhs), PhantomData)
     }
 }
 
 impl<Unit, Repr> Div<Self> for AmountOf<Unit, Repr>
 where
-    Repr: Div<Repr>,
+    Repr: std::ops::Div,
+    Saturating<Repr>: Div<Saturating<Repr>>,
+    Saturating<Repr>: From<<Saturating<Repr> as Div>::Output>,
 {
-    type Output = <Repr as Div>::Output;
+    type Output = Repr;
 
     fn div(self, rhs: Self) -> Self::Output {
-        self.0.div(rhs.0)
+        Saturating::<Repr>::from(self.0.div(rhs.0)).0
     }
 }
 
 impl<Unit, Repr> Div<Repr> for AmountOf<Unit, Repr>
 where
-    Repr: Div<Repr, Output = Repr>,
+    Saturating<Repr>: Div<Output = Saturating<Repr>>,
 {
     type Output = Self;
 
     fn div(self, rhs: Repr) -> Self::Output {
-        Self(self.0 / rhs, PhantomData)
+        Self(self.0 / Saturating(rhs), PhantomData)
     }
 }
 
 impl<Unit, Repr> DivAssign<Repr> for AmountOf<Unit, Repr>
 where
-    Repr: DivAssign,
+    Saturating<Repr>: DivAssign<Repr>,
 {
     fn div_assign(&mut self, rhs: Repr) {
         self.0 /= rhs;
@@ -443,7 +450,7 @@ where
 
 impl<Unit, Repr> std::iter::Sum for AmountOf<Unit, Repr>
 where
-    Repr: std::iter::Sum,
+    Saturating<Repr>: Add<Output = Saturating<Repr>> + Default,
 {
     /// ```
     /// use phantom_newtype::AmountOf;
@@ -455,13 +462,13 @@ where
     /// assert_eq!(v.into_iter().sum::<Apples>(), Apples::from(6));
     /// ```
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
-        Self::new(Repr::sum(iter.map(|a| a.0)))
+        Self::new(iter.fold(Saturating::<Repr>::default(), |a, b| a + b.0).0)
     }
 }
 
 impl<'a, Unit, Repr> std::iter::Sum<&'a Self> for AmountOf<Unit, Repr>
 where
-    Repr: std::iter::Sum + Copy,
+    Saturating<Repr>: Add<Output = Saturating<Repr>> + Default + Copy,
 {
     /// ```
     /// use phantom_newtype::AmountOf;
@@ -473,7 +480,7 @@ where
     /// assert_eq!(v.iter().sum::<Apples>(), Apples::from(6));
     /// ```
     fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
-        Self::new(Repr::sum(iter.map(|a| a.get())))
+        Self::new(iter.fold(Saturating::<Repr>::default(), |a, b| a + b.0).0)
     }
 }
 
@@ -542,7 +549,7 @@ where
     where
         S: candid::types::Serializer,
     {
-        self.0.idl_serialize(serializer)
+        self.0 .0.idl_serialize(serializer)
     }
 }
 
@@ -553,6 +560,6 @@ impl<Unit, Repr: slog::Value> slog::Value for AmountOf<Unit, Repr> {
         key: slog::Key,
         serializer: &mut dyn slog::Serializer,
     ) -> slog::Result {
-        self.0.serialize(record, key, serializer)
+        self.0 .0.serialize(record, key, serializer)
     }
 }
