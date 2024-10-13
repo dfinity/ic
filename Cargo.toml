@@ -349,6 +349,11 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests",
+    "rs/tests/boundary_nodes",
+    "rs/tests/boundary_nodes/integration_test_common",
+    "rs/tests/boundary_nodes/performance_test_common",
+    "rs/tests/boundary_nodes/utils",
+    "rs/tests/ckbtc",
     "rs/tests/consensus",
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
@@ -361,6 +366,7 @@ members = [
     "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
     "rs/tests/nested",
+    "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/nns_dapp",
@@ -656,7 +662,7 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.3", default-features = false }
+strum = { version = "0.26.3", features = [ "derive" ] }
 strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
