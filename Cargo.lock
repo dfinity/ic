@@ -19293,7 +19293,6 @@ dependencies = [
  "ic-types",
  "reqwest 0.12.8",
  "slog",
- "tests",
 ]
 
 [[package]]
@@ -19875,7 +19874,6 @@ dependencies = [
  "ic-system-test-driver",
  "slog",
  "spec-compliance",
- "tests",
 ]
 
 [[package]]
