@@ -2888,6 +2888,9 @@ impl From<pb::InstallCode> for pb_api::InstallCode {
             .map(|wasm_module| super::calculate_hash(&wasm_module).to_vec());
         let arg = item.arg.unwrap_or_default();
         let arg_hash = if arg.is_empty() {
+            // Since the `arg_hash` is the only thing being returned and it's very common to have
+            // empty args, it is more informative to return an empty vec for this case instead of
+            // `e3b0c442...` (`sha256([])`).
             Some(vec![])
         } else {
             Some(super::calculate_hash(&arg).to_vec())
