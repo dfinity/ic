@@ -177,6 +177,7 @@ pub struct ExecutionParameters {
     // The limit on the Wasm memory set by the developer in canister settings.
     pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
+    pub canister_callback_quota: u64,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,

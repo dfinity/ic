@@ -188,6 +188,8 @@ pub struct ExecutionTest {
     message_id: u64,
     // The memory available in the subnet.
     subnet_available_memory: SubnetAvailableMemory,
+    // The pool of callbacks available on the subnet.
+    subnet_available_callbacks: i64,
     // The number of instructions executed so far per canister.
     executed_instructions: HashMap<CanisterId, NumInstructions>,
     // The total cost of execution so far per canister.
@@ -995,6 +997,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let instruction_limits = InstructionLimits::new(
@@ -1113,6 +1116,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         let result = self.exec_env.execute_canister_response(
@@ -1210,6 +1214,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
 
@@ -1261,6 +1266,7 @@ impl ExecutionTest {
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
             subnet_available_memory: self.subnet_available_memory,
+            subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used,
         };
         for canister_id in canister_ids {
@@ -1338,6 +1344,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
@@ -1361,6 +1368,7 @@ impl ExecutionTest {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
                     subnet_available_memory: self.subnet_available_memory,
+                    subnet_available_callbacks: self.subnet_available_callbacks,
                     compute_allocation_used,
                 };
                 let result = execute_canister(
@@ -2241,6 +2249,7 @@ impl ExecutionTestBuilder {
                     .subnet_wasm_custom_sections_memory_capacity
                     .get() as i64,
             ),
+            subnet_available_callbacks: self.execution_config.subnet_callback_soft_cap as i64,
             time: self.time,
             dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
