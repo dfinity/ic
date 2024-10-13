@@ -1758,7 +1758,10 @@ fn test_get_default_effective_canister_id_specified_id() {
     let default_effective_canister_id =
         pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
 
-    assert_eq!(default_effective_canister_id, initial_default_effective_canister_id);
+    assert_eq!(
+        default_effective_canister_id,
+        initial_default_effective_canister_id
+    );
 }
 
 #[test]
