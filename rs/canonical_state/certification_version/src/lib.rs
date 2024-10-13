@@ -80,6 +80,12 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 /// computed states.
 pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
+/// Minimum supported certification version.
+///
+/// The replica will panic if requested to certify using a version lower than
+/// this.
+pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V15;
+
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
@@ -89,10 +95,13 @@ pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {
     use strum::IntoEnumIterator;
-    CertificationVersion::iter().take_while(|v| *v <= MAX_SUPPORTED_CERTIFICATION_VERSION)
+    CertificationVersion::iter().filter(|v| {
+        MIN_SUPPORTED_CERTIFICATION_VERSION <= *v && *v <= MAX_SUPPORTED_CERTIFICATION_VERSION
+    })
 }
 
 #[test]
-fn supported_version_ge_current() {
+fn version_constants_consistent() {
+    assert!(MIN_SUPPORTED_CERTIFICATION_VERSION <= CURRENT_CERTIFICATION_VERSION);
     assert!(CURRENT_CERTIFICATION_VERSION <= MAX_SUPPORTED_CERTIFICATION_VERSION);
 }

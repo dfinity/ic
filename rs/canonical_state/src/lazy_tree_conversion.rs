@@ -5,7 +5,7 @@ use crate::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
 use ic_crypto_tree_hash::Label;
@@ -285,10 +285,11 @@ fn invert_routing_table(
 pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
-        certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
-        "Unable to certify state with version {:?}. Maximum supported certification version is {:?}",
+        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        "Unable to certify state with version {:?}. Supported certification versions are {:?}..={:?}",
         certification_version,
-        MAX_SUPPORTED_CERTIFICATION_VERSION
+        MIN_SUPPORTED_CERTIFICATION_VERSION,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
     );
 
     fork(
