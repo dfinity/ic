@@ -6,7 +6,7 @@ on:
     types: [opened, synchronize, reopened]
 permissions: read-all
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
   cancel-in-progress: true
 env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}

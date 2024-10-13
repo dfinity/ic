@@ -1,27 +1,24 @@
 use std::net::{Ipv6Addr, SocketAddrV6};
 use std::time::{Duration, Instant};
 
-use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use anyhow::anyhow;
 use anyhow::Context;
 use candid::Principal;
+use ic_boundary_nodes_system_test_utils::{
+    constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig,
+};
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::canister_agent::CanisterAgent;
-use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use ic_system_test_driver::generic_workload_engine::engine::Engine;
-use ic_system_test_driver::generic_workload_engine::metrics::LoadTestMetrics;
-use ic_system_test_driver::generic_workload_engine::metrics::RequestOutcome;
-use ic_system_test_driver::util::{block_on, create_agent_mapping};
 use ic_system_test_driver::{
+    canister_agent::CanisterAgent,
     canister_api::{CallMode, GenericRequest},
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
-        ic::{InternetComputer, Subnet},
+        farm::HostFeature,
+        ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
@@ -29,7 +26,11 @@ use ic_system_test_driver::{
             RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::spawn_round_robin_workload_engine,
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::{LoadTestMetrics, RequestOutcome},
+    },
+    util::{block_on, create_agent_mapping, spawn_round_robin_workload_engine},
 };
 use prost::Message;
 use rand::rngs::StdRng;
@@ -380,7 +381,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
         .unwrap();
     let logger = env.logger();
 
-    let bn_addr = SocketAddrV6::new(bn_ipv6, 443, 0, 0).into();
+    let bn_addr = SocketAddrV6::new(bn_ipv6, 0, 0, 0).into();
 
     let mut http_clients = vec![];
     for _ in 0..NUM_AGENTS {

@@ -23,12 +23,12 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/backup",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:hex",

@@ -7,7 +7,7 @@ const MAINNET_ROOT_SUBNET_ID: &str =
 
 // How to run via Bazel/Cargo:
 // ic$ bazel run //rs/boundary_node/discower_bowndary:fetch-api-bns -- ic0.app
-// ic$ cargo run --bin fetch_api_bns ic0.app
+// ic$ cargo run --example fetch_api_bns ic0.app
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

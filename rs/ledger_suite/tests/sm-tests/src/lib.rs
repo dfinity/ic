@@ -46,6 +46,7 @@ use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::sync::Arc;
+use std::time::{Instant, UNIX_EPOCH};
 use std::{
     cmp,
     collections::{BTreeMap, HashMap},
@@ -4201,5 +4202,219 @@ where
         from_account,
         spender_account,
         receiver_account,
+    );
+}
+
+pub struct TransactionGenerationParameters {
+    pub mint_multiplier: u64,
+    pub transfer_multiplier: u64,
+    pub approve_multiplier: u64,
+    pub transfer_from_multiplier: u64,
+    pub burn_multiplier: u64,
+    pub num_transactions_per_type: usize,
+}
+
+pub fn generate_transactions(
+    state_machine: &StateMachine,
+    canister_id: CanisterId,
+    params: TransactionGenerationParameters,
+) {
+    let start = Instant::now();
+    let minter_account = crate::minting_account(state_machine, canister_id)
+        .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
+    let u64_fee = crate::fee(state_machine, canister_id);
+    let fee = Nat::from(u64_fee);
+    let burn_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.burn_multiplier)
+            .unwrap_or_else(|| panic!("burn amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.transfer_multiplier)
+            .unwrap_or_else(|| panic!("transfer amount overflowed for canister {:?}", canister_id)),
+    );
+    let mint_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.mint_multiplier)
+            .unwrap_or_else(|| panic!("mint amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_from_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.transfer_from_multiplier)
+            .unwrap_or_else(|| {
+                panic!(
+                    "transfer_from amount overflowed for canister {:?}",
+                    canister_id
+                )
+            }),
+    );
+    let approve_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.approve_multiplier)
+            .unwrap_or_else(|| panic!("approve amount overflowed for canister {:?}", canister_id)),
+    );
+    let mut accounts = vec![];
+    for i in 0..params.num_transactions_per_type {
+        let subaccount = match i {
+            0 => None,
+            _ => Some([i as u8; 32]),
+        };
+        accounts.push(Account {
+            owner: PrincipalId::new_user_test_id(i as u64).0,
+            subaccount,
+        });
+    }
+    // Mint
+    let mut minted = 0usize;
+    println!("minting");
+    for to in &accounts {
+        send_transfer(
+            state_machine,
+            canister_id,
+            minter_account.owner,
+            &TransferArg {
+                from_subaccount: minter_account.subaccount,
+                to: *to,
+                fee: None,
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(minted as u64)),
+                amount: mint_amount.clone(),
+            },
+        )
+        .expect("should be able to mint");
+        minted += 1;
+        if minted >= params.num_transactions_per_type {
+            break;
+        }
+    }
+    // Transfer
+    println!("transferring");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let to = accounts[(i + 1) % params.num_transactions_per_type];
+        send_transfer(
+            state_machine,
+            canister_id,
+            from.owner,
+            &TransferArg {
+                from_subaccount: from.subaccount,
+                to,
+                fee: Some(fee.clone()),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(i as u64)),
+                amount: transfer_amount.clone(),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    // Approve
+    println!("approving");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let spender = accounts[(i + 1) % params.num_transactions_per_type];
+        let current_allowance = get_allowance(state_machine, canister_id, from, spender);
+        let expires_at = state_machine
+            .time()
+            .checked_add(std::time::Duration::from_secs(3600))
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        send_approval(
+            state_machine,
+            canister_id,
+            from.owner,
+            &ApproveArgs {
+                from_subaccount: from.subaccount,
+                spender,
+                amount: approve_amount.clone(),
+                expected_allowance: Some(current_allowance.allowance.clone()),
+                expires_at: Some(expires_at),
+                fee: Some(fee.clone()),
+                memo: Some(Memo::from(i as u64)),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    // Transfer From
+    println!("transferring from");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let spender = accounts[(i + 1) % params.num_transactions_per_type];
+        let to = accounts[(i + 2) % params.num_transactions_per_type];
+        send_transfer_from(
+            state_machine,
+            canister_id,
+            spender.owner,
+            &TransferFromArgs {
+                spender_subaccount: spender.subaccount,
+                from,
+                to,
+                amount: transfer_from_amount.clone(),
+                fee: Some(fee.clone()),
+                memo: Some(Memo::from(i as u64)),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+            },
+        )
+        .expect("should be able to transfer from");
+    }
+    // Burn
+    println!("burning");
+    for (i, from) in accounts
+        .iter()
+        .enumerate()
+        .take(params.num_transactions_per_type)
+    {
+        send_transfer(
+            state_machine,
+            canister_id,
+            from.owner,
+            &TransferArg {
+                from_subaccount: from.subaccount,
+                to: minter_account,
+                fee: None,
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(i as u64)),
+                amount: burn_amount.clone(),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    println!(
+        "generated {} transactions in {:?}",
+        params.num_transactions_per_type * 5,
+        start.elapsed()
     );
 }

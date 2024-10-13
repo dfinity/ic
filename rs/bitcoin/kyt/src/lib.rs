@@ -29,9 +29,7 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
             HttpGetTxError::ResponseTooLarge => {
                 (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
             }
-            _ => {
-                CheckTransactionIrrecoverableError::InvalidTransaction(format!("{:?}", err)).into()
-            }
+            _ => CheckTransactionRetriable::TransientInternalError(format!("{:?}", err)).into(),
         }
     }
 }
