@@ -1446,10 +1446,36 @@ pub async fn get_default_effective_canister_id(
     let topology_bytes = res.bytes().await?;
     let topology_str = String::from_utf8(topology_bytes.to_vec())?;
     let topology: Topology = serde_json::from_str(&topology_str)?;
-    let subnet = topology.get_app_subnets().into_iter().next().unwrap_or_else(|| topology.get_verified_app_subnets().into_iter().next().unwrap_or_else(|| topology.get_system_subnets().into_iter().next().unwrap_or_else(|| panic!("PocketIC topology contains no application, verified application, and system subnet."))));
-    Ok(Principal::from_slice(
-        &topology.0.get(&subnet).unwrap().canister_ranges[0]
-            .start
-            .canister_id,
-    ))
+
+    let subnet_ids: Vec<_> = if !topology.get_app_subnets().is_empty() {
+        topology.get_app_subnets()
+    } else if !topology.get_verified_app_subnets().is_empty() {
+        topology.get_verified_app_subnets()
+    } else if !topology.get_system_subnets().is_empty() {
+        topology.get_system_subnets()
+    } else {
+        panic!(
+            "PocketIC topology contains no application, verified application, and system subnet."
+        )
+    };
+
+    let subnet_to_effective_canister_ids = |subnet| {
+        topology
+            .0
+            .get(&subnet)
+            .unwrap()
+            .canister_ranges
+            .iter()
+            .map(|range| Principal::from_slice(range.start.canister_id.as_slice()))
+            .collect::<Vec<_>>()
+    };
+    let mut effective_canister_ids: Vec<_> = subnet_ids
+        .into_iter()
+        .flat_map(subnet_to_effective_canister_ids)
+        .collect();
+
+    // sort the candidate effective canister ids and return the last one which is unique for a PocketIC instance
+    // because newly created subnets get lower canister ids assigned
+    effective_canister_ids.sort();
+    Ok(*effective_canister_ids.last().unwrap())
 }
