@@ -3,7 +3,8 @@ use ic_base_types::PrincipalId;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_cdk::api::management_canister::http_request::HttpResponse;
-use ic_cdk::api::management_canister::main::{CanisterId, CanisterSettings};
+use ic_cdk::api::management_canister::main::{CanisterId, CanisterIdRecord, CanisterSettings};
+use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
 use ic_universal_canister::{wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo, Name,
@@ -12,9 +13,9 @@ use icp_ledger::{
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        SubnetKind,
+        RawEffectivePrincipal, SubnetKind,
     },
-    update_candid, PocketIc, PocketIcBuilder, WasmResult,
+    update_candid, DefaultEffectiveCanisterIdError, PocketIc, PocketIcBuilder, WasmResult,
 };
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -1603,4 +1604,156 @@ fn test_raw_gateway() {
         let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
         assert!(page.contains(expected));
     }
+}
+
+fn create_canister_with_effective_canister_id(
+    pic: &PocketIc,
+    effective_canister_id: Principal,
+) -> Principal {
+    let CanisterIdRecord { canister_id } = pocket_ic::call_candid_as(
+        pic,
+        Principal::management_canister(),
+        RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec()),
+        Principal::anonymous(),
+        "provisional_create_canister_with_cycles",
+        (ProvisionalCreateCanisterWithCyclesArgument {
+            settings: None,
+            amount: None,
+        },),
+    )
+    .map(|(x,)| x)
+    .unwrap();
+    canister_id
+}
+
+async fn create_canister_with_effective_canister_id_nonblocking(
+    pic: &pocket_ic::nonblocking::PocketIc,
+    effective_canister_id: Principal,
+) -> Principal {
+    let CanisterIdRecord { canister_id } = pocket_ic::nonblocking::call_candid_as(
+        pic,
+        Principal::management_canister(),
+        RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec()),
+        Principal::anonymous(),
+        "provisional_create_canister_with_cycles",
+        (ProvisionalCreateCanisterWithCyclesArgument {
+            settings: None,
+            amount: None,
+        },),
+    )
+    .await
+    .map(|(x,)| x)
+    .unwrap();
+    canister_id
+}
+
+#[test]
+fn test_get_default_effective_canister_id() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let gateway_url = pic.make_live(None);
+
+    let default_effective_canister_id =
+        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
+
+    let canister_id =
+        create_canister_with_effective_canister_id(&pic, default_effective_canister_id);
+    assert_eq!(canister_id, default_effective_canister_id);
+
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert!(pic.topology().get_app_subnets().contains(&subnet_id));
+}
+
+#[tokio::test]
+async fn test_get_default_effective_canister_id_nonblocking() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build_async()
+        .await;
+    let gateway_url = pic.make_live(None).await;
+
+    let default_effective_canister_id =
+        pocket_ic::nonblocking::get_default_effective_canister_id(gateway_url.to_string())
+            .await
+            .unwrap();
+
+    let canister_id =
+        create_canister_with_effective_canister_id_nonblocking(&pic, default_effective_canister_id)
+            .await;
+    assert_eq!(canister_id, default_effective_canister_id);
+
+    let subnet_id = pic.get_subnet(canister_id).await.unwrap();
+    assert!(pic.topology().await.get_app_subnets().contains(&subnet_id));
+}
+
+#[test]
+fn test_get_default_effective_canister_id_system_subnet() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_system_subnet()
+        .build();
+    let gateway_url = pic.make_live(None);
+
+    let default_effective_canister_id =
+        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
+
+    let canister_id =
+        create_canister_with_effective_canister_id(&pic, default_effective_canister_id);
+    assert_eq!(canister_id, default_effective_canister_id);
+
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert!(pic.topology().get_system_subnets().contains(&subnet_id));
+}
+
+#[test]
+fn test_get_default_effective_canister_id_subnet_precedence() {
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_system_subnet()
+        .build();
+    let gateway_url = pic.make_live(None);
+
+    let default_effective_canister_id =
+        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
+
+    let canister_id =
+        create_canister_with_effective_canister_id(&pic, default_effective_canister_id);
+    assert_eq!(canister_id, default_effective_canister_id);
+
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert!(pic.topology().get_app_subnets().contains(&subnet_id));
+}
+
+#[test]
+fn test_get_default_effective_canister_id_invalid_url() {
+    let _pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+
+    let parent_pid = std::os::unix::process::parent_id();
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+    let port = std::fs::read_to_string(port_file_path).unwrap();
+
+    let server_url = format!("http://localhost:{}", port);
+    match pocket_ic::get_default_effective_canister_id(server_url).unwrap_err() {
+        DefaultEffectiveCanisterIdError::ReqwestError(_) => (),
+        err => panic!("Unexpected error: {}", err),
+    };
+}
+
+#[test]
+#[should_panic(
+    expected = "PocketIC topology contains no application, verified application, and system subnet."
+)]
+fn test_get_default_effective_canister_id_panics() {
+    let mut pic = PocketIcBuilder::new().with_nns_subnet().build();
+    let gateway_url = pic.make_live(None);
+
+    let _default_effective_canister_id =
+        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
 }

@@ -61,6 +61,8 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use thiserror::Error;
+use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
 
 pub mod common;
@@ -1330,4 +1332,41 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         }
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+#[derive(Error, Debug)]
+pub enum DefaultEffectiveCanisterIdError {
+    ReqwestError(#[from] reqwest::Error),
+    JsonError(#[from] serde_json::Error),
+    Utf8Error(#[from] std::string::FromUtf8Error),
+}
+
+impl std::fmt::Display for DefaultEffectiveCanisterIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            DefaultEffectiveCanisterIdError::ReqwestError(err) => {
+                write!(f, "ReqwestError({})", err)
+            }
+            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({})", err),
+            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({})", err),
+        }
+    }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+///
+/// Panics if the PocketIC instance topology contains no application, verified application, and system subnet.
+pub fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let runtime = Runtime::new().expect("Unable to create a runtime");
+    runtime.block_on(crate::nonblocking::get_default_effective_canister_id(
+        pocket_ic_url,
+    ))
 }

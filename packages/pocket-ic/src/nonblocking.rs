@@ -7,6 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
@@ -19,7 +20,7 @@ use ic_cdk::api::management_canister::main::{
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
-use reqwest::Url;
+use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
@@ -1412,4 +1413,43 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+///
+/// Panics if the PocketIC instance topology contains no application, verified application, and system subnet.
+pub async fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let client = reqwest::Client::new();
+    let res = loop {
+        let res = client
+            .get(format!(
+                "{}{}",
+                pocket_ic_url.trim_end_matches('/'),
+                "/_/topology"
+            ))
+            .send()
+            .await?;
+        if res.status() == StatusCode::CONFLICT {
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+        } else {
+            break res.error_for_status()?;
+        }
+    };
+    let topology_bytes = res.bytes().await?;
+    let topology_str = String::from_utf8(topology_bytes.to_vec())?;
+    let topology: Topology = serde_json::from_str(&topology_str)?;
+    let subnet = topology.get_app_subnets().into_iter().next().unwrap_or_else(|| topology.get_verified_app_subnets().into_iter().next().unwrap_or_else(|| topology.get_system_subnets().into_iter().next().unwrap_or_else(|| panic!("PocketIC topology contains no application, verified application, and system subnet."))));
+    Ok(Principal::from_slice(
+        &topology.0.get(&subnet).unwrap().canister_ranges[0]
+            .start
+            .canister_id,
+    ))
 }
