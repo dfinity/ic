@@ -16,8 +16,6 @@ use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-#[cfg(target_os = "linux")]
-use ic_logger::warn;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
@@ -29,15 +27,10 @@ use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
-#[cfg(target_os = "linux")]
-use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::collections::{HashMap, VecDeque};
-#[cfg(target_os = "linux")]
-use std::convert::TryInto;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::mpsc::Receiver;
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -49,15 +42,11 @@ use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use super::process_exe_and_args::{
     create_compiler_sandbox_argv, create_launcher_argv, create_sandbox_argv,
 };
-#[cfg(target_os = "linux")]
-use super::process_os_metrics;
 use super::sandbox_process_eviction::{self, EvictionCandidate};
 use ic_replicated_state::{
     canister_state::execution_state::NextScheduledMethod, page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::ExecutionRound;
-
-const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
@@ -83,18 +72,6 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_execute_duration: HistogramVec,
     sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
     sandboxed_execution_spawn_process: Histogram,
-    #[cfg(target_os = "linux")]
-    sandboxed_execution_subprocess_anon_rss_total: IntGauge,
-    #[cfg(target_os = "linux")]
-    sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
-    #[cfg(target_os = "linux")]
-    sandboxed_execution_subprocess_anon_rss: Histogram,
-    #[cfg(target_os = "linux")]
-    sandboxed_execution_subprocess_memfd_rss: Histogram,
-    #[cfg(target_os = "linux")]
-    sandboxed_execution_subprocess_rss: Histogram,
-    sandboxed_execution_subprocess_active_last_used: Histogram,
-    sandboxed_execution_subprocess_evicted_last_used: Histogram,
     sandboxed_execution_critical_error_invalid_memory_size: IntCounter,
     sandboxed_execution_replica_create_exe_state_duration: Histogram,
     sandboxed_execution_replica_create_exe_state_wait_compile_duration: Histogram,
@@ -161,44 +138,6 @@ impl SandboxedExecutionMetrics {
                 "sandboxed_execution_spawn_process_duration_seconds",
                 "The time to spawn a sandbox process",
                 decimal_buckets_with_zero(-4, 1),
-            ),
-            #[cfg(target_os = "linux")]
-            sandboxed_execution_subprocess_anon_rss_total: metrics_registry.int_gauge(
-                "sandboxed_execution_subprocess_anon_rss_total_kib",
-                "The resident anonymous memory for all canister sandbox processes in KiB",
-            ),
-            #[cfg(target_os = "linux")]
-            sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
-                "sandboxed_execution_subprocess_memfd_rss_total_kib",
-                "The resident shared memory for all canister sandbox processes in KiB"
-            ),
-            #[cfg(target_os = "linux")]
-            sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
-                "sandboxed_execution_subprocess_anon_rss_kib",
-                "The resident anonymous memory for a canister sandbox process in KiB",
-                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
-            ),
-            #[cfg(target_os = "linux")]
-            sandboxed_execution_subprocess_memfd_rss: metrics_registry.histogram(
-                "sandboxed_execution_subprocess_memfd_rss_kib",
-                "The resident shared memory for a canister sandbox process in KiB",
-                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
-            ),
-            #[cfg(target_os = "linux")]
-            sandboxed_execution_subprocess_rss: metrics_registry.histogram(
-                "sandboxed_execution_subprocess_rss_kib",
-                "The resident memory of a canister sandbox process in KiB",
-                decimal_buckets_with_zero(1, 7), // 10KiB - 50GiB.
-            ),
-            sandboxed_execution_subprocess_active_last_used: metrics_registry.histogram(
-                "sandboxed_execution_subprocess_active_last_used_duration_seconds",
-                "Time since the last usage of an active sandbox process in seconds",
-                decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
-            ),
-            sandboxed_execution_subprocess_evicted_last_used: metrics_registry.histogram(
-                "sandboxed_execution_subprocess_evicted_last_used_duration_seconds",
-                "Time since the last usage of an evicted sandbox process in seconds",
-                decimal_buckets_with_zero(-1, 4), // 0.1s - 13h.
             ),
             sandboxed_execution_critical_error_invalid_memory_size: metrics_registry.error_counter(
                 SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE),
@@ -460,11 +399,6 @@ enum Backend {
 #[derive(Clone)]
 struct SandboxProcessStats {
     last_used: std::time::Instant,
-}
-
-enum SandboxProcessStatus {
-    Active,
-    Evicted,
 }
 
 // This is a helper struct that is used for tracing execution of method when the
@@ -1069,22 +1003,7 @@ impl SandboxedExecutionController {
         let backends = Arc::new(Mutex::new(HashMap::new()));
         let metrics = Arc::new(SandboxedExecutionMetrics::new(metrics_registry));
 
-        let backends_copy = Arc::clone(&backends);
-        let metrics_copy = Arc::clone(&metrics);
-        let logger_copy = logger.clone();
-        let (tx, rx) = std::sync::mpsc::channel();
-
-        std::thread::spawn(move || {
-            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
-                logger_copy,
-                backends_copy,
-                metrics_copy,
-                min_sandbox_count,
-                max_sandbox_count,
-                max_sandbox_idle_time,
-                rx,
-            );
-        });
+        let (tx, _) = std::sync::mpsc::channel();
 
         let exit_watcher = Arc::new(ExitWatcher {
             logger: logger.clone(),
@@ -1119,128 +1038,6 @@ impl SandboxedExecutionController {
             fd_factory: Arc::clone(&fd_factory),
             stop_monitoring_thread: tx,
         })
-    }
-
-    // Periodically walk through all the backend processes and:
-    // - evict inactive processes,
-    // - update memory usage metrics.
-    fn monitor_and_evict_sandbox_processes(
-        // `logger` isn't used on MacOS.
-        #[allow(unused_variables)] logger: ReplicaLogger,
-        backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
-        metrics: Arc<SandboxedExecutionMetrics>,
-        min_sandbox_count: usize,
-        max_sandbox_count: usize,
-        max_sandbox_idle_time: Duration,
-        stop_request: Receiver<bool>,
-    ) {
-        loop {
-            let sandbox_processes = get_sandbox_process_stats(&backends);
-
-            #[cfg(target_os = "linux")]
-            {
-                let mut total_anon_rss: u64 = 0;
-                let mut total_memfd_rss: u64 = 0;
-                let now = std::time::Instant::now();
-
-                // For all processes requested, get their memory usage and report
-                // it keyed by pid. Ignore processes failures to get
-                for (sandbox_process, stats, status) in &sandbox_processes {
-                    let pid = sandbox_process.pid;
-                    let mut process_rss = 0;
-                    if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
-                        total_anon_rss += kib;
-                        process_rss += kib;
-                        metrics
-                            .sandboxed_execution_subprocess_anon_rss
-                            .observe(kib as f64);
-                    } else {
-                        warn!(logger, "Unable to get anon RSS for pid {}", pid);
-                    }
-                    if let Ok(kib) = process_os_metrics::get_page_allocator_rss(pid) {
-                        total_memfd_rss += kib;
-                        process_rss += kib;
-                        metrics
-                            .sandboxed_execution_subprocess_memfd_rss
-                            .observe(kib as f64);
-                    } else {
-                        warn!(logger, "Unable to get memfd RSS for pid {}", pid);
-                    }
-                    metrics
-                        .sandboxed_execution_subprocess_rss
-                        .observe(process_rss as f64);
-                    let time_since_last_usage = now
-                        .checked_duration_since(stats.last_used)
-                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
-                    match status {
-                        SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
-                        }
-                        SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
-                        }
-                    }
-                }
-
-                metrics
-                    .sandboxed_execution_subprocess_anon_rss_total
-                    .set(total_anon_rss.try_into().unwrap());
-
-                metrics
-                    .sandboxed_execution_subprocess_memfd_rss_total
-                    .set(total_memfd_rss.try_into().unwrap());
-            }
-
-            // We don't need to record memory metrics on non-linux systems.  And
-            // the functions to get memory usage use `proc` so they won't work
-            // on macos anyway.
-            #[cfg(not(target_os = "linux"))]
-            {
-                let now = std::time::Instant::now();
-                // For all processes requested, get their memory usage and report
-                // it keyed by pid. Ignore processes failures to get
-                for (_sandbox_process, stats, status) in &sandbox_processes {
-                    let time_since_last_usage = now
-                        .checked_duration_since(stats.last_used)
-                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
-                    match status {
-                        SandboxProcessStatus::Active => {
-                            metrics
-                                .sandboxed_execution_subprocess_active_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
-                        }
-                        SandboxProcessStatus::Evicted => {
-                            metrics
-                                .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(time_since_last_usage.as_secs_f64());
-                        }
-                    }
-                }
-            }
-
-            {
-                let mut guard = backends.lock().unwrap();
-                evict_sandbox_processes(
-                    &mut guard,
-                    min_sandbox_count,
-                    max_sandbox_count,
-                    max_sandbox_idle_time,
-                );
-            }
-
-            // Collect metrics sufficiently infrequently that it does not use
-            // excessive compute resources. It might be sensible to scale this
-            // based on the time measured to perform the collection and e.g.
-            // ensure that we are 99% idle instead of using a static duration
-            // here.
-            if let Ok(true) = stop_request.recv_timeout(SANDBOX_PROCESS_UPDATE_INTERVAL) {
-                break;
-            }
-        }
     }
 
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
@@ -1710,46 +1507,6 @@ fn evict_sandbox_processes(
             *backend = new;
         }
     }
-}
-
-// Returns all processes that are still alive.
-fn get_sandbox_process_stats(
-    backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
-) -> Vec<(
-    Arc<SandboxProcess>,
-    SandboxProcessStats,
-    SandboxProcessStatus,
-)> {
-    let guard = backends.lock().unwrap();
-    let mut result = vec![];
-    for backend in guard.values() {
-        match backend {
-            Backend::Active {
-                sandbox_process,
-                stats,
-            } => {
-                result.push((
-                    Arc::clone(sandbox_process),
-                    stats.clone(),
-                    SandboxProcessStatus::Active,
-                ));
-            }
-            Backend::Evicted {
-                sandbox_process,
-                stats,
-            } => {
-                if let Some(strong_reference) = sandbox_process.upgrade() {
-                    result.push((
-                        strong_reference,
-                        stats.clone(),
-                        SandboxProcessStatus::Evicted,
-                    ));
-                }
-            }
-            Backend::Empty => {}
-        };
-    }
-    result
 }
 
 pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
