@@ -123,7 +123,7 @@ fn test_why_list_neurons_expensive() {
 
     // Enable profiling of the governance canister.
 
-    // Have ic-wasm instrument the governance WASM.
+    // Have ic-wasm instrument the governance WASM for profiling.
     let mut instrumented_governance_wasm =
         walrus::Module::from_buffer(&decompress_gz(&governance_wasm_gz))
             .expect("walrus cannot cope with our WASM.");
@@ -138,8 +138,9 @@ fn test_why_list_neurons_expensive() {
     .unwrap();
     let instrumented_governance_wasm = instrumented_governance_wasm.emit_wasm();
 
-    // Read some metadata from the profiling-enabled governance WASM that will
-    // later be used to visualize where instructions are consumed. This is based on
+    // Read some metadata from the profiling-enabled governance WASM. This
+    // metadata will later be used to visualize where instructions are consumed.
+    // This is based on
     // https://sourcegraph.com/github.com/dfinity/ic-repl@746bea25ddd4cc98709f6b9eaa283f32a21ac30d/-/blob/src/helper.rs?L504
     let name_custom_section_payload = Decode!(
         &read_custom_section(&instrumented_governance_wasm, "icp:public name"),
@@ -163,7 +164,7 @@ fn test_why_list_neurons_expensive() {
     println!("Ready for fine-grained performance measurement 👍");
     println!("");
 
-    // Make a bunch of list_neuron calls.
+    // Measure a variety of list_neuron calls.
     for (caller, (heap_neuron_count, stable_memory_neuron_count)) in principal_id_to_neuron_count {
         let is_principal_too_heavy = [
             PrincipalId::from_str("dies2-up6x4-i42et-avcop-xvl3v-it2mm-hqeuj-j4hyu-vz7wl-ewndz-dae").unwrap(),
