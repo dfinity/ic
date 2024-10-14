@@ -1,6 +1,3 @@
-mod common;
-
-use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
@@ -220,9 +217,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     // retrieve the first canister ID on the application subnet
     // which will be the effective and expected canister ID for canister creation
     let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     // define HTTP protocol for this test
     let proto = if https { "https" } else { "http" };
@@ -338,7 +333,7 @@ async fn test_gateway(server_url: Url, https: bool) {
         .call_and_wait()
         .await
         .unwrap();
-    assert_eq!(canister_id, effective_canister_id.into());
+    assert_eq!(canister_id, effective_canister_id);
 
     // install II canister WASM
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
@@ -677,6 +672,7 @@ fn canister_state_dir() {
     let topology = pic.topology();
     let nns_subnet = topology.get_nns().unwrap();
     let app_subnet = topology.get_app_subnets()[0];
+    let default_effective_canister_id = topology.default_effective_canister_id;
 
     // We create a counter canister on the NNS subnet.
     let nns_canister_id = pic.create_canister_on_subnet(None, None, nns_subnet);
@@ -749,6 +745,10 @@ fn canister_state_dir() {
     // We created one app subnet and another one was created dynamically
     // to host the canister with the "specified" canister ID.
     assert_eq!(topology.get_app_subnets().len(), 2);
+    assert_eq!(
+        topology.default_effective_canister_id,
+        default_effective_canister_id
+    );
 
     // Check that the canister states have been properly restored.
     check_counter(&pic, nns_canister_id, 2);
@@ -775,9 +775,17 @@ fn canister_state_dir() {
     let (newest_server_url, _) = start_server_helper(None, false, false);
 
     // Create a PocketIC instance mounting the NNS and app state created so far.
-    let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
+    let nns_subnet_seed = topology
+        .subnet_configs
+        .get(&nns_subnet)
+        .unwrap()
+        .subnet_seed;
     let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
-    let app_subnet_seed = topology.0.get(&app_subnet).unwrap().subnet_seed;
+    let app_subnet_seed = topology
+        .subnet_configs
+        .get(&app_subnet)
+        .unwrap()
+        .subnet_seed;
     let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
@@ -816,12 +824,9 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    // retrieve the first canister ID on the application subnet
-    // which will be the effective canister ID for canister creation
+    // Retrieve effective canister id for canister creation.
     let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -855,7 +860,7 @@ fn test_specified_id_call_v3() {
                 "provisional_create_canister_with_cycles",
             )
             .with_arg(bytes)
-            .with_effective_canister_id(effective_canister_id.into())
+            .with_effective_canister_id(effective_canister_id)
             .call()
             .await
             .map(|response| match response {
@@ -1233,6 +1238,9 @@ fn registry_canister() {
 }
 
 #[test]
+#[should_panic(
+    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
+)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()

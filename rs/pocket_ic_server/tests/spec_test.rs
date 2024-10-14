@@ -87,14 +87,14 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     let endpoint = pic.make_live(None);
     let topo = pic.topology();
     let app_subnet_id = topo.get_app_subnets()[0];
-    let app_config = topo.0.get(&app_subnet_id).unwrap();
+    let app_config = topo.subnet_configs.get(&app_subnet_id).unwrap();
     let app_node_ids = app_config
         .node_ids
         .iter()
         .map(|n| Principal::from_slice(&n.node_id))
         .collect();
     let nns_subnet_id = topo.get_nns().unwrap();
-    let nns_config = topo.0.get(&nns_subnet_id).unwrap();
+    let nns_config = topo.subnet_configs.get(&nns_subnet_id).unwrap();
     let nns_node_ids = nns_config
         .node_ids
         .iter()
