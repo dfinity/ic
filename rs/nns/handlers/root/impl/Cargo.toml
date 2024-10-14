@@ -67,6 +67,6 @@ build-info-build = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-state-machine-tests = { path = "../../../../state_machine_tests" }
+ic-pocket-ic-tests = { path = "../../../../pocket_ic_tests" }
 pretty_assertions = { workspace = true }
 tokio = { workspace = true }

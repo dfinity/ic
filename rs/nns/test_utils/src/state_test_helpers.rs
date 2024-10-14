@@ -54,6 +54,7 @@ use ic_nns_governance_api::pb::v1::{
 };
 use ic_nns_handler_lifeline_interface::UpgradeRootProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
+use ic_pocket_ic_tests::{StateMachine, StateMachineBuilder};
 use ic_registry_transport::pb::v1::{
     RegistryGetChangesSinceRequest, RegistryGetChangesSinceResponse,
 };
@@ -65,7 +66,6 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -89,10 +89,7 @@ use std::{convert::TryInto, env, time::Duration};
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
     StateMachineBuilder::new()
         .with_current_time()
-        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
-            CanisterId::from_u64(0x2100000),
-            CanisterId::from_u64(0x21FFFFE),
-        ))
+        .with_ii_subnet()
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -2106,6 +2103,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
         pub index_id: Option<candid::Principal>,
     }
 
+    /*
     state_machine.reroute_canister_range(
         std::ops::RangeInclusive::<CanisterId>::new(
             CYCLES_LEDGER_CANISTER_ID,
@@ -2113,6 +2111,7 @@ pub fn setup_cycles_ledger(state_machine: &StateMachine) {
         ),
         state_machine.get_subnet_id(),
     );
+    */
     state_machine.create_canister_with_cycles(
         Some(CYCLES_LEDGER_CANISTER_ID.get()),
         Cycles::zero(),

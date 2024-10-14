@@ -46,9 +46,9 @@ rust_ic_test(
     proc_macro_deps = [],
     deps = [
         # Keep sorted.
+        "//rs/pocket_ic_tests",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/stable_memory_integrity",
-        "//rs/state_machine_tests",
         "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
