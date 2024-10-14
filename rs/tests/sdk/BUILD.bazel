@@ -35,6 +35,7 @@ BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
 
 system_test_nns(
     name = "dfx_smoke_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     tags = [
         "on_push_to_master",  # since it takes longer than 5 minutes.

@@ -31,6 +31,7 @@ rust_binary(
 
 system_test_nns(
     name = "spec_compliance_application_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     tags = [
         "cpu:4",
@@ -51,6 +52,7 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_system_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     tags = [
         "cpu:4",
@@ -71,6 +73,7 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_group_01_application_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     tags = [
         "cpu:4",
@@ -91,6 +94,7 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_group_01_system_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     tags = [
         "cpu:4",

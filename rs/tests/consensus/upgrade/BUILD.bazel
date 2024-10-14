@@ -84,6 +84,7 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_app_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -110,6 +111,7 @@ system_test_nns(
 
 system_test_nns(
     name = "downgrade_app_subnet_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

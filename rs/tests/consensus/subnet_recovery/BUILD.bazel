@@ -47,6 +47,7 @@ rust_library(
 
 system_test_nns(
     name = "sr_app_same_nodes_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -107,6 +108,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_failover_nodes_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -169,6 +171,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_no_upgrade_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -252,6 +255,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_nns_same_nodes_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -277,6 +281,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

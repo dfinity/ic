@@ -18,6 +18,7 @@ system_test_nns(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -81,6 +82,7 @@ system_test_nns(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -102,6 +104,7 @@ system_test_nns(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -123,6 +126,7 @@ system_test_nns(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
