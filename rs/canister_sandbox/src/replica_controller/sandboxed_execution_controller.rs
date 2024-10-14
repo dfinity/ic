@@ -650,7 +650,7 @@ pub struct SandboxedExecutionController {
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    replicated_state: Arc<ReplicatedState>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
@@ -1066,7 +1066,7 @@ impl SandboxedExecutionController {
         metrics_registry: &MetricsRegistry,
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        replicated_state: Arc<ReplicatedState>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
@@ -1130,7 +1130,7 @@ impl SandboxedExecutionController {
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
             stop_monitoring_thread: tx,
-            replicated_state: Arc::clone(&replicated_state),
+            state_reader: Arc::clone(&state_reader),
         })
     }
 
@@ -1877,7 +1877,7 @@ mod tests {
 
         use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 
-        let replicated_state = ReplicatedStateBuilder::new().build();
+        let replicated_state: ReplicatedState = ReplicatedStateBuilder::new().build();
 
         let controller = SandboxedExecutionController::new(
             logger,
