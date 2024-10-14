@@ -17,6 +17,7 @@ use prost::Message;
 use std::{
     borrow::Cow,
     collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
+    iter::Peekable,
     ops::{Bound as RangeBound, RangeBounds},
 };
 
@@ -345,22 +346,10 @@ where
     where
         R: RangeBounds<NeuronId> + Clone,
     {
-        let first = match range.start_bound() {
-            RangeBound::Included(start) => Some(start.clone()), // Start is inclusive, extract value
-            RangeBound::Excluded(start) => Some(start.clone()), // Start is exclusive, extract value
-            RangeBound::Unbounded => Some(NeuronId::MIN),       // No lower bound, return None
-        }
-        .unwrap();
-        // Get the last bound (end of the range)
-        let last = match range.end_bound() {
-            RangeBound::Included(end) => Some(end.clone()), // End is inclusive, extract value
-            RangeBound::Excluded(end) => Some(end.clone()), // End is exclusive, extract value
-            RangeBound::Unbounded => Some(NeuronId::MAX),   // No upper bound, return None
-        }
-        .unwrap();
+        let (first, last) = extract_range_ends(range.clone());
 
-        let simple_1 = (first, u64::MIN)..(last, u64::MAX);
-        let simple_2 = (first, u64::MIN)..(last, u64::MAX);
+        let hotkeys_range = (first, u64::MIN)..(last, u64::MAX);
+        let ballots_range = (first, u64::MIN)..(last, u64::MAX);
 
         let followees_range = FolloweesKey {
             follower_id: first,
@@ -370,73 +359,56 @@ where
             ..FolloweesKey::MAX
         };
 
-        let mut hot_keys_iter = self.hot_keys_map.range(simple_1).peekable();
-        let mut recent_ballots_iter = self.recent_ballots_map.range(simple_2).peekable();
+        let mut main_range = self.main.range(range.clone());
+        let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
+        let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
         let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
-        let mut transfer_iter = self.transfer_map.range(range.clone()).peekable();
+        let mut transfer_iter = self.transfer_map.range(range).peekable();
 
-        self.main.range(range).map(move |(main_neuron_id, neuron)| {
-            let abridged_neuron = neuron;
+        main_range.map(move |(main_neuron_id, abridged_neuron)| {
             // We'll collect data from all relevant maps for this neuron_id
-            let mut hot_keys = vec![];
-            let mut ballots = vec![];
-            let mut followees = vec![];
 
-            // Synchronize hot_keys_map:
-            while let Some(((neuron_id, _index), principal)) = hot_keys_iter.peek() {
-                if *neuron_id > main_neuron_id {
-                    break;
-                }
-                if *neuron_id == main_neuron_id {
-                    hot_keys.push(PrincipalId::from(principal.clone()));
-                }
-                hot_keys_iter.next(); // Advance the hot key iterator
-            }
+            let hot_keys = collect_for_neuron_id(
+                &mut hot_keys_iter,
+                main_neuron_id,
+                |((neuron_id, _index), principal)| {
+                    (*neuron_id, PrincipalId::from(principal.clone()))
+                },
+            );
 
-            // Synchronize recent_ballots_map:
-            while let Some(((neuron_id, _index), ballot_info)) = recent_ballots_iter.peek() {
-                if *neuron_id > main_neuron_id {
-                    break;
-                }
-                if *neuron_id == main_neuron_id {
-                    ballots.push(ballot_info.clone());
-                }
-                recent_ballots_iter.next(); // Advance the ballot iterator
-            }
+            let ballots = collect_for_neuron_id(
+                &mut recent_ballots_iter,
+                main_neuron_id,
+                |((neuron_id, _index), ballot_info)| (*neuron_id, ballot_info.clone()),
+            );
 
-            // Synchronize followees_map:
-            while let Some((followees_key, followee_id)) = followees_iter.peek() {
-                if followees_key.follower_id > main_neuron_id {
-                    break;
-                }
-                if followees_key.follower_id == main_neuron_id {
-                    followees.push((followees_key.clone(), *followee_id));
-                }
-                followees_iter.next(); // Advance the followees iterator
-            }
+            let followees = collect_for_neuron_id(
+                &mut followees_iter,
+                main_neuron_id,
+                |(followees_key, followee_id)| {
+                    (
+                        followees_key.follower_id,
+                        (followees_key.clone(), *followee_id),
+                    )
+                },
+            );
 
-            let mut current_known_neuron_data = None;
-            while let Some((neuron_id, known_neuron_data)) = known_neuron_data_iter.peek() {
-                if *neuron_id > main_neuron_id {
-                    break;
-                }
-                if *neuron_id == main_neuron_id {
-                    current_known_neuron_data.replace(known_neuron_data.clone());
-                }
-                known_neuron_data_iter.next();
-            }
+            let current_known_neuron_data = collect_for_neuron_id(
+                &mut known_neuron_data_iter,
+                main_neuron_id,
+                |(neuron_id, known_neuron_data)| (*neuron_id, known_neuron_data.clone()),
+            )
+            .first()
+            .cloned();
 
-            let mut current_transfer = None;
-            while let Some((neuron_id, transfer)) = transfer_iter.peek() {
-                if *neuron_id > main_neuron_id {
-                    break;
-                }
-                if *neuron_id == main_neuron_id {
-                    current_transfer.replace(transfer.clone());
-                }
-                transfer_iter.next();
-            }
+            let current_transfer = collect_for_neuron_id(
+                &mut transfer_iter,
+                main_neuron_id,
+                |(neuron_id, transfer)| (*neuron_id, transfer.clone()),
+            )
+            .first()
+            .cloned();
 
             Neuron::from(DecomposedNeuron {
                 id: main_neuron_id,
@@ -718,6 +690,49 @@ impl Storable for NeuronStakeTransfer {
 
 // Private Helpers
 // ===============
+
+fn extract_range_ends<R>(range_bound: R) -> (NeuronId, NeuronId)
+where
+    R: RangeBounds<NeuronId>,
+{
+    let start = match range_bound.start_bound() {
+        RangeBound::Included(start) => start.clone(),
+        RangeBound::Excluded(start) => start.clone(),
+        RangeBound::Unbounded => NeuronId::MIN,
+    };
+    let end = match range_bound.end_bound() {
+        RangeBound::Included(start) => start.clone(),
+        RangeBound::Excluded(start) => start.clone(),
+        RangeBound::Unbounded => NeuronId::MAX,
+    };
+
+    (start, end)
+}
+
+fn collect_for_neuron_id<I, T, F, R>(
+    iter: &mut Peekable<I>,
+    target_neuron_id: NeuronId,
+    mut extract_key_and_value: F,
+) -> Vec<R>
+where
+    F: FnMut(&T) -> (NeuronId, R),
+    I: Iterator<Item = T>,
+{
+    let mut result = vec![];
+
+    while let Some(item) = iter.peek() {
+        let (neuron_id, value) = extract_key_and_value(item);
+        if neuron_id > target_neuron_id {
+            break;
+        }
+        if neuron_id == target_neuron_id {
+            result.push(value);
+        }
+        iter.next();
+    }
+
+    result
+}
 
 // This is copied from candid/src. Seems like their definition should be public,
 // but it's not. Seems to be an oversight.
