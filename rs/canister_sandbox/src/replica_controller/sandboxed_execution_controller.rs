@@ -88,6 +88,8 @@ struct SandboxedExecutionMetrics {
     #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss_total: IntGauge,
     #[cfg(target_os = "linux")]
+    sandboxed_execution_subprocess_rust_mem_total: IntGauge,
+    #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_anon_rss: Histogram,
     #[cfg(target_os = "linux")]
     sandboxed_execution_subprocess_memfd_rss: Histogram,
@@ -171,6 +173,11 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_subprocess_memfd_rss_total: metrics_registry.int_gauge(
                 "sandboxed_execution_subprocess_memfd_rss_total_kib",
                 "The resident shared memory for all canister sandbox processes in KiB"
+            ),
+            #[cfg(target_os = "linux")]
+            sandboxed_execution_subprocess_rust_mem_total: metrics_registry.int_gauge(
+                "sandboxed_execution_subprocess_rust_mem_total_kib",
+                "The Rust allocated memory for all canister sandbox processes in KiB"
             ),
             #[cfg(target_os = "linux")]
             sandboxed_execution_subprocess_anon_rss: metrics_registry.histogram(
@@ -1126,6 +1133,7 @@ impl SandboxedExecutionController {
             {
                 let mut total_anon_rss: u64 = 0;
                 let mut total_memfd_rss: u64 = 0;
+                let mut total_rust_mem: u64 = 0;
                 let now = std::time::Instant::now();
 
                 // For all processes requested, get their memory usage and report
@@ -1151,6 +1159,17 @@ impl SandboxedExecutionController {
                     } else {
                         warn!(logger, "Unable to get memfd RSS for pid {}", pid);
                     }
+
+                    if let SandboxProcessStatus::Active = status {
+                        if let Ok(protocol::sbxsvc::MemoryUsageReply { bytes }) = sandbox_process
+                            .sandbox_service
+                            .memory_usage(protocol::sbxsvc::MemoryUsageRequest {})
+                            .sync()
+                        {
+                            total_rust_mem += bytes as u64;
+                        }
+                    }
+
                     metrics
                         .sandboxed_execution_subprocess_rss
                         .observe(process_rss as f64);
@@ -1178,6 +1197,10 @@ impl SandboxedExecutionController {
                 metrics
                     .sandboxed_execution_subprocess_memfd_rss_total
                     .set(total_memfd_rss.try_into().unwrap());
+
+                metrics
+                    .sandboxed_execution_subprocess_rust_mem_total
+                    .set(total_rust_mem.try_into().unwrap());
             }
 
             // We don't need to record memory metrics on non-linux systems.  And

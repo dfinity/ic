@@ -1,3 +1,4 @@
+pub mod alloc_metrics;
 pub mod compiler_sandbox;
 pub mod controller_client_stub;
 pub mod controller_launcher_client_stub;

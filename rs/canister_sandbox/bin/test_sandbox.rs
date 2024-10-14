@@ -100,6 +100,13 @@ impl sandbox_service::SandboxService for DummySandboxService {
     ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
         unimplemented!()
     }
+
+    fn memory_usage(
+        &self,
+        _req: sbxsvc::MemoryUsageRequest,
+    ) -> rpc::Call<sbxsvc::MemoryUsageReply> {
+        unimplemented!()
+    }
 }
 
 fn main() {

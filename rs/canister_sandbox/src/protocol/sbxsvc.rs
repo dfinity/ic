@@ -314,6 +314,14 @@ pub struct CreateExecutionStateSerializedReply(
     pub HypervisorResult<CreateExecutionStateSerializedSuccessReply>,
 );
 
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct MemoryUsageRequest {}
+
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
+pub struct MemoryUsageReply {
+    pub bytes: usize,
+}
+
 /// All possible requests to a sandboxed process.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -329,6 +337,7 @@ pub enum Request {
     AbortExecution(AbortExecutionRequest),
     CreateExecutionState(CreateExecutionStateRequest),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedRequest),
+    MemoryUsage(MemoryUsageRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
@@ -344,7 +353,8 @@ impl EnumerateInnerFileDescriptors for Request {
             | Request::CloseMemory(_)
             | Request::StartExecution(_)
             | Request::ResumeExecution(_)
-            | Request::AbortExecution(_) => {}
+            | Request::AbortExecution(_)
+            | Request::MemoryUsage(_) => {}
         }
     }
 }
@@ -364,6 +374,7 @@ pub enum Reply {
     AbortExecution(AbortExecutionReply),
     CreateExecutionState(CreateExecutionStateReply),
     CreateExecutionStateSerialized(CreateExecutionStateSerializedReply),
+    MemoryUsage(MemoryUsageReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {
