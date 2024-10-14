@@ -244,7 +244,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
 /rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/boundary_nodes/                           @dfinity/boundary-node @dfinity/idx
 /rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
 /rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx

@@ -388,3 +388,21 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    if: |
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
