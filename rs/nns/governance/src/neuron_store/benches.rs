@@ -190,7 +190,7 @@ fn range_neurons_performance() -> BenchResult {
 
     bench_fn(|| {
         let _ = with_stable_neuron_store(|stable_store| {
-            let iter = stable_store.range_neurons(NeuronId::from_u64(0)..NeuronId::from_u64(100));
+            let iter = stable_store.range_neurons(..);
             for n in iter {
                 let n = n.id();
             }
