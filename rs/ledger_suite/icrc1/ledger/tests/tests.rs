@@ -6,6 +6,10 @@ use ic_icrc1_ledger::{
     ChangeFeeCollector, FeatureFlags, InitArgs, InitArgsBuilder as LedgerInitArgsBuilder,
     LedgerArgument,
 };
+use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
@@ -13,10 +17,6 @@ use ic_ledger_suite_state_machine_tests::{
     NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
     TOKEN_SYMBOL,
 };
-use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType};
-use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
@@ -218,7 +218,10 @@ fn test_single_transfer() {
 
 #[test]
 fn test_account_canonicalization() {
-    ic_ledger_suite_state_machine_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_account_canonicalization(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -228,7 +231,11 @@ fn test_tx_time_bounds() {
 
 #[test]
 fn test_archiving() {
-    ic_ledger_suite_state_machine_tests::test_archiving(ledger_wasm(), encode_init_args, archive_wasm());
+    ic_ledger_suite_state_machine_tests::test_archiving(
+        ledger_wasm(),
+        encode_init_args,
+        archive_wasm(),
+    );
 }
 
 #[test]
@@ -303,7 +310,10 @@ fn test_approve_self() {
 
 #[test]
 fn test_approve_expected_allowance() {
-    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]

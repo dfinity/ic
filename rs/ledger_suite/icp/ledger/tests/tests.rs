@@ -4,14 +4,14 @@ use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
+use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::{block::BlockType, Tokens};
 use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
     transfer, FEE, MINTER,
 };
-use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
@@ -62,7 +62,9 @@ fn ledger_wasm_allowance_getter() -> Vec<u8> {
     )
 }
 
-fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> LedgerCanisterInitPayload {
+fn encode_init_args(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerCanisterInitPayload {
     let initial_values = args
         .initial_balances
         .into_iter()
@@ -443,7 +445,10 @@ fn test_mint_burn() {
 
 #[test]
 fn test_account_canonicalization() {
-    ic_ledger_suite_state_machine_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_account_canonicalization(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -1347,7 +1352,10 @@ fn test_approve_self() {
 
 #[test]
 fn test_approve_expected_allowance() {
-    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]

@@ -335,12 +335,13 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let burns_without_spender = ic_ledger_suite_state_machine_tests::in_memory_ledger::BurnsWithoutSpender {
-        minter: ck_btc_minter,
-        burn_indexes: vec![
-            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
-        ],
-    };
+    let burns_without_spender =
+        ic_ledger_suite_state_machine_tests::in_memory_ledger::BurnsWithoutSpender {
+            minter: ck_btc_minter,
+            burn_indexes: vec![
+                100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+            ],
+        };
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
