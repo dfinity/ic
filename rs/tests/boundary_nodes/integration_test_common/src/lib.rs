@@ -16,7 +16,7 @@ Success::
 . The calls succeed with the expected values.
 end::catalog[] */
 
-use crate::boundary_nodes::{
+use ic_boundary_nodes_system_test_utils::{
     constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
     helpers::{
         create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
@@ -257,7 +257,7 @@ pub fn asset_canister_test(env: TestEnv) {
             )
         } else {
             let host = format!("{0}.ic0.app", asset_canister.canister_id);
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
             let client_builder = http_client_builder
                 .danger_accept_invalid_certs(true)
                 .resolve(&host, bn_addr);
@@ -673,7 +673,7 @@ pub fn http_canister_test(env: TestEnv) {
             } else {
                 let host = format!("{canister_id}.raw.ic0.app");
                 let invalid_host = "invalid-canister-id.raw.ic0.app".to_string();
-                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
                 let client_builder = client_builder
                     .danger_accept_invalid_certs(true)
                     .resolve(&host, bn_addr)
@@ -867,7 +867,7 @@ pub fn prefix_canister_id_test(env: TestEnv) {
             )
         } else {
             let host = format!("ignored-prefix--{canister_id}.raw.ic0.app");
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
             let client_builder = client_builder
                 .danger_accept_invalid_certs(true)
                 .resolve(&host, bn_addr);
@@ -1026,7 +1026,7 @@ pub fn proxy_http_canister_test(env: TestEnv) {
             } else {
                 let host = format!("{canister_id}.raw.ic0.app");
                 let invalid_host = "invalid-canister-id.raw.ic0.app".to_string();
-                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+                let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
                 let client_builder = client_builder
                     .danger_accept_invalid_certs(true)
                     .resolve(&host, bn_addr)
@@ -1231,7 +1231,7 @@ pub fn denylist_test(env: TestEnv) {
             (client_builder, playnet)
         } else {
             let host = "ic0.app";
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
             let client_builder = client_builder
                 .danger_accept_invalid_certs(true)
                 .resolve(&format!("{canister_id}.raw.{host}"),bn_addr.into());
@@ -1329,7 +1329,7 @@ pub fn canister_allowlist_test(env: TestEnv) {
             (client_builder, playnet)
         } else {
             let host = "ic0.app";
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
             let client_builder = client_builder
                 .danger_accept_invalid_certs(true)
                 .resolve(&format!("{canister_id}.raw.{host}"), bn_addr.into());
@@ -1446,7 +1446,7 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
             .resolve(host, bn_addr.into())
@@ -1545,7 +1545,7 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder
             .resolve(host, bn_addr.into())
             .resolve(&format!("raw.{host}"), bn_addr.into());
@@ -1646,7 +1646,7 @@ pub fn http_endpoint_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder.danger_accept_invalid_certs(true).resolve(
             &format!("{0}.{host}", asset_canister_orig.canister_id),
             bn_addr.into(),
@@ -1842,7 +1842,7 @@ pub fn ic_gateway_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
             .resolve(&format!("{canister_id}.{host}"), bn_addr.into())
@@ -1947,7 +1947,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
             .resolve(host, bn_addr.into());
@@ -2164,7 +2164,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder
             .danger_accept_invalid_certs(true)
             .resolve(host, bn_addr.into());
@@ -2377,7 +2377,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         .get_snapshot()
         .expect("failed to get BN snapshot");
 
-    let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+    let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
 
     let client = ClientBuilder::new()
         .danger_accept_invalid_certs(true)
@@ -2598,7 +2598,7 @@ pub fn seo_test(env: TestEnv) {
         (client_builder, playnet)
     } else {
         let host = "ic0.app";
-        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0);
+        let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0);
         let client_builder = client_builder.danger_accept_invalid_certs(true).resolve(
             &format!("{0}.{host}", asset_canister_orig.canister_id),
             bn_addr.into(),
@@ -2851,7 +2851,7 @@ pub fn headers_test(env: TestEnv) {
             (http_client_builder, playnet)
         } else {
             let host = "ic0.app";
-            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 443, 0, 0).into();
+            let bn_addr = SocketAddrV6::new(boundary_node.ipv6(), 0, 0, 0).into();
             let client_builder = http_client_builder
                 .danger_accept_invalid_certs(true)
                 .resolve(host, bn_addr);

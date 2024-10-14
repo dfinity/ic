@@ -1,5 +1,5 @@
-load("@bazel_gazelle//:def.bzl", "gazelle")
 load("@bazel_skylib//rules:common_settings.bzl", "string_setting")
+load("@gazelle//:def.bzl", "gazelle")
 load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
 package(default_visibility = ["//visibility:public"])
@@ -79,19 +79,19 @@ gazelle(
 
 alias(
     name = "gobin",
-    actual = "@go_sdk//:bin/go",
+    actual = "@rules_go//go",
     visibility = ["//visibility:public"],
 )
 
-# Builds python dependencies
+# Builds python dependencies. To update the lockfile:
+# $ bazel run //:python-requirements.update
 compile_pip_requirements(
     name = "python-requirements",
-    timeout = "moderate",
-    requirements_in = "requirements.in",
+    src = "requirements.in",
+    # NOTE: the requirements.txt reports the system python's version, not
+    # the one specified in MODULE.bazel.
+    # https://rules-python.readthedocs.io/en/latest/pypi-dependencies.html#pip-rules
     requirements_txt = "requirements.txt",
-    tags = [
-        "requires-network",
-    ],
 )
 
 test_suite(

@@ -1,6 +1,3 @@
-mod common;
-
-use crate::common::raw_canister_id_range_into;
 use candid::{Encode, Principal};
 use ic_agent::agent::{http_transport::ReqwestTransport, CallResponse};
 use ic_cdk::api::management_canister::main::CanisterIdRecord;
@@ -16,7 +13,7 @@ use ic_registry_transport::pb::v1::{
 use ic_utils::interfaces::ManagementCanister;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpsConfig, InstanceConfig, SubnetConfigSet, Topology,
+    HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
 };
 use pocket_ic::{update_candid, PocketIc, PocketIcBuilder, WasmResult};
 use rcgen::{CertificateParams, KeyPair};
@@ -220,9 +217,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     // retrieve the first canister ID on the application subnet
     // which will be the effective and expected canister ID for canister creation
     let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     // define HTTP protocol for this test
     let proto = if https { "https" } else { "http" };
@@ -338,7 +333,7 @@ async fn test_gateway(server_url: Url, https: bool) {
         .call_and_wait()
         .await
         .unwrap();
-    assert_eq!(canister_id, effective_canister_id.into());
+    assert_eq!(canister_id, effective_canister_id);
 
     // install II canister WASM
     let ii_path = std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
@@ -648,9 +643,9 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
 /// can be successfully restored from a `state_dir`
 /// if a PocketIC instance is created with that `state_dir`,
 /// using `with_state_dir` on `PocketIcBuilder`.
-/// Furthermore, tests that the NNS subnet and its canister states
-/// can be successfully restored from the NNS subnet state,
-/// using `with_nns_state` on `PocketIcBuilder`.
+/// Furthermore, tests that the NNS and application subnets and their canister states
+/// can be successfully restored from the respective subnet states,
+/// using `with_nns_state` and `with_subnet_state` on `PocketIcBuilder`.
 #[test]
 fn canister_state_dir() {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
@@ -677,6 +672,7 @@ fn canister_state_dir() {
     let topology = pic.topology();
     let nns_subnet = topology.get_nns().unwrap();
     let app_subnet = topology.get_app_subnets()[0];
+    let default_effective_canister_id = topology.default_effective_canister_id;
 
     // We create a counter canister on the NNS subnet.
     let nns_canister_id = pic.create_canister_on_subnet(None, None, nns_subnet);
@@ -714,6 +710,13 @@ fn canister_state_dir() {
     let counter_wasm = wat::parse_str(COUNTER_WAT).unwrap();
     pic.install_canister(spec_canister_id, counter_wasm, vec![], None);
 
+    // Check the registry version.
+    // The registry version should be 3 as we have three subnets on the PocketIC instance now
+    // and every subnet creation bumps the registry version.
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
+    assert_eq!(registry_data_provider.latest_version(), 3.into());
+
     // Bump the counter three times and check the counter value.
     pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
         .unwrap();
@@ -742,15 +745,28 @@ fn canister_state_dir() {
     // We created one app subnet and another one was created dynamically
     // to host the canister with the "specified" canister ID.
     assert_eq!(topology.get_app_subnets().len(), 2);
+    assert_eq!(
+        topology.default_effective_canister_id,
+        default_effective_canister_id
+    );
 
     // Check that the canister states have been properly restored.
     check_counter(&pic, nns_canister_id, 2);
     check_counter(&pic, app_canister_id, 1);
     check_counter(&pic, spec_canister_id, 3);
 
-    // Bump the counter on the NNS subnet.
+    // Bump the counters on all subnets.
     pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
         .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+    pic.update_call(spec_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
+
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
+    check_counter(&pic, spec_canister_id, 4);
 
     // Delete the PocketIC instance.
     drop(pic);
@@ -758,33 +774,44 @@ fn canister_state_dir() {
     // Start a new PocketIC server.
     let (newest_server_url, _) = start_server_helper(None, false, false);
 
-    // Create a PocketIC instance mounting the NNS state created so far.
-    let nns_subnet_seed = topology.0.get(&nns_subnet).unwrap().subnet_seed;
+    // Create a PocketIC instance mounting the NNS and app state created so far.
+    let nns_subnet_seed = topology
+        .subnet_configs
+        .get(&nns_subnet)
+        .unwrap()
+        .subnet_seed;
     let nns_state_dir = state_dir.path().join(hex::encode(nns_subnet_seed));
+    let app_subnet_seed = topology
+        .subnet_configs
+        .get(&app_subnet)
+        .unwrap()
+        .subnet_seed;
+    let app_state_dir = state_dir.path().join(hex::encode(app_subnet_seed));
     let pic = PocketIcBuilder::new()
         .with_server_url(newest_server_url)
         .with_nns_state(nns_subnet, nns_state_dir)
+        .with_subnet_state(SubnetKind::Application, app_subnet, app_state_dir)
         .build();
 
     // Check that the topology has been properly restored.
     let topology = pic.topology();
     assert_eq!(topology.get_nns().unwrap(), nns_subnet);
-    // We didn't specify to restore any app subnets.
-    assert!(topology.get_app_subnets().is_empty());
+    // We only specified to restore one app subnet.
+    assert_eq!(topology.get_app_subnets().len(), 1);
 
     // Check that the canister states have been properly restored.
     check_counter(&pic, nns_canister_id, 3);
+    check_counter(&pic, app_canister_id, 2);
 
-    // Bump the counter on the NNS subnet.
+    // Bump the counter on all subnets.
     pic.update_call(nns_canister_id, Principal::anonymous(), "write", vec![])
         .unwrap();
+    pic.update_call(app_canister_id, Principal::anonymous(), "write", vec![])
+        .unwrap();
 
-    // Check the registry version.
-    // The registry version should be 3 as we have three subnets on the PocketIC instance now
-    // and every subnet creation bumps the registry version.
-    let registry_proto_path = state_dir_path_buf.join("registry.proto");
-    let registry_data_provider = ProtoRegistryDataProvider::load_from_file(registry_proto_path);
-    assert_eq!(registry_data_provider.latest_version(), 3.into());
+    // Check that the counters have been properly updated.
+    check_counter(&pic, nns_canister_id, 4);
+    check_counter(&pic, app_canister_id, 3);
 }
 
 /// Test that PocketIC can handle synchronous update calls, i.e. `/api/v3/.../call`.
@@ -797,12 +824,9 @@ fn test_specified_id_call_v3() {
         .build();
     let endpoint = pic.make_live(None);
 
-    // retrieve the first canister ID on the application subnet
-    // which will be the effective canister ID for canister creation
+    // Retrieve effective canister id for canister creation.
     let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id =
-        raw_canister_id_range_into(&topology.0.get(&app_subnet).unwrap().canister_ranges[0]).start;
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -836,7 +860,7 @@ fn test_specified_id_call_v3() {
                 "provisional_create_canister_with_cycles",
             )
             .with_arg(bytes)
-            .with_effective_canister_id(effective_canister_id.into())
+            .with_effective_canister_id(effective_canister_id)
             .call()
             .await
             .map(|response| match response {
@@ -1214,6 +1238,9 @@ fn registry_canister() {
 }
 
 #[test]
+#[should_panic(
+    expected = "The binary representation  of effective canister ID aaaaa-aa should consist of 10 bytes."
+)]
 fn provisional_create_canister_with_cycles() {
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
