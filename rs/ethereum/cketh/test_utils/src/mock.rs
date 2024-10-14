@@ -52,6 +52,7 @@ pub enum JsonRpcProvider {
     BlockPi,
     PublicNode,
     LlamaNodes,
+    Alchemy,
 }
 
 impl JsonRpcProvider {
@@ -60,6 +61,7 @@ impl JsonRpcProvider {
             JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
+            JsonRpcProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
         }
     }
 }
@@ -366,9 +368,19 @@ impl MockJsonRpcProvidersBuilder {
         self
     }
 
-    pub fn respond_with<T: Serialize>(mut self, provider: JsonRpcProvider, response: T) -> Self {
-        self.responses
-            .insert(provider, serde_json::to_value(response).unwrap());
+    pub fn respond_with<T: Serialize>(self, provider: JsonRpcProvider, response: T) -> Self {
+        self.respond_for_providers_with(std::iter::once(provider), response)
+    }
+
+    pub fn respond_for_providers_with<T: Serialize, I: IntoIterator<Item = JsonRpcProvider>>(
+        mut self,
+        providers: I,
+        response: T,
+    ) -> Self {
+        let response = serde_json::to_value(response).unwrap();
+        for provider in providers {
+            self.responses.insert(provider, response.clone());
+        }
         self
     }
 
@@ -387,11 +399,8 @@ impl MockJsonRpcProvidersBuilder {
         self.respond_with(provider, previous_response)
     }
 
-    pub fn respond_for_all_with<T: Serialize + Clone>(mut self, response: T) -> Self {
-        for provider in JsonRpcProvider::iter() {
-            self = self.respond_with(provider, response.clone());
-        }
-        self
+    pub fn respond_for_all_with<T: Serialize>(self, response: T) -> Self {
+        self.respond_for_providers_with(JsonRpcProvider::iter(), response)
     }
 
     pub fn modify_response_for_all<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(

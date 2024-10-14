@@ -34,16 +34,15 @@ use ic_consensus_system_test_utils::{
         generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
         wait_until_authentication_is_granted, AuthMean,
     },
-    subnet::enable_chain_key_on_subnet,
     upgrade::{
         assert_assigned_replica_version, bless_public_replica_version,
         deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
     },
 };
-use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+use ic_consensus_threshold_sig_system_test_utils::{
+    get_master_public_key, make_key_ids_for_all_schemes, run_chain_key_signature_test,
 };
+use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -86,6 +85,18 @@ pub fn config(env: TestEnv) {
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .add_nodes(SUBNET_SIZE)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: make_key_ids_for_all_schemes()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: 20,
+                            pre_signatures_to_create_in_advance: 7,
+                            key_id,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .setup_and_start(&env)
@@ -148,23 +159,16 @@ pub fn test(env: TestEnv) {
         .expect("chmod command failed");
     chmod.wait_with_output().expect("chmod execution failed");
 
-    info!(log, "Run ECDSA signature test");
+    info!(log, "Run threshold signature test");
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let agent = nns_node.build_default_agent();
     let nns_canister = block_on(MessageCanister::new(
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let public_keys = enable_chain_key_on_subnet(
-        &nns_node,
-        &nns_canister,
-        env.topology_snapshot().root_subnet_id(),
-        None,
-        make_key_ids_for_all_schemes(),
-        &log,
-    );
 
-    for (key_id, public_key) in public_keys {
+    for key_id in make_key_ids_for_all_schemes() {
+        let public_key = get_master_public_key(&nns_canister, &key_id, &log);
         run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
@@ -485,21 +489,4 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
             .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
-}
-
-fn make_key_ids_for_all_schemes() -> Vec<MasterPublicKeyId> {
-    vec![
-        MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: "some_ecdsa_key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Ed25519,
-            name: "some_eddsa_key".to_string(),
-        }),
-        MasterPublicKeyId::Schnorr(SchnorrKeyId {
-            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
-            name: "some_bip340_key".to_string(),
-        }),
-    ]
 }
