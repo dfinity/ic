@@ -74,14 +74,7 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# BITCOIND_ADDR indicates that we are in system test environment. No socks proxy needed.
-# bitcoin_addr.conf should be formatted like this: key 'bitcoind_addr', comma separated values, NO "" around addresses, NO trailing ',' AND spaces
-# Example: bitcoind_addr=seed.bitcoin.sipa.be,regtest.random.me,regtest.random.org
-#
-# Bash explanation:
-# ${bitcoind_addr:+\"${bitcoind_addr//,/\",\"}\"}
-# ${parameter:+word}: If parameter is null or unset, nothing is substituted, otherwise the expansion of word is substituted.
-# word: \"${bitcoind_addr//,/\",\"}\" Adds surrounding "" and matches and replaces all ',' with '","'
+# config_bitcoind_addr indicates that we are in system test environment. No socks proxy needed.
 if [ "${config_bitcoind_addr}" != "" ] && [ "${config_bitcoind_addr}" != "null" ]; then
     echo '{
         "network": "regtest",
