@@ -16,7 +16,6 @@ on:
       - 'dev-gh-*'
   # Used as reusable workflow within release-testing workflow
   workflow_call:
-# runs for the same workflow are cancelled on PRs but not on master
 
 permissions: read-all
 
