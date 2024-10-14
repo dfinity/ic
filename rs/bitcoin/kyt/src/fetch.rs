@@ -1,6 +1,9 @@
-use crate::state::{FetchGuardError, FetchTxStatus, FetchedTx, HttpGetTxError, TransactionKytData};
+use crate::state::{
+    FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
+    TransactionKytData,
+};
 use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
-use crate::{blocklist_contains, state};
+use crate::{blocklist_contains, providers, state, BtcNetwork};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
@@ -44,7 +47,6 @@ pub enum FetchResult {
 pub enum TryFetchResult<F> {
     Pending,
     HighLoad,
-    Error(HttpGetTxError),
     NotEnoughCycles,
     Fetched(FetchedTx),
     ToFetch(F),
@@ -54,8 +56,11 @@ pub enum TryFetchResult<F> {
 pub trait FetchEnv {
     type FetchGuard;
     fn new_fetch_guard(&self, txid: Txid) -> Result<Self::FetchGuard, FetchGuardError>;
+    fn btc_network(&self) -> BtcNetwork;
+
     async fn http_get_tx(
         &self,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
@@ -71,13 +76,24 @@ pub trait FetchEnv {
         &self,
         txid: Txid,
     ) -> TryFetchResult<impl futures::Future<Output = Result<FetchResult, Infallible>>> {
-        let max_response_bytes = match state::get_fetch_status(txid) {
-            None => INITIAL_MAX_RESPONSE_BYTES,
+        let (provider, max_response_bytes) = match state::get_fetch_status(txid) {
+            None => (
+                providers::next_provider(self.btc_network()),
+                INITIAL_MAX_RESPONSE_BYTES,
+            ),
             Some(FetchTxStatus::PendingRetry {
                 max_response_bytes, ..
-            }) => max_response_bytes,
+            }) => (
+                providers::next_provider(self.btc_network()),
+                max_response_bytes,
+            ),
             Some(FetchTxStatus::PendingOutcall { .. }) => return TryFetchResult::Pending,
-            Some(FetchTxStatus::Error(msg)) => return TryFetchResult::Error(msg),
+            Some(FetchTxStatus::Error(err)) => (
+                // An FetchTxStatus error can be retried with another provider
+                err.provider.next(),
+                // The next provider can use the same max_response_bytes
+                err.max_response_bytes,
+            ),
             Some(FetchTxStatus::Fetched(fetched)) => return TryFetchResult::Fetched(fetched),
         };
         let guard = match self.new_fetch_guard(txid) {
@@ -88,7 +104,7 @@ pub trait FetchEnv {
         if self.cycles_accept(cycle_cost) < cycle_cost {
             TryFetchResult::NotEnoughCycles
         } else {
-            TryFetchResult::ToFetch(self.fetch_tx(guard, txid, max_response_bytes))
+            TryFetchResult::ToFetch(self.fetch_tx(guard, provider, txid, max_response_bytes))
         }
     }
 
@@ -104,10 +120,11 @@ pub trait FetchEnv {
     async fn fetch_tx(
         &self,
         _guard: Self::FetchGuard,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self.http_get_tx(txid, max_response_bytes).await {
+        match self.http_get_tx(provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
                 match TransactionKytData::try_from(tx) {
@@ -121,7 +138,14 @@ pub trait FetchEnv {
                     }
                     Err(err) => {
                         let err = HttpGetTxError::TxEncoding(err.to_string());
-                        state::set_fetch_status(txid, FetchTxStatus::Error(err.clone()));
+                        state::set_fetch_status(
+                            txid,
+                            FetchTxStatus::Error(FetchTxStatusError {
+                                provider,
+                                max_response_bytes,
+                                error: err.clone(),
+                            }),
+                        );
                         Ok(FetchResult::Error(err))
                     }
                 }
@@ -138,7 +162,14 @@ pub trait FetchEnv {
                 Ok(FetchResult::RetryWithBiggerBuffer)
             }
             Err(err) => {
-                state::set_fetch_status(txid, FetchTxStatus::Error(err.clone()));
+                state::set_fetch_status(
+                    txid,
+                    FetchTxStatus::Error(FetchTxStatusError {
+                        provider,
+                        max_response_bytes,
+                        error: err.clone(),
+                    }),
+                );
                 Ok(FetchResult::Error(err))
             }
         }
@@ -191,7 +222,7 @@ pub trait FetchEnv {
                         state::set_fetched_address(txid, index, address.clone());
                     }
                     Pending => continue,
-                    HighLoad | NotEnoughCycles | Error(_) => break,
+                    HighLoad | NotEnoughCycles => break,
                 }
             }
         }

@@ -36,7 +36,7 @@
 use crate::common::rest::{
     BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
     InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetSpec, Topology,
+    SubnetKind, SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -205,9 +205,46 @@ impl PocketIcBuilder {
     /// ```sh
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
-    pub fn with_nns_state(mut self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        self.with_subnet_state(SubnetKind::NNS, nns_subnet_id, path_to_state)
+    }
+
+    /// Add a subnet with state loaded form the given state directory.
+    /// Note that the provided path must be accessible for the PocketIC server process.
+    ///
+    /// `state_dir` should point to a directory which is expected to have
+    /// the following structure:
+    ///
+    /// state_dir/
+    ///  |-- backups
+    ///  |-- checkpoints
+    ///  |-- diverged_checkpoints
+    ///  |-- diverged_state_markers
+    ///  |-- fs_tmp
+    ///  |-- page_deltas
+    ///  |-- states_metadata.pbuf
+    ///  |-- tip
+    ///  `-- tmp
+    ///
+    /// `subnet_id` should be the subnet ID of the subnet in the state to be loaded
+    pub fn with_subnet_state(
+        mut self,
+        subnet_kind: SubnetKind,
+        subnet_id: Principal,
+        state_dir: PathBuf,
+    ) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.nns = Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id));
+        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir, subnet_id);
+        match subnet_kind {
+            SubnetKind::NNS => config.nns = Some(subnet_spec),
+            SubnetKind::SNS => config.sns = Some(subnet_spec),
+            SubnetKind::II => config.ii = Some(subnet_spec),
+            SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
+            SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
+            SubnetKind::Application => config.application.push(subnet_spec),
+            SubnetKind::System => config.system.push(subnet_spec),
+            SubnetKind::VerifiedApplication => config.verified_application.push(subnet_spec),
+        };
         self.config = Some(config);
         self
     }
