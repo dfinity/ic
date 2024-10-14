@@ -421,7 +421,7 @@ fn icrc1_test_upgrade_serialization() {
 fn icrc1_test_upgrade_serialization_fixed_tx() {
     ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_fixed_tx(
         ledger_mainnet_wasm(),
-        ledger_wasm(),
+        ledger_wasm_lowupgradeinstructionlimits(),
         encode_init_args,
     );
 }

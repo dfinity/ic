@@ -2651,6 +2651,9 @@ pub fn test_upgrade_serialization(
                         .unwrap();
                     if migration_to_stable_structures {
                         wait_ledger_ready(&env, ledger_id, 10);
+                        let stable_upgrade_migration_steps =
+                            parse_metric(&env, ledger_id, "ledger_stable_upgrade_migration_steps");
+                        assert_eq!(stable_upgrade_migration_steps, 1);
                     }
                     add_tx_and_verify();
                 };
@@ -2688,7 +2691,7 @@ pub fn test_upgrade_serialization(
 
 pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2758,6 +2761,10 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
         wait_ledger_ready(&env, canister_id, 10);
 
+        let stable_upgrade_migration_steps =
+            parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
+        assert!(stable_upgrade_migration_steps > 1);
+
         let mut allowances = vec![];
         for i in 0..accounts.len() {
             for j in i + 1..accounts.len() {
@@ -2777,11 +2784,10 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     };
 
     // Test if the old serialized approvals and balances are correctly deserialized
-    test_upgrade(ledger_wasm_current.clone(), balances.clone());
-
-    let stable_upgrade_migration_steps =
-        parse_metric(&env, canister_id, "ledger_stable_upgrade_migration_steps");
-    assert_eq!(stable_upgrade_migration_steps, 1);
+    test_upgrade(
+        ledger_wasm_current_lowinstructionlimits.clone(),
+        balances.clone(),
+    );
 
     // Add some more approvals
     for a1 in &accounts {
@@ -2800,7 +2806,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current, balances);
+    test_upgrade(ledger_wasm_current_lowinstructionlimits, balances);
 
     // See if the additional approvals are there
     for a1 in &accounts {
