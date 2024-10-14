@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 mod tests;
 
 lazy_static! {
-    /// As the name suggests, this is useful when constructing a Histogram.
+    /// Suitable for passing to Histogram::new.
     ///
     /// The value of this is vec![1,2,3, ... 10, 20, 30, ... 100, 125, 150, 175,
     /// 200, 225, 250, 275, ...] and goes as high as i64 allows.
