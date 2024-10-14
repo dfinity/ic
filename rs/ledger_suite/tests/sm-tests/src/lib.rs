@@ -2823,6 +2823,32 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 }
 
+pub fn test_downgrade_from_incompatible_version<T>(
+    ledger_wasm_nextledgerversion: Vec<u8>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with unsupported future version.
+    let (env, canister_id) = setup(ledger_wasm_nextledgerversion, encode_init_args, vec![]);
+
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from future ledger version should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to upgrade from incompatible version"))
+        }
+    };
+}
+
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
     ApproveArgs {
         from_subaccount: None,

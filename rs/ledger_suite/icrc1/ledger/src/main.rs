@@ -124,6 +124,12 @@ fn init_state(init_args: InitArgs) {
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
 
+#[cfg(not(feature = "next-ledger-version"))]
+const LEDGER_VERSION: u64 = 0;
+
+#[cfg(feature = "next-ledger-version")]
+const LEDGER_VERSION: u64 = 1;
+
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
@@ -142,6 +148,10 @@ fn pre_upgrade() {
             buffered_writer
                 .write_all(&counter_bytes)
                 .expect("failed to write instructions consumed to UPGRADES_MEMORY");
+            let ledger_version_bytes: [u8; 8] = LEDGER_VERSION.to_le_bytes();
+            buffered_writer
+                .write_all(&ledger_version_bytes)
+                .expect("failed to write the ledger version to UPGRADES_MEMORY");
         });
     });
 }
@@ -196,6 +206,20 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                         0u64
                     }
                 };
+            let mut leger_version_bytes = [0u8; 8];
+            match buffered_reader.read_exact(&mut leger_version_bytes) {
+                Ok(_) => {
+                    let ledger_version = u64::from_le_bytes(leger_version_bytes);
+                    if ledger_version > LEDGER_VERSION {
+                    panic!(
+                        "Trying to upgrade from incompatible version {}. Maximum allowed version is {}.",
+                        ledger_version, LEDGER_VERSION
+                    );
+                }
+            }
+                _ => {}
+            };
+
             state
         });
         ic_cdk::println!("Successfully read state from memory manager managed stable structures");
