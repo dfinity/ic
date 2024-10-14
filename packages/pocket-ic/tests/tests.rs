@@ -1702,15 +1702,39 @@ fn test_get_default_effective_canister_id_system_subnet() {
         .build();
     let gateway_url = pic.make_live(None);
 
-    let default_effective_canister_id =
+    let initial_default_effective_canister_id =
         pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
 
     let canister_id =
-        create_canister_with_effective_canister_id(&pic, default_effective_canister_id);
-    assert_eq!(canister_id, default_effective_canister_id);
+        create_canister_with_effective_canister_id(&pic, initial_default_effective_canister_id);
+    assert_eq!(canister_id, initial_default_effective_canister_id);
 
     let subnet_id = pic.get_subnet(canister_id).unwrap();
     assert!(pic.topology().get_system_subnets().contains(&subnet_id));
+
+    assert_eq!(pic.topology().get_app_subnets().len(), 0);
+
+    // We define a "specified" canister ID that exists on the IC mainnet,
+    // but belongs to the canister ranges of no subnet on the PocketIC instance.
+    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    assert!(pic.get_subnet(specified_id).is_none());
+
+    // We create a canister with that specified canister ID: this should succeed
+    // and a new subnet should be created.
+    let canister_id = pic
+        .create_canister_with_id(None, None, specified_id)
+        .unwrap();
+    assert_eq!(canister_id, specified_id);
+
+    assert_eq!(pic.topology().get_app_subnets().len(), 1);
+
+    let default_effective_canister_id =
+        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
+
+    assert_eq!(
+        default_effective_canister_id,
+        initial_default_effective_canister_id
+    );
 }
 
 #[test]
