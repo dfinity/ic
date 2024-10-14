@@ -363,3 +363,43 @@ fn should_match_slip10_derivation_test_data() {
         "Derived keys match"
     );
 }
+
+#[test]
+fn private_derivation_also_works_for_derived_keys() {
+    let rng = &mut reproducible_rng();
+    use rand::Rng;
+
+    for _ in 0..100 {
+        let master_sk = PrivateKey::generate_using_rng(rng);
+
+        let chain_code = rng.gen::<[u8; 32]>();
+        let path_len = 2 + rng.gen::<usize>() % 32;
+        let path = (0..path_len)
+            .map(|_| rng.gen::<u32>())
+            .collect::<Vec<u32>>();
+
+        // First derive directly from a normal key
+        let (derived_sk, cc_sk) =
+            master_sk.derive_subkey_with_chain_code(&DerivationPath::new_bip32(&path), &chain_code);
+
+        // Now derive with the path split in half
+
+        let split = rng.gen::<usize>() % (path_len - 1);
+        let path1 = DerivationPath::new_bip32(&path[..split]);
+        let path2 = DerivationPath::new_bip32(&path[split..]);
+
+        // Derive the intermediate secret key and chain code
+        let (isk, icc) = master_sk.derive_subkey_with_chain_code(&path1, &chain_code);
+
+        // From the intermediate key, use the second part of the path to derive the final key
+
+        let (fsk, fcc) = isk.derive_subkey_with_chain_code(&path2, &icc);
+
+        assert_eq!(hex::encode(fcc), hex::encode(cc_sk));
+
+        assert_eq!(
+            hex::encode(fsk.serialize_sec1()),
+            hex::encode(derived_sk.serialize_sec1())
+        );
+    }
+}

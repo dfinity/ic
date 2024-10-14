@@ -49,6 +49,9 @@ pub struct DerivationPath {
 
 impl DerivationPath {
     /// Create a BIP32-style derivation path
+    ///
+    /// See SLIP-10 <https://github.com/satoshilabs/slips/blob/master/slip-0010.md>
+    /// for details of derivation paths
     pub fn new_bip32(bip32: &[u32]) -> Self {
         let mut path = Vec::with_capacity(bip32.len());
         for n in bip32 {
@@ -470,7 +473,7 @@ impl PrivateKey {
     ) -> (Self, [u8; 32]) {
         use p256::NonZeroScalar;
 
-        let public_key: AffinePoint = self.key.verifying_key().as_affine().clone();
+        let public_key: AffinePoint = *self.key.verifying_key().as_affine();
         let (_pt, offset, derived_chain_code) =
             derivation_path.derive_offset(public_key, chain_code);
 
@@ -480,7 +483,7 @@ impl PrivateKey {
             NonZeroScalar::new(derived_scalar).expect("Derivation always produces non-zero sum");
 
         let derived_key = Self {
-            key: p256::SecretKey::from(nz_ds).into(),
+            key: p256::ecdsa::SigningKey::from(nz_ds),
         };
 
         (derived_key, derived_chain_code)
@@ -554,7 +557,7 @@ impl PublicKey {
     /// valid signature, then (r,-s) is also valid. To avoid this malleability,
     /// some systems require that s be "normalized" to the smallest value.
     ///
-    /// This normalization is quite common on secp256r1, but is virtually
+    /// This normalization is quite common on secp256k1, but is virtually
     /// unknown and unimplemented for secp256r1. The vast majority of secp256r1
     /// signatures will not be normalized. Thus this verification *does not*
     /// ensure any non-malleability properties.
@@ -606,10 +609,9 @@ impl PublicKey {
         let (pt, _offset, chain_code) = derivation_path.derive_offset(public_key, chain_code);
 
         let derived_key = Self {
-            key: p256::PublicKey::from(
+            key: p256::ecdsa::VerifyingKey::from(
                 p256::PublicKey::from_affine(pt).expect("Derived point is valid"),
-            )
-            .into(),
+            ),
         };
 
         (derived_key, chain_code)
