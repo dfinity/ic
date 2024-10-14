@@ -124,7 +124,7 @@ pub(crate) enum TipRequest {
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
     ValidateReplicatedState {
-        checkpoint_layout: Box<CheckpointLayout<ReadOnly>>,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
