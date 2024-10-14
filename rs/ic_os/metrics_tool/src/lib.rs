@@ -40,18 +40,24 @@ impl Metric {
     }
 
     // TODO: formatting of floats
-    pub fn to_string(&self) -> String {
+    // Convert to prometheus exposition format
+    pub fn to_prom_string(&self) -> String {
         let labels_str = if self.labels.is_empty() {
             String::new()
         } else {
-            let labels: Vec<String> = self.labels.iter()
+            let labels: Vec<String> = self
+                .labels
+                .iter()
                 .map(|(k, v)| format!("{}=\"{}\"", k, v))
                 .collect();
             format!("{{{}}}", labels.join(","))
         };
-        format!("# HELP {} {}\n\
+        format!(
+            "# HELP {} {}\n\
              # TYPE {} counter\n\
-             {}{} {}", self.name, self.annotation, self.name, self.name, labels_str, self.value)
+             {}{} {}",
+            self.name, self.annotation, self.name, self.name, labels_str, self.value
+        )
     }
 }
 
@@ -70,7 +76,7 @@ impl MetricsWriter {
         let path = Path::new(&self.file_path);
         let mut file = File::create(&path)?;
         for metric in metrics {
-            writeln!(file, "{}", metric.to_string())?;
+            writeln!(file, "{}", metric.to_prom_string())?;
         }
         Ok(())
     }
@@ -84,9 +90,12 @@ mod tests {
         let metric = Metric::new("test_metric", 123.45)
             .add_label("label1", "value1")
             .add_label("label2", "value2");
-        assert_eq!(metric.to_string(), "# HELP test_metric Custom metric\n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP test_metric Custom metric\n\
              # TYPE test_metric counter\n\
-             test_metric{label1=\"value1\",label2=\"value2\"} 123.45");
+             test_metric{label1=\"value1\",label2=\"value2\"} 123.45"
+        );
     }
 
     #[test]
@@ -98,37 +107,49 @@ mod tests {
         let writer = MetricsWriter::new("/tmp/test_metrics.prom");
         writer.write_metrics(&metrics).unwrap();
         let content = std::fs::read_to_string("/tmp/test_metrics.prom").unwrap();
-        assert!(content.contains("# HELP metric1 Custom metric\n\
+        assert!(content.contains(
+            "# HELP metric1 Custom metric\n\
              # TYPE metric1 counter\n\
-             metric1 1"));
-        assert!(content.contains("# HELP metric2 Custom metric\n\
+             metric1 1"
+        ));
+        assert!(content.contains(
+            "# HELP metric2 Custom metric\n\
              # TYPE metric2 counter\n\
-             metric2{label=\"value\"} 2"));
+             metric2{label=\"value\"} 2"
+        ));
     }
 
     #[test]
     fn test_metric_large_value() {
         let metric = Metric::new("large_value_metric", 1.0e64);
-        assert_eq!(metric.to_string(), "# HELP large_value_metric Custom metric\n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP large_value_metric Custom metric\n\
              # TYPE large_value_metric counter\n\
-             large_value_metric 10000000000000000000000000000000000000000000000000000000000000000");
+             large_value_metric 10000000000000000000000000000000000000000000000000000000000000000"
+        );
     }
-
 
     #[test]
     fn test_metric_without_labels() {
         let metric = Metric::new("no_label_metric", 42.0);
-        assert_eq!(metric.to_string(), "# HELP no_label_metric Custom metric\n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP no_label_metric Custom metric\n\
              # TYPE no_label_metric counter\n\
-             no_label_metric 42");
+             no_label_metric 42"
+        );
     }
 
     #[test]
     fn test_metric_with_annotation() {
         let metric = Metric::with_annotation("annotated_metric", 99.9, "This is a test metric");
-        assert_eq!(metric.to_string(), "# HELP annotated_metric This is a test metric\n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP annotated_metric This is a test metric\n\
              # TYPE annotated_metric counter\n\
-             annotated_metric 99.9");
+             annotated_metric 99.9"
+        );
     }
 
     #[test]
@@ -145,16 +166,22 @@ mod tests {
         let metric = Metric::new("multi_label_metric", 10.0)
             .add_label("foo", "bar")
             .add_label("version", "1.0.0");
-        assert_eq!(metric.to_string(), "# HELP multi_label_metric Custom metric\n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP multi_label_metric Custom metric\n\
              # TYPE multi_label_metric counter\n\
-             multi_label_metric{foo=\"bar\",version=\"1.0.0\"} 10");
+             multi_label_metric{foo=\"bar\",version=\"1.0.0\"} 10"
+        );
     }
 
     #[test]
     fn test_metric_with_empty_annotation() {
         let metric = Metric::with_annotation("empty_annotation_metric", 5.5, "");
-        assert_eq!(metric.to_string(), "# HELP empty_annotation_metric \n\
+        assert_eq!(
+            metric.to_prom_string(),
+            "# HELP empty_annotation_metric \n\
              # TYPE empty_annotation_metric counter\n\
-             empty_annotation_metric 5.5");
+             empty_annotation_metric 5.5"
+        );
     }
 }
