@@ -128,6 +128,16 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[macro_use]
+pub mod tla_macros;
+#[cfg(feature = "tla")]
+pub mod tla;
+#[cfg(feature = "tla")]
+pub use tla::{
+    split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES,
+};
+
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
@@ -2593,6 +2603,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2723,6 +2734,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
