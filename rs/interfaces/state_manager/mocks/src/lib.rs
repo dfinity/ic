@@ -21,7 +21,6 @@ mock! {
 
         fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
 
-
         fn latest_state_height(&self) -> Height;
 
         fn latest_certified_height(&self) -> Height;
@@ -34,7 +33,6 @@ mock! {
         fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;
 
         fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority>;
-
     }
 
     impl StateManager for StateManager {

@@ -30,11 +30,12 @@ use ic_replicated_state::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
-use ic_types::{AccumulatedPriority, CanisterId, NumInstructions};
+use ic_types::{AccumulatedPriority, CanisterId, Height, NumInstructions};
 use ic_wasm_types::CanisterModule;
 #[cfg(target_os = "linux")]
 use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 #[cfg(target_os = "linux")]
 use std::convert::TryInto;
@@ -1656,6 +1657,11 @@ fn wrap_remote_memory(
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
+thread_local! {
+    static PRIORITIES: RefCell<HashMap<CanisterId, AccumulatedPriority>> = RefCell::new(HashMap::new());
+    static LAST_PRIORITY_UPDATE: RefCell<Option<Height>> = const { RefCell::new(None) };
+}
+
 // Evicts some sandbox process backends according to the heuristics of the
 // `sandbox_process_eviction::evict()` function. See the comments of that
 // function for the explanation of the threshold parameters.
@@ -1679,20 +1685,29 @@ fn evict_sandbox_processes(
         }
         Backend::Empty => false,
     });
+    LAST_PRIORITY_UPDATE.with(|s| {
+        let current_height = state_reader.latest_state_height();
+        if s.borrow().unwrap_or(0.into()) < current_height {
+            *s.borrow_mut() = Some(current_height);
+            PRIORITIES.with(|p| *p.borrow_mut() = state_reader.get_latest_scheduler_priorities())
+        }
+    });
 
-    let priorities = state_reader.get_latest_scheduler_priorities();
-
-    let candidates: Vec<_> = backends
-        .iter()
-        .filter_map(|(id, backend)| match backend {
-            Backend::Active { stats, .. } => Some(EvictionCandidate {
-                id: *id,
-                last_used: stats.last_used,
-                scheduler_priority: *priorities.get(id).unwrap_or(&AccumulatedPriority::new(0)),
-            }),
-            Backend::Evicted { .. } | Backend::Empty => None,
-        })
-        .collect();
+    let candidates: Vec<_> = PRIORITIES.with(|p| {
+        backends
+            .iter()
+            .filter_map(|(id, backend)| match backend {
+                Backend::Active { stats, .. } => Some(EvictionCandidate {
+                    id: *id,
+                    last_used: stats.last_used,
+                    scheduler_priority: *(*p.borrow())
+                        .get(id)
+                        .unwrap_or(&AccumulatedPriority::new(0)),
+                }),
+                Backend::Evicted { .. } | Backend::Empty => None,
+            })
+            .collect()
+    });
 
     let last_used_threshold = match Instant::now().checked_sub(max_sandbox_idle_time) {
         Some(threshold) => threshold,
