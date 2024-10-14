@@ -214,6 +214,34 @@ oci.pull(
 )
 use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
 
+# Ubuntu snapshots
+
+bazel_dep(name = "rules_distroless", version = "0.3.8")
+
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+
+## Packageset based on an Ubuntu focal snapshot, see manifest file
+## for details
+## To update, comment out the `lock` field below and run:
+##   bazel run @focal//:lock
+apt.install(
+    name = "focal",
+    lock = "//bazel:focal.lock.json",
+    manifest = "//bazel:focal.yaml",
+)
+use_repo(apt, "focal")
+
+# Packageset based on an Ubuntu noble snapshot, see manifest file
+# for details
+# To update, comment out the `lock` field below and run:
+#   bazel run @noble//:lock
+apt.install(
+    name = "noble",
+    lock = "//bazel:noble.lock.json",
+    manifest = "//bazel:noble.yaml",
+)
+use_repo(apt, "noble")
+
 # Haskell toolchain for spec_compliance tests
 
 bazel_dep(
