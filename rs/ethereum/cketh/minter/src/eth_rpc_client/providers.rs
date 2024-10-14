@@ -1,15 +1,18 @@
 use crate::lifecycle::EthereumNetwork;
 use evm_rpc_client::{RpcService as EvmRpcService, RpcServices as EvmRpcServices};
 
-pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
+pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 4] = [
     RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
     RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
     RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
+    RpcNodeProvider::Ethereum(EthereumProvider::Alchemy),
 ];
 
-pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
+pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 4] = [
     RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
+    RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
+    RpcNodeProvider::Sepolia(SepoliaProvider::RpcSepolia),
 ];
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -40,6 +43,7 @@ pub(crate) enum EthereumProvider {
     PublicNode,
     // https://llamanodes.com/
     LlamaNodes,
+    Alchemy,
 }
 
 impl EthereumProvider {
@@ -48,6 +52,7 @@ impl EthereumProvider {
             EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             EthereumProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             EthereumProvider::LlamaNodes => "https://eth.llamarpc.com",
+            EthereumProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
         }
     }
 
@@ -64,6 +69,9 @@ pub(crate) enum SepoliaProvider {
     BlockPi,
     // https://publicnode.com/
     PublicNode,
+    // https://www.alchemy.com/chain-connect/endpoints/rpc-sepolia-sepolia
+    Alchemy,
+    RpcSepolia,
 }
 
 impl SepoliaProvider {
@@ -71,6 +79,8 @@ impl SepoliaProvider {
         match self {
             SepoliaProvider::BlockPi => "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
             SepoliaProvider::PublicNode => "https://ethereum-sepolia-rpc.publicnode.com",
+            SepoliaProvider::Alchemy => "https://eth-sepolia.g.alchemy.com/v2/demo",
+            SepoliaProvider::RpcSepolia => "https://rpc.sepolia.org",
         }
     }
 

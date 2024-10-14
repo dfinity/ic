@@ -18,6 +18,10 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
+# Until the lockfile format has settled, don't use a
+# lockfile for MODULE.bazel
+common --lockfile_mode=off
+
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
@@ -120,9 +124,6 @@ build:afl --run_under="/ic/bin/afl_wrapper.sh"
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
-
-# In bazel 7+ bzlmod is the default, though our repo doesn't support it yet
-common --noenable_bzlmod
 
 # The default value makes rules_rust pick a dummy toolchain that breaks
 # our canister that depend on C deps
