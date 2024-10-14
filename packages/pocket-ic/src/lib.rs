@@ -1360,8 +1360,6 @@ impl std::fmt::Display for DefaultEffectiveCanisterIdError {
 ///
 /// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
 /// because the given URL points to a replica (i.e., does not meet any of the above two properties).
-///
-/// Panics if the PocketIC instance topology contains no application, verified application, and system subnet.
 pub fn get_default_effective_canister_id(
     pocket_ic_url: String,
 ) -> Result<Principal, DefaultEffectiveCanisterIdError> {

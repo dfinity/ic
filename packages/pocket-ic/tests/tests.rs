@@ -356,7 +356,7 @@ fn test_cycle_scaling() {
 }
 
 #[test]
-fn test_random_subnet_selection() {
+fn test_canister_creation_subnet_selection() {
     // Application subnet has highest priority
     let pic = PocketIcBuilder::new()
         .with_nns_subnet()
@@ -370,7 +370,12 @@ fn test_random_subnet_selection() {
 
     let canister_id = pic.create_canister();
     let subnet_id = pic.get_subnet(canister_id).unwrap();
-    let subnet_kind = pic.topology().0.get(&subnet_id).unwrap().subnet_kind;
+    let subnet_kind = pic
+        .topology()
+        .subnet_configs
+        .get(&subnet_id)
+        .unwrap()
+        .subnet_kind;
     assert_eq!(subnet_kind, SubnetKind::Application);
 
     // System subnet has highest priority
@@ -384,7 +389,12 @@ fn test_random_subnet_selection() {
         .build();
     let canister_id = pic.create_canister();
     let subnet_id = pic.get_subnet(canister_id).unwrap();
-    let subnet_kind = pic.topology().0.get(&subnet_id).unwrap().subnet_kind;
+    let subnet_kind = pic
+        .topology()
+        .subnet_configs
+        .get(&subnet_id)
+        .unwrap()
+        .subnet_kind;
     assert_eq!(subnet_kind, SubnetKind::System);
 }
 
@@ -1042,12 +1052,7 @@ fn test_query_call_on_new_pocket_ic() {
     let pic = PocketIc::new();
 
     let topology = pic.topology();
-    let app_subnet = topology.get_app_subnets()[0];
-    let canister_id = Principal::from_slice(
-        &topology.0.get(&app_subnet).unwrap().canister_ranges[0]
-            .start
-            .canister_id,
-    );
+    let canister_id: Principal = topology.default_effective_canister_id.into();
 
     pic.query_call(canister_id, Principal::anonymous(), "foo", vec![])
         .unwrap_err();
@@ -1780,16 +1785,4 @@ fn test_get_default_effective_canister_id_invalid_url() {
         DefaultEffectiveCanisterIdError::ReqwestError(_) => (),
         err => panic!("Unexpected error: {}", err),
     };
-}
-
-#[test]
-#[should_panic(
-    expected = "PocketIC topology contains no application, verified application, and system subnet."
-)]
-fn test_get_default_effective_canister_id_panics() {
-    let mut pic = PocketIcBuilder::new().with_nns_subnet().build();
-    let gateway_url = pic.make_live(None);
-
-    let _default_effective_canister_id =
-        pocket_ic::get_default_effective_canister_id(gateway_url.to_string()).unwrap();
 }
