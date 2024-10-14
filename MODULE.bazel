@@ -149,9 +149,9 @@ use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 # we can't use the official image: https://github.com/bazel-contrib/rules_oci/issues/695
 #
 # Instead we copy the official image to our repository:
-# $ docker pull halverneus/static-file-server
-# $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
-# $ docker push dfinitydev/halverneus-static-file-server:latest
+# $ docker pull jaegertracing/all-in-one
+# $ docker tag jaegertracing/all-in-one dfinitydev/jaegertracing-all-in-one:latest
+# $ docker push jaegertracing-all-in-one:latest
 # > latest: digest: sha256:...
 oci.pull(
     name = "jaeger",
