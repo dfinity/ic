@@ -46,7 +46,6 @@ pub enum JsonRpcMethod {
     EthSendRawTransaction,
 }
 
-
 #[derive(Debug)]
 pub struct JsonRpcRequest {
     pub method: JsonRpcMethod,
