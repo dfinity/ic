@@ -29,7 +29,10 @@ system_test_nns(
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["k8s"],
+    tags = [
+        "k8s",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -70,7 +73,10 @@ system_test_nns(
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["k8s"],
+    tags = [
+        "k8s",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +

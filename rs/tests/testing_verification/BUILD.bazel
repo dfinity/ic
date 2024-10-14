@@ -32,7 +32,10 @@ rust_binary(
 system_test_nns(
     name = "spec_compliance_application_subnet_test",
     flaky = True,
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
@@ -49,7 +52,10 @@ system_test_nns(
 system_test_nns(
     name = "spec_compliance_system_subnet_test",
     flaky = True,
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "on_push_to_master",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
@@ -66,7 +72,10 @@ system_test_nns(
 system_test_nns(
     name = "spec_compliance_group_01_application_subnet_test",
     flaky = True,
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",
@@ -83,7 +92,10 @@ system_test_nns(
 system_test_nns(
     name = "spec_compliance_group_01_system_subnet_test",
     flaky = True,
-    tags = ["cpu:4"],
+    tags = [
+        "cpu:4",
+        "on_push_to_master",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
         "//ic-os/components:networking/dev-certs/canister_http_test_ca.cert",

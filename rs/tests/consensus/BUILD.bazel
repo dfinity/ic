@@ -12,7 +12,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "system_test_hourly",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -238,6 +238,7 @@ system_test_nns(
     tags = [
         "experimental_system_test_colocation",
         "k8s",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
         "subnet_splitting",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -383,6 +384,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "on_push_to_master",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,

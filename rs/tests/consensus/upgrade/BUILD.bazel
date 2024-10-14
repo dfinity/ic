@@ -86,6 +86,9 @@ system_test_nns(
     name = "upgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps =
@@ -109,6 +112,9 @@ system_test_nns(
     name = "downgrade_app_subnet_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "on_push_to_master",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
     runtime_deps =
