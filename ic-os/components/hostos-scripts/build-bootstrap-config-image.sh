@@ -162,6 +162,9 @@ EOF
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
+    if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
+        cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
+    fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
     fi
@@ -177,20 +180,12 @@ EOF
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
-    if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
-        cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
-    fi
 
-    # Create guestos config.json (but not break testing)
-    if [ -f "/boot/config/config.json" ]; then
-        /opt/ic/bin/config generate-guestos-config
-        echo "* Copying 'config-guestos.json' to GuestOS config partition..."
-        if [ -f "/boot/config/config-guestos.json" ]; then
-            cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
-            # else
-            # todo: fix ERROR
-        fi
-    fi
+    # Create guestos config.json
+    echo "* Generating 'config-guestos.json'..."
+    /opt/ic/bin/config generate-guestos-config
+    echo "* Copying 'config-guestos.json' to GuestOS config partition..."
+    cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
 
     tar cf "${OUT_FILE}" \
         --sort=name \
