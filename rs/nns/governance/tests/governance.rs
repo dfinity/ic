@@ -4691,6 +4691,9 @@ fn test_claim_neuron_without_minimum_stake_fails() {
         }
         _ => panic!("Invalid response."),
     };
+
+    #[cfg(feature = "tla")]
+    tla::check_traces();
 }
 
 fn claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) {
@@ -4727,6 +4730,9 @@ fn claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) 
     let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
+
+    #[cfg(feature = "tla")]
+    tla::check_traces();
 }
 
 /// Like the above, but explicitly sets the controller in the MemoAndController
@@ -4776,6 +4782,9 @@ fn test_non_controller_cant_claim_neuron_for_themselves() {
         CommandResponse::Error(_) => (),
         _ => panic!("Claim should have failed."),
     };
+
+    #[cfg(feature = "tla")]
+    tla::check_traces();
 }
 
 fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
@@ -4997,6 +5006,9 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
             .stake_e8s,
         previous_stake_e8s + 100_000_000_000_000
     );
+
+    #[cfg(feature = "tla")]
+    tla::check_traces();
 }
 
 #[test]
