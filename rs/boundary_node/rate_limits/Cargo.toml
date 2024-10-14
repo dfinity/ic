@@ -1,0 +1,21 @@
+[package]
+name = "rate_limits"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ciborium = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
+ic-stable-structures = { workspace = true }
+rate-limits-api = { path = "./api" }
+serde = { workspace = true }
+
+[lib]
+crate-type = ["cdylib"]
+path = "canister/canister.rs"
