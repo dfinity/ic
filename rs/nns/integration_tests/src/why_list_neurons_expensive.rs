@@ -105,7 +105,7 @@ fn test_why_list_neurons_expensive() {
     };
     let principal_id_to_neuron_count = Decode!(
         &principal_id_to_neuron_count,
-        Vec<(PrincipalId, u64)>
+        Vec<(PrincipalId, (u64, u64))>
     )
     .unwrap();
     {
@@ -164,7 +164,7 @@ fn test_why_list_neurons_expensive() {
     println!("");
 
     // Make a bunch of list_neuron calls.
-    for (caller, neuron_count) in principal_id_to_neuron_count {
+    for (caller, (heap_neuron_count, stable_memory_neuron_count)) in principal_id_to_neuron_count {
         let is_principal_too_heavy = [
             PrincipalId::from_str("dies2-up6x4-i42et-avcop-xvl3v-it2mm-hqeuj-j4hyu-vz7wl-ewndz-dae").unwrap(),
             PrincipalId::from_str("renrk-eyaaa-aaaaa-aaada-cai").unwrap(),
@@ -189,16 +189,27 @@ fn test_why_list_neurons_expensive() {
         let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
 
         // Visualize where instructions get consumed.
+        let title = format!(
+            "{}/{} neurons ({})",
+            heap_neuron_count, stable_memory_neuron_count, caller,
+        );
+        let destination = format!(
+            "list_neurons_{:0>4}_heap_neurons_{:0>4}_stable_memory_neurons_{}.svg",
+            heap_neuron_count, stable_memory_neuron_count, caller,
+        );
         let cost = render_profiling( // DO NOT MERGE
             profiling,
             &name_custom_section_payload,
-            &format!("{} neurons ({})", neuron_count, caller), // title
-            PathBuf::from(format!("list_neurons_{:0>4}_neurons_{}.svg", neuron_count, caller)),
+            &title,
+            PathBuf::from(destination),
         )
         .unwrap();
 
         // Print data that can be copied into a spreadsheet for further analysis.
-        println!("{}\t{}\t{}", caller, neuron_count, unwrap_cost(cost));
+        println!(
+            "{}\t{}\t{}\t{}",
+            caller, heap_neuron_count, stable_memory_neuron_count, unwrap_cost(cost),
+        );
     }
 }
 

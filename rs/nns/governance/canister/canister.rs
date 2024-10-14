@@ -649,39 +649,54 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 use std::collections::HashMap;
 #[update]
 fn principal_id_to_neuron_count() // DO NOT MERGE
-    -> Vec<(PrincipalId, /* neuron_count */ u64)>
+    -> Vec<(PrincipalId, (/* heap_neuron_count */ u64, /* stable_memory_neuron_count */ u64))>
 {
     use ic_nns_governance::storage::with_stable_neuron_indexes;
 
-    let mut result = HashMap::new();
+    let mut result = HashMap::<PrincipalId, (u64, u64)>::new();
 
     with_stable_neuron_indexes(|neuron_indexes| {
-        for ((principal_id, _neuron_id), ()) in
+        for ((principal_id, neuron_id), ()) in
             neuron_indexes
                 .principal()
                 .principal_and_neuron_id_set
                 .iter()
         {
             let principal_id = PrincipalId::from(principal_id);
-            let count = result.entry(principal_id).or_default();
+            let counts = result.entry(principal_id).or_default();
+
+            // Select count that needs to be increment, based on whether the
+            // neuron is in heap vs. stable memory.
+            let is_in_heap = governance()
+                .neuron_store
+                .active_neurons_range(neuron_id..)
+                .next()
+                .unwrap()
+                .id() == neuron_id;
+            let count = &mut if is_in_heap {
+                counts.0
+            } else {
+                counts.1
+            };
+
             *count += 1;
         }
     });
 
     let mut result = result.into_iter().collect::<Vec<_>>();
-    result.sort_by_key(|(_principal_id, count)| *count);
+    result.sort_by_key(|(_principal_id, (a, b))| a + b);
     result.reverse();
 
     // Decimate tail down to 1k elements. (Thus, result will end up with 2k).
     let tail = result.split_off(1000);
     let mut random = rand::rngs::StdRng::seed_from_u64(42);
     use rand::seq::IteratorRandom;
-    let mut new_tail = vec![(PrincipalId::new_user_test_id(0), 0); 1000];
+    let mut new_tail = vec![(PrincipalId::new_user_test_id(0), (0, 0)); 1000];
     tail
         .into_iter()
         .choose_multiple_fill(&mut random, &mut new_tail);
     let mut tail = new_tail;
-    tail.sort_by_key(|(_principal_id, neuron_count)| *neuron_count);
+    tail.sort_by_key(|(_principal_id, (a, b))| a + b);
     tail.reverse();
     result.append(&mut tail);
 
