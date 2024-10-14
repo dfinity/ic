@@ -994,6 +994,10 @@ impl Operation for GetTopology {
         OpOut::Topology(pic.topology().clone())
     }
 
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> OpId {
         OpId("get_topology".into())
     }
