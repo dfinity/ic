@@ -1,11 +1,31 @@
-use std::time::Instant;
+use std::{cmp::Ordering, time::Instant};
 
-use ic_types::CanisterId;
+use ic_types::{AccumulatedPriority, CanisterId};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct EvictionCandidate {
     pub id: CanisterId,
     pub last_used: Instant,
+    pub scheduler_priority: AccumulatedPriority,
+}
+
+impl Ord for EvictionCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.scheduler_priority == other.scheduler_priority {
+            return self.last_used.cmp(&other.last_used);
+        }
+        self.scheduler_priority.cmp(&other.scheduler_priority)
+    }
+}
+
+impl PartialOrd for EvictionCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        /*if self.scheduler_priority == other.scheduler_priority {
+            return Some(self.last_used.cmp(&other.last_used));
+        }
+        Some(self.scheduler_priority.cmp(&other.scheduler_priority))*/
+        Some(self.cmp(other))
+    }
 }
 
 /// Evicts the least recently used candidates in order to bring the number of
@@ -31,26 +51,27 @@ pub(crate) fn evict(
     last_used_threshold: Instant,
 ) -> Vec<EvictionCandidate> {
     //here
-    candidates.sort_by_key(|x| x.last_used);
+    candidates.sort();
 
     let evict_at_least = candidates.len().saturating_sub(max_count_threshold);
     let evict_at_most = candidates.len().saturating_sub(min_count_threshold);
 
-    let mut evicted = vec![];
+    // candidates = candidates [0.. evict_at_least), remaining_candidates = candidates [evict_at_least.. candidates.len())
+    let remaining_candidates = candidates.split_off(evict_at_least);
+    let mut evicted = candidates;
 
-    for candidate in candidates.into_iter() {
+    for candidate in remaining_candidates.into_iter() {
         if evicted.len() >= evict_at_most {
             // Cannot evict anymore because at least `min_count_threshold`
             // should remain not evicted.
             break;
         }
-        if candidate.last_used >= last_used_threshold && evicted.len() >= evict_at_least {
+        if candidate.last_used < last_used_threshold {
             // We have already evicted the minimum required number of candidates
-            // and all the remaining candidates were not idle the recent
-            // `last_used_threshold` time window. No need to evict more.
-            break;
+            // and we are adding the new candidate that were idle the recent
+            // `last_used_threshold` time window.
+            evicted.push(candidate)
         }
-        evicted.push(candidate)
     }
 
     evicted
@@ -61,6 +82,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use ic_test_utilities_types::ids::canister_test_id;
+    use ic_types::AccumulatedPriority;
 
     use super::{evict, EvictionCandidate};
 
@@ -77,6 +99,7 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now,
+                scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(evict(candidates, 0, 10, now,), vec![],);
@@ -90,6 +113,7 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now + Duration::from_secs(100 - i),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
@@ -106,6 +130,7 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
@@ -122,6 +147,7 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
@@ -138,6 +164,7 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(evict(candidates.clone(), 0, 100, now).len(), 100);

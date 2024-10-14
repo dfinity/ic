@@ -24,7 +24,9 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
-use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
+use ic_replicated_state::{
+    EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
+};
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{CanisterId, NumInstructions};
@@ -660,7 +662,13 @@ impl Drop for SandboxedExecutionController {
 
         // Evict all the sandbox processes.
         let mut guard = self.backends.lock().unwrap();
-        evict_sandbox_processes(&mut guard, 0, 0, Duration::default());
+        evict_sandbox_processes(
+            &mut guard,
+            0,
+            0,
+            Duration::default(),
+            Arc::clone(&self.replicated_state),
+        );
 
         // Terminate the Sandbox Launcher process.
         self.launcher_service
@@ -1073,6 +1081,7 @@ impl SandboxedExecutionController {
 
         let backends_copy = Arc::clone(&backends);
         let metrics_copy = Arc::clone(&metrics);
+        let replicated_state_copy = Arc::clone(&replicated_state);
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
@@ -1085,6 +1094,7 @@ impl SandboxedExecutionController {
                 max_sandbox_count,
                 max_sandbox_idle_time,
                 rx,
+                replicated_state_copy,
             );
         });
 
@@ -1120,6 +1130,7 @@ impl SandboxedExecutionController {
             launcher_service,
             fd_factory: Arc::clone(&fd_factory),
             stop_monitoring_thread: tx,
+            replicated_state: Arc::clone(&replicated_state),
         })
     }
 
@@ -1135,6 +1146,7 @@ impl SandboxedExecutionController {
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
         stop_request: Receiver<bool>,
+        replicated_state: Arc<ReplicatedState>,
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
@@ -1231,6 +1243,7 @@ impl SandboxedExecutionController {
                     min_sandbox_count,
                     max_sandbox_count,
                     max_sandbox_idle_time,
+                    Arc::clone(&replicated_state),
                 );
             }
 
@@ -1287,6 +1300,7 @@ impl SandboxedExecutionController {
                 self.min_sandbox_count,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
+                Arc::clone(&self.replicated_state),
             );
         }
 
@@ -1649,6 +1663,7 @@ fn evict_sandbox_processes(
     min_active_sandboxes: usize,
     max_active_sandboxes: usize,
     max_sandbox_idle_time: Duration,
+    replicated_state: Arc<ReplicatedState>,
 ) {
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
@@ -1670,6 +1685,12 @@ fn evict_sandbox_processes(
             Backend::Active { stats, .. } => Some(EvictionCandidate {
                 id: *id,
                 last_used: stats.last_used,
+                scheduler_priority: replicated_state
+                    .canister_states
+                    .get(id)
+                    .unwrap()
+                    .scheduler_state
+                    .accumulated_priority,
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
@@ -1811,6 +1832,7 @@ mod tests {
         execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
     };
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
+    use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use slog::{o, Drain};
@@ -1854,11 +1876,15 @@ mod tests {
         let logger = new_replica_logger(root, &LoggerConfig::default());
 
         use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
+
+        let replicated_state = ReplicatedStateBuilder::new().build();
+
         let controller = SandboxedExecutionController::new(
             logger,
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(replicated_state),
         )
         .unwrap();
 
