@@ -1680,19 +1680,15 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
+    let priorities = state_reader.get_latest_scheduler_priorities();
+
     let candidates: Vec<_> = backends
         .iter()
         .filter_map(|(id, backend)| match backend {
             Backend::Active { stats, .. } => Some(EvictionCandidate {
                 id: *id,
                 last_used: stats.last_used,
-                scheduler_priority: state_reader
-                    .get_latest_state()
-                    .get_ref()
-                    .canister_state(id)
-                    .map_or(AccumulatedPriority::new(0), |canister_state| {
-                        canister_state.scheduler_state.accumulated_priority
-                    }),
+                scheduler_priority: *priorities.get(id).unwrap_or(&AccumulatedPriority::new(0)),
             }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
