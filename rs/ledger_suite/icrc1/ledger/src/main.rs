@@ -207,14 +207,14 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                     }
                 };
             let mut leger_version_bytes = [0u8; 8];
-             if buffered_reader.read_exact(&mut leger_version_bytes).is_ok() {
-                     let ledger_version = u64::from_le_bytes(leger_version_bytes);
-                     if ledger_version > LEDGER_VERSION {
-                     panic!(
-                         "Trying to upgrade from incompatible version {}. Maximum allowed version is {}.",
-                         ledger_version, LEDGER_VERSION
-                     );
-                 }
+            if buffered_reader.read_exact(&mut leger_version_bytes).is_ok() {
+                let ledger_version = u64::from_le_bytes(leger_version_bytes);
+                if ledger_version > LEDGER_VERSION {
+                    panic!(
+                        "Trying to upgrade from incompatible version {}. Current version is {}.",
+                        ledger_version, LEDGER_VERSION
+                    );
+                }
             };
             state
         });
