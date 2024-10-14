@@ -390,7 +390,7 @@ impl TaskQueue {
     }
 
     pub fn len(&self) -> usize {
-        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1)
+        self.paused_or_aborted_task.is_some() as usize
             + self.on_low_wasm_memory_hook_status.is_ready() as usize
             + self.queue.len()
     }
