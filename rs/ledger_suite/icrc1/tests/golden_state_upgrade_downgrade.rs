@@ -757,7 +757,7 @@ mod index {
                 curr_start,
                 length - (curr_start - start_index),
             )
-                .blocks;
+            .blocks;
             assert!(!new_blocks.is_empty());
             curr_start += new_blocks.len() as u64;
             blocks.extend(new_blocks);
