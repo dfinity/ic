@@ -189,6 +189,5 @@ if [[ -n "$CHROOT_DIR" ]]; then
     [[ -d "$CHROOT_DIR" ]] || die "Error: $CHROOT_DIR is not a valid directory."
     $mount_unshare /bin/bash -c "$(declare_all); run_with_chroot"
 else
-    echo "$(declare_all); ${COMMAND[@]}"
     $mount_unshare /bin/bash -c "$(declare_all); run_without_chroot"
 fi
