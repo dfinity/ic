@@ -298,12 +298,15 @@ fn verify_paths(
 
                 // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
-                if Some(*user) != ingress_status.user_id() {
-                    return Err(HttpError {
-                        status: StatusCode::FORBIDDEN,
-                        message: "The user tries to access Request ID not signed by the caller."
-                            .to_string(),
-                    });
+                if let Some(ingress_user_id) = ingress_status.user_id() {
+                    if ingress_user_id != *user {
+                        return Err(HttpError {
+                            status: StatusCode::FORBIDDEN,
+                            message:
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                        });
+                    }
                 }
 
                 if let Some(receiver) = ingress_status.receiver() {
