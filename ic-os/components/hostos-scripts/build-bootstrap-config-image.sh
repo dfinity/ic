@@ -151,6 +151,7 @@ function build_ic_bootstrap_tar() {
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
+    # todo: delete network.conf and malicious_behaviour.conf
     cat >"${BOOTSTRAP_TMPDIR}/network.conf" <<EOF
 ${IPV6_ADDRESS:+ipv6_address=$IPV6_ADDRESS}
 ${IPV6_GATEWAY:+ipv6_gateway=$IPV6_GATEWAY}
@@ -159,15 +160,22 @@ ${IPV4_ADDRESS:+ipv4_address=$IPV4_ADDRESS}
 ${IPV4_GATEWAY:+ipv4_gateway=$IPV4_GATEWAY}
 ${DOMAIN:+domain=$DOMAIN}
 EOF
+    if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
+        echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    fi
+
+    # todo: switch nns_public_key.pem, node_operator_private_key.pem. and accounts_ssh to use config object
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
     fi
-    if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
-        echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
+        cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
+
+    # todo: investigate what to do for...
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
     fi
@@ -176,9 +184,6 @@ EOF
     fi
     if [ "${IC_REGISTRY_LOCAL_STORE}" != "" ]; then
         cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
-    fi
-    if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
-        cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
     # Create guestos config.json
