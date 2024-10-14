@@ -50,11 +50,17 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
-rust_test(
-    name = "lib_tests",
-    crate = ":test_utils",
-    deps = [
-        # Keep sorted.
-        ":test_utils",
-    ],
-)
+[
+    rust_test(
+        name = "lib_tests" + name_suffix,
+        crate = ":test_utils" + name_suffix,
+        deps = [
+            # Keep sorted.
+            ":test_utils" + name_suffix,
+        ],
+    )
+    for name_suffix in [
+        "",
+        "_evm_rpc",
+    ]
+]
