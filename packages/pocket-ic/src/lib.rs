@@ -1345,11 +1345,12 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         );
     }
 
-    // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
-    let parent_pid = std::os::unix::process::parent_id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+    // We use the test driver's process ID to share the PocketIC server between multiple tests
+    // launched by the same test driver.
+    let test_driver_pid = std::process::id();
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
     let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
-    cmd.arg("--pid").arg(parent_pid.to_string());
+    cmd.arg("--pid").arg(test_driver_pid.to_string());
     if std::env::var("POCKET_IC_MUTE_SERVER").is_ok() {
         cmd.stdout(std::process::Stdio::null());
         cmd.stderr(std::process::Stdio::null());
