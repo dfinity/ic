@@ -47,7 +47,7 @@ Since version 4.0.0, the PocketIC server also exposes the IC's HTTP interface, j
 For that reason, you need to explicitly make an instance "live" by calling `make_live()` on it. This will do three things: 
 
 - It launches a thread that calls `tick()` and `advance_time(...)` on the instance regularly - several times per second. 
-- It creates a gateway (like icx-proxy for the replica via dfx) which points to this live instance.
+- It creates a gateway which points to this live instance.
 - It returns a gateway URL which can then be passed to agent-like tools.
 
 Of course, other instances on the same PocketIC server remain unchanged - neither do they receive `tick`s nor can the gateway route requests to them. 
@@ -485,3 +485,129 @@ fn test_query_stats() {
     ); // the test canister responds with 4 bytes per call
 }
 ```
+
+## IC Bitcoin API via the management canister
+
+In this section, we show how to test your dapp integrating with the [IC Bitcoin API](https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-bitcoin-api)
+served by the management canister.
+
+First, we start a `bitcoind` process (the `bitcoind` binary can be downloaded from [here](https://bitcoin.org/en/download)):
+
+```rust
+    use tempfile::tempdir;
+    // We create a temporary directory to store the `bitcoind` process' configuration and data.
+    let tmp_dir = tempdir().unwrap();
+
+    let bitcoind_path = [...];
+
+    let conf_path = tmp_dir.path().join("bitcoin.conf");
+    let mut conf = File::create(conf_path.clone()).unwrap();
+    conf.write_all(r#"regtest=1
+# Dummy credentials for bitcoin RPC.
+rpcuser=ic-btc-integration
+rpcpassword=QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=
+rpcauth=ic-btc-integration:cdf2741387f3a12438f69092f0fdad8e$62081498c98bee09a0dce2b30671123fa561932992ce377585e8e08bb0c11dfa"#.as_bytes()).unwrap();
+    drop(conf);
+
+    let data_dir_path = tmp_dir.path().join("data");
+    create_dir(data_dir_path.clone()).unwrap();
+
+    Command::new(bitcoind_path)
+        .arg(format!("-conf={}", conf_path.display()))
+        .arg(format!("-datadir={}", data_dir_path.display()))
+        .spawn()
+        .unwrap();
+```
+
+If needed (e.g., for running tests in parallel), you can specify ports to which the `bitcoind` process binds:
+
+```rust
+    let port = [...];       // to be used with `PocketIcBuilder::with_bitcoind_addr` (see below for more details)
+    let onion_port = [...]; // not needed, but a unique port must be provided
+    let rpc_port = [...];   // to be used with `bitcoincore_rpc::Client` (see below for more details)
+    Command::new(bitcoind_path)
+        .arg(format!("-conf={}", conf_path.display()))
+        .arg(format!("-datadir={}", data_dir_path.display()))
+        .arg(format!("-bind=0.0.0.0:{}", port))
+        .arg(format!("-bind=0.0.0.0:{}=onion", onion_port))
+        .arg(format!("-rpcport={}", rpc_port))
+        .spawn()
+        .unwrap();
+```
+
+Now we create a PocketIC instance configured with the Bitcoin subnet and the `bitcoind` process' address and port
+(by default, the `bitcoind` process configured with `regtest=1` listens at port 18444):
+
+```rust
+    let pic = PocketIcBuilder::new()
+        .with_bitcoin_subnet()     // to deploy the bitcoin canister
+        .with_ii_subnet()          // to have tECDSA keys available
+        .with_application_subnet() // to deploy the test dapp
+        .with_bitcoind_addr(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            18444,
+        ))
+        .build();
+```
+
+Because the `bitcoind` process uses the real time, we set the time of the PocketIC instance to be the current time:
+
+```rust
+    pic.set_time(SystemTime::now());
+```
+
+Next we deploy the bitcoin testnet canister (canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai`) on the bitcoin subnet and configure it with `Network::Regtest`
+(the bitcoin canister WASM can be downloaded from [here](https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2024-07-28/ic-btc-canister.wasm.gz)):
+
+```rust
+    use ic_btc_interface::{Config, Network};
+    // The NNS root canister should be the controller of the bitcoin testnet canister.
+    let nns_root_canister_id: Principal =
+        Principal::from_text("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap();
+    let btc_canister_id = Principal::from_text("g4xu7-jiaaa-aaaan-aaaaq-cai").unwrap();
+    let actual_canister_id = pic
+        .create_canister_with_id(Some(nns_root_canister_id), None, btc_canister_id)
+        .unwrap();
+    assert_eq!(actual_canister_id, btc_canister_id);
+
+    let btc_wasm = [...];
+    let args = Config {
+        network: Network::Regtest,
+        ..Default::default()
+    };
+    pic.install_canister(
+        btc_canister_id,
+        btc_wasm,
+        Encode!(&args).unwrap(),
+        Some(nns_root_canister_id),
+    );
+```
+
+To mine blocks with rewards credited to a given `bitcoin_address: String`, you can use the JSON-RPC API:
+
+*Notes.*
+- By default, the `bitcoind` process configured with `regtest=1` listens at port 18444
+  and serves its JSON-RPC API at port 18443.
+- We use the dummy authentication specified in the `bitcoind` configuration created above.
+- You need to mine at least 100 blocks (Coinbase maturity rule) so that the reward for the first block
+  can be transferred to a different address.
+
+```rust
+    use bitcoincore_rpc::{bitcoin::Address, Auth, Client, RpcApi};
+    let btc_rpc = Client::new(
+        "http://127.0.0.1:18443",
+        Auth::UserPass(
+            "ic-btc-integration".to_string(),
+            "QPQiNaph19FqUsCrBRN0FII7lyM26B51fAMeBQzCb-E=".to_string(),
+        ),
+    )
+    .unwrap();
+
+    let mut n = 101; // must be more than 100 (Coinbase maturity rule)
+    btc_rpc
+        .generate_to_address(n, &Address::from_str(&bitcoin_address).unwrap())
+        .unwrap();
+```
+
+For an example of a test canister that can be deployed to an application subnet of the PocketIC instance,
+we refer to the basic bitcoin example canister in DFINITY's [examples](https://github.com/dfinity/examples/tree/master/rust/basic_bitcoin).

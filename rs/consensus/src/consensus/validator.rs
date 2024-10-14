@@ -13,7 +13,7 @@ use crate::{
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, is_time_to_make_block,
+    get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -52,6 +52,8 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+
+use super::block_maker::is_time_to_make_block;
 
 /// The number of seconds spent in unvalidated pool, after which we start
 /// logging why we cannot validate an artifact.
@@ -1059,6 +1061,10 @@ impl Validator {
                 }
             }
 
+            let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {
+                continue;
+            };
+
             // We only validate blocks from a block maker of a certain rank after a
             // rank-based delay. If this time has not elapsed yet, we ignore the block for
             // now.
@@ -1067,9 +1073,11 @@ impl Validator {
                 self.registry_client.as_ref(),
                 self.replica_config.subnet_id,
                 pool_reader,
+                parent,
                 proposal.height(),
                 proposal.rank(),
                 self.time_source.as_ref(),
+                /*metrics=*/ None,
             ) {
                 continue;
             }
@@ -1093,17 +1101,19 @@ impl Validator {
                 // Ensure the proposal has a different hash from the validated
                 // block of same rank. Then we can construct the proof.
                 if proposal.content.get_hash().get_ref() != existing_metadata.content.hash() {
+                    let proof = EquivocationProof {
+                        signer: proposal.signature.signer,
+                        version: proposal.content.version().clone(),
+                        height: proposal.height(),
+                        subnet_id: self.replica_config.subnet_id,
+                        hash1: proposal.content.get_hash().clone(),
+                        signature1: proposal.signature.signature.clone(),
+                        hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
+                        signature2: existing_metadata.signature.signature,
+                    };
+                    warn!(self.log, "Equivocation found. Proof: {:?}", proof,);
                     change_set.push(ChangeAction::AddToValidated(ValidatedArtifact {
-                        msg: ConsensusMessage::EquivocationProof(EquivocationProof {
-                            signer: proposal.signature.signer,
-                            version: proposal.content.version().clone(),
-                            height: proposal.height(),
-                            subnet_id: self.replica_config.subnet_id,
-                            hash1: proposal.content.get_hash().clone(),
-                            signature1: proposal.signature.signature.clone(),
-                            hash2: CryptoHashOf::new(existing_metadata.content.hash().clone()),
-                            signature2: existing_metadata.signature.signature,
-                        }),
+                        msg: ConsensusMessage::EquivocationProof(proof),
                         timestamp: self.time_source.get_relative_time(),
                     }));
                     valid_ranks.remove(proposal.height(), proposal.rank());
@@ -1889,9 +1899,13 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::idkg::test_utils::{
-        add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+    use crate::{
+        consensus::block_maker::get_block_maker_delay,
+        idkg::test_utils::{
+            add_available_quadruple_to_payload, empty_idkg_payload,
+            fake_ecdsa_master_public_key_id, fake_signature_request_context_with_pre_sig,
+            fake_state_with_signature_requests,
+        },
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -1900,7 +1914,6 @@ pub mod test {
         dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
         Dependencies, RefMockPayloadBuilder,
     };
-    use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::{
         messaging::XNetPayloadValidationFailure, p2p::consensus::MutablePool,
         time_source::TimeSource,
@@ -2562,6 +2575,7 @@ pub mod test {
                 .initial_notary_delay
                 + Duration::from_nanos(1);
 
+            let pool_reader = PoolReader::new(&pool);
             // After sufficiently advancing the time, ensure that the validator validates
             // the block
             let delay = monotonic_block_increment
@@ -2569,10 +2583,11 @@ pub mod test {
                     &no_op_logger(),
                     registry_client.as_ref(),
                     replica_config.subnet_id,
-                    PoolReader::new(&pool)
-                        .registry_version(test_block.height())
-                        .unwrap(),
+                    &pool_reader,
+                    parent.clone(),
+                    pool_reader.registry_version(test_block.height()).unwrap(),
                     rank,
+                    /*metrics=*/ None,
                 )
                 .unwrap();
 
@@ -3263,16 +3278,19 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
+            let parent = pool.latest_notarized_blocks().next().unwrap();
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
+            let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
                 replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
+                &pool_reader,
+                parent.clone(),
+                pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
+                /*metrics=*/ None,
             )
             .unwrap();
             test_block.content.as_mut().rank = rank;
@@ -3316,14 +3334,16 @@ pub mod test {
             // Continue stalling the clock, and validate a rank > 0 block.
             let mut test_block = make_next_block(&pool);
             let rank = Rank(1);
+            let pool_reader = PoolReader::new(&pool);
             let delay = get_block_maker_delay(
                 &no_op_logger(),
                 registry_client.as_ref(),
                 replica_config.subnet_id,
-                PoolReader::new(&pool)
-                    .registry_version(test_block.height())
-                    .unwrap(),
+                &pool_reader,
+                parent.clone(),
+                pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
+                /*metrics=*/ None,
             )
             .unwrap();
             test_block.content.as_mut().rank = rank;

@@ -268,7 +268,7 @@ docker run -d -u $(id -u) \
     --rm -v /home/admin/rosetta/{port}/data:/data \
     --rm -v /home/admin/rosetta/{port}/logs:/home/rosetta/log \
     --name rosetta-{port} \
-    bazel/rs/rosetta-api:rosetta_image \
+    rosetta:image \
     --blockchain \"{}\" \
     --ic-url \"{}\" \
     --canister-id {} \
@@ -294,7 +294,7 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = get_dependency_path("rs/rosetta-api")
+    let path = get_dependency_path("rs/rosetta-api/icp")
         .into_os_string()
         .into_string()
         .unwrap();

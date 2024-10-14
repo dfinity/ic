@@ -92,6 +92,9 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
+    inject_image_pub_key: Optional[str] = None
+
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
@@ -101,11 +104,25 @@ class Args:
     # How many nodes should be deployed in parallel
     parallel: int = 1
 
-    # Directory where idrac scripts are held. If None, pip bin directory will be used.
-    idrac_script_dir_file: Optional[str] = None
+    # Path to an idrac script, which we use to find the directory. If None, pip bin directory will be used.
+    idrac_script: Optional[str] = None
 
     # Disable progress bars if True
     ci_mode: bool = flag(default=False)
+
+    # Run benchmarks if True
+    benchmark: bool = flag(default=False)
+
+    # Path to the benchmark_driver script.
+    benchmark_driver_script: Optional[str] = "./benchmark_driver.sh"
+
+    # Path to the benchmark_runner script.
+    benchmark_runner_script: Optional[str] = "./benchmark_runner.sh"
+
+    # Paths to any benchmark tool scripts.
+    benchmark_tools: Optional[List[str]] = field(
+        default_factory=lambda: ["../hw_validation/stress.sh", "../hw_validation/benchmark.sh"]
+    )
 
     def __post_init__(self):
         assert self.upload_img is None or self.upload_img.endswith(
@@ -118,21 +135,21 @@ class Args:
         ), f"csv file must be specified via CLI or environment variable {BMC_INFO_ENV_VAR}"
         self.csv_filename = self.csv_filename or csv_filename_env_var
 
-        assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or \
-            not (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway), \
-            "Both ipv6_prefix and ipv6_gateway flags must be present or none"
+        assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or not (
+            self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
+        ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
-            assert self.inject_configuration_tool, \
-                "setupos_inject_configuration tool required to modify image"
-        ipv4_args = [self.inject_image_ipv4_address,
-                     self.inject_image_ipv4_gateway,
-                     self.inject_image_ipv4_prefix_length,
-                     self.inject_image_domain]
-        assert all(ipv4_args) or not any(ipv4_args), \
-            "All ipv4 flags must be present or none"
-        assert self.file_share_ssh_key is None \
-            or Path(self.file_share_ssh_key).exists(), \
-            "File share ssh key path does not exist"
+            assert self.inject_configuration_tool, "setupos_inject_configuration tool required to modify image"
+        ipv4_args = [
+            self.inject_image_ipv4_address,
+            self.inject_image_ipv4_gateway,
+            self.inject_image_ipv4_prefix_length,
+            self.inject_image_domain,
+        ]
+        assert all(ipv4_args) or not any(ipv4_args), "All ipv4 flags must be present or none"
+        assert (
+            self.file_share_ssh_key is None or Path(self.file_share_ssh_key).exists()
+        ), "File share ssh key path does not exist"
 
 
 @dataclass(frozen=True)
@@ -201,7 +218,7 @@ def parse_from_rows(rows: List[List[str]], network_image_url: str) -> List["BMCI
 
 def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
     with open(csv_filename, "r") as csv_file:
-        rows = [line.strip().split(',') for line in csv_file]
+        rows = [line.strip().split(",") for line in csv_file]
         return [parse_from_row(row, network_image_url) for row in rows]
 
 
@@ -209,8 +226,7 @@ def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
     ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     result = invoke.run(f"ssh {ssh_opts} {ssh_key_arg} {target_url} 'echo Testing connection'", warn=True)
-    assert result and result.ok, \
-        f"SSH connection test failed: {result.stderr.strip()}"
+    assert result and result.ok, f"SSH connection test failed: {result.stderr.strip()}"
 
 
 def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
@@ -246,9 +262,7 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
 
     log.info("Got metrics result from GuestOS")
     guestos_version_line = next(
-        line
-        for line in metrics_output.splitlines()
-        if not line.startswith("#") and "guestos_version{" in line
+        line for line in metrics_output.splitlines() if not line.startswith("#") and "guestos_version{" in line
     )
     log.info(f"GuestOS version metric: {guestos_version_line}")
     return True
@@ -260,12 +274,14 @@ def wait(wait_secs: int) -> bool:
 
 
 def check_idrac_version(bmc_info: BMCInfo):
-    response = requests.get(f"https://{bmc_info.ip_address}/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion",
-                 verify=False,
-                 auth=(bmc_info.username,bmc_info.password))
+    response = requests.get(
+        f"https://{bmc_info.ip_address}/redfish/v1/Managers/iDRAC.Embedded.1?$select=FirmwareVersion",
+        verify=False,
+        auth=(bmc_info.username, bmc_info.password),
+    )
     data = response.json()
     assert response.status_code == 200, "ERROR - Cannot get idrac version"
-    idrac_version = int(data["FirmwareVersion"].replace('.',''))
+    idrac_version = int(data["FirmwareVersion"].replace(".", ""))
     assert idrac_version >= 6000000, "ERROR - Old idrac version detected. Please update idrac version to >= 6"
     # todo - return or raise an error.
 
@@ -277,19 +293,18 @@ class DeploymentError(Exception):
 
 def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
     error_msg = f"Failed on {result.command}: {result.stderr}"
-    return DeploymentError(
-        OperationResult(bmc_info, success=False, error_msg=error_msg)
-    )
+    return DeploymentError(OperationResult(bmc_info, success=False, error_msg=error_msg))
 
 
-def run_script(idrac_script_dir: Path,
-               bmc_info: BMCInfo,
-               script_and_args: str,
-               quiet: bool = False) -> None:
+def run_script(idrac_script_dir: Path, bmc_info: BMCInfo, script_and_args: str, permissive: bool = True) -> None:
     """Run a given script from the given bin dir and raise an exception if anything went wrong"""
     command = f"python3 {idrac_script_dir}/{script_and_args}"
-    result = invoke.run(command, hide="stdout" if quiet else None)
+    result = invoke.run(command)
+
     if result and not result.ok:
+        raise gen_failure(result, bmc_info)
+
+    if not permissive and result and "FAIL" in result.stdout:
         raise gen_failure(result, bmc_info)
 
 
@@ -317,9 +332,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
     check_idrac_version(bmc_info)
 
     configure_process_local_log(f"{bmc_info.ip_address}")
-    cli_creds = (
-        f"-ip {bmc_info.ip_address} -u {bmc_info.username} -p {bmc_info.password}"
-    )
+    cli_creds = f"-ip {bmc_info.ip_address} -u {bmc_info.username} -p {bmc_info.password}"
 
     # Keep state of if we attached the image
     network_image_attached = False
@@ -346,13 +359,15 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         log.info("Attaching virtual media")
         run_func(
             f"InsertEjectVirtualMediaREDFISH.py {cli_creds} --uripath {bmc_info.network_image_url} --action insert --index 1",
+            permissive=False,
         )
         network_image_attached = True
 
         log.info("Setting next boot device to virtual floppy, and restarting")
         run_func(
-            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2"
-        ) # Device 2 for virtual Floppy
+            f"SetNextOneTimeBootVirtualMediaDeviceOemREDFISH.py {cli_creds} --device 2",
+            permissive=False,
+        )  # Device 2 for virtual Floppy
 
         log.info("Turning on machine")
         run_func(
@@ -371,18 +386,12 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
             assert bmc_info.guestos_ipv6_address is not None, "Logic error"
             return check_guestos_ping_connectivity(
                 bmc_info.guestos_ipv6_address, timeout_secs
-            ) and check_guestos_metrics_version(
-                bmc_info.guestos_ipv6_address, timeout_secs
-            )
+            ) and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
 
-        iterate_func = (
-            check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
-        )
+        iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
 
-        log.info(
-            f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}"
-        )
-        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISABLE_PROGRESS_BAR):
+        log.info(f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}")
+        for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))), disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
@@ -402,9 +411,7 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
     finally:
         if network_image_attached:
             try:
-                log.info(
-                    "Ejecting the attached image so the next machine can boot from it"
-                )
+                log.info("Ejecting the attached image so the next machine can boot from it")
                 run_func(
                     f"InsertEjectVirtualMediaREDFISH.py {cli_creds} --action eject --index 1",
                 )
@@ -413,14 +420,10 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
                 return e.args[0]
 
 
-def boot_images(bmc_infos: List[BMCInfo],
-                parallelism: int,
-                wait_time_mins: int,
-                idrac_script_dir: Path):
+def boot_images(bmc_infos: List[BMCInfo], parallelism: int, wait_time_mins: int, idrac_script_dir: Path):
     results: List[OperationResult] = []
 
-    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir) \
-                  for bmc_info in bmc_infos)
+    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir) for bmc_info in bmc_infos)
 
     with Pool(parallelism) as p:
         results = p.starmap(deploy_server, arg_tuples)
@@ -440,11 +443,62 @@ def boot_images(bmc_infos: List[BMCInfo],
         return True
 
 
-def create_file_share_endpoint(file_share_url: str,
-                               file_share_username: Optional[str]) -> str:
-    return file_share_url \
-        if file_share_username is None \
-        else f"{file_share_username}@{file_share_url}"
+def benchmark_node(
+    bmc_info: BMCInfo,
+    benchmark_driver_script: str,
+    benchmark_runner_script: str,
+    benchmark_tools: List[str],
+    file_share_ssh_key: Optional[str] = None,
+):
+    log.info("Benchmarking machine.")
+
+    ip_address = bmc_info.guestos_ipv6_address
+
+    benchmark_tools = " ".join(benchmark_tools) if benchmark_tools is not None else ""
+
+    # Throw away the result, for now
+    invoke.run(
+        f"{benchmark_driver_script} {benchmark_runner_script} {file_share_ssh_key} {ip_address} {benchmark_tools}",
+        warn=True,
+    )
+    return OperationResult(bmc_info, success=True)
+
+
+def benchmark_nodes(
+    bmc_infos: List[BMCInfo],
+    parallelism: int,
+    benchmark_driver_script: str,
+    benchmark_runner_script: str,
+    benchmark_tools: List[str],
+    file_share_ssh_key: Optional[str] = None,
+):
+    results: List[OperationResult] = []
+
+    arg_tuples = (
+        (bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key)
+        for bmc_info in bmc_infos
+    )
+
+    with Pool(parallelism) as p:
+        results = p.starmap(benchmark_node, arg_tuples)
+
+    log.info("Benchmark summary:")
+    benchmark_failure = False
+    for res in results:
+        log.info(res)
+        if not res.success:
+            benchmark_failure = True
+
+    if benchmark_failure:
+        log.error("One or more node benchmarks failed")
+        return False
+    else:
+        log.info("All benchmarks completed successfully.")
+        return True
+
+
+def create_file_share_endpoint(file_share_url: str, file_share_username: Optional[str]) -> str:
+    return file_share_url if file_share_username is None else f"{file_share_username}@{file_share_url}"
 
 
 def upload_to_file_share(
@@ -457,24 +511,24 @@ def upload_to_file_share(
     log.info(f'''Uploading "{upload_img}" to "{file_share_endpoint}"''')
 
     connect_kw_args = {"key_filename": file_share_ssh_key} if file_share_ssh_key else None
-    conn = fabric.Connection(host=file_share_endpoint,
-                             connect_kwargs=connect_kw_args)
+    conn = fabric.Connection(host=file_share_endpoint, connect_kwargs=connect_kw_args)
     tmp_dir = None
     try:
         result = conn.run("mktemp --directory", hide="both", echo=True)
         tmp_dir = str.strip(result.stdout)
         # scp is faster than fabric's built-in transfer.
         ssh_key_arg = f"-i {file_share_ssh_key}" if file_share_ssh_key else ""
-        invoke.run(f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {file_share_endpoint}:{tmp_dir}", echo=True, pty=True)
+        invoke.run(
+            f"scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ssh_key_arg} {upload_img}  {file_share_endpoint}:{tmp_dir}",
+            echo=True,
+            pty=True,
+        )
 
         upload_img_filename = upload_img.name
         # Decompress in place. disk.img should appear in the same directory
         conn.run(f"tar --extract --zstd --file {tmp_dir}/{upload_img_filename} --directory {tmp_dir}", echo=True)
         image_destination = f"/{file_share_dir}/{file_share_image_name}"
-        conn.run(
-            f"mv {tmp_dir}/disk.img {image_destination}",
-            echo=True
-        )
+        conn.run(f"mv {tmp_dir}/disk.img {image_destination}", echo=True)
         conn.run(f"chmod a+r {image_destination}", echo=True)
     finally:
         # Clean up remote dir
@@ -484,13 +538,16 @@ def upload_to_file_share(
     log.info(f"Image ready at {file_share_endpoint}:/{file_share_dir}/{file_share_image_name}")
 
 
-def inject_config_into_image(setupos_inject_configuration_path: Path,
-                             working_dir: Path,
-                             compressed_image_path: Path,
-                             ipv6_prefix: str,
-                             ipv6_gateway: str,
-                             ipv4_args: Optional[Ipv4Args],
-                             verbose: Optional[str]) -> Path:
+def inject_config_into_image(
+    setupos_inject_configuration_path: Path,
+    working_dir: Path,
+    compressed_image_path: Path,
+    ipv6_prefix: str,
+    ipv6_gateway: str,
+    ipv4_args: Optional[Ipv4Args],
+    verbose: Optional[str],
+    pub_key: Optional[str],
+) -> Path:
     """
     Transform the compressed image.
     * Decompress image into working_dir
@@ -501,10 +558,11 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     """
     assert working_dir.is_dir()
     assert compressed_image_path.exists()
+
     def is_executable(p: Path) -> bool:
         return os.access(p, os.X_OK)
-    assert setupos_inject_configuration_path.exists() and \
-        is_executable(setupos_inject_configuration_path)
+
+    assert setupos_inject_configuration_path.exists() and is_executable(setupos_inject_configuration_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -525,7 +583,14 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     if verbose:
         verbose_part = f"--verbose {verbose} "
 
-    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part}", echo=True)
+    admin_key_part = ""
+    if pub_key:
+        admin_key_part = f'--public-keys "{pub_key}"'
+
+    invoke.run(
+        f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        echo=True,
+    )
 
     # Reuse the name of the compressed image path in the working directory
     result_filename = compressed_image_path.name
@@ -535,27 +600,16 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     return result_path
 
 
-def get_idrac_script_dir(idrac_script_dir_file: Optional[str]) -> Path:
-    if idrac_script_dir_file:
-        log.info(f"Using idrac script dir file: {idrac_script_dir_file}")
-        idrac_script_dir = open(idrac_script_dir_file).read().strip()
-        assert '\n' not in idrac_script_dir, "idrac script dir file must be one line"
-        return Path(idrac_script_dir)
-    return Path(DEFAULT_IDRAC_SCRIPT_DIR)
-
-
 def main():
     print(sys.argv)
-    args: Args = parse(Args, add_config_path_arg=True) # Parse from config file too
+    args: Args = parse(Args, add_config_path_arg=True)  # Parse from config file too
 
-    DISABLE_PROGRESS_BAR = args.ci_mode # noqa - ruff format wants to erroneously delete this
+    DISABLE_PROGRESS_BAR = args.ci_mode  # noqa - ruff format wants to erroneously delete this
 
-    network_image_url: str = (
-        f"{args.file_share_url}:{args.file_share_dir}/{args.file_share_image_filename}"
-    )
+    network_image_url: str = f"http://{args.file_share_url}/{args.file_share_image_filename}"
     log.info(f"Using network_image_url: {network_image_url}")
 
-    idrac_script_dir = get_idrac_script_dir(args.idrac_script_dir_file)
+    idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
     csv_filename: str = args.csv_filename
@@ -563,10 +617,28 @@ def main():
 
     ipv4_args = None
     if args.inject_image_ipv4_address:
-        ipv4_args = Ipv4Args(args.inject_image_ipv4_address,
-                             args.inject_image_ipv4_gateway,
-                             args.inject_image_ipv4_prefix_length,
-                             args.inject_image_domain)
+        ipv4_args = Ipv4Args(
+            args.inject_image_ipv4_address,
+            args.inject_image_ipv4_gateway,
+            args.inject_image_ipv4_prefix_length,
+            args.inject_image_domain,
+        )
+
+    # Benchmark these nodes, rather than deploy them.
+    if args.benchmark:
+        success = benchmark_nodes(
+            bmc_infos=bmc_infos,
+            parallelism=args.parallel,
+            benchmark_driver_script=args.benchmark_driver_script,
+            benchmark_runner_script=args.benchmark_runner_script,
+            benchmark_tools=args.benchmark_tools,
+            file_share_ssh_key=args.file_share_ssh_key,
+        )
+
+        if not success:
+            sys.exit(1)
+
+        sys.exit(0)
 
     if args.upload_img or args.inject_image_ipv6_prefix:
         file_share_endpoint = create_file_share_endpoint(args.file_share_url, args.file_share_username)
@@ -583,15 +655,17 @@ def main():
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
                 ipv4_args,
-                args.inject_image_verbose
-                )
+                args.inject_image_verbose,
+                args.inject_image_pub_key,
+            )
 
             upload_to_file_share(
                 modified_image_path,
                 file_share_endpoint,
                 args.file_share_dir,
                 args.file_share_image_filename,
-                args.file_share_ssh_key)
+                args.file_share_ssh_key,
+            )
 
         elif args.upload_img:
             upload_to_file_share(
@@ -599,15 +673,13 @@ def main():
                 file_share_endpoint,
                 args.file_share_dir,
                 args.file_share_image_filename,
-                args.file_share_ssh_key)
+                args.file_share_ssh_key,
+            )
 
     wait_time_mins = args.wait_time
     parallelism = args.parallel
     success = boot_images(
-        bmc_infos=bmc_infos,
-        parallelism=parallelism,
-        wait_time_mins=wait_time_mins,
-        idrac_script_dir=idrac_script_dir
+        bmc_infos=bmc_infos, parallelism=parallelism, wait_time_mins=wait_time_mins, idrac_script_dir=idrac_script_dir
     )
 
     if not success:

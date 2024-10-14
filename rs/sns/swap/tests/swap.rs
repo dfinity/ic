@@ -194,7 +194,7 @@ fn create_generic_committed_swap() -> Swap {
     Swap {
         lifecycle: Committed as i32,
         init: Some(init),
-        params: Some(params.clone()),
+        params: Some(params),
         buyers: buyers(),
         cf_participants: vec![],
         neuron_recipes: vec![],
@@ -209,6 +209,7 @@ fn create_generic_committed_swap() -> Swap {
         auto_finalize_swap_response: None,
         direct_participation_icp_e8s: Some(50 * E8),
         neurons_fund_participation_icp_e8s: None,
+        timers: None,
     }
 }
 
@@ -1825,10 +1826,10 @@ fn test_error_refund_single_user() {
 
     // The minimum number of participants is 1, so when calling commit with the appropriate end
     // time a commit should be possible, but an abort should not be possible
-    assert!(!swap.can_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(!swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.can_abort(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.try_abort(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.can_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
 
     // The life cycle should have changed to COMMITTED
     assert_eq!(swap.lifecycle(), Committed);
@@ -1959,8 +1960,8 @@ fn test_error_refund_multiple_users() {
 
     // The minimum number of participants is 1, so when calling abort with the appropriate end time an abort should be possible
     // (but a commit should not be possible)
-    assert!(!swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(!swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_abort(swap.params.unwrap().swap_due_timestamp_seconds));
 
     //The life cycle should have changed to ABORTED
     assert_eq!(swap.lifecycle(), Aborted);
@@ -2072,8 +2073,8 @@ fn test_error_refund_after_close() {
     assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
     //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
-    assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-    assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+    assert!(swap.can_commit(swap.params.unwrap().swap_due_timestamp_seconds));
+    assert!(swap.try_commit(swap.params.unwrap().swap_due_timestamp_seconds));
 
     //The life cycle should have changed to COMMITTED
     assert_eq!(swap.lifecycle(), Committed);
@@ -4752,7 +4753,7 @@ fn test_refresh_buyer_tokens_token_limit() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     // Buy limit of tokens available per user
     buy_token_ok(
@@ -4803,7 +4804,7 @@ fn test_refresh_buyer_tokens_quota() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     //The limit per user is 40 E8s and we want to test the maximum participation limit per user
@@ -4868,7 +4869,7 @@ fn test_refresh_buyer_tokens_not_enough_tokens_left() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     let amount_user2_0 = 40 * E8;
@@ -4935,7 +4936,7 @@ fn test_refresh_buyer_tokens_no_sns_neuron_baskets_available() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 5 * E8;
     let amount_user2_0 = 40 * E8;
@@ -5030,7 +5031,7 @@ fn test_refresh_buyer_tokens_committed_tokens_below_minimum() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 3 * E8;
     let amount_user1_1 = 150_000_000;
@@ -5142,7 +5143,7 @@ fn test_refresh_buyer_tokens_committing_with_no_funds_sent() {
         .with_neurons_fund_participation()
         .build();
 
-    let params = swap.params.clone().unwrap();
+    let params = swap.params.unwrap();
 
     let amount_user1_0 = 3 * E8;
     let amount_user2_0 = 40 * E8;

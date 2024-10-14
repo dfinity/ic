@@ -13,7 +13,7 @@ ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = [":orchestrator_universal_vm_activation.s
 
 STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/tests:static-file-server_image",
+    "//rs/tests:static-file-server.tar",
 ]
 
 rust_library(
@@ -73,7 +73,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -94,7 +93,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -134,7 +132,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -156,7 +153,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -197,7 +193,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -219,7 +214,6 @@ system_test_nns(
         "k8s",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,
@@ -240,7 +234,6 @@ system_test_nns(
         "experimental_system_test_colocation",
         "subnet_recovery",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",

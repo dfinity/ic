@@ -11,6 +11,7 @@ use ic_management_canister_types::IC_00;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -208,6 +209,7 @@ pub fn get_system_api(
         EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     )
@@ -216,14 +218,13 @@ pub fn get_system_api(
 pub fn get_system_state() -> SystemState {
     let mut system_state = SystemStateBuilder::new().build();
     system_state
-        .call_context_manager_mut()
-        .unwrap()
         .new_call_context(
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             RequestMetadata::new(0, UNIX_EPOCH),
-        );
+        )
+        .unwrap();
     system_state
 }
 

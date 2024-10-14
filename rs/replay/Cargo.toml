@@ -17,7 +17,6 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -41,7 +40,7 @@ ic-registry-transport = { path = "../registry/transport" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
-icp-ledger = { path = "../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../ledger_suite/icp" }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }

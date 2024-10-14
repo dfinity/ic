@@ -7,10 +7,15 @@ on:
     branches:
       - master
       - rc--*
+    tags:
+      - release-*
     workflows:
       - Schedule Daily
+      - Schedule RC
+      - Schedule Rust Benchmarks
       - Schedule Weekly
       - Release Testing
+      - Publish Release
       - Container IC Base Images
 
 jobs:
@@ -45,7 +50,7 @@ jobs:
 
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
-        if: ${{ steps.setup.outputs.message != 'nothing' }}
+        if: ${{ github.event.workflow_run.conclusion != 'cancelled' }}
         with:
           channel-id: ${{ steps.setup.outputs.channel }}
           slack-message: "${{ steps.setup.outputs.message }}"

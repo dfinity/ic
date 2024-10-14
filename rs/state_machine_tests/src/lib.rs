@@ -1,7 +1,11 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
+use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
+    adapters::AdaptersConfig,
+    bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
     state_manager::LsmtConfig, subnet_config::SubnetConfig,
 };
@@ -109,7 +113,7 @@ use ic_types::{
     artifact::IngressMessageId,
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ConsensusResponse,
-        QueryStatsPayload, TotalQueryStats, ValidationContext, XNetPayload,
+        QueryStatsPayload, SelfValidatingPayload, TotalQueryStats, ValidationContext, XNetPayload,
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
@@ -772,8 +776,12 @@ impl StateMachineNode {
             ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
         let idkg_mega_encryption_key =
             ic_crypto_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let http_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
-        let xnet_ip_addr = Ipv6Addr::from(rng.gen::<[u16; 8]>());
+        let mut http_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        http_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
+        let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
+        let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
+        let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
         Self {
             node_id: PrincipalId::new_self_authenticating(
                 &node_signing_key.public_key().serialize_rfc8410_der(),
@@ -824,7 +832,13 @@ pub struct StateMachine {
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
     nonce: AtomicU64,
+    // the time used to derive the time of the next round:
+    //  - equal to `time` + 1ns if `time` = `time_of_last_round`;
+    //  - equal to `time`       otherwise.
     time: AtomicU64,
+    // the time of the last round
+    // (equal to `time` when this `StateMachine` is initialized)
+    time_of_last_round: RwLock<SystemTime>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
     idkg_subnet_secret_keys: BTreeMap<MasterPublicKeyId, SignatureSecretKey>,
     pub replica_logger: ReplicaLogger,
@@ -912,6 +926,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     dts: bool,
     log_level: Option<Level>,
+    bitcoin_testnet_uds_path: Option<PathBuf>,
 }
 
 impl StateMachineBuilder {
@@ -945,6 +960,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             dts: true,
             log_level: None,
+            bitcoin_testnet_uds_path: None,
         }
     }
 
@@ -1130,6 +1146,13 @@ impl StateMachineBuilder {
         Self { log_level, ..self }
     }
 
+    pub fn with_bitcoin_testnet_uds_path(self, bitcoin_testnet_uds_path: Option<PathBuf>) -> Self {
+        Self {
+            bitcoin_testnet_uds_path,
+            ..self
+        }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -1201,6 +1224,8 @@ impl StateMachineBuilder {
         self,
         subnets: Arc<RwLock<BTreeMap<SubnetId, Arc<StateMachine>>>>,
     ) -> Arc<StateMachine> {
+        let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
+
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
         let subnet_id = sm.get_subnet_id();
@@ -1220,7 +1245,7 @@ impl StateMachineBuilder {
         let rng = Arc::new(Some(Mutex::new(StdRng::seed_from_u64(42))));
         let xnet_slice_pool_impl = Box::new(PocketXNetSlicePoolImpl::new(subnets, subnet_id));
         let metrics = Arc::new(XNetPayloadBuilderMetrics::new(&sm.metrics_registry));
-        let xnet_payload_builder = XNetPayloadBuilderImpl::new_from_components(
+        let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new_from_components(
             sm.state_manager.clone(),
             sm.state_manager.clone(),
             sm.registry_client.clone(),
@@ -1229,16 +1254,42 @@ impl StateMachineBuilder {
             refill_task_handle,
             metrics,
             sm.replica_logger.clone(),
+        ));
+
+        let adapters_config = AdaptersConfig {
+            bitcoin_mainnet_uds_path: None,
+            bitcoin_mainnet_uds_metrics_path: None,
+            bitcoin_testnet_uds_path,
+            bitcoin_testnet_uds_metrics_path: None,
+            https_outcalls_uds_path: None,
+            https_outcalls_uds_metrics_path: None,
+        };
+        let bitcoin_clients = setup_bitcoin_adapter_clients(
+            sm.replica_logger.clone(),
+            &sm.metrics_registry,
+            sm.runtime.handle().clone(),
+            adapters_config,
         );
+        let self_validating_payload_builder = Arc::new(BitcoinPayloadBuilder::new(
+            sm.state_manager.clone(),
+            &sm.metrics_registry,
+            bitcoin_clients.btc_mainnet_client,
+            bitcoin_clients.btc_testnet_client,
+            sm.subnet_id,
+            sm.registry_client.clone(),
+            BitcoinPayloadBuilderConfig::default(),
+            sm.replica_logger.clone(),
+        ));
 
         // Instantiate a `PayloadBuilderImpl` and put it into `StateMachine`
         // which contains no `PayloadBuilderImpl` after creation.
-        *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new_for_testing(
+        *sm.payload_builder.write().unwrap() = Some(PayloadBuilderImpl::new(
             subnet_id,
             sm.nodes[0].node_id,
             sm.registry_client.clone(),
             sm.ingress_manager.clone(),
-            Arc::new(xnet_payload_builder),
+            xnet_payload_builder,
+            self_validating_payload_builder,
             sm.canister_http_payload_builder.clone(),
             sm.query_stats_payload_builder.clone(),
             sm.metrics_registry.clone(),
@@ -1357,11 +1408,13 @@ impl StateMachine {
         if let Some(ref query_stats) = query_stats {
             self.query_stats_payload_builder.purge(query_stats);
         }
+        let self_validating = Some(batch_payload.self_validating);
         let mut payload = PayloadBuilder::new()
             .with_ingress_messages(ingress_messages)
             .with_xnet_payload(xnet_payload)
             .with_consensus_responses(http_responses)
-            .with_query_stats(query_stats);
+            .with_query_stats(query_stats)
+            .with_self_validating(self_validating);
 
         // Process threshold signing requests.
         for (id, context) in &state
@@ -1651,7 +1704,10 @@ impl StateMachine {
                     let path =
                         DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                    let private_key = PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                    // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                    let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                        .derive_subkey(&path)
+                        .0;
 
                     let public_key = MasterPublicKey {
                         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
@@ -1669,8 +1725,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
@@ -1687,8 +1745,10 @@ impl StateMachine {
                         let path =
                             DerivationPath::new(vec![DerivationIndex(id.name.as_bytes().to_vec())]);
 
-                        let private_key =
-                            PrivateKey::generate_from_seed(&seed).derive_subkey(&path).0;
+                        // We use a fixed seed here so that all subnets in PocketIC share the same keys.
+                        let private_key = PrivateKey::generate_from_seed(&[42; 32])
+                            .derive_subkey(&path)
+                            .0;
 
                         let public_key = MasterPublicKey {
                             algorithm_id: AlgorithmId::ThresholdEd25519,
@@ -1775,6 +1835,7 @@ impl StateMachine {
             checkpoint_interval_length: checkpoint_interval_length.into(),
             nonce: AtomicU64::new(nonce),
             time: AtomicU64::new(time.as_nanos_since_unix_epoch()),
+            time_of_last_round: RwLock::new(time.into()),
             idkg_subnet_public_keys,
             idkg_subnet_secret_keys,
             replica_logger: replica_logger.clone(),
@@ -2248,8 +2309,6 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure time is strictly monotone)
     /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
-        self.advance_time(Self::EXECUTE_ROUND_TIME_INCREMENT);
-
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -2276,14 +2335,17 @@ impl StateMachine {
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
-                bitcoin_adapter_responses: vec![],
+                bitcoin_adapter_responses: payload
+                    .self_validating
+                    .map(|p| p.get().to_vec())
+                    .unwrap_or_default(),
                 query_stats: payload.query_stats,
             },
             randomness: Randomness::from(seed),
             idkg_subnet_public_keys: self.idkg_subnet_public_keys.clone(),
             idkg_pre_signature_ids: BTreeMap::new(),
             registry_version: self.registry_client.get_latest_version(),
-            time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
+            time: self.get_time_of_next_round(),
             consensus_responses: payload.consensus_responses,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         };
@@ -2302,6 +2364,10 @@ impl StateMachine {
         );
 
         self.check_critical_errors();
+
+        let time_of_next_round = self.time_of_next_round();
+        self.set_time(time_of_next_round);
+        *self.time_of_last_round.write().unwrap() = time_of_next_round;
 
         batch_number
     }
@@ -2392,9 +2458,16 @@ impl StateMachine {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
-    /// Returns the state machine time at the beginning of next round.
+    /// Returns the state machine time at the beginning of next round
+    /// under the assumption that time won't be advanced before that
+    /// round is finalized.
     pub fn time_of_next_round(&self) -> SystemTime {
-        self.time() + Self::EXECUTE_ROUND_TIME_INCREMENT
+        let time = self.time();
+        if time == *self.time_of_last_round.read().unwrap() {
+            time + Self::EXECUTE_ROUND_TIME_INCREMENT
+        } else {
+            time
+        }
     }
 
     /// Returns the current state machine time.
@@ -3641,6 +3714,7 @@ pub struct PayloadBuilder {
     xnet_payload: XNetPayload,
     consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
+    self_validating: Option<SelfValidatingPayload>,
 }
 
 impl Default for PayloadBuilder {
@@ -3652,6 +3726,7 @@ impl Default for PayloadBuilder {
             xnet_payload: Default::default(),
             consensus_responses: Default::default(),
             query_stats: Default::default(),
+            self_validating: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -3702,6 +3777,13 @@ impl PayloadBuilder {
     pub fn with_query_stats(self, query_stats: Option<QueryStatsPayload>) -> Self {
         Self {
             query_stats,
+            ..self
+        }
+    }
+
+    pub fn with_self_validating(self, self_validating: Option<SelfValidatingPayload>) -> Self {
+        Self {
+            self_validating,
             ..self
         }
     }

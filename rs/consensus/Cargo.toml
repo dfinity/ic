@@ -27,6 +27,7 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
+num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
@@ -71,6 +72,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 proptest = { workspace = true }
 prost = { workspace = true }
+rstest = { workspace = true }
 serde_cbor = { workspace = true }
 slog-async = { workspace = true }
 slog-envlogger = "2.2.0"
