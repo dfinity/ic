@@ -236,7 +236,7 @@ fn verify_paths(
     targets: &CanisterIdSet,
     effective_principal_id: PrincipalId,
 ) -> Result<(), HttpError> {
-    let mut request_status_id: Option<MessageId> = None;
+    let mut last_request_status_id: Option<MessageId> = None;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -283,18 +283,17 @@ fn verify_paths(
                     status: StatusCode::BAD_REQUEST,
                     message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
                 })?;
-                {
-                    if let Some(request_status_id) = request_status_id {
-                        if request_status_id != message_id {
-                            return Err(HttpError {
+
+                if let Some(x) = last_request_status_id {
+                    if x != message_id {
+                        return Err(HttpError {
                                 status: StatusCode::BAD_REQUEST,
                                 message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                   request_status_id, message_id),
+                                   x, message_id),
                             });
-                        }
                     }
-                    request_status_id = Some(message_id.clone());
                 }
+                last_request_status_id = Some(message_id.clone());
 
                 // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
