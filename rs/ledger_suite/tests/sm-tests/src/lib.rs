@@ -2818,7 +2818,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 
 pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2839,7 +2839,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
 
     env.upgrade_canister(
         canister_id,
-        ledger_wasm_current,
+        ledger_wasm_current_lowinstructionlimits,
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
@@ -2969,7 +2969,7 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
 
 pub fn test_incomplete_migration<T>(
     ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_current: Vec<u8>,
+    ledger_wasm_current_lowinstructionlimits: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -3015,7 +3015,7 @@ pub fn test_incomplete_migration<T>(
 
     env.upgrade_canister(
         canister_id,
-        ledger_wasm_current,
+        ledger_wasm_current_lowinstructionlimits,
         Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
     )
     .unwrap();
