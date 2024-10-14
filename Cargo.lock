@@ -5403,7 +5403,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-logger",
@@ -9153,7 +9153,6 @@ dependencies = [
  "candid",
  "chrono",
  "ciborium",
- "clap 3.2.25",
  "dfn_protobuf",
  "ic-agent",
  "ic-certification 0.9.0",
@@ -10511,7 +10510,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "base64 0.13.1",
- "clap 3.2.25",
+ "clap 4.5.19",
  "fs_extra",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -11045,7 +11044,7 @@ version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "canister-test",
- "clap 3.2.25",
+ "clap 4.5.19",
  "criterion",
  "hex",
  "ic-artifact-pool",
@@ -11303,7 +11302,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "dfn_candid",
  "dfn_protobuf",
  "futures",
@@ -12059,7 +12058,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
@@ -12231,7 +12230,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-config",
  "ic-logger",
@@ -12351,7 +12350,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
@@ -14409,7 +14408,7 @@ checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -16621,7 +16620,7 @@ dependencies = [
  "bitcoincore-rpc",
  "bytes",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "flate2",
  "form_urlencoded",
  "fqdn",
@@ -19919,7 +19918,6 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "chrono",
- "clap 3.2.25",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
@@ -21156,7 +21154,7 @@ dependencies = [
 name = "vsock_guest"
 version = "1.0.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "vsock_lib",
 ]
 

@@ -13,7 +13,7 @@ name = "state-tool"
 path = "src/main.rs"
 
 [dependencies]
-clap = { workspate = true }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }

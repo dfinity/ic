@@ -73,7 +73,7 @@ fn is_valid_version_symbol(c: char) -> bool {
 
 impl FromStr for ReplicaVersion {
     type Err = ReplicaVersionParseError;
-    
+
     fn from_str(version_str: &str) -> Result<Self, Self::Err> {
         ReplicaVersion::try_from(version_str)
     }

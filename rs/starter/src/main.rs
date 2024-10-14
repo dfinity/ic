@@ -20,8 +20,8 @@
 //!   - serves metrics at localhost:18080 instead of dumping them at stdout
 
 use anyhow::Result;
-use clap::Parser;
 use clap::builder::PossibleValuesParser;
+use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,

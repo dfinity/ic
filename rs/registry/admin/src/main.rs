@@ -245,7 +245,7 @@ struct Opts {
     #[clap(
         long = "nns-public-key-pem-file",
         help = "PEM file to overwrite the mainnet NNS public key. Requires --verify-nns-responses.",
-        requires = "verify-nns-responses"
+        requires = "verify_nns_responses"
     )]
     nns_public_key_pem_file: Option<PathBuf>,
 

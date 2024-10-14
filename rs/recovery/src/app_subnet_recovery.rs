@@ -17,7 +17,6 @@ use std::{iter::Peekable, net::IpAddr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
-use std::str::FromStr;
 
 #[derive(
     Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
