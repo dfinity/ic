@@ -262,7 +262,7 @@ stack_snapshot.snapshot(name = "lts-22.30")
 
 [
     stack_snapshot.package(
-        name = pkg,  # See https://github.com/tweag/rules_haskell/issues/1871
+        name = pkg,
     )
     for pkg in [
         "QuickCheck",
