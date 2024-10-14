@@ -79,7 +79,6 @@ function assemble_config_media() {
         cmd+=(--domain "${domain}")
     fi
     cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
-    cmd+=(--nns_url "$nns_urls")
     if [ -f "$node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "$node_operator_private_key")
     fi
