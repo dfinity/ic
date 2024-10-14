@@ -1400,7 +1400,10 @@ impl Swap {
         let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(INFO, "Successfully restored dapp controllers, {:?}", result);
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1418,7 +1421,14 @@ impl Swap {
             .await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(
+                    INFO,
+                    "Successfully took sole control of dapp controllers, {:?}",
+                    result
+                );
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
