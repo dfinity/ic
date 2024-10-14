@@ -7,6 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
@@ -19,7 +20,7 @@ use ic_cdk::api::management_canister::main::{
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
-use reqwest::Url;
+use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
@@ -889,10 +890,7 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let settings = CanisterSettings {
             controllers: Some(new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
-            reserved_cycles_limit: None,
+            ..CanisterSettings::default()
         };
         call_candid_as::<(UpdateSettingsArgument,), ()>(
             self,
@@ -1415,4 +1413,38 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+pub async fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let client = reqwest::Client::new();
+    let res = loop {
+        let res = client
+            .get(format!(
+                "{}{}",
+                pocket_ic_url.trim_end_matches('/'),
+                "/_/topology"
+            ))
+            .send()
+            .await?;
+        if res.status() == StatusCode::CONFLICT {
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+        } else {
+            break res.error_for_status()?;
+        }
+    };
+    let topology_bytes = res.bytes().await?;
+    let topology_str = String::from_utf8(topology_bytes.to_vec())?;
+    let topology: Topology = serde_json::from_str(&topology_str)?;
+    let default_effective_canister_id =
+        Principal::from_slice(&topology.default_effective_canister_id.canister_id);
+    Ok(default_effective_canister_id)
 }

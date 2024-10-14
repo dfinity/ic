@@ -1,8 +1,7 @@
-use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{
     self, Block, BlockSpec, BlockTag, Data, FeeHistory, FeeHistoryParams, FixedSizeData,
-    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, ResponseSizeEstimate,
-    SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
+    GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, Quantity,
+    ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
 use crate::eth_rpc_client::providers::{
     EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
@@ -13,17 +12,14 @@ use crate::lifecycle::EthereumNetwork;
 use crate::logs::{PrintProxySink, DEBUG, INFO, TRACE_HTTP};
 use crate::numeric::{BlockNumber, GasAmount, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::State;
-use candid::Nat;
 use evm_rpc_client::{
-    types::candid::{
-        Block as EvmBlock, BlockTag as EvmBlockTag, FeeHistory as EvmFeeHistory,
-        FeeHistoryArgs as EvmFeeHistoryArgs, GetLogsArgs as EvmGetLogsArgs,
-        GetTransactionCountArgs as EvmGetTransactionCountArgs, LogEntry as EvmLogEntry,
-        MultiRpcResult as EvmMultiRpcResult, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
-        RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
-        TransactionReceipt as EvmTransactionReceipt,
-    },
-    EvmRpcClient, IcRuntime, OverrideRpcConfig,
+    Block as EvmBlock, BlockTag as EvmBlockTag, ConsensusStrategy, EvmRpcClient,
+    FeeHistory as EvmFeeHistory, FeeHistoryArgs as EvmFeeHistoryArgs,
+    GetLogsArgs as EvmGetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
+    Hex32, IcRuntime, LogEntry as EvmLogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
+    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError as EvmRpcError,
+    RpcResult as EvmRpcResult, SendRawTransactionStatus as EvmSendRawTransactionStatus,
+    TransactionReceipt as EvmTransactionReceipt,
 };
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -32,7 +28,6 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::fmt::{Debug, Display};
-use std::str::FromStr;
 
 mod providers;
 pub mod requests;
@@ -61,11 +56,22 @@ impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
-            const MIN_ATTACHED_CYCLES: u128 = 300_000_000_000;
+            const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
             let providers = match client.chain {
                 EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
                 EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
+            };
+            let min_threshold = match client.chain {
+                EthereumNetwork::Mainnet => 3_u8,
+                EthereumNetwork::Sepolia => 2_u8,
+            };
+            let threshold_strategy = EvmRpcConfig {
+                response_consensus: Some(ConsensusStrategy::Threshold {
+                    total: None,
+                    min: min_threshold,
+                }),
+                ..EvmRpcConfig::default()
             };
             client.evm_rpc_client = Some(
                 EvmRpcClient::builder_for_ic(TRACE_HTTP)
@@ -73,12 +79,17 @@ impl EthRpcClient {
                     .with_evm_canister_id(evm_rpc_id)
                     .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
                     .with_override_rpc_config(OverrideRpcConfig {
+                        eth_get_block_by_number: Some(threshold_strategy.clone()),
                         eth_get_logs: Some(EvmRpcConfig {
                             response_size_estimate: Some(
                                 ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                             ),
+                            ..threshold_strategy.clone()
                         }),
-                        ..Default::default()
+                        eth_fee_history: Some(threshold_strategy.clone()),
+                        eth_get_transaction_receipt: Some(threshold_strategy.clone()),
+                        eth_get_transaction_count: Some(threshold_strategy.clone()),
+                        eth_send_raw_transaction: Some(threshold_strategy),
                     })
                     .build(),
             );
@@ -171,7 +182,11 @@ impl EthRpcClient {
                 .eth_get_logs(EvmGetLogsArgs {
                     from_block: Some(into_evm_block_tag(params.from_block)),
                     to_block: Some(into_evm_block_tag(params.to_block)),
-                    addresses: params.address.into_iter().map(|a| a.to_string()).collect(),
+                    addresses: params
+                        .address
+                        .into_iter()
+                        .map(|a| Hex20::from(a.into_bytes()))
+                        .collect(),
                     topics: Some(into_evm_topic(params.topics)),
                 })
                 .await
@@ -249,7 +264,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             return evm_rpc_client
                 .eth_fee_history(EvmFeeHistoryArgs {
-                    block_count: params.block_count.as_u128(),
+                    block_count: Nat256::from_be_bytes(params.block_count.to_be_bytes()),
                     newest_block: into_evm_block_tag(params.highest_block),
                     reward_percentiles: Some(params.reward_percentiles),
                 })
@@ -294,7 +309,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             let results = evm_rpc_client
                 .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: address.to_string(),
+                    address: Hex20::from(address.into_bytes()),
                     block: EvmBlockTag::Finalized,
                 })
                 .await;
@@ -316,7 +331,7 @@ impl EthRpcClient {
         if let Some(evm_rpc_client) = &self.evm_rpc_client {
             let results = evm_rpc_client
                 .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                    address: address.to_string(),
+                    address: Hex20::from(address.into_bytes()),
                     block: EvmBlockTag::Latest,
                 })
                 .await;
@@ -622,8 +637,8 @@ impl Reduce for EvmMultiRpcResult<EvmBlock> {
         ReducedResult::from_internal(self).map_reduce(
             &|block: EvmBlock| {
                 Ok::<Block, String>(Block {
-                    number: BlockNumber::try_from(block.number)?,
-                    base_fee_per_gas: Wei::try_from(block.base_fee_per_gas)?,
+                    number: BlockNumber::from(block.number),
+                    base_fee_per_gas: Wei::from(block.base_fee_per_gas.expect("BUG: must be present in blocks after the London Upgrade / EIP-1559, which pre-dates the ckETH minter")),
                 })
             },
             MultiCallResults::reduce_with_equality,
@@ -649,25 +664,20 @@ impl Reduce for EvmMultiRpcResult<Vec<EvmLogEntry>> {
 
         fn map_single_log(log: EvmLogEntry) -> Result<LogEntry, String> {
             Ok(LogEntry {
-                address: Address::from_str(&log.address)?,
+                address: Address::new(log.address.into()),
                 topics: log
                     .topics
                     .into_iter()
-                    .map(|t| FixedSizeData::from_str(&t))
-                    .collect::<Result<_, _>>()?,
-                data: Data::from_str(&log.data)?,
-                block_number: log.block_number.map(BlockNumber::try_from).transpose()?,
-                transaction_hash: log
-                    .transaction_hash
-                    .as_deref()
-                    .map(Hash::from_str)
-                    .transpose()?,
+                    .map(|t| FixedSizeData(t.into()))
+                    .collect(),
+                data: Data(log.data.into()),
+                block_number: log.block_number.map(BlockNumber::from),
+                transaction_hash: log.transaction_hash.map(|h| Hash(h.into())),
                 transaction_index: log
                     .transaction_index
-                    .map(|i| CheckedAmountOf::<()>::try_from(i).map(|c| c.into_inner()))
-                    .transpose()?,
-                block_hash: log.block_hash.as_deref().map(Hash::from_str).transpose()?,
-                log_index: log.log_index.map(LogIndex::try_from).transpose()?,
+                    .map(|i| Quantity::from_be_bytes(i.into_be_bytes())),
+                block_hash: log.block_hash.map(|h| Hash(h.into())),
+                log_index: log.log_index.map(LogIndex::from),
                 removed: log.removed,
             })
         }
@@ -692,18 +702,18 @@ impl Reduce for EvmMultiRpcResult<Option<EvmFeeHistory>> {
         fn map_fee_history(fee_history: Option<EvmFeeHistory>) -> Result<FeeHistory, String> {
             let fee_history = fee_history.ok_or("No fee history available")?;
             Ok(FeeHistory {
-                oldest_block: BlockNumber::try_from(fee_history.oldest_block)?,
-                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas)?,
+                oldest_block: BlockNumber::from(fee_history.oldest_block),
+                base_fee_per_gas: wei_per_gas_iter(fee_history.base_fee_per_gas),
                 reward: fee_history
                     .reward
                     .into_iter()
                     .map(wei_per_gas_iter)
-                    .collect::<Result<_, _>>()?,
+                    .collect(),
             })
         }
 
-        fn wei_per_gas_iter(values: Vec<Nat>) -> Result<Vec<WeiPerGas>, String> {
-            values.into_iter().map(WeiPerGas::try_from).collect()
+        fn wei_per_gas_iter(values: Vec<Nat256>) -> Vec<WeiPerGas> {
+            values.into_iter().map(WeiPerGas::from).collect()
         }
 
         ReducedResult::from_internal(self).map_reduce(&map_fee_history, |results| {
@@ -731,18 +741,17 @@ impl Reduce for EvmMultiRpcResult<Option<EvmTransactionReceipt>> {
             receipt
                 .map(|evm_receipt| {
                     Ok(TransactionReceipt {
-                        block_hash: Hash::from_str(&evm_receipt.block_hash)?,
-                        block_number: BlockNumber::try_from(evm_receipt.block_number)?,
-                        effective_gas_price: WeiPerGas::try_from(evm_receipt.effective_gas_price)?,
-                        gas_used: GasAmount::try_from(evm_receipt.gas_used)?,
+                        block_hash: Hash(evm_receipt.block_hash.into()),
+                        block_number: BlockNumber::from(evm_receipt.block_number),
+                        effective_gas_price: WeiPerGas::from(evm_receipt.effective_gas_price),
+                        gas_used: GasAmount::from(evm_receipt.gas_used),
                         status: TransactionStatus::try_from(
                             evm_receipt
                                 .status
-                                .0
-                                .to_u8()
+                                .and_then(|s| s.as_ref().0.to_u8())
                                 .ok_or("invalid transaction status")?,
                         )?,
-                        transaction_hash: Hash::from_str(&evm_receipt.transaction_hash)?,
+                        transaction_hash: Hash(evm_receipt.transaction_hash.into()),
                     })
                 })
                 .transpose()
@@ -804,12 +813,14 @@ impl ReduceWithStrategy<Equality> for MultiCallResults<TransactionCount> {
     }
 }
 
-impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat> {
+impl ReduceWithStrategy<Equality> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            &|tx_count: Nat256| {
+                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
+            },
             MultiCallResults::reduce_with_equality,
         )
     }
@@ -824,12 +835,14 @@ impl ReduceWithStrategy<MinByKey> for MultiCallResults<TransactionCount> {
     }
 }
 
-impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat> {
+impl ReduceWithStrategy<MinByKey> for EvmMultiRpcResult<Nat256> {
     type Item = TransactionCount;
 
     fn reduce(self) -> ReducedResult<Self::Item> {
         ReducedResult::from_internal(self).map_reduce(
-            &|tx_count: Nat| TransactionCount::try_from(tx_count),
+            &|tx_count: Nat256| {
+                Ok::<TransactionCount, Infallible>(TransactionCount::from(tx_count))
+            },
             |results| results.reduce_with_min_by_key(|transaction_count| *transaction_count),
         )
     }
@@ -974,20 +987,21 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
 
 fn into_evm_block_tag(block: BlockSpec) -> EvmBlockTag {
     match block {
-        BlockSpec::Number(n) => EvmBlockTag::Number(n.into()),
+        BlockSpec::Number(n) => EvmBlockTag::Number(Nat256::from_be_bytes(n.to_be_bytes())),
         BlockSpec::Tag(BlockTag::Latest) => EvmBlockTag::Latest,
         BlockSpec::Tag(BlockTag::Safe) => EvmBlockTag::Safe,
         BlockSpec::Tag(BlockTag::Finalized) => EvmBlockTag::Finalized,
     }
 }
 
-fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<String>> {
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
+    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
     let mut result = Vec::with_capacity(topics.len());
     for topic in topics {
         result.push(match topic {
-            Topic::Single(single_topic) => vec![single_topic.to_string()],
+            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
             Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(|t| t.to_string()).collect()
+                multiple_topic.into_iter().map(into_hex_32).collect()
             }
         });
     }

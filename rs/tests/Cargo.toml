@@ -29,7 +29,6 @@ deterministic_ips = { path = "../ic_os/dev_test_tools/deterministic_ips" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
-discower_bowndary = { path = "../boundary_node/discower_bowndary" }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
@@ -51,7 +50,6 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 ic-http-utils = { path = "../http_utils" }
@@ -61,7 +59,7 @@ ic-icrc1-ledger = { path = "../ledger_suite/icrc1/ledger" }
 ic-icrc1-test-utils = { path = "../ledger_suite/icrc1/test_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
+ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils" }
 ic-ledger-core = { path = "../ledger_suite/common/ledger_core" }
 ic-ledger-suite-orchestrator = { path = "../ethereum/ledger-suite-orchestrator" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
@@ -94,9 +92,8 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
-ic-replay = { path = "../replay" }
-ic-rosetta-api = { path = "../rosetta-api" }
-ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
+ic-rosetta-api = { path = "../rosetta-api/icp" }
+ic-rosetta-test-utils = { path = "../rosetta-api/icp/test_utils" }
 ic-sns-governance = { path = "../sns/governance" }
 ic-sns-init = { path = "../sns/init" }
 ic-sns-root = { path = "../sns/root" }
@@ -108,6 +105,7 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-tests-ckbtc = { path = "ckbtc" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
@@ -121,7 +119,6 @@ indoc = "1.0.9"
 itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
-k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
@@ -147,7 +144,7 @@ regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 ring = { version = "0.17.7", features = ["std"] }
-rosetta-core = { path = "../rosetta-api/rosetta_core" }
+rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
 rsa = { version = "0.9.2", features = ["sha2"] }
 rust_decimal = "1.25"
 schnorr_fun = "0.10"
@@ -292,14 +289,6 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-bn-integration"
-path = "boundary_nodes/bn_integration_test.rs"
-
-[[bin]]
-name = "ic-systest-bn-integration-on-playnet"
-path = "boundary_nodes/bn_integration_on_playnet_test.rs"
-
-[[bin]]
 name = "ic-systest-bn-update-workload-test"
 path = "boundary_nodes/bn_update_workload_test.rs"
 
@@ -366,54 +355,6 @@ path = "message_routing/state_sync_malicious_chunk_test.rs"
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
-
-[[bin]]
-name = "ic-systest-nns-dapp"
-path = "gix/nns_dapp_test.rs"
-
-[[bin]]
-name = "ic-systest-small"
-path = "testing_verification/testnets/small.rs"
-
-[[bin]]
-name = "ic-systest-small-with-query-stats"
-path = "testing_verification/testnets/small_with_query_stats.rs"
-
-[[bin]]
-name = "ic-systest-small-nns"
-path = "testing_verification/testnets/small_nns.rs"
-
-[[bin]]
-name = "ic-systest-sns-testing"
-path = "testing_verification/testnets/sns_testing.rs"
-
-[[bin]]
-name = "ic-systest-medium"
-path = "testing_verification/testnets/medium.rs"
-
-[[bin]]
-name = "ic-systest-large"
-path = "testing_verification/testnets/large.rs"
-
-[[bin]]
-name = "ic-systest-single-app-large-node-with-nns"
-path = "testing_verification/testnets/single_app_large_node_with_nns.rs"
-
-[[bin]]
-name = "ic-systest-bn-performance"
-path = "boundary_nodes/bn_performance_test.rs"
-
-[[bin]]
-name = "ic-systest-api-bn-decentralization"
-path = "boundary_nodes/api_bn_decentralization_test.rs"
-
-[[bin]]
-name = "ic-systest-mainnet-bn-performance"
-path = "boundary_nodes/mainnet_bn_performance_test.rs"
-
-[[bin]]
-name = "ic-systest-ipv4-integration"
-path = "node/ipv4_integration_test.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"

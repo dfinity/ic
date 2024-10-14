@@ -1,0 +1,220 @@
+# Bazel modules for the IC build.
+# NOTE: Some dependencies are still listed in the WORKSPACE file. See WORKSPACE
+# for details.
+
+module(
+    name = "ic",
+)
+
+# General Bazel helpers
+
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
+
+# Python dependencies
+
+bazel_dep(name = "rules_python", version = "0.35.0")
+
+python_version = "3.10"
+
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(python_version = python_version)
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "python_deps",
+    python_version = python_version,
+    requirements_lock = "//:requirements.txt",
+)
+use_repo(pip, "python_deps")
+
+# Protobuf dependencies
+bazel_dep(
+    name = "protobuf",
+    version = "28.2",
+    # We need to give the repository an explicit name that rules_closure
+    # can find
+    repo_name = "com_google_protobuf",
+)
+
+# Closure (JS framework) dependencies
+
+bazel_dep(name = "rules_java", version = "7.11.1")
+
+# Go dependencies
+
+bazel_dep(name = "rules_go", version = "0.50.1")
+bazel_dep(name = "gazelle", version = "0.38.0")
+
+go_deps = use_extension("@gazelle//:extensions.bzl", "go_deps")
+go_deps.from_file(go_mod = "//:go.mod")
+
+# All direct go deps
+go_deps.module(
+    path = "github.com/fatih/color",
+    sum = "h1:8LOYc1KYPPmyKMuN8QV2DNRWNbLo6LZ0iLs8+mlH53w=",
+    version = "v1.13.0",
+)
+go_deps.module(
+    path = "github.com/golang/protobuf",
+    sum = "h1:ROPKBNFfQgOUMifHyP+KYbvpjbdoFNs+aK7DXlji0Tw=",
+    version = "v1.5.2",
+)
+go_deps.module(
+    path = "github.com/google/go-cmp",
+    sum = "h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=",
+    version = "v0.5.9",
+)
+go_deps.module(
+    path = "github.com/honeycombio/beeline-go",
+    sum = "h1:cyrfwgxM32DKzUhZFJ0KLbPkoyf5lHOyn+7GISwEVZQ=",
+    version = "v1.11.1",
+)
+go_deps.module(
+    path = "github.com/schollz/closestmatch",
+    sum = "h1:Uel2GXEpJqOWBrlyI+oY9LTiyyjYS17cCYRqP13/SHk=",
+    version = "v2.1.0+incompatible",
+)
+go_deps.module(
+    path = "github.com/spf13/cobra",
+    sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
+    version = "v1.6.1",
+)
+go_deps.module(
+    path = "github.com/stretchr/testify",
+    sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
+    version = "v1.8.1",
+)
+go_deps.module(
+    path = "google.golang.org/genproto",
+    sum = "h1:wtujag7C+4D6KMoulW9YauvK2lgdvCMS260jsqqBXr0=",
+    version = "v0.0.0-20210602131652-f16073e35f0c",
+)
+go_deps.module(
+    path = "google.golang.org/grpc",
+    sum = "h1:WTLtQzmQori5FUH25Pq4WT22oCsv8USpQ+F6rqtsmxw=",
+    version = "v1.49.0",
+)
+go_deps.module(
+    path = "google.golang.org/protobuf",
+    sum = "h1:d0NfwRgPtno5B1Wa6L2DAG+KivqkdutMf1UhdNx175w=",
+    version = "v1.28.1",
+)
+use_repo(
+    go_deps,
+    "com_github_fatih_color",
+    "com_github_golang_protobuf",
+    "com_github_google_go_cmp",
+    "com_github_honeycombio_beeline_go",
+    "com_github_schollz_closestmatch",
+    "com_github_spf13_cobra",
+    "com_github_stretchr_testify",
+    "org_golang_google_genproto",
+    "org_golang_google_grpc",
+    "org_golang_google_protobuf",
+)
+
+# Docker/OCI & archive rules with image definitions
+
+bazel_dep(name = "rules_pkg", version = "1.0.1")
+bazel_dep(name = "rules_oci", version = "2.0.0")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+# file server used in tests
+oci.pull(
+    name = "static-file-server",
+    # $ docker pull halverneus/static-file-server
+    # $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
+    # $ docker push dfinitydev/halverneus-static-file-server:latest
+    #latest: digest: sha256:...
+    image = "docker.io/dfinitydev/halverneus-static-file-server@sha256:80eb204716e0928e27e378ed817056c1167b2b1a878b1ac4ce496964dd9a3ccd",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "static-file-server", "static-file-server_linux_amd64")
+
+# bitcoin container used in test
+oci.pull(
+    name = "bitcoind",
+    image = "docker.io/kylemanna/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
+
+# Tracing image used in tests
+# we can't use the official image: https://github.com/bazel-contrib/rules_oci/issues/695
+#
+# Instead we copy the official image to our repository:
+# $ docker pull halverneus/static-file-server
+# $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
+# $ docker push dfinitydev/halverneus-static-file-server:latest
+# > latest: digest: sha256:...
+oci.pull(
+    name = "jaeger",
+    image = "docker.io/dfinitydev/jaegertracing-all-in-one@sha256:b85a6bbb949a62377010b8418d7a860c9d0ea7058d83e7cb5ade4fba046c4a76",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "jaeger", "jaeger_linux_amd64")
+
+# Used by tests
+oci.pull(
+    name = "minica",
+    image = "docker.io/ryantk/minica@sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "minica", "minica_linux_amd64")
+
+# used by rosetta image
+oci.pull(
+    name = "rust_base",
+    image = "gcr.io/distroless/cc-debian11@sha256:8e94f031353596c3fc9db6a2499bcc82dacc40cb71e0703476f9fad41677efdf",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "rust_base", "rust_base_linux_amd64")
+
+# used in various places as base
+oci.pull(
+    name = "ubuntu_base",
+    image = "docker.io/library/ubuntu@sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "ubuntu_base", "ubuntu_base_linux_amd64")
+
+# used by boundary node tests
+oci.pull(
+    name = "coredns",
+    image = "docker.io/coredns/coredns@sha256:be7652ce0b43b1339f3d14d9b14af9f588578011092c1f7893bd55432d83a378",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "coredns", "coredns_linux_amd64")
+
+# used by custom domains tests
+oci.pull(
+    name = "pebble",
+    image = "docker.io/letsencrypt/pebble@sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "pebble", "pebble_linux_amd64")
+oci.pull(
+    name = "python3",
+    image = "docker.io/library/python@sha256:0a56f24afa1fc7f518aa690cb8c7be661225e40b157d9bb8c6ef402164d9faa7",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "python3", "python3_linux_amd64")
+oci.pull(
+    name = "alpine_openssl",
+    image = "docker.io/alpine/openssl@sha256:cf89651f07a33d2faf4499f72e6f8b0ee2542cd40735d51c7e75b8965c17af0e",
+    platforms = ["linux/amd64"],
+)
+use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
+
+# Kubernetes helper
+
+kubeconfig_ext = use_extension("//rs/tests:kubeconfig_extension.bzl", "kubeconfig_extension")
+use_repo(kubeconfig_ext, "kubeconfig")

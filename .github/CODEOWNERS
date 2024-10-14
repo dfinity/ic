@@ -20,7 +20,7 @@
 /bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
 /third_party/             @dfinity/idx
 /WORKSPACE.bazel          @dfinity/idx
-/mainnet-canisters.bzl    @dfinity/idx @dfinity/nns-team
+/mainnet-canisters.json   @dfinity/idx @dfinity/nns-team
 /BUILD.bazel              @dfinity/idx
 .bazelrc                  @dfinity/idx
 .bazelversion             @dfinity/idx
@@ -96,6 +96,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/kyt/                                        @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/networking
 /rs/bitcoin/replica_types/                              @dfinity/execution
+/rs/bitcoin/validation                                  @dfinity/networking @dfinity/execution
 /rs/boundary_node/                                      @dfinity/boundary-node
 /rs/canister_client/                                    @dfinity/networking
 /rs/canister_sandbox/                                   @dfinity/execution
@@ -123,6 +124,7 @@ go_deps.bzl               @dfinity/idx
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/networking
 /rs/http_endpoints/fuzz/                                @dfinity/product-security
+/rs/http_endpoints/xnet/                                @dfinity/networking @dfinity/ic-message-routing-owners
 /rs/http_utils/                                         @dfinity/consensus
 /rs/https_outcalls/                                     @dfinity/networking
 /rs/https_outcalls/consensus/                           @dfinity/consensus
@@ -227,6 +229,7 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
+/rs/tests/dashboards/IC/execution-metrics.json          @dfinity/execution @dfinity/idx
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
@@ -234,7 +237,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
-/rs/tests/gix/                                          @dfinity/idx
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
 /rs/tests/networking/                                   @dfinity/networking @dfinity/idx
 /rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
@@ -242,7 +244,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
 /rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/boundary_nodes/                           @dfinity/boundary-node @dfinity/idx
 /rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
 /rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx

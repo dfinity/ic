@@ -134,6 +134,7 @@ pub struct ExecutionStateBits {
     pub metadata: WasmMetadata,
     pub binary_hash: Option<WasmHash>,
     pub next_scheduled_method: NextScheduledMethod,
+    pub is_wasm64: bool,
 }
 
 /// This struct contains bits of the `CanisterState` that are not already
@@ -2550,6 +2551,7 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
                 pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
                     .into(),
             ),
+            is_wasm64: item.is_wasm64,
         }
     }
 }
@@ -2589,6 +2591,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                     .into(),
                 None => NextScheduledMethod::default(),
             },
+            is_wasm64: value.is_wasm64,
         })
     }
 }

@@ -212,8 +212,7 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
         .get_by_height_range(range);
     for proposal in proposals {
         if !notary.is_proposal_already_notarized_by_me(pool, &proposal) {
-            let block = proposal.as_ref();
-            if let Some(share) = notary.notarize_block(pool, block) {
+            if let Some(share) = notary.notarize_block(pool, &proposal.content) {
                 notarization_shares.push(share);
             }
         }
