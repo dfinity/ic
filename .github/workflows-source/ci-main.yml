@@ -16,7 +16,7 @@ on:
 
 # runs for the same workflow are cancelled on PRs but not on master
 # explanation: on scheduled jobs neither head_ref or ref is set, so the fallback is run_id and master will run without being cancelled
-concurrency
+concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref || github.run_id }}
   cancel-in-progress: true
 
