@@ -1,6 +1,7 @@
 use super::*;
-use crate::types::BtcNetwork;
-use crate::{blocklist, CheckTransactionIrrecoverableError};
+use crate::{
+    blocklist, providers::Provider, types::BtcNetwork, CheckTransactionIrrecoverableError,
+};
 use bitcoin::{
     absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
     PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
@@ -18,6 +19,7 @@ struct MockEnv {
     replies: RefCell<VecDeque<Result<Transaction, HttpGetTxError>>>,
     available_cycles: RefCell<u128>,
     accepted_cycles: RefCell<u128>,
+    called_provider: RefCell<Option<Provider>>,
 }
 
 impl FetchEnv for MockEnv {
@@ -30,19 +32,26 @@ impl FetchEnv for MockEnv {
             Ok(())
         }
     }
+
+    fn btc_network(&self) -> BtcNetwork {
+        BtcNetwork::Mainnet
+    }
+
     async fn http_get_tx(
         &self,
+        provider: Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
+        *self.called_provider.borrow_mut() = Some(provider);
         self.replies
             .borrow_mut()
             .pop_front()
             .unwrap_or(Err(HttpGetTxError::Rejected {
-                code: RejectionCode::from(0),
+                code: RejectionCode::SysTransient,
                 message: "no more reply".to_string(),
             }))
     }
@@ -67,6 +76,7 @@ impl MockEnv {
             replies: RefCell::new(VecDeque::new()),
             available_cycles: RefCell::new(available_cycles),
             accepted_cycles: RefCell::new(0),
+            called_provider: RefCell::new(None),
         }
     }
     fn assert_get_tx_call(&self, txid: Txid, max_response_bytes: u32) {
@@ -137,6 +147,7 @@ fn mock_transaction_with_inputs(input_txids: Vec<(Txid, u32)>) -> Transaction {
 async fn test_mock_env() {
     // Test cycle mock functions
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let provider = providers::next_provider(env.btc_network());
     assert_eq!(
         env.cycles_accept(CHECK_TRANSACTION_CYCLES_SERVICE_FEE),
         CHECK_TRANSACTION_CYCLES_SERVICE_FEE
@@ -155,7 +166,9 @@ async fn test_mock_env() {
     let env = MockEnv::new(0);
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
-    let result = env.http_get_tx(txid, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .http_get_tx(provider, txid, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
     env.assert_no_more_get_tx_call();
@@ -210,6 +223,7 @@ fn test_try_fetch_tx() {
 #[tokio::test]
 async fn test_fetch_tx() {
     let env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
+    let provider = providers::next_provider(env.btc_network());
     let txid_0 = mock_txid(0);
     let txid_1 = mock_txid(1);
     let txid_2 = mock_txid(2);
@@ -218,7 +232,9 @@ async fn test_fetch_tx() {
     let tx_0 = mock_transaction_with_inputs(vec![(txid_1, 0), (txid_2, 1)]);
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
-    let result = env.fetch_tx((), txid_0, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), provider, txid_0, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
         state::get_fetch_status(txid_0),
@@ -233,7 +249,9 @@ async fn test_fetch_tx() {
 
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
-    let result = env.fetch_tx((), txid_1, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), provider, txid_1, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
                 state::get_fetch_status(txid_1),
@@ -243,23 +261,25 @@ async fn test_fetch_tx() {
     env.expect_get_tx_with_reply(Err(HttpGetTxError::TxEncoding(
         "failed to decode tx".to_string(),
     )));
-    let result = env.fetch_tx((), txid_2, INITIAL_MAX_RESPONSE_BYTES).await;
+    let result = env
+        .fetch_tx((), provider, txid_2, INITIAL_MAX_RESPONSE_BYTES)
+        .await;
     assert!(matches!(
         result,
         Ok(FetchResult::Error(HttpGetTxError::TxEncoding(_)))
     ));
     assert!(matches!(
         state::get_fetch_status(txid_2),
-        Some(FetchTxStatus::Error(HttpGetTxError::TxEncoding(_)))
+        Some(FetchTxStatus::Error(FetchTxStatusError {
+            error: HttpGetTxError::TxEncoding(_),
+            ..
+        }))
     ));
 }
 
 #[tokio::test]
 async fn test_check_fetched() {
     let mut env = MockEnv::new(CHECK_TRANSACTION_CYCLES_REQUIRED);
-    state::set_config(state::Config {
-        btc_network: BtcNetwork::Mainnet,
-    });
     let good_address = Address::from_str("12cbQLTFMXRnSzktFkuoG3eHoMeFtpTu3S")
         .unwrap()
         .assume_checked();
@@ -460,5 +480,32 @@ async fn test_check_fetched() {
         CHECK_TRANSACTION_CYCLES_REQUIRED
             - get_tx_cycle_cost(INITIAL_MAX_RESPONSE_BYTES) * 2
             - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
+    );
+
+    // case HttpGetTxError can be retried.
+    let remaining_cycles = env.cycles_available();
+    let provider = providers::next_provider(env.btc_network());
+    state::set_fetch_status(
+        txid_2,
+        FetchTxStatus::Error(FetchTxStatusError {
+            provider,
+            max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
+            error: HttpGetTxError::Rejected {
+                code: RejectionCode::SysTransient,
+                message: "no more reply".to_string(),
+            },
+        }),
+    );
+    env.expect_get_tx_with_reply(Ok(tx_2.clone()));
+    assert!(matches!(
+        env.check_fetched(txid_0, &fetched).await,
+        CheckTransactionResponse::Passed
+    ));
+    // check if provider has been rotated
+    assert!(*env.called_provider.borrow() == Some(provider.next()));
+    // Check remaining cycle. The cost should match RETRY_MAX_RESPONSE_BYTES
+    assert_eq!(
+        env.cycles_available(),
+        remaining_cycles - get_tx_cycle_cost(RETRY_MAX_RESPONSE_BYTES)
     );
 }
