@@ -29,7 +29,6 @@ deterministic_ips = { path = "../ic_os/dev_test_tools/deterministic_ips" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
-discower_bowndary = { path = "../boundary_node/discower_bowndary" }
 ed25519-dalek = { workspace = true }
 flate2 = { workspace = true }
 futures = { workspace = true }
@@ -51,7 +50,6 @@ ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-ic-cup-explorer = { path = "../cup_explorer" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
 ic-http-utils = { path = "../http_utils" }
@@ -94,7 +92,6 @@ ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
-ic-replay = { path = "../replay" }
 ic-rosetta-api = { path = "../rosetta-api/icp" }
 ic-rosetta-test-utils = { path = "../rosetta-api/icp/test_utils" }
 ic-sns-governance = { path = "../sns/governance" }
@@ -108,6 +105,7 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-tests-ckbtc = { path = "ckbtc" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
@@ -121,7 +119,6 @@ indoc = "1.0.9"
 itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
-k8s-openapi = { version = "0.20.0", features = ["v1_22"] }
 kube = { workspace = true }
 lazy_static = { workspace = true }
 leb128 = "0.2.5"
@@ -292,14 +289,6 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-bn-integration"
-path = "boundary_nodes/bn_integration_test.rs"
-
-[[bin]]
-name = "ic-systest-bn-integration-on-playnet"
-path = "boundary_nodes/bn_integration_on_playnet_test.rs"
-
-[[bin]]
 name = "ic-systest-bn-update-workload-test"
 path = "boundary_nodes/bn_update_workload_test.rs"
 
@@ -366,18 +355,6 @@ path = "message_routing/state_sync_malicious_chunk_test.rs"
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
-
-[[bin]]
-name = "ic-systest-bn-performance"
-path = "boundary_nodes/bn_performance_test.rs"
-
-[[bin]]
-name = "ic-systest-api-bn-decentralization"
-path = "boundary_nodes/api_bn_decentralization_test.rs"
-
-[[bin]]
-name = "ic-systest-mainnet-bn-performance"
-path = "boundary_nodes/mainnet_bn_performance_test.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"

@@ -1,5 +1,6 @@
 load("//ic-os:defs.bzl", "icos_build")
-load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
+
+#load("//ic-os/dev-tools/bare_metal_deployment:tools.bzl", "launch_bare_metal")
 load("//ic-os/setupos:defs.bzl", "image_deps")
 
 # The macro contains several targets.
@@ -14,7 +15,7 @@ icos_build(
     vuln_scan = False,
 )
 
-launch_bare_metal(
-    name = "launch_bare_metal",
-    image_zst_file = ":disk-img.tar.zst",
-)
+# launch_bare_metal(
+#     name = "launch_bare_metal",
+#     image_zst_file = ":disk-img.tar.zst",
+# )
