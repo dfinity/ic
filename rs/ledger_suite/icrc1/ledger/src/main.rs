@@ -207,7 +207,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                     }
                 };
             let mut leger_version_bytes = [0u8; 8];
-             if let Ok(_) = buffered_reader.read_exact(&mut leger_version_bytes) {
+             if buffered_reader.read_exact(&mut leger_version_bytes).is_ok() {
                      let ledger_version = u64::from_le_bytes(leger_version_bytes);
                      if ledger_version > LEDGER_VERSION {
                      panic!(
@@ -216,7 +216,6 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                      );
                  }
             };
-
             state
         });
         ic_cdk::println!("Successfully read state from memory manager managed stable structures");
