@@ -134,8 +134,8 @@ pub mod tla_macros;
 pub mod tla;
 #[cfg(feature = "tla")]
 pub use tla::{
-    split_neuron_desc, claim_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
-    TLA_TRACES,
+    claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)

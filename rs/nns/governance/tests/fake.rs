@@ -320,18 +320,19 @@ impl IcpLedger for FakeDriver {
             "WaitForBalanceQuery",
             Destination::new("ledger"),
             "AccountBalance",
-            tla::TlaValue::Record(BTreeMap::from([
-                ("account".to_string(), account_to_tla(account))
-            ]))
+            tla::TlaValue::Record(BTreeMap::from([(
+                "account".to_string(),
+                account_to_tla(account)
+            )]))
         );
 
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         tla_log_response!(
             Destination::new("ledger"),
-                tla::TlaValue::Variant {
-                    tag: "BalanceQueryOk".to_string(),
-                    value: Box::new(account_e8s.to_tla_value()),
-                }
+            tla::TlaValue::Variant {
+                tag: "BalanceQueryOk".to_string(),
+                value: Box::new(account_e8s.to_tla_value()),
+            }
         );
         Ok(Tokens::from_e8s(*account_e8s))
     }

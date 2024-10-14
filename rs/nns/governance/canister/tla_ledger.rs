@@ -79,9 +79,10 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
             "WaitForBalanceQuery",
             Destination::new("ledger"),
             "AccountBalance",
-            tla::TlaValue::Record(BTreeMap::from([
-                ("account".to_string(), account_to_tla(account))
-            ]))
+            tla::TlaValue::Record(BTreeMap::from([(
+                "account".to_string(),
+                account_to_tla(account)
+            )]))
         );
 
         let result = self.0.account_balance(account).await;
