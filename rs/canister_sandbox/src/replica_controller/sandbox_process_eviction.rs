@@ -20,10 +20,6 @@ impl Ord for EvictionCandidate {
 
 impl PartialOrd for EvictionCandidate {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        /*if self.scheduler_priority == other.scheduler_priority {
-            return Some(self.last_used.cmp(&other.last_used));
-        }
-        Some(self.scheduler_priority.cmp(&other.scheduler_priority))*/
         Some(self.cmp(other))
     }
 }
@@ -50,7 +46,6 @@ pub(crate) fn evict(
     max_count_threshold: usize,
     last_used_threshold: Instant,
 ) -> Vec<EvictionCandidate> {
-    //here
     candidates.sort();
 
     let evict_at_least = candidates.len().saturating_sub(max_count_threshold);

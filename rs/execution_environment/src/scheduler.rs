@@ -1649,7 +1649,6 @@ impl Scheduler for SchedulerImpl {
             state.put_canister_states(canisters);
             round_schedule_candidate
         };
-        //here
 
         // Inner round.
         let (mut state, active_canister_ids) = self.inner_round(
