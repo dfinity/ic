@@ -1136,7 +1136,7 @@ pub mod sns {
             dapps: _,
         } = response
         else {
-            panic!("Cannot find some SNS caniser IDs in {:#?}", response);
+            panic!("Cannot find some SNS canister IDs in {:#?}", response);
         };
 
         // Sanity check
@@ -1198,9 +1198,9 @@ pub mod sns {
         )
         .await;
 
-        for _ in 0..10 {
-            pocket_ic.tick().await;
+        for _ in 0..20 {
             pocket_ic.advance_time(Duration::from_secs(10)).await;
+            pocket_ic.tick().await;
         }
 
         let post_upgrade_running_version =
@@ -1219,7 +1219,7 @@ pub mod sns {
             nns::governance::propose_and_wait(
                 pocket_ic,
                 MakeProposalRequest {
-                    title: Some("Enable auto-finalization for the Swap canister".to_string()),
+                    title: Some("Upgrade Swap from NNS Governance".to_string()),
                     summary: "".to_string(),
                     url: "".to_string(),
                     action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
@@ -2650,7 +2650,7 @@ pub mod sns {
             status: SwapFinalizationStatus,
         ) -> Result<GetAutoFinalizationStatusResponse, String> {
             let mut last_auto_finalization_status = None;
-            for _attempt_count in 1..=100 {
+            for _attempt_count in 1..=1000 {
                 pocket_ic.tick().await;
                 pocket_ic.advance_time(Duration::from_secs(1)).await;
                 let auto_finalization_status =

@@ -11,10 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIc::get_subnet_metrics` to retrieve metrics of a given subnet.
 - The function `PocketIcBuilder::with_bitcoind_addr` to specify the address and port at which a `bitcoind` process is listening.
 - The function `PocketIcBuilder::new_with_config` to specify a custom `ExtendedSubnetConfigSet`.
+- The function `PocketIcBuilder::with_subnet_state` to load subnet state from a state directory for an arbitrary subnet kind and subnet id.
+- The function `get_default_effective_canister_id` to retrieve a default effective canister id for canister creation on a PocketIC instance.
 
 ### Removed
 - Functions `PocketIc::from_config`, `PocketIc::from_config_and_max_request_time`, and `PocketIc::from_config_and_server_url`.
   Use the `PocketIcBuilder` instead.
+
+### Changed
+- The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations
+  and `default_effective_canister_id` contains a default effective canister id for canister creation.
 
 
 
