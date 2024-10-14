@@ -41,9 +41,12 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:strum",
         ],
     )
-    for (name_suffix,  features) in [
+    for (name_suffix, features) in [
         ("", []),
-        ("_evm_rpc", ["evm-rpc"]),
+        (
+            "_evm_rpc",
+            ["evm-rpc"],
+        ),
     ]
 ]
 

@@ -219,12 +219,17 @@ rust_binary(
         ] + extra_deps,
     )
     for (name_suffix, extra_data, extra_env, extra_deps) in [
-        ("", [], {}, ["//rs/ethereum/cketh/test_utils"]),
+        (
+            "",
+            [],
+            {},
+            ["//rs/ethereum/cketh/test_utils"],
+        ),
         (
             "_evm_rpc",
             ["@evm_rpc.wasm.gz//file"],
             {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
-            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"]
+            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"],
         ),
     ]
 ]
