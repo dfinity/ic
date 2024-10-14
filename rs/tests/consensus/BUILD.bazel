@@ -12,6 +12,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
+        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -22,12 +23,12 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/backup",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
-        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:hex",

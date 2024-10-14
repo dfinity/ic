@@ -347,7 +347,9 @@ generate_forum_post_nns_upgrades() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -379,7 +381,9 @@ generate_forum_post_sns_wasm_publish() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 

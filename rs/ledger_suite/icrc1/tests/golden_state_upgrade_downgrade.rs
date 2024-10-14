@@ -9,18 +9,13 @@ use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_icrc1_ledger_sm_tests::{
-    get_all_ledger_and_archive_blocks, get_allowance, send_approval, send_transfer,
-    send_transfer_from,
+    generate_transactions, get_all_ledger_and_archive_blocks, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
-use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use std::str::FromStr;
-use std::time::{Instant, UNIX_EPOCH};
 
 mod common;
 
@@ -39,12 +34,20 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(not(feature = "u256-tokens"))]
 lazy_static! {
-    pub static ref MAINNET_WASMS: Wasms = Wasms::new(
+    pub static ref MAINNET_CKBTC_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -61,14 +64,6 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-        ))
-    );
-    pub static ref MAINNET_U64_WASMS: Wasms = Wasms::new(
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
-        )),
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -337,7 +332,18 @@ impl LedgerState {
         if let Some(previous_ledger_state) = &previous_ledger_state {
             ledger_state.assert_eq(previous_ledger_state);
         }
-        generate_transactions(state_machine, ledger_id);
+        generate_transactions(
+            state_machine,
+            ledger_id,
+            TransactionGenerationParameters {
+                mint_multiplier: MINT_MULTIPLIER,
+                transfer_multiplier: TRANSFER_MULTIPLIER,
+                approve_multiplier: APPROVE_MULTIPLIER,
+                transfer_from_multiplier: TRANSFER_FROM_MULTIPLIER,
+                burn_multiplier: BURN_MULTIPLIER,
+                num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
+            },
+        );
         // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
         // not fetched in the previous call to `fetch_next_blocks`.
         let ledger_and_archive_blocks = ledger_state
@@ -380,7 +386,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             CK_BTC_INDEX_CANISTER_ID,
             CK_BTC_LEDGER_CANISTER_NAME,
         ),
-        &MAINNET_WASMS,
+        &MAINNET_CKBTC_WASMS,
         &MASTER_WASMS,
         Some(burns_without_spender),
         true,
@@ -521,7 +527,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
-#[cfg(feature = "u256-tokens")]
+#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
@@ -673,7 +679,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
         OPENCHAT_LEDGER_SUITE,
-        &MAINNET_U64_WASMS,
+        &MAINNET_SNS_WASMS,
         &MASTER_WASMS,
         None,
         true,
@@ -710,7 +716,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &MAINNET_U64_WASMS,
+            &MAINNET_SNS_WASMS,
             &MASTER_WASMS,
         ));
     }
@@ -723,209 +729,13 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     }
 }
 
-fn generate_transactions(state_machine: &StateMachine, canister_id: CanisterId) {
-    let start = Instant::now();
-    let minter_account = ic_icrc1_ledger_sm_tests::minting_account(state_machine, canister_id)
-        .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
-    let u64_fee = ic_icrc1_ledger_sm_tests::fee(state_machine, canister_id);
-    let fee = Tokens::from(u64_fee);
-    let burn_amount = Tokens::from(
-        u64_fee
-            .checked_mul(BURN_MULTIPLIER)
-            .unwrap_or_else(|| panic!("burn amount overflowed for canister {:?}", canister_id)),
-    );
-    let transfer_amount =
-        Tokens::from(u64_fee.checked_mul(TRANSFER_MULTIPLIER).unwrap_or_else(|| {
-            panic!("transfer amount overflowed for canister {:?}", canister_id)
-        }));
-    let mint_amount = Tokens::from(
-        u64_fee
-            .checked_mul(MINT_MULTIPLIER)
-            .unwrap_or_else(|| panic!("mint amount overflowed for canister {:?}", canister_id)),
-    );
-    let transfer_from_amount = Tokens::from(
-        u64_fee
-            .checked_mul(TRANSFER_FROM_MULTIPLIER)
-            .unwrap_or_else(|| {
-                panic!(
-                    "transfer_from amount overflowed for canister {:?}",
-                    canister_id
-                )
-            }),
-    );
-    let approve_amount = Tokens::from(
-        u64_fee
-            .checked_mul(APPROVE_MULTIPLIER)
-            .unwrap_or_else(|| panic!("approve amount overflowed for canister {:?}", canister_id)),
-    );
-    let mut accounts = vec![];
-    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
-        let subaccount = match i {
-            0 => None,
-            _ => Some([i as u8; 32]),
-        };
-        accounts.push(Account {
-            owner: PrincipalId::new_user_test_id(i as u64).0,
-            subaccount,
-        });
-    }
-    // Mint
-    let mut minted = 0usize;
-    println!("minting");
-    for to in &accounts {
-        send_transfer(
-            state_machine,
-            canister_id,
-            minter_account.owner,
-            &TransferArg {
-                from_subaccount: minter_account.subaccount,
-                to: *to,
-                fee: None,
-                created_at_time: Some(
-                    state_machine
-                        .time()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
-                memo: Some(Memo::from(minted as u64)),
-                amount: Nat::from(mint_amount),
-            },
-        )
-        .expect("should be able to mint");
-        minted += 1;
-        if minted >= NUM_TRANSACTIONS_PER_TYPE {
-            break;
-        }
-    }
-    // Transfer
-    println!("transferring");
-    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
-        let from = accounts[i];
-        let to = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        send_transfer(
-            state_machine,
-            canister_id,
-            from.owner,
-            &TransferArg {
-                from_subaccount: from.subaccount,
-                to,
-                fee: Some(Nat::from(fee)),
-                created_at_time: Some(
-                    state_machine
-                        .time()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
-                memo: Some(Memo::from(i as u64)),
-                amount: Nat::from(transfer_amount),
-            },
-        )
-        .expect("should be able to transfer");
-    }
-    // Approve
-    println!("approving");
-    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
-        let from = accounts[i];
-        let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        let current_allowance = get_allowance(state_machine, canister_id, from, spender);
-        let expires_at = state_machine
-            .time()
-            .checked_add(std::time::Duration::from_secs(3600))
-            .unwrap()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        send_approval(
-            state_machine,
-            canister_id,
-            from.owner,
-            &ApproveArgs {
-                from_subaccount: from.subaccount,
-                spender,
-                amount: Nat::from(approve_amount),
-                expected_allowance: Some(current_allowance.allowance.clone()),
-                expires_at: Some(expires_at),
-                fee: Some(Nat::from(fee)),
-                memo: Some(Memo::from(i as u64)),
-                created_at_time: Some(
-                    state_machine
-                        .time()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
-            },
-        )
-        .expect("should be able to transfer");
-    }
-    // Transfer From
-    println!("transferring from");
-    for i in 0..NUM_TRANSACTIONS_PER_TYPE {
-        let from = accounts[i];
-        let spender = accounts[(i + 1) % NUM_TRANSACTIONS_PER_TYPE];
-        let to = accounts[(i + 2) % NUM_TRANSACTIONS_PER_TYPE];
-        send_transfer_from(
-            state_machine,
-            canister_id,
-            spender.owner,
-            &TransferFromArgs {
-                spender_subaccount: spender.subaccount,
-                from,
-                to,
-                amount: Nat::from(transfer_from_amount),
-                fee: Some(Nat::from(fee)),
-                memo: Some(Memo::from(i as u64)),
-                created_at_time: Some(
-                    state_machine
-                        .time()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
-            },
-        )
-        .expect("should be able to transfer from");
-    }
-    // Burn
-    println!("burning");
-    for (i, from) in accounts.iter().enumerate().take(NUM_TRANSACTIONS_PER_TYPE) {
-        send_transfer(
-            state_machine,
-            canister_id,
-            from.owner,
-            &TransferArg {
-                from_subaccount: from.subaccount,
-                to: minter_account,
-                fee: None,
-                created_at_time: Some(
-                    state_machine
-                        .time()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_nanos() as u64,
-                ),
-                memo: Some(Memo::from(i as u64)),
-                amount: Nat::from(burn_amount),
-            },
-        )
-        .expect("should be able to transfer");
-    }
-    println!(
-        "generated {} transactions in {:?}",
-        NUM_TRANSACTIONS_PER_TYPE * 5,
-        start.elapsed()
-    );
-}
-
 mod index {
     use super::*;
     use candid::Decode;
     use ic_icrc1_index_ng::Status;
     use ic_state_machine_tests::WasmResult;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     pub fn get_all_index_blocks(
         state_machine: &StateMachine,
@@ -947,7 +757,7 @@ mod index {
                 curr_start,
                 length - (curr_start - start_index),
             )
-            .blocks;
+                .blocks;
             assert!(!new_blocks.is_empty());
             curr_start += new_blocks.len() as u64;
             blocks.extend(new_blocks);

@@ -36,7 +36,7 @@
 use crate::common::rest::{
     BlobCompression, BlobId, CanisterHttpRequest, DtsFlag, ExtendedSubnetConfigSet, HttpsConfig,
     InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
-    SubnetSpec, Topology,
+    SubnetKind, SubnetSpec, Topology,
 };
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
@@ -61,10 +61,14 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use thiserror::Error;
+use tokio::runtime::Runtime;
 use tracing::{instrument, warn};
 
 pub mod common;
 pub mod nonblocking;
+
+const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -201,9 +205,46 @@ impl PocketIcBuilder {
     /// ```sh
     /// ic-regedit snapshot <path-to-ic_registry_local_store> | jq -r ".nns_subnet_id"
     /// ```
-    pub fn with_nns_state(mut self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+    pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
+        self.with_subnet_state(SubnetKind::NNS, nns_subnet_id, path_to_state)
+    }
+
+    /// Add a subnet with state loaded form the given state directory.
+    /// Note that the provided path must be accessible for the PocketIC server process.
+    ///
+    /// `state_dir` should point to a directory which is expected to have
+    /// the following structure:
+    ///
+    /// state_dir/
+    ///  |-- backups
+    ///  |-- checkpoints
+    ///  |-- diverged_checkpoints
+    ///  |-- diverged_state_markers
+    ///  |-- fs_tmp
+    ///  |-- page_deltas
+    ///  |-- states_metadata.pbuf
+    ///  |-- tip
+    ///  `-- tmp
+    ///
+    /// `subnet_id` should be the subnet ID of the subnet in the state to be loaded
+    pub fn with_subnet_state(
+        mut self,
+        subnet_kind: SubnetKind,
+        subnet_id: Principal,
+        state_dir: PathBuf,
+    ) -> Self {
         let mut config = self.config.unwrap_or_default();
-        config.nns = Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id));
+        let subnet_spec = SubnetSpec::default().with_state_dir(state_dir, subnet_id);
+        match subnet_kind {
+            SubnetKind::NNS => config.nns = Some(subnet_spec),
+            SubnetKind::SNS => config.sns = Some(subnet_spec),
+            SubnetKind::II => config.ii = Some(subnet_spec),
+            SubnetKind::Fiduciary => config.fiduciary = Some(subnet_spec),
+            SubnetKind::Bitcoin => config.bitcoin = Some(subnet_spec),
+            SubnetKind::Application => config.application.push(subnet_spec),
+            SubnetKind::System => config.system.push(subnet_spec),
+            SubnetKind::VerifiedApplication => config.verified_application.push(subnet_spec),
+        };
         self.config = Some(config);
         self
     }
@@ -1282,6 +1323,28 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
 , &bin_path, is_dir, &std::env::current_dir().map(|x| x.display().to_string()).unwrap_or_else(|_| "an unknown directory".to_string()));
     }
 
+    // check PocketIC server version compatibility
+    let mut cmd = Command::new(PathBuf::from(bin_path.clone()));
+    cmd.arg("--version");
+    let version = cmd
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to get version of PocketIC binary ({}): {}",
+                bin_path, e
+            )
+        })
+        .stdout;
+    let version_str = String::from_utf8(version)
+        .unwrap_or_else(|e| panic!("Failed to parse PocketIC binary version string: {}", e));
+    let version_line = version_str.trim_end_matches('\n');
+    if version_line != EXPECTED_SERVER_VERSION {
+        panic!(
+            "Incompatible PocketIC server version: got {}; expected {}.",
+            version_line, EXPECTED_SERVER_VERSION
+        );
+    }
+
     // Use the parent process ID to find the PocketIC server port for this `cargo test` run.
     let parent_pid = std::os::unix::process::parent_id();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
@@ -1306,4 +1369,39 @@ To download the binary, please visit https://github.com/dfinity/pocketic."
         }
         std::thread::sleep(Duration::from_millis(20));
     }
+}
+
+#[derive(Error, Debug)]
+pub enum DefaultEffectiveCanisterIdError {
+    ReqwestError(#[from] reqwest::Error),
+    JsonError(#[from] serde_json::Error),
+    Utf8Error(#[from] std::string::FromUtf8Error),
+}
+
+impl std::fmt::Display for DefaultEffectiveCanisterIdError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            DefaultEffectiveCanisterIdError::ReqwestError(err) => {
+                write!(f, "ReqwestError({})", err)
+            }
+            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({})", err),
+            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({})", err),
+        }
+    }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+pub fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let runtime = Runtime::new().expect("Unable to create a runtime");
+    runtime.block_on(crate::nonblocking::get_default_effective_canister_id(
+        pocket_ic_url,
+    ))
 }
