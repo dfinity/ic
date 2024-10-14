@@ -3,7 +3,7 @@
 #
 # The following chart shows the 90th percentile of the duration per bazel test in ci-main/bazel-test-all:
 # https://superset.idx.dfinity.network/explore/?slice_id=48
-# If a test takes longer than 5 minutes it has to be tagged with "on-push-to-master"
+# If a test takes longer than 5 minutes it has to be tagged with "on_push_to_master"
 # to skip running it in ci-main/bazel-test-all and run it here instead.
 
 name: On Push To Master
