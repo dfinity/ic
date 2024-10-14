@@ -100,6 +100,13 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
     }
 }
 
+pub fn request_id(id: u64, height: Height) -> RequestId {
+    RequestId {
+        callback_id: CallbackId::from(id),
+        height,
+    }
+}
+
 pub fn fake_signature_request_context(
     key_id: MasterPublicKeyId,
     pseudo_random_id: [u8; 32],
@@ -116,7 +123,7 @@ pub fn fake_signature_request_context(
 }
 
 pub fn fake_signature_request_context_with_pre_sig(
-    id: u8,
+    request_id: &RequestId,
     key_id: MasterPublicKeyId,
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
@@ -125,46 +132,29 @@ pub fn fake_signature_request_context_with_pre_sig(
         args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [id; 32],
+        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: pre_signature.map(|pid| (pid, Height::from(1))),
         nonce: None,
     };
-    (CallbackId::from(id as u64), context)
-}
-
-pub fn fake_completed_signature_request_context(
-    id: u8,
-    key_id: MasterPublicKeyId,
-    pre_signature_id: PreSigId,
-) -> (CallbackId, SignWithThresholdContext) {
-    let (_, context) = fake_signature_request_context_from_id(
-        key_id,
-        &RequestId {
-            pre_signature_id,
-            pseudo_random_id: [id; 32],
-            height: Height::from(1),
-        },
-    );
-    (CallbackId::from(id as u64), context)
+    (request_id.callback_id, context)
 }
 
 pub fn fake_signature_request_context_from_id(
     key_id: MasterPublicKeyId,
+    pre_sig_id: PreSigId,
     request_id: &RequestId,
 ) -> (CallbackId, SignWithThresholdContext) {
     let height = request_id.height;
-    let pre_sig_id = request_id.pre_signature_id;
-    let callback_id = CallbackId::from(pre_sig_id.id());
     let context = SignWithThresholdContext {
         request: RequestBuilder::new().build(),
         args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: request_id.pseudo_random_id,
+        pseudo_random_id: [pre_sig_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
         nonce: Some([0; 32]),
     };
-    (callback_id, context)
+    (request_id.callback_id, context)
 }
 
 pub fn fake_state_with_signature_requests<T>(
@@ -373,25 +363,19 @@ impl TestIDkgBlockReader {
 
     pub(crate) fn for_signer_test(
         height: Height,
-        sig_inputs: Vec<(RequestId, TestSigInputs)>,
+        sig_inputs: Vec<(PreSigId, TestSigInputs)>,
     ) -> Self {
         let mut idkg_transcripts = BTreeMap::new();
-        let mut requested_signatures = Vec::new();
         let mut available_pre_signatures = BTreeMap::new();
-        for (request_id, sig_inputs) in sig_inputs {
+        for (pre_sig_id, sig_inputs) in sig_inputs {
             for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
                 idkg_transcripts.insert(transcript_ref, transcript);
             }
-            available_pre_signatures.insert(
-                request_id.pre_signature_id,
-                sig_inputs.sig_inputs_ref.pre_signature(),
-            );
-            requested_signatures.push((request_id, sig_inputs.sig_inputs_ref));
+            available_pre_signatures.insert(pre_sig_id, sig_inputs.sig_inputs_ref.pre_signature());
         }
 
         Self {
             height,
-            requested_signatures,
             available_pre_signatures,
             idkg_transcripts,
             ..Default::default()
@@ -454,16 +438,6 @@ impl TestIDkgBlockReader {
     ) {
         self.available_pre_signatures
             .insert(pre_signature_id, pre_signature);
-    }
-
-    pub(crate) fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdSigInputsRef)> + '_> {
-        Box::new(
-            self.requested_signatures
-                .iter()
-                .map(|(id, sig_inputs)| (id, sig_inputs)),
-        )
     }
 }
 
@@ -645,9 +619,10 @@ impl TestThresholdSignatureBuilder {
 impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
     fn get_completed_signature(
         &self,
+        callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        let request_id = get_context_request_id(context)?;
+        let request_id = get_context_request_id(callback_id, context)?;
         self.signatures.get(&request_id).cloned()
     }
 }

@@ -43,6 +43,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::consensus::idkg::common::{CombinedSignature, ThresholdSigInputsRef};
 use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrVerifyCombinedSigError;
 use ic_types::crypto::canister_threshold_sig::ThresholdSchnorrCombinedSignature;
+use ic_types::messages::CallbackId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -427,6 +428,7 @@ impl IDkgTranscriptBuilder for CachedBuilder {
 impl ThresholdSignatureBuilder for CachedBuilder {
     fn get_completed_signature(
         &self,
+        _id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
         self.signatures.get(&context.pseudo_random_id).cloned()
@@ -548,8 +550,8 @@ fn validate_new_signature_agreements(
     let mut new_signatures = BTreeMap::new();
     let contexts = state.signature_request_contexts();
     let context_map = contexts
-        .values()
-        .map(|c| (c.pseudo_random_id, c))
+        .iter()
+        .map(|(id, c)| (c.pseudo_random_id, (id, c)))
         .collect::<BTreeMap<_, _>>();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let idkg::CompletedSignature::Unreported(response) = completed {
@@ -557,10 +559,10 @@ fn validate_new_signature_agreements(
                 if prev_payload.signature_agreements.contains_key(random_id) {
                     return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
                 }
-                let context = context_map.get(random_id).ok_or(
+                let (id, context) = context_map.get(random_id).ok_or(
                     InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
                 )?;
-                let (_, input_ref) = build_signature_inputs(context, block_reader)
+                let (_, input_ref) = build_signature_inputs(**id, context, block_reader)
                     .map_err(InvalidIDkgPayloadReason::NewSignatureBuildInputsError)?;
                 match input_ref {
                     ThresholdSigInputsRef::Ecdsa(input_ref) => {
@@ -630,6 +632,7 @@ mod test {
         messages::CallbackId,
         Height,
     };
+    use idkg::RequestId;
     use std::collections::BTreeSet;
 
     #[test]
@@ -876,19 +879,37 @@ mod test {
         let pre_sig_id2 = idkg_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id3 = idkg_payload.uid_generator.next_pre_signature_id();
 
+        let id1 = RequestId {
+            callback_id: CallbackId::from(1),
+            height: Height::from(0),
+        };
+        let id2 = RequestId {
+            callback_id: CallbackId::from(2),
+            height: Height::from(0),
+        };
+        let id3 = RequestId {
+            callback_id: CallbackId::from(3),
+            height: Height::from(0),
+        };
+
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_completed_signature_request_context(1, key_id.clone(), pre_sig_id1),
-            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_id2),
-            fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, &id1),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, &id2),
+            fake_signature_request_context_with_pre_sig(&id3, key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
         let request_ids = signature_request_contexts
-            .values()
-            .flat_map(get_context_request_id)
+            .iter()
+            .flat_map(|(callback_id, context)| {
+                context.matched_pre_signature.map(|(_, height)| RequestId {
+                    callback_id: *callback_id,
+                    height,
+                })
+            })
             .collect::<Vec<_>>();
 
         let (key_transcript, key_transcript_ref) =
@@ -1025,9 +1046,18 @@ mod test {
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id2 = prev_payload.uid_generator.next_pre_signature_id();
 
+        let id1 = RequestId {
+            callback_id: CallbackId::from(1),
+            height: Height::from(0),
+        };
+        let id2 = RequestId {
+            callback_id: CallbackId::from(2),
+            height: Height::from(0),
+        };
+
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id)),
-            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_id2),
+            fake_signature_request_context_with_pre_sig(&id1, key_id.clone(), Some(pre_sig_id)),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, &id2),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());

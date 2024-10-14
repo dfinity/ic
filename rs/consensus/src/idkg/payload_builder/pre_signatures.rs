@@ -538,8 +538,8 @@ pub(super) mod tests {
         create_available_pre_signature, create_available_pre_signature_with_key_transcript,
         fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
         fake_schnorr_key_id, fake_schnorr_master_public_key_id,
-        fake_signature_request_context_with_pre_sig, set_up_idkg_payload, IDkgPayloadTestHelper,
-        TestIDkgBlockReader, TestIDkgTranscriptBuilder,
+        fake_signature_request_context_with_pre_sig, request_id, set_up_idkg_payload,
+        IDkgPayloadTestHelper, TestIDkgBlockReader, TestIDkgTranscriptBuilder,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
@@ -1103,7 +1103,11 @@ pub(super) mod tests {
 
         // All three pre-signatures are matched with a context
         let contexts = BTreeMap::from_iter(pre_sig_ids.into_iter().map(|id| {
-            fake_signature_request_context_with_pre_sig(id.id() as u8, key_id.clone(), Some(id))
+            fake_signature_request_context_with_pre_sig(
+                &request_id(id.id(), Height::from(300)),
+                key_id.clone(),
+                Some(id),
+            )
         }));
 
         // None of them should be purged
@@ -1122,12 +1126,8 @@ pub(super) mod tests {
 
     fn test_unmatched_pre_signatures_of_current_key_are_not_purged(key_id: MasterPublicKeyId) {
         let mut rng = reproducible_rng();
-        let (mut payload, _, _) = set_up(
-            &mut rng,
-            subnet_test_id(1),
-            vec![key_id.clone()],
-            Height::from(100),
-        );
+        let height = Height::from(100);
+        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), vec![key_id.clone()], height);
         let key_transcript = get_current_unmasked_key_transcript(&payload);
 
         // Create three pre-signatures of the current key transcript
@@ -1142,7 +1142,7 @@ pub(super) mod tests {
 
         // None of them are matched to a context
         let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
-            1,
+            &request_id(1, height),
             key_id.clone(),
             None,
         )]);
@@ -1198,7 +1198,7 @@ pub(super) mod tests {
 
         // The first one is matched to a context
         let contexts = BTreeMap::from_iter([fake_signature_request_context_with_pre_sig(
-            1,
+            &request_id(1, Height::from(300)),
             key_id.clone(),
             Some(pre_sig_ids[0]),
         )]);

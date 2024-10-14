@@ -132,7 +132,7 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        let signature = match signature_builder.get_completed_signature(context) {
+        let signature = match signature_builder.get_completed_signature(*callback_id, context) {
             Some(CombinedSignature::Ecdsa(signature)) => SignWithECDSAReply {
                 signature: signature.signature.clone(),
             }
@@ -174,8 +174,8 @@ mod tests {
 
     use crate::idkg::test_utils::{
         create_available_pre_signature, empty_idkg_payload_with_key_ids, empty_response,
-        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        fake_master_public_key_ids_for_all_algorithms, fake_signature_request_context,
+        fake_ecdsa_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_signature_request_context, fake_signature_request_context_from_id,
         fake_signature_request_context_with_pre_sig, set_up_idkg_payload,
         TestThresholdSignatureBuilder,
     };
@@ -267,20 +267,26 @@ mod tests {
         let pre_sig_ids = (0..4)
             .map(|i| create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
+        let ids = (0..5)
+            .map(|i| RequestId {
+                callback_id: CallbackId::from(i),
+                height: Height::from(0),
+            })
+            .collect::<Vec<_>>();
         let missing_pre_signature = idkg_payload.uid_generator.next_pre_signature_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
-            fake_completed_signature_request_context(0, key_id.clone(), pre_sig_ids[0]),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[0], &ids[0]),
             // insert request to be completed
-            fake_completed_signature_request_context(1, key_id.clone(), pre_sig_ids[1]),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[1], &ids[1]),
             // insert request that was already completed
-            fake_completed_signature_request_context(2, key_id.clone(), pre_sig_ids[2]),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_ids[2], &ids[2]),
             // insert request without a matched pre-signature
-            fake_signature_request_context_with_pre_sig(3, key_id.clone(), None),
+            fake_signature_request_context_with_pre_sig(&ids[3], key_id.clone(), None),
             // insert request matched to a non-existent pre-signature
             fake_signature_request_context_with_pre_sig(
-                4,
+                &ids[4],
                 key_id.clone(),
                 Some(missing_pre_signature),
             ),
@@ -296,8 +302,7 @@ mod tests {
         for (i, pre_sig_id) in pre_sig_ids.iter().enumerate().skip(1) {
             signature_builder.signatures.insert(
                 RequestId {
-                    pre_signature_id: *pre_sig_id,
-                    pseudo_random_id: [i as u8; 32],
+                    callback_id: CallbackId::from(i as u64),
                     height: Height::from(1),
                 },
                 match key_id {

@@ -269,6 +269,7 @@ mod tests {
     use crate::idkg::test_utils::{
         add_available_quadruple_to_payload, empty_idkg_payload, fake_ecdsa_master_public_key_id,
         fake_signature_request_context_with_pre_sig, fake_state_with_signature_requests,
+        request_id,
     };
 
     use super::*;
@@ -388,6 +389,7 @@ mod tests {
                 )],
             );
 
+            let height = Height::from(0);
             state_manager
                 .get_mut()
                 .expect_get_state_hash_at()
@@ -401,16 +403,28 @@ mod tests {
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(1, key_id.clone(), Some(pre_sig_id1)),
-                fake_signature_request_context_with_pre_sig(2, key_id.clone(), None),
-                fake_signature_request_context_with_pre_sig(3, key_id.clone(), Some(pre_sig_id3)),
+                fake_signature_request_context_with_pre_sig(
+                    &request_id(1, height),
+                    key_id.clone(),
+                    Some(pre_sig_id1),
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    &request_id(2, height),
+                    key_id.clone(),
+                    None,
+                ),
+                fake_signature_request_context_with_pre_sig(
+                    &request_id(3, height),
+                    key_id.clone(),
+                    Some(pre_sig_id3),
+                ),
             ];
 
             state_manager
                 .get_mut()
                 .expect_get_state_at()
                 .return_const(Ok(fake_state_with_signature_requests(
-                    Height::from(0),
+                    height,
                     contexts.clone(),
                 )
                 .get_labeled_state()));
@@ -463,7 +477,7 @@ mod tests {
             assert_eq!(&share.content.block, proposal.content.get_hash());
             assert_eq!(
                 share.content.state_hash,
-                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+                state_manager.get_state_hash_at(height).unwrap()
             );
             // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
             // by the replicated state should be the registry version of quadruple 3, which is 2.

@@ -936,7 +936,7 @@ pub fn ecdsa_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }
@@ -950,7 +950,7 @@ pub fn schnorr_sig_share_prefix(
     sig_share_node_id.hash(&mut hasher);
 
     IDkgPrefixOf::new(IDkgPrefix::new(
-        request_id.pre_signature_id.id(),
+        request_id.callback_id.get(),
         hasher.finish(),
     ))
 }

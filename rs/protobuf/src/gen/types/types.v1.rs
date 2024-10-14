@@ -539,14 +539,12 @@ pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "4")]
     pub initial_dealings: ::core::option::Option<ConsensusResponse>,
 }
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RequestId {
-    #[prost(bytes = "vec", tag = "1")]
-    pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "2")]
-    pub pre_signature_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
+    #[prost(uint64, tag = "5")]
+    pub callback_id: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct TranscriptRef {

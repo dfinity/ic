@@ -554,10 +554,7 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
-    use self::test_utils::{
-        fake_completed_signature_request_context, fake_ecdsa_master_public_key_id,
-        TestIDkgBlockReader,
-    };
+    use self::test_utils::{fake_ecdsa_master_public_key_id, TestIDkgBlockReader};
     use self::utils::get_context_request_id;
 
     use super::*;
@@ -567,6 +564,7 @@ mod tests {
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
         opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
     };
+    use ic_types::messages::CallbackId;
     use ic_types::{
         consensus::idkg::{RequestId, SigShareIdData},
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
@@ -579,24 +577,13 @@ mod tests {
     fn test_idkg_priority_fn_args() {
         let state_manager = Arc::new(RefMockStateManager::default());
         let height = Height::from(100);
-        let key_id = fake_ecdsa_master_public_key_id();
-        // Add two contexts to state, one with, and one without quadruple
-        let pre_sig_id = PreSigId(0);
-        let context_with_quadruple =
-            fake_completed_signature_request_context(0, key_id.clone(), pre_sig_id);
+
         state_manager
             .get_mut()
             .expect_latest_certified_height()
             .returning(move || height);
 
-        let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
-        assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);
-        assert_eq!(expected_request_id.pre_signature_id, pre_sig_id);
-
-        let block_reader = TestIDkgBlockReader::for_signer_test(
-            height,
-            vec![(expected_request_id.clone(), create_sig_inputs(0, &key_id))],
-        );
+        let block_reader = TestIDkgBlockReader::for_signer_test(height, vec![]);
 
         // Only the context with matched quadruple should be in "requested"
         let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
@@ -704,18 +691,15 @@ mod tests {
         let local_subnet_id = SUBNET_2;
         let mut uid_generator = IDkgUIDGenerator::new(local_subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [1; 32],
+            callback_id: CallbackId::from(1),
             height: Height::from(80),
         };
         let request_id_fetch_2 = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [3; 32],
+            callback_id: CallbackId::from(3),
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            pre_signature_id: uid_generator.next_pre_signature_id(),
-            pseudo_random_id: [4; 32],
+            callback_id: CallbackId::from(4),
             height: Height::from(200),
         };
         let args = IDkgBouncerArgs {
