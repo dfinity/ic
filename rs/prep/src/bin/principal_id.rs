@@ -1,4 +1,4 @@
-use clap::{ValueEnum, Parser};
+use clap::{Parser, ValueEnum};
 use ic_types::PrincipalId;
 use std::{
     env,
