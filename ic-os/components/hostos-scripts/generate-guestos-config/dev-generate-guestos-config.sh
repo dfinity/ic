@@ -71,7 +71,6 @@ function read_config_variables() {
 
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
-    cmd+=(--nns_public_key "$nns_public_key")
     cmd+=(--ipv6_address "$(/opt/ic/bin/hostos_tool generate-ipv6-address --node-type GuestOS)")
     cmd+=(--ipv6_gateway "${ipv6_gateway}")
     if [[ -n "$ipv4_address" && -n "$ipv4_prefix_length" && -n "$ipv4_gateway" && -n "$domain" ]]; then
@@ -80,6 +79,7 @@ function assemble_config_media() {
         cmd+=(--domain "${domain}")
     fi
     cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
+    cmd+=(--nns_public_key "$nns_public_key")
     if [ -f "$node_operator_private_key" ]; then
         cmd+=(--node_operator_private_key "$node_operator_private_key")
     fi
