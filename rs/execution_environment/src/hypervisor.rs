@@ -276,6 +276,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        replicated_state: Arc<ReplicatedState>,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -288,6 +289,7 @@ impl Hypervisor {
                     metrics_registry,
                     &embedder_config,
                     Arc::clone(&fd_factory),
+                    replicated_state,
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)

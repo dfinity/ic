@@ -648,6 +648,7 @@ pub struct SandboxedExecutionController {
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    replicated_state: Arc<ReplicatedState>,
     stop_monitoring_thread: std::sync::mpsc::Sender<bool>,
 }
 
@@ -1057,6 +1058,7 @@ impl SandboxedExecutionController {
         metrics_registry: &MetricsRegistry,
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        replicated_state: Arc<ReplicatedState>,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv =
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
