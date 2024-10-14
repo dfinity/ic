@@ -11,10 +11,39 @@ use ic_sns_governance::{
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use std::time::Duration;
 
-const TICKS_PER_TASK: u64 = 2;
+const TICKS_PER_TASK: u64 = 10;
+async fn await_with_timeout<'a, T, F, Fut>(
+    pocket_ic: &'a PocketIc,
+    timeout_seconds: u64,
+    decompose: F,
+    expected: &T,
+) -> Result<(), String>
+where
+    T: std::cmp::PartialEq + std::fmt::Debug,
+    F: Fn(&'a PocketIc) -> Fut,
+    Fut: std::future::Future<Output = T>,
+{
+    let mut counter = 0;
+    loop {
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+        pocket_ic.tick().await;
+
+        let observed = decompose(pocket_ic).await;
+        if observed == *expected {
+            return Ok(());
+        }
+        if counter == timeout_seconds {
+            return Err(format!(
+                "Observed state: {:?}\n!= Expected state {:?}\nafter {} seconds / rounds",
+                observed, expected, timeout_seconds,
+            ));
+        }
+        counter += 1;
+    }
+}
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
@@ -152,7 +181,76 @@ async fn test_get_upgrade_journal() {
 
         assert_eq!(
             upgrade_steps.versions,
-            vec![initial_sns_version, new_sns_version_1, new_sns_version_2,]
+            vec![
+                initial_sns_version.clone(),
+                new_sns_version_1.clone(),
+                new_sns_version_2.clone()
+            ]
         );
     }
+
+    println!(
+        "initial_sns_version.root_wasm_hash = {:?}",
+        initial_sns_version.root_wasm_hash
+    );
+    println!(
+        "new_sns_version_1.root_wasm_hash = {:?}",
+        new_sns_version_1.root_wasm_hash
+    );
+    println!(
+        "new_sns_version_2.root_wasm_hash = {:?}",
+        new_sns_version_2.root_wasm_hash
+    );
+
+    // State C: after the second periodic task's completion (+6 min).
+    await_with_timeout(
+        &pocket_ic,
+        599,
+        |pocket_ic| async move {
+            let sns_pb::GetUpgradeJournalResponse { upgrade_steps, .. } =
+                sns::governance::get_upgrade_journal(pocket_ic, sns.governance.canister_id).await;
+            upgrade_steps
+                .expect("cached_upgrade_steps should be Some")
+                .versions
+        },
+        &vec![
+            initial_sns_version.clone(),
+            new_sns_version_1.clone(),
+            new_sns_version_2.clone(),
+        ],
+    )
+    .await
+    .unwrap();
+
+    // State D: deployed_version is now new_sns_version_1.
+    await_with_timeout(
+        &pocket_ic,
+        17,
+        |pocket_ic| async move {
+            let sns_pb::GetRunningSnsVersionResponse {
+                deployed_version, ..
+            } = sns::governance::get_running_sns_version(pocket_ic, sns.governance.canister_id)
+                .await;
+            deployed_version.expect("deployed_version should be Some")
+        },
+        &new_sns_version_1,
+    )
+    .await
+    .unwrap();
+
+    // State D: deployed_version is now new_sns_version_2.
+    await_with_timeout(
+        &pocket_ic,
+        17,
+        |pocket_ic| async move {
+            let sns_pb::GetRunningSnsVersionResponse {
+                deployed_version, ..
+            } = sns::governance::get_running_sns_version(pocket_ic, sns.governance.canister_id)
+                .await;
+            deployed_version.expect("deployed_version should be Some")
+        },
+        &new_sns_version_2,
+    )
+    .await
+    .unwrap();
 }

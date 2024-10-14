@@ -1,7 +1,7 @@
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
-        upgrade_canister_directly,
+        upgrade_canister_directly, upgrade_canister_directly_legacy,
     },
     logs::{ERROR, INFO},
     neuron::{
@@ -21,7 +21,7 @@ use crate::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
                 CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
-                UpgradeInProgress, Version, Versions,
+                UpgradeInProgress, UpgradeLock, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -64,8 +64,8 @@ use crate::{
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
-        get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
-        UpgradeSnsParams,
+        canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_running_version,
+        get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
     types::{
         function_id_to_proposal_criticality, is_registered_function_id, Environment,
@@ -159,6 +159,9 @@ pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
 // How frequently the canister should attempt to refresh the cached_upgrade_steps
 pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
+
+// Maximum amount of time that is given for a single attempt to upgrade this SNS to next version.
+pub const UPGRADE_ATTEMPT_TIMEOUT_SECONDS: u64 = 5 * 60; // 5 minutes
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -385,7 +388,17 @@ impl GovernanceProto {
     }
 
     pub fn root_canister_id_or_panic(&self) -> CanisterId {
-        CanisterId::unchecked_from_principal(self.root_canister_id.expect("No root_canister_id."))
+        self.root_canister_id_or_err()
+            .expect("No root_canister_id.")
+    }
+
+    pub fn root_canister_id_or_err(&self) -> Result<CanisterId, String> {
+        let Some(root_canister_id) = self.root_canister_id else {
+            return Err(
+                "Root canister ID is not set! Believe it or not, this is a bug.".to_string(),
+            );
+        };
+        Ok(CanisterId::unchecked_from_principal(root_canister_id))
     }
 
     pub fn ledger_canister_id_or_panic(&self) -> CanisterId {
@@ -2567,7 +2580,7 @@ impl Governance {
         let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
 
         if target_is_root {
-            upgrade_canister_directly(
+            upgrade_canister_directly_legacy(
                 &*self.env,
                 root_canister_id,
                 target_wasm,
@@ -4622,9 +4635,11 @@ impl Governance {
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
         use ic_cdk::println;
-
         self.process_proposals();
 
+        // TODO: --- DO NOT MERGE ---
+        // TODO: prefix these functions with "legacy_"
+        // TODO: --- DO NOT MERGE ---
         if self.should_check_upgrade_status() {
             self.check_upgrade_status().await;
         }
@@ -4659,87 +4674,459 @@ impl Governance {
 
         self.maybe_gc();
 
-        if self.should_refresh_cached_upgrade_steps() {
-            self.temporarily_lock_refresh_cached_upgrade_steps();
-            self.refresh_cached_upgrade_steps().await;
-        }
-    }
-
-    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
-        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
-        } else {
-            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                requested_timestamp_seconds: Some(self.env.now()),
-                ..Default::default()
-            });
-        }
-    }
-
-    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
-        let now = self.env.now();
-
-        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            let requested_timestamp_seconds = cached_upgrade_steps
-                .requested_timestamp_seconds
-                .unwrap_or(0);
-            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
-                return false;
+        // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+        {
+            let now_timestamp_seconds = self.env.now();
+            if self.should_refresh_cached_upgrade_steps(now_timestamp_seconds) {
+                self.temporarily_lock_refresh_cached_upgrade_steps(now_timestamp_seconds);
+                self.refresh_cached_upgrade_steps(now_timestamp_seconds)
+                    .await;
             }
         }
 
-        true
+        // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+        self.try_release_upgrade_to_next_version_lock().await;
+
+        // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+        {
+            dfn_core::println!("{}AAA", log_prefix());
+            if self.try_acquire_upgrade_to_next_version_lock() {
+                dfn_core::println!("{}BBB", log_prefix());
+                self.upgrade_to_next_version().await;
+            }
+            dfn_core::println!("{}CCC", log_prefix());
+        }
     }
 
-    /// Refreshes the cached_upgrade_steps field
-    pub async fn refresh_cached_upgrade_steps(&mut self) {
-        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+    // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+    //
+    // TODO: Currently, only SNS Root can be upgraded using the new feature. So we currently only
+    // TODO: check for that canister's version. This needs to be generalized to detect arbitrary SNS
+    // TODO: canister version changes.
+    pub async fn try_release_upgrade_to_next_version_lock(&mut self) {
+        let now_timestamp_seconds = self.env.now();
+
+        // Assume delta(starting_version, expected_version) == Root
+        let root_canister_id = match self.proto.root_canister_id_or_err() {
+            Err(err) => {
+                dfn_core::println!("{}{}", log_prefix(), err);
+                log!(ERROR, "{}{}", log_prefix(), err);
+                return;
+            }
+            Ok(root_canister_id) => root_canister_id,
+        };
+
+        let Some(UpgradeLock {
+            expected_version,
+            acquired_timestamp_seconds,
+            released_timestamp_seconds,
+            refresh_deployed_version_attempts,
+            ..
+        }) = &mut self.proto.upgrade_lock
+        else {
+            return;
+        };
+
+        let Some(expected_version) = expected_version else {
+            dfn_core::println!(
+                "{}UpgradeLock.expected_version must be specified.",
+                log_prefix()
+            );
             log!(
                 ERROR,
-                "Cannot refresh cached_upgrade_steps: deployed_version not set."
+                "{}UpgradeLock.expected_version must be specified.",
+                log_prefix()
             );
             return;
         };
-        let sns_governance_canister_id = self.env.canister_id().get();
 
-        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
-            &*self.env,
-            deployed_version.clone(),
-            sns_governance_canister_id,
-        )
-        .await;
+        let Some(acquired_timestamp_seconds) = acquired_timestamp_seconds else {
+            dfn_core::println!(
+                "{}UpgradeLock.acquired_timestamp_seconds must be specified.",
+                log_prefix()
+            );
+            log!(
+                ERROR,
+                "{}UpgradeLock.acquired_timestamp_seconds must be specified.",
+                log_prefix()
+            );
+            return;
+        };
 
-        let upgrade_steps = match upgrade_steps {
-            Ok(upgrade_steps) => upgrade_steps,
+        if released_timestamp_seconds.is_some() {
+            // The lock has already been released.
+            return;
+        }
+
+        // Check if the lock needs to be released due to a timeout
+        if now_timestamp_seconds - *acquired_timestamp_seconds >= UPGRADE_ATTEMPT_TIMEOUT_SECONDS {
+            *released_timestamp_seconds = Some(now_timestamp_seconds);
+            return;
+        }
+
+        if refresh_deployed_version_attempts.is_some() {
+            *refresh_deployed_version_attempts = refresh_deployed_version_attempts
+                .map(|refresh_deployed_version_attempts| refresh_deployed_version_attempts + 1);
+        } else {
+            *refresh_deployed_version_attempts = Some(1);
+        }
+
+        let canister_info_arg = match Encode!(&CanisterInfoRequest::new(root_canister_id, Some(1),))
+        {
+            Ok(canister_info_arg) => canister_info_arg,
             Err(err) => {
+                dfn_core::println!(
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
                 log!(
                     ERROR,
-                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
                     err
                 );
                 return;
             }
         };
-        let upgrade_steps = Versions {
-            versions: upgrade_steps,
+
+        let root_canister_info = self
+            .env
+            .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
+            .await;
+
+        let root_canister_info = match root_canister_info {
+            Ok(root_canister_info) => root_canister_info,
+            Err((_, err)) => {
+                dfn_core::println!(
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
+                log!(
+                    ERROR,
+                    "{}Cannot get Root canister info from the management canister: {}",
+                    log_prefix(),
+                    err
+                );
+                return;
+            }
         };
 
-        // The following code must remain after the async call.
-        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
-            cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
+        let module_hash = {
+            let canister_info_response =
+                match Decode!(&root_canister_info[..], CanisterInfoResponse) {
+                    Ok(canister_info_response) => canister_info_response,
+                    Err(err) => {
+                        dfn_core::println!(
+                            "{}Cannot decode canister info from the management canister: {}",
+                            log_prefix(),
+                            err
+                        );
+                        log!(
+                            ERROR,
+                            "{}Cannot decode canister info from the management canister: {}",
+                            log_prefix(),
+                            err
+                        );
+                        return;
+                    }
+                };
+
+            let Some(module_hash) = canister_info_response.module_hash() else {
+                dfn_core::println!("{}Module hash is None", log_prefix());
+                log!(ERROR, "{}Module hash is None", log_prefix());
+                return;
+            };
+
+            module_hash
+        };
+
+        if expected_version.root_wasm_hash == module_hash {
+            dfn_core::println!(
+                "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
+                log_prefix(),
+                expected_version.root_wasm_hash,
+                refresh_deployed_version_attempts
+            );
+            log!(
+                ERROR,
+                "{}Upgrading Root to {:?} succeeded after {:?} attempts!",
+                log_prefix(),
+                expected_version.root_wasm_hash,
+                refresh_deployed_version_attempts
+            );
+            self.proto.deployed_version = Some(expected_version.clone());
+
+            // TODO: refresh_cached_upgrade_steps the only producer/modifier of the cached upgrade steps, so this is unnecessary
+            if let Some(CachedUpgradeSteps {
+                upgrade_steps: Some(ref mut upgrade_steps),
+                ..
+            }) = self.proto.cached_upgrade_steps.as_mut()
+            {
+                upgrade_steps.versions.remove(0);
+                // TODO: check invariant cached_upgrade_steps[0] == expected_version
+            }
+            *released_timestamp_seconds = Some(self.env.now());
+        } else {
+            dfn_core::println!(
+                "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
+                log_prefix(),
+                expected_version.root_wasm_hash,
+                refresh_deployed_version_attempts
+            );
+            log!(
+                ERROR,
+                "{}Upgrading Root to {:?} did not yet succeed after {:?} attempts ...",
+                log_prefix(),
+                expected_version.root_wasm_hash,
+                refresh_deployed_version_attempts
+            );
         }
-        // It's unlikely that cached_upgrade_steps is None, the caller is
-        // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
-        // and that requires cached_upgrade_steps != None.
-        // However, we handle it just in case.
+    }
+
+    pub async fn upgrade_to_next_version(&self) {
+        let Some(UpgradeLock {
+            starting_version: Some(ref starting_version),
+            expected_version: Some(ref expected_version),
+            ..
+        }) = self.proto.upgrade_lock
         else {
+            dfn_core::println!(
+                "{}Upgrade lock and its starting_version and expected_version fields must be \
+                 set before upgrade is initiated (this is a bug).",
+                log_prefix(),
+            );
+            log!(
+                ERROR,
+                "{}Upgrade lock and its starting_version and expected_version fields must be \
+                 set before upgrade is initiated (this is a bug).",
+                log_prefix(),
+            );
+            return;
+        };
+
+        let (canister_type_to_upgrade, wasm_hash) =
+            match canister_type_and_wasm_hash_for_upgrade(starting_version, expected_version) {
+                Ok((canister_type_to_upgrade, wasm_hash)) => (canister_type_to_upgrade, wasm_hash),
+                Err(e) => {
+                    dfn_core::println!(
+                        "{}Could not get canister types and wasm hashes for upgrade: {e}",
+                        log_prefix(),
+                    );
+                    log!(
+                        ERROR,
+                        "{}Could not get canister types and wasm hashes for upgrade: {e}",
+                        log_prefix(),
+                    );
+                    return;
+                }
+            };
+
+        if canister_type_to_upgrade != SnsCanisterType::Root {
+            // FIXME: DO NOT MERGE
+            dfn_core::println!(
+                "{}Only Root can be upgraded right now; requested {:?}.",
+                log_prefix(),
+                canister_type_to_upgrade
+            );
+            log!(
+                ERROR,
+                "{}Only Root can be upgraded right now; requested {:?}.",
+                log_prefix(),
+                canister_type_to_upgrade
+            );
+            return;
+        }
+
+        dfn_core::println!(
+            "{}expected_version = {:#?}, wasm_hash = {:?}",
+            log_prefix(),
+            expected_version,
+            wasm_hash
+        ); // DO NOT MERGE
+        let get_wasm_result = get_wasm(&*self.env, wasm_hash, canister_type_to_upgrade).await;
+
+        let wasm = match get_wasm_result {
+            Ok(sns_wasm) => sns_wasm.wasm,
+            Err(err) => {
+                dfn_core::println!("{}Failed to get WASM from SNS-W: {}", log_prefix(), err);
+                log!(
+                    ERROR,
+                    "{}Failed to get WASM from SNS-W: {}",
+                    log_prefix(),
+                    err
+                );
+                return;
+            }
+        };
+
+        let root_canister_id = match self.proto.root_canister_id_or_err() {
+            Err(err) => {
+                dfn_core::println!("{}{}", log_prefix(), err);
+                log!(ERROR, "{}{}", log_prefix(), err);
+                return;
+            }
+            Ok(root_canister_id) => root_canister_id,
+        };
+
+        let arg = match Encode!() {
+            Ok(arg) => arg,
+            Err(err) => {
+                dfn_core::println!("{}Encoding upgrade argument failed: {}", log_prefix(), err);
+                log!(
+                    ERROR,
+                    "{}Encoding upgrade argument failed: {}",
+                    log_prefix(),
+                    err
+                );
+                return;
+            }
+        };
+
+        upgrade_canister_directly(&*self.env, root_canister_id, wasm, arg).await;
+    }
+
+    // TODO[NNS1-3365]: This function is part of the "Effortless SNS upgrades" feature.
+    //
+    // TODO: --- DO NOT MERGE ---
+    // TODO: Currently, this function does not use the target, rather assuming that the SNS always
+    // TODO: wants to upgrade to the next available version. This should be changed before merging.
+    // TODO: --- DO NOT MERGE ---
+    pub fn try_acquire_upgrade_to_next_version_lock(&mut self) -> bool {
+        let now_timestamp_seconds = self.env.now();
+
+        // TODO: Remove this condition after obsoleting the legacy upgrade feature.
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            dfn_core::println!(
+                "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                log_prefix(),
+            );
+            log!(
+                ERROR,
+                "{}Error in try_acquire_upgrade_to_next_version_lock: deployed_version not set.",
+                log_prefix(),
+            );
+            return false;
+        };
+
+        let Some(CachedUpgradeSteps {
+            upgrade_steps: Some(ref upgrade_steps),
+            ..
+        }) = self.proto.cached_upgrade_steps
+        else {
+            dfn_core::println!("{}DDD", log_prefix());
+            return false;
+        };
+
+        // In this function, we're interested in just the first two version (current and next).
+        let (current_version, next_version) = match &upgrade_steps.versions[..] {
+            [current_version] => (current_version, None),
+            [current_version, next_version, ..] => (current_version, Some(next_version)),
+            _ => {
+                dfn_core::println!("{}upgrade_steps is empty.", log_prefix());
+                log!(ERROR, "{}upgrade_steps is empty.", log_prefix());
+                return false;
+            }
+        };
+
+        // This is where we check that the information is consistent from the p.o.v. of the new
+        // and the legacy SNS upgrade feature.
+        //
+        // TODO: Maintain this invariant.
+        if current_version != deployed_version {
+            dfn_core::println!("{}EEE", log_prefix());
+            return false;
+        }
+
+        let Some(next_version) = next_version else {
+            dfn_core::println!("{}HHH upgrade_steps = {:?}", log_prefix(), upgrade_steps);
+            return false;
+        };
+
+        let acquired_timestamp_seconds = Some(now_timestamp_seconds);
+        let starting_version = Some(current_version.clone());
+        let expected_version = Some(next_version.clone());
+
+        self.proto.upgrade_lock = Some(UpgradeLock {
+            acquired_timestamp_seconds,
+            starting_version,
+            expected_version,
+            ..Default::default()
+        });
+
+        true
+    }
+
+    pub fn should_refresh_cached_upgrade_steps(&self, now_timestamp_seconds: u64) -> bool {
+        if let Some(CachedUpgradeSteps {
+            requested_timestamp_seconds: Some(ref requested_timestamp_seconds),
+            ..
+        }) = self.proto.cached_upgrade_steps
+        {
+            if now_timestamp_seconds - requested_timestamp_seconds
+                < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+            {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self, now_timestamp_seconds: u64) {
+        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            cached_upgrade_steps.requested_timestamp_seconds = Some(now_timestamp_seconds);
+        } else {
             self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
-                response_timestamp_seconds: Some(self.env.now()),
-                upgrade_steps: Some(upgrade_steps),
+                requested_timestamp_seconds: Some(now_timestamp_seconds),
                 ..Default::default()
             });
         }
+    }
+
+    /// Refreshes the cached_upgrade_steps field
+    pub async fn refresh_cached_upgrade_steps(&mut self, now_timestamp_seconds: u64) {
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            log!(
+                ERROR,
+                "{}Cannot refresh cached_upgrade_steps: deployed_version not set.",
+                log_prefix(),
+            );
+            return;
+        };
+        let sns_governance_canister_id = self.env.canister_id().get();
+        let current_version = deployed_version.clone();
+
+        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
+            &*self.env,
+            current_version,
+            sns_governance_canister_id,
+        )
+        .await;
+
+        let versions = match upgrade_steps {
+            Ok(upgrade_steps) => upgrade_steps,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "{}Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    log_prefix(),
+                    err,
+                );
+                return;
+            }
+        };
+        let upgrade_steps = Some(Versions { versions });
+        let requested_timestamp_seconds = Some(now_timestamp_seconds);
+
+        // The call to `self.env.now()` must remain after the async call.
+        let response_timestamp_seconds = Some(self.env.now());
+
+        self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+            upgrade_steps,
+            requested_timestamp_seconds,
+            response_timestamp_seconds,
+        });
     }
 
     pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
