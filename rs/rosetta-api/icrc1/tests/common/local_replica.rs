@@ -6,7 +6,7 @@ use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Ident
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
-use ic_icrc1_ledger_sm_tests::{
+use ic_ledger_suite_state_machine_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
     TOKEN_NAME, TOKEN_SYMBOL,

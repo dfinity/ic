@@ -39,13 +39,13 @@ MACRO_DEPENDENCIES = [
 
 [
     rust_library(
-        name = "sm-tests" + name_suffix,
+        name = "ic-ledger-suite-state-machine-tests" + name_suffix,
         testonly = True,
         srcs = glob([
             "src/**/*.rs",
         ]),
         crate_features = features,
-        crate_name = "ic_icrc1_ledger_sm_tests",
+        crate_name = "ic_ledger_suite_state_machine_tests",
         data = [
             "//rs/ledger_suite/icrc1/ledger:block.cddl",
         ],
@@ -69,8 +69,8 @@ MACRO_DEPENDENCIES = [
 
 [
     rust_test(
-        name = "sm-tests-unit-tests" + name_suffix,
-        crate = ":sm-tests" + name_suffix,
+        name = "ic-ledger-suite-state-machine-unit-tests" + name_suffix,
+        crate = ":ic-ledger-suite-state-machine-tests" + name_suffix,
         crate_features = features,
         deps = DEPENDENCIES + extra_deps,
     )
