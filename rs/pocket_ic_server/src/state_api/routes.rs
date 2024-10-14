@@ -1051,19 +1051,20 @@ pub async fn status() -> StatusCode {
 
 fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
     Iterator::any(
-        &mut vec![config.sns, config.ii, config.fiduciary, config.bitcoin]
-            .into_iter()
-            .flatten()
-            .chain(config.system)
-            .chain(config.application)
-            .chain(config.verified_application),
-        |spec: pocket_ic::common::rest::SubnetSpec| {
-            spec.get_subnet_id().is_some() || !spec.is_supported()
-        },
-    ) || config
-        .nns
-        .map(|spec| !spec.is_supported())
-        .unwrap_or_default()
+        &mut vec![
+            config.nns,
+            config.sns,
+            config.ii,
+            config.fiduciary,
+            config.bitcoin,
+        ]
+        .into_iter()
+        .flatten()
+        .chain(config.system)
+        .chain(config.application)
+        .chain(config.verified_application),
+        |spec| !spec.is_supported(),
+    )
 }
 
 /// Create a new empty IC instance from a given subnet configuration.
@@ -1078,30 +1079,28 @@ pub async fn create_instance(
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let subnet_configs = instance_config.subnet_config_set;
-    if (instance_config.state_dir.is_none()
-        || File::open(
-            instance_config
-                .state_dir
-                .clone()
-                .unwrap()
-                .join("topology.json"),
-        )
-        .is_err())
-        && subnet_configs.validate().is_err()
-    {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Bad config".to_owned(),
-            }),
-        );
+
+    let skip_validate_subnet_configs = instance_config
+        .state_dir
+        .as_ref()
+        .map(|state_dir| File::open(state_dir.clone().join("topology.json")).is_ok())
+        .unwrap_or_default();
+    if !skip_validate_subnet_configs {
+        if let Err(e) = subnet_configs.validate() {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(rest::CreateInstanceResponse::Error {
+                    message: format!("Subnet config failed to validate: {:?}", e),
+                }),
+            );
+        }
     }
     // TODO: Remove this once the SubnetStateConfig variants are implemented
     if contains_unimplemented(subnet_configs.clone()) {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
-                message: "SubnetStateConfig::FromPath is currently only implemented for NNS. SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
+                message: "SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
             }),
         );
     }

@@ -236,7 +236,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
-/rs/tests/gix/                                          @dfinity/idx
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
 /rs/tests/networking/                                   @dfinity/networking @dfinity/idx
 /rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
@@ -244,7 +243,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
 /rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/boundary_nodes/                           @dfinity/boundary-node @dfinity/idx
 /rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
 /rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx

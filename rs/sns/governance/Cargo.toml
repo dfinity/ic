@@ -33,10 +33,11 @@ base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = { workspace = true }
+futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../rust_canisters/canister_profiler" }

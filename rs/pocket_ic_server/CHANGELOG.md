@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The PocketIC HTTP gateway routes requests whose paths start with `/_/` and for which no canister ID can be found
   directly to the PocketIC instance/replica (this only used to apply to requests for `/_/dashboard` independently
   of whether a canister ID could be found).
+- Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
 
 
 

@@ -1,4 +1,3 @@
-use crate::sns_upgrade::get_proposal_id_that_added_wasm;
 use crate::{
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     governance::{
@@ -24,13 +23,12 @@ use crate::{
         RegisterDappCanisters, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
         UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
+    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     types::Environment,
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
-use dfn_core::api::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
