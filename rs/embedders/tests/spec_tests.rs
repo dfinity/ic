@@ -800,7 +800,6 @@ fn error_to_string(e: anyhow::Error) -> String {
 /// rule in `WORKSPACE.bazel`.
 ///
 /// See BUILD.bazel for inspecting the `wast` files.
-/// `bazel-ic/external/wasm_spec_testsuite/` after building this test.
 #[test]
 fn spec_testsuite() {
     let test_files = parse_env_test_files("WASM_SPEC_BASE");
