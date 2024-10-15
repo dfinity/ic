@@ -97,8 +97,7 @@ build_container_base_image = _icos_build_rule(
         # Add the container_utils attribute
         "container_utils": attr.label(
             default = "//toolchains/sysimage:container_utils",
-            executable = True,
-            cfg = "exec",
+            allow_single_file = True,
         ),
     },
 )
@@ -182,8 +181,7 @@ build_container_filesystem = _icos_build_rule(
         # Add the container_utils attribute
         "container_utils": attr.label(
             default = "//toolchains/sysimage:container_utils",
-            executable = True,
-            cfg = "exec",
+            allow_single_file = True,
         ),
     },
 )
