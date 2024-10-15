@@ -144,6 +144,10 @@ jobs:
         with:
           fetch-depth: 256
       - <<: *before-script
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Setup python deps
         id: setup-python-deps
         shell: bash
