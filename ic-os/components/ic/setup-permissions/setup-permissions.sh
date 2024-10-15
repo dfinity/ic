@@ -12,40 +12,31 @@ set -e
 # Ideally, it should actually only run once after initial install or an
 # upgrade (as part of format conversion).
 
-# Set up unix owner ids in target directory.
+# Set up unix owner ids in target directory, recursively.
 #
 # Arguments:
 # - $1: Target directory
 # - $2: user to assign
 # - $3: group to assign
-# - $4: -R, if the permissions should be set recursively
 function make_group_owned_and_sticky() {
     local TARGET_DIR="$1"
     local USER="$2"
     local GROUP="$3"
-    local RECURSIVE_FLAG="$4" # "-R" if recursive
 
     mkdir -p "${TARGET_DIR}"
-
-    # Check if the RECURSIVE_FLAG is set to "-R"
-    if [[ "$RECURSIVE_FLAG" == "-R" ]]; then
-        chown -R "${USER}:${GROUP}" "${TARGET_DIR}"
-        chmod u=rwX,g=rX,o= -R "${TARGET_DIR}"
-        find "${TARGET_DIR}" -type d | xargs chmod g+s
-    else
-        chown "${USER}:${GROUP}" "${TARGET_DIR}"
-        chmod u=rwX,g=rX,o=,g+s "${TARGET_DIR}"
-    fi
+    chown -R "${USER}:${GROUP}" "${TARGET_DIR}"
+    chmod u=rwX,g=rX,o= -R "${TARGET_DIR}"
+    find "${TARGET_DIR}" -type d | xargs chmod g+s
 }
 
 make_group_owned_and_sticky /var/lib/ic/backup ic-replica backup
-make_group_owned_and_sticky /var/lib/ic/crypto ic-csp-vault ic-csp-vault -R
-make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica nonconfidential -R
-make_group_owned_and_sticky /var/lib/ic/data/ic_state ic-replica nonconfidential -R
-make_group_owned_and_sticky /var/lib/ic/data/cups ic-replica nonconfidential -R
-make_group_owned_and_sticky /var/lib/ic/data/orchestrator ic-replica nonconfidential -R
-make_group_owned_and_sticky /var/lib/ic/data/ic_registry_local_store ic-replica ic-registry-local-store -R
-make_group_owned_and_sticky /var/lib/ic/data/ic_state/page_deltas ic-replica nonconfidential -R
+make_group_owned_and_sticky /var/lib/ic/crypto ic-csp-vault ic-csp-vault
+make_group_owned_and_sticky /var/lib/ic/data/ic_consensus_pool ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/ic_state ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/cups ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/orchestrator ic-replica nonconfidential
+make_group_owned_and_sticky /var/lib/ic/data/ic_registry_local_store ic-replica ic-registry-local-store
+make_group_owned_and_sticky /var/lib/ic/data/ic_state/page_deltas ic-replica nonconfidential
 
 # Fix up security labels for everything.
 echo "Restoring SELinux security contexts in /var/lib/ic"
