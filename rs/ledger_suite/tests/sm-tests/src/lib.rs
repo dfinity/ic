@@ -2844,7 +2844,7 @@ pub fn test_downgrade_from_incompatible_version<T>(
         Err(e) => {
             assert!(e
                 .description()
-                .contains("Trying to upgrade from incompatible version"))
+                .contains("Trying to downgrade from incompatible version"))
         }
     };
 }
