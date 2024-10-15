@@ -51,3 +51,7 @@ path = "general_execution_test.rs"
 [[bin]]
 name = "inter_canister_queries_test"
 path = "inter_canister_queries_test.rs"
+
+[[bin]]
+name = "max_number_of_canisters_test"
+path = "max_number_of_canisters_test.rs"
