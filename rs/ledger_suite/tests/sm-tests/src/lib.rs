@@ -3005,7 +3005,7 @@ pub fn test_incomplete_migration<T>(
 
     send_approvals();
 
-    let check_approvals = |expected_allowance: u64| {
+    let check_approvals = || {
         for i in 2..2 + NUM_APPROVALS {
             let allowance = get_allowance(
                 &env,
@@ -3013,11 +3013,11 @@ pub fn test_incomplete_migration<T>(
                 account,
                 Account::from(PrincipalId::new_user_test_id(i).0),
             );
-            assert_eq!(allowance.allowance, Nat::from(expected_allowance));
+            assert_eq!(allowance.allowance, Nat::from(APPROVE_AMOUNT));
         }
     };
 
-    check_approvals(APPROVE_AMOUNT);
+    check_approvals();
 
     env.upgrade_canister(
         canister_id,
@@ -3035,7 +3035,7 @@ pub fn test_incomplete_migration<T>(
     .unwrap();
 
     // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
-    check_approvals(APPROVE_AMOUNT);
+    check_approvals();
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
