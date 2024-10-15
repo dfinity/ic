@@ -3,53 +3,6 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-
-# Rules used to build Ubuntu systems
-http_archive(
-    name = "rules_distroless",
-    sha256 = "8a3440067453ad211f3b34d4a8f68f65663dc5fd6d7834bf81eecf0526785381",
-    strip_prefix = "rules_distroless-0.3.6",
-    url = "https://github.com/GoogleContainerTools/rules_distroless/releases/download/v0.3.6/rules_distroless-v0.3.6.tar.gz",
-)
-
-load("@rules_distroless//distroless:dependencies.bzl", "distroless_dependencies")
-
-distroless_dependencies()
-
-load("@rules_distroless//distroless:toolchains.bzl", "distroless_register_toolchains")
-
-distroless_register_toolchains()
-
-load("@rules_distroless//apt:index.bzl", "deb_index")
-
-# Packageset based on an Ubuntu focal snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @focal//:lock
-deb_index(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-
-load("@focal//:packages.bzl", "focal_packages")
-
-focal_packages()
-
-# Packageset based on an Ubuntu noble snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @noble//:lock
-deb_index(
-    name = "noble",
-    lock = "//bazel:noble.lock.json",
-    manifest = "//bazel:noble.yaml",
-)
-
-load("@noble//:packages.bzl", "noble_packages")
-
-noble_packages()
-
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
