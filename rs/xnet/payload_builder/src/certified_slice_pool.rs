@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{get_msg_limit, ExpectedIndices};
+use crate::{get_signal_limit, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -16,7 +16,6 @@ use ic_metrics::{
 };
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
-use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::certification::Certification,
     xnet::{CertifiedStreamSlice, StreamIndex},
@@ -1108,13 +1107,11 @@ impl CertifiedSlicePool {
     pub fn take_slice(
         &mut self,
         subnet_id: SubnetId,
-        state: &ReplicatedState,
         begin: Option<&ExpectedIndices>,
-        //msg_limit: Option<usize>,
+        msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<(CertifiedStreamSlice, usize)>> {
-        //match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
-        match self.take_slice_impl(subnet_id, state, begin, byte_limit) {
+        match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
             Ok(Some(slice)) => {
                 let slice_count_bytes = slice.count_bytes();
                 debug_assert!(slice_count_bytes <= byte_limit.unwrap_or(usize::MAX));
@@ -1150,9 +1147,8 @@ impl CertifiedSlicePool {
     fn take_slice_impl(
         &mut self,
         subnet_id: SubnetId,
-        state: &ReplicatedState,
         begin: Option<&ExpectedIndices>,
-        //msg_limit: Option<usize>,
+        msg_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<Option<UnpackedStreamSlice>> {
         // Update the stream position in case we bail out early with no slice returned.
@@ -1162,7 +1158,10 @@ impl CertifiedSlicePool {
             Some(entry) => entry,
             None => return Ok(None),
         };
-        let msg_limit = get_msg_limit(subnet_id, state, begin, slice.payload.header.begin());
+
+        let signal_limit = get_signal_limit(begin, slice.payload.header.begin());
+        let msg_limit =
+            Some(msg_limit.map_or(signal_limit, |msg_limit| msg_limit.min(signal_limit)));
 
         // GC first if explicit begin indices were provided.
         let original_message_count = slice.payload.len();
