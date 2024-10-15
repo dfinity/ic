@@ -73,7 +73,7 @@ rust_test(
 
 rust_test_suite(
     name = "test",
-    size = "small",
+    size = "medium",
     srcs = ["tests/tests.rs"],
     data = [
         "tests/counter.wasm",
@@ -89,6 +89,7 @@ rust_test_suite(
     },
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["cpu:8"],
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
 
