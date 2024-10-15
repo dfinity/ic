@@ -17,6 +17,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
