@@ -26,5 +26,4 @@ tqdm
 uuid
 PyGithub>=2.3.0
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
-# numpy>=1.26.4
-# pillow>=10.1
+typing_extensions>=4.6.0
