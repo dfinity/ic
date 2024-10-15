@@ -35,7 +35,6 @@ tokio = { workspace = true }
 wat = { workspace = true }
 assert_matches = { workspace = true }
 
-
 [[bin]]
 name = "compute_allocation_test"
 path = "compute_allocation_test.rs"
@@ -55,3 +54,7 @@ path = "inter_canister_queries_test.rs"
 [[bin]]
 name = "max_number_of_canisters_test"
 path = "max_number_of_canisters_test.rs"
+
+[[bin]]
+name = "system_api_security_test"
+path = "system_api_security_test.rs"
