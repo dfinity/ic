@@ -344,26 +344,26 @@ where
     /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
-        R: RangeBounds<NeuronId> + Clone,
+        R: RangeBounds<NeuronId> + Copy,
     {
-        let (first, last) = extract_range_ends(range.clone());
+        let (start, end) = extract_range_ends(range);
 
-        let hotkeys_range = (first, u64::MIN)..(last, u64::MAX);
-        let ballots_range = (first, u64::MIN)..(last, u64::MAX);
+        let hotkeys_range = (start, u64::MIN)..(end, u64::MAX);
+        let ballots_range = (start, u64::MIN)..(end, u64::MAX);
 
         let followees_range = FolloweesKey {
-            follower_id: first,
+            follower_id: start,
             ..FolloweesKey::MIN
         }..FolloweesKey {
-            follower_id: last,
+            follower_id: end,
             ..FolloweesKey::MAX
         };
 
-        let main_range = self.main.range(range.clone());
+        let main_range = self.main.range(range);
         let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
         let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
-        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
+        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range).peekable();
         let mut transfer_iter = self.transfer_map.range(range).peekable();
 
         main_range.map(move |(main_neuron_id, abridged_neuron)| {
@@ -394,16 +394,13 @@ where
                 main_neuron_id,
                 |(neuron_id, known_neuron_data)| (*neuron_id, known_neuron_data.clone()),
             )
-            .first()
-            .cloned();
-
+            .pop();
             let current_transfer = collect_for_neuron_id(
                 &mut transfer_iter,
                 main_neuron_id,
                 |(neuron_id, transfer)| (*neuron_id, transfer.clone()),
             )
-            .first()
-            .cloned();
+            .pop();
 
             Neuron::from(DecomposedNeuron {
                 id: main_neuron_id,
