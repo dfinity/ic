@@ -12,6 +12,8 @@ use ic_cdk::{query, update};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
+// HTTP gateway interface
+
 pub type HeaderField = (String, String);
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -71,6 +73,8 @@ fn http_request(request: HttpGatewayRequest) -> HttpGatewayResponse {
         }
     }
 }
+
+// Schnorr interface
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SchnorrAlgorithm {
@@ -158,6 +162,8 @@ async fn sign_with_schnorr(
     Ok(internal_reply.signature)
 }
 
+// ECDSA interface
+
 #[update]
 async fn ecdsa_public_key(
     canister_id: Option<Principal>,
@@ -198,6 +204,8 @@ async fn sign_with_ecdsa(
         .0
         .signature)
 }
+
+// canister HTTP outcalls
 
 #[update]
 async fn canister_http() -> Result<HttpResponse, (RejectionCode, String)> {
@@ -242,52 +250,32 @@ async fn canister_http_with_transform() -> HttpResponse {
     canister_http_outcall(arg, cycles).await.unwrap().0
 }
 
-fn main() {}
+// inter-canister calls
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
-    use lazy_static::lazy_static;
-    use std::{env::var_os, path::PathBuf};
-
-    lazy_static! {
-        static ref DECLARED_INTERFACE: String = {
-            let cargo_manifest_dir =
-                var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined");
-
-            let path = PathBuf::from(cargo_manifest_dir).join("tests/test_canister.did");
-
-            let contents = std::fs::read(path).unwrap();
-            String::from_utf8(contents).unwrap()
-        };
-        static ref IMPLEMENTED_INTERFACE: String = {
-            candid::export_service!();
-            __export_service()
-        };
-    }
-
-    #[test]
-    fn test_candid_interface() {
-        let result = service_equal(
-            CandidSource::Text(&IMPLEMENTED_INTERFACE),
-            CandidSource::Text(&DECLARED_INTERFACE),
-        );
-
-        if let Err(err) = result {
-            panic!(
-                "Implemented interface:\n\
-                 {}\n\
-                 \n\
-                 Declared interface:\n\
-                 {}\n\
-                 \n\
-                 Error:\n\
-                 {}n\
-                 \n\
-                 The Candid service implementation is not equal to the declared interface.",
-                *IMPLEMENTED_INTERFACE, *DECLARED_INTERFACE, err,
-            );
-        }
-    }
+#[update]
+async fn whoami() -> String {
+    ic_cdk::id().to_string()
 }
+
+#[update]
+async fn whois(canister: Principal) -> String {
+    ic_cdk::call::<_, (String,)>(canister, "whoami", ((),))
+        .await
+        .unwrap()
+        .0
+}
+
+#[update]
+async fn blob_len(blob: Vec<u8>) -> usize {
+    blob.len()
+}
+
+#[update]
+async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
+    ic_cdk::call::<_, (usize,)>(canister, "blob_len", (vec![42_u8; blob_len],))
+        .await
+        .unwrap()
+        .0
+}
+
+fn main() {}

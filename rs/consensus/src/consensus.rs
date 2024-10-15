@@ -23,12 +23,15 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-    dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+use crate::{
+    bouncer_metrics::BouncerMetrics,
+    consensus::{
+        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
+        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
+        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+        share_aggregator::ShareAggregator, validator::Validator,
+    },
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
@@ -501,38 +504,37 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         let changeset = self.schedule.call_next(&calls);
 
-        if let Some(settings) = get_notarization_delay_settings(
+        let settings = get_notarization_delay_settings(
             &self.log,
             &*self.registry_client,
             self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
-        ) {
-            let unit_delay = settings.unit_delay;
-            let current_time = self.time_source.get_relative_time();
-            for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-                let time_since_last_invoked =
-                    current_time.saturating_duration_since(*last_invoked_time);
-                let component_name = component.as_ref();
+        );
+        let unit_delay = settings.unit_delay;
+        let current_time = self.time_source.get_relative_time();
+        for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
+            let time_since_last_invoked =
+                current_time.saturating_duration_since(*last_invoked_time);
+            let component_name = component.as_ref();
+            self.metrics
+                .time_since_last_invoked
+                .with_label_values(&[component_name])
+                .set(time_since_last_invoked.as_secs_f64());
+
+            // Log starvation
+            if time_since_last_invoked > unit_delay {
                 self.metrics
-                    .time_since_last_invoked
+                    .starvation_counter
                     .with_label_values(&[component_name])
-                    .set(time_since_last_invoked.as_secs_f64());
+                    .inc();
 
-                // Log starvation
-                if time_since_last_invoked > unit_delay {
-                    self.metrics
-                        .starvation_counter
-                        .with_label_values(&[component_name])
-                        .inc();
-
-                    warn!(
-                        every_n_seconds => 5,
-                        self.log,
-                        "starvation detected: {:?} has not been invoked for {:?}",
-                        component,
-                        time_since_last_invoked
-                    );
-                }
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "starvation detected: {:?} has not been invoked for {:?}",
+                    component,
+                    time_since_last_invoked
+                );
             }
         }
 
@@ -586,18 +588,27 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
+    metrics: BouncerMetrics,
 }
 
 impl ConsensusBouncer {
     /// Create a new [ConsensusBouncer].
-    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
-        ConsensusBouncer { message_routing }
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing: Arc<dyn MessageRouting>,
+    ) -> Self {
+        ConsensusBouncer {
+            metrics: BouncerMetrics::new(metrics_registry, "consensus_pool"),
+            message_routing,
+        }
     }
 }
 
 impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusBouncer {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 

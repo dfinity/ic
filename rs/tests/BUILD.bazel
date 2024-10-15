@@ -4,7 +4,7 @@ load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
@@ -17,10 +17,6 @@ exports_files([
     "src/counter.wat",
 ])
 
-ALIASES = {
-    "//rs/utils": "utils",
-}
-
 bool_flag(
     name = "k8s",
     build_setting_default = False,
@@ -30,7 +26,6 @@ rust_library(
     name = "tests",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
         "src/memory_safety.wasm",
@@ -142,15 +137,6 @@ uvm_config_image(
         "activate-systest-uvm-config": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-rust_test(
-    name = "tests_test",
-    aliases = ALIASES,
-    crate = ":tests",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    deps = DEPENDENCIES,
 )
 
 exports_files([

@@ -16,21 +16,21 @@ use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
     CandidOperation, CandidTransaction, FeatureFlags, GetBlocksArgs, GetBlocksRes, GetBlocksResult,
-    GetEncodedBlocksResult, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, TimeStamp, UpgradeArgs, DEFAULT_TRANSFER_FEE,
     MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
-use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -42,6 +42,22 @@ fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister",
+        &[],
+    )
+}
+
+fn ledger_wasm_upgrade_to_memory_manager() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-upgrade-to-memory-manager",
+        &[],
+    )
+}
+
+fn ledger_wasm_allowance_getter() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-allowance-getter",
         &[],
     )
 }
@@ -335,6 +351,78 @@ fn test_anonymous_approval() {
         string_from_bytes_result,
         Ok("Anonymous principal cannot approve token transfers on the ledger.".to_string())
     );
+}
+
+#[test]
+fn test_icp_allowance_getter_unavailable_in_prod() {
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(ledger_wasm(), encode_init_args, vec![]);
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+    let error = response.unwrap_err();
+
+    assert_eq!(error.code(), ErrorCode::CanisterMethodNotFound);
+}
+
+#[test]
+fn test_get_icp_approval() {
+    const INITIAL_BALANCE: u64 = 10_000_000;
+    const APPROVE_AMOUNT: u64 = 1_000_000;
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm_allowance_getter(),
+        encode_init_args,
+        vec![(Account::from(p1.0), INITIAL_BALANCE)],
+    );
+    assert_eq!(INITIAL_BALANCE, total_supply(&env, canister_id));
+    assert_eq!(INITIAL_BALANCE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, p2.0));
+    let approve_args = ApproveArgs {
+        from_subaccount: None,
+        spender: p2.0.into(),
+        amount: Nat::from(APPROVE_AMOUNT),
+        fee: None,
+        memo: None,
+        expires_at: None,
+        expected_allowance: None,
+        created_at_time: None,
+    };
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "icrc2_approve",
+        Encode!(&approve_args).unwrap(),
+    );
+    assert!(response.is_ok());
+    let allowance_args = IcpAllowanceArgs {
+        account: AccountIdentifier::from(p1.0),
+        spender: AccountIdentifier::from(p2.0),
+    };
+
+    let response = env.execute_ingress_as(
+        p1,
+        canister_id,
+        "allowance",
+        Encode!(&allowance_args).unwrap(),
+    );
+
+    let result = Decode!(
+        &response.expect("failed to get allowance").bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response");
+    assert_eq!(result.allowance.0.to_u64(), Some(APPROVE_AMOUNT));
 }
 
 #[test]
@@ -1147,27 +1235,36 @@ fn test_upgrade_serialization() {
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
         ledger_wasm_mainnet,
         ledger_wasm_current,
-        None,
+        Some(ledger_wasm_upgrade_to_memory_manager()),
         init_args,
         upgrade_args,
         minter,
+        false,
         false,
     );
 }
 
 #[test]
-fn test_approval_upgrade() {
+fn test_upgrade_serialization_fixed_tx() {
     let ledger_wasm_mainnet =
         std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     let ledger_wasm_current = ledger_wasm();
+    let ledger_wasm_upgradetomemorymanager = ledger_wasm_upgrade_to_memory_manager();
 
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
     let p3 = PrincipalId::new_user_test_id(3);
+    let accounts = vec![
+        Account::from(p1.0),
+        Account::from(p2.0),
+        Account::from(p3.0),
+    ];
 
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
-    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+    for account in &accounts {
+        initial_balances.insert((*account).into(), Tokens::from_e8s(10_000_000));
+    }
 
     let payload = LedgerCanisterInitPayload::builder()
         .minting_account(MINTER.into())
@@ -1193,6 +1290,11 @@ fn test_approval_upgrade() {
     approve_args.expires_at = Some(expiration);
     send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
 
+    let mut balances = BTreeMap::new();
+    for account in &accounts {
+        balances.insert(account, balance_of(&env, canister_id, *account));
+    }
+
     let test_upgrade = |ledger_wasm: Vec<u8>| {
         env.upgrade_canister(
             canister_id,
@@ -1208,11 +1310,21 @@ fn test_approval_upgrade() {
         let allowance = get_allowance(&env, canister_id, p1.0, p3.0);
         assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
         assert_eq!(allowance.expires_at, Some(expiration));
+
+        for account in &accounts {
+            assert_eq!(balances[account], balance_of(&env, canister_id, *account));
+        }
     };
 
-    // Test if the old serialized approvals are correctly deserialized
+    // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone());
-    // Test if new approvals serialization also works
+    // Test the new wasm serialization
+    test_upgrade(ledger_wasm_current.clone());
+    // Test serializing to the memory manager
+    test_upgrade(ledger_wasm_upgradetomemorymanager.clone());
+    // Test upgrade to memory manager again
+    test_upgrade(ledger_wasm_upgradetomemorymanager);
+    // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current);
     // Test if downgrade works
     test_upgrade(ledger_wasm_mainnet);
@@ -1582,7 +1694,9 @@ fn test_icrc21_standard() {
 }
 
 mod metrics {
-    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
+    use crate::{
+        encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgrade_to_memory_manager,
+    };
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -1614,7 +1728,7 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            None,
+            Some(ledger_wasm_upgrade_to_memory_manager()),
             encode_init_args,
             encode_upgrade_args,
         );

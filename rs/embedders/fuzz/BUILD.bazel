@@ -71,7 +71,7 @@ rust_binary(
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:arbitrary",
-        "@crate_index//:clap_3_2_25",
+        "@crate_index//:clap",
         "@crate_index//:lazy_static",
         "@crate_index//:libflate",
         "@crate_index//:wasm-encoder",

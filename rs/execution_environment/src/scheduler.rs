@@ -35,7 +35,7 @@ use ic_types::{
     consensus::idkg::PreSigId,
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
+    messages::{CanisterMessage, Ingress, MessageId, Response, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
     MAX_WASM_MEMORY_IN_BYTES,
@@ -271,8 +271,8 @@ impl SchedulerImpl {
         // `(compute_capacity - total_compute_allocation) * multiplier / number_of_canisters`
         // can be simplified to just
         // `(compute_capacity - total_compute_allocation) * scheduler_cores`
-        let free_capacity_per_canister = compute_capacity_percent
-            .saturating_sub(total_compute_allocation_percent)
+        let free_capacity_per_canister = (compute_capacity_percent
+            .saturating_sub(total_compute_allocation_percent))
             * scheduler_cores as i64;
 
         // Fully divide the free allocation across all canisters.
@@ -344,7 +344,6 @@ impl SchedulerImpl {
         let round_schedule = RoundSchedule::new(
             scheduler_cores,
             long_execution_cores,
-            total_compute_allocation_percent,
             round_states
                 .iter()
                 .skip(number_of_long_executions)
@@ -588,9 +587,9 @@ impl SchedulerImpl {
         let now = state.time();
         for canister in state.canisters_iter_mut() {
             // Add `Heartbeat` or `GlobalTimer` for running canisters only.
-            match canister.system_state.status {
-                CanisterStatus::Running { .. } => {}
-                CanisterStatus::Stopping { .. } | CanisterStatus::Stopped => {
+            match canister.system_state.status() {
+                CanisterStatusType::Running => {}
+                CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
                     continue;
                 }
             }
@@ -644,7 +643,7 @@ impl SchedulerImpl {
         scheduler_round_limits: &mut SchedulerRoundLimits,
         registry_settings: &RegistryExecutionSettings,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    ) -> (ReplicatedState, BTreeSet<CanisterId>, BTreeSet<CanisterId>) {
+    ) -> (ReplicatedState, BTreeSet<CanisterId>) {
         let measurement_scope =
             MeasurementScope::nested(&self.metrics.round_inner, root_measurement_scope);
         let mut ingress_execution_results = Vec::new();
@@ -655,9 +654,6 @@ impl SchedulerImpl {
 
         let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
         let mut round_executed_canister_ids = BTreeSet::new();
-        // The set of canisters marked as fully executed: have no messages to execute
-        // or were scheduled first on a core.
-        let mut round_fully_executed_canister_ids = BTreeSet::new();
 
         // Start iteration loop:
         //      - Execute subnet messages.
@@ -701,14 +697,7 @@ impl SchedulerImpl {
 
             // Update subnet available memory before taking out the canisters.
             round_limits.subnet_available_memory = self.exec_env.subnet_available_memory(&state);
-            let mut canisters = state.take_canister_states();
-            round_schedule.charge_idle_canisters(
-                &mut canisters,
-                &mut round_fully_executed_canister_ids,
-                current_round,
-                is_first_iteration,
-            );
-
+            let canisters = state.take_canister_states();
             // Obtain the active canisters and update the collection of heap delta rate-limited canisters.
             let (active_round_schedule, rate_limited_canister_ids) = round_schedule
                 .filter_canisters(
@@ -736,7 +725,6 @@ impl SchedulerImpl {
             let (
                 active_canisters,
                 executed_canister_ids,
-                fully_executed_canister_ids,
                 mut loop_ingress_execution_results,
                 heap_delta,
             ) = self.execute_canisters_in_inner_round(
@@ -751,10 +739,9 @@ impl SchedulerImpl {
             );
             let instructions_consumed = instructions_before - round_limits.instructions;
             drop(execution_timer);
+            round_executed_canister_ids.extend(executed_canister_ids);
 
             let finalization_timer = self.metrics.round_inner_iteration_fin.start_timer();
-            round_executed_canister_ids.extend(executed_canister_ids);
-            round_fully_executed_canister_ids.extend(fully_executed_canister_ids);
             total_heap_delta += heap_delta;
             state.metadata.heap_delta_estimate += heap_delta;
 
@@ -810,19 +797,14 @@ impl SchedulerImpl {
                 .metrics
                 .round_inner_heartbeat_overhead_duration
                 .start_timer();
-            // Remove all remaining `Heartbeat`, `GlobalTimer`, and `OnLowWasmMemory` tasks
+            // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
             for canister_id in &heartbeat_and_timer_canister_ids {
                 let canister = state.canister_state_mut(canister_id).unwrap();
-                canister.system_state.task_queue.retain(|task| match task {
-                    ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer
-                    | ExecutionTask::OnLowWasmMemory => false,
-                    ExecutionTask::PausedExecution { .. }
-                    | ExecutionTask::PausedInstallCode(..)
-                    | ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => true,
-                });
+                canister
+                    .system_state
+                    .task_queue
+                    .remove_heartbeat_and_global_timer();
             }
         }
 
@@ -865,11 +847,7 @@ impl SchedulerImpl {
             .heap_delta_rate_limited_canisters_per_round
             .observe(round_filtered_canisters.rate_limited_canister_ids.len() as f64);
 
-        (
-            state,
-            round_filtered_canisters.active_canister_ids,
-            round_fully_executed_canister_ids,
-        )
+        (state, round_filtered_canisters.active_canister_ids)
     }
 
     /// Executes canisters in parallel using the thread pool.
@@ -896,7 +874,6 @@ impl SchedulerImpl {
     ) -> (
         Vec<CanisterState>,
         BTreeSet<CanisterId>,
-        Vec<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
         NumBytes,
     ) {
@@ -909,7 +886,6 @@ impl SchedulerImpl {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 BTreeSet::new(),
-                vec![],
                 vec![],
                 NumBytes::from(0),
             );
@@ -974,7 +950,6 @@ impl SchedulerImpl {
         // Aggregate `results_by_thread` to get the result of this function.
         let mut canisters = Vec::new();
         let mut executed_canister_ids = BTreeSet::new();
-        let mut fully_executed_canister_ids = vec![];
         let mut ingress_results = Vec::new();
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
@@ -982,7 +957,6 @@ impl SchedulerImpl {
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
             executed_canister_ids.extend(result.executed_canister_ids);
-            fully_executed_canister_ids.extend(result.fully_executed_canister_ids);
             ingress_results.append(&mut result.ingress_results);
             let instructions_executed = as_num_instructions(
                 round_limits_per_thread.instructions - result.round_limits.instructions,
@@ -1016,7 +990,6 @@ impl SchedulerImpl {
         (
             canisters,
             executed_canister_ids,
-            fully_executed_canister_ids,
             ingress_results,
             heap_delta,
         )
@@ -1392,62 +1365,11 @@ impl SchedulerImpl {
             .iter()
             .filter(|(_, canister)| !canister.system_state.task_queue.is_empty());
 
-        // 1. Heartbeat, GlobalTimer, and OnLowWasmMemory tasks exist only during the round
-        //    and must not exist after the round.
-        // 2. Paused executions can exist only in ordinary rounds (not checkpoint rounds).
-        // 3. If deterministic time slicing is disabled, then there are no paused tasks.
-        //    Aborted tasks may still exist if DTS was disabled in recent checkpoints.
         for (id, canister) in canisters_with_tasks {
-            for task in canister.system_state.task_queue.iter() {
-                match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => {}
-                    ExecutionTask::Heartbeat => {
-                        panic!(
-                            "Unexpected heartbeat task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    ExecutionTask::GlobalTimer => {
-                        panic!(
-                            "Unexpected global timer task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    // TODO [EXC-1666]
-                    // For now, since OnLowWasmMemory is not used we will copy behaviour similar
-                    // to Heartbeat and GlobalTimer, but when the feature is implemented we will
-                    // come back to it, to revisit if we should keep it after the round ends.
-                    ExecutionTask::OnLowWasmMemory => {
-                        panic!(
-                            "Unexpected on low wasm memory task after a round in canister {:?}",
-                            id
-                        );
-                    }
-                    ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
-                        assert_eq!(
-                            self.deterministic_time_slicing,
-                            FlagStatus::Enabled,
-                            "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                            task,
-                            id
-                        );
-                        assert_eq!(
-                            current_round_type,
-                            ExecutionRoundType::OrdinaryRound,
-                            "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                            task,
-                            id
-                        );
-                    }
-                }
-            }
-
-            // There should be at most one paused or aborted task left in the task queue.
-            assert!(
-                canister.system_state.task_queue.len() <= 1,
-                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
-                id, canister.system_state.task_queue
+            canister.system_state.task_queue.check_dts_invariants(
+                self.deterministic_time_slicing,
+                current_round_type,
+                id,
             );
         }
     }
@@ -1729,7 +1651,7 @@ impl Scheduler for SchedulerImpl {
         };
 
         // Inner round.
-        let (mut state, active_canister_ids, fully_executed_canister_ids) = self.inner_round(
+        let (mut state, active_canister_ids) = self.inner_round(
             state,
             &mut csprng,
             &round_schedule,
@@ -1890,10 +1812,6 @@ impl Scheduler for SchedulerImpl {
                     .num_canister_snapshots
                     .set(final_state.canister_snapshots.count() as i64);
             }
-            round_schedule.finish_round(
-                &mut final_state.canister_states,
-                fully_executed_canister_ids,
-            );
             self.finish_round(&mut final_state, current_round_type);
             final_state
                 .metadata
@@ -1969,7 +1887,6 @@ fn observe_instructions_consumed_per_message(
 struct ExecutionThreadResult {
     canisters: Vec<CanisterState>,
     executed_canister_ids: BTreeSet<CanisterId>,
-    fully_executed_canister_ids: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
     slices_executed: NumSlices,
     messages_executed: NumMessages,
@@ -2007,7 +1924,6 @@ fn execute_canisters_on_thread(
     // These variables accumulate the results and will be returned at the end.
     let mut canisters = vec![];
     let mut executed_canister_ids = BTreeSet::new();
-    let mut fully_executed_canister_ids = BTreeSet::new();
     let mut ingress_results = vec![];
     let mut total_slices_executed = NumSlices::from(0);
     let mut total_messages_executed = NumMessages::from(0);
@@ -2120,13 +2036,18 @@ fn execute_canisters_on_thread(
         if let Some(es) = &mut canister.execution_state {
             es.last_executed_round = round_id;
         }
-        RoundSchedule::finish_canister_execution(
-            &mut canister,
-            &mut fully_executed_canister_ids,
-            round_id,
-            is_first_iteration,
-            rank,
-        );
+        let full_message_execution = match canister.next_execution() {
+            NextExecution::None => true,
+            NextExecution::StartNew => false,
+            // We just finished a full slice of executions.
+            NextExecution::ContinueLong | NextExecution::ContinueInstallCode => true,
+        };
+        let scheduled_first = is_first_iteration && rank == 0;
+        if full_message_execution || scheduled_first {
+            // The very first canister is considered to have a full execution round for
+            // scheduling purposes even if it did not complete within the round.
+            canister.scheduler_state.last_full_execution_round = round_id;
+        }
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
         round_limits.instructions -=
@@ -2136,7 +2057,6 @@ fn execute_canisters_on_thread(
     ExecutionThreadResult {
         canisters,
         executed_canister_ids,
-        fully_executed_canister_ids,
         ingress_results,
         slices_executed: total_slices_executed,
         messages_executed: total_messages_executed,
@@ -2181,16 +2101,15 @@ fn observe_replicated_state_metrics(
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
-        match &canister.system_state.status {
+        match canister.system_state.get_status() {
             CanisterStatus::Running { .. } => num_running_canisters += 1,
             CanisterStatus::Stopping { stop_contexts, .. } => {
                 num_stopping_canisters += 1;
                 // TODO(EXC-1466): Remove once all calls have `call_id` present.
-                let stop_contexts_with_missing_call_id: Vec<&StopCanisterContext> = stop_contexts
+                num_stop_canister_calls_without_call_id += stop_contexts
                     .iter()
                     .take_while(|stop_context| stop_context.call_id().is_none())
-                    .collect();
-                num_stop_canister_calls_without_call_id += stop_contexts_with_missing_call_id.len();
+                    .count();
             }
             CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
@@ -2584,10 +2503,10 @@ fn enqueue_tasks(
     // We first push the 'other_task' to the front of the queue and then
     // in front of it 'task' so that 'task' is executed first.
     if let Some(other_task) = other_task {
-        canister.system_state.task_queue.push_front(other_task);
+        canister.system_state.task_queue.enqueue(other_task);
     }
 
-    canister.system_state.task_queue.push_front(task);
+    canister.system_state.task_queue.enqueue(task);
 }
 
 /// Estimates the heap delta limit for the given round based on the maximum

@@ -183,7 +183,7 @@ impl RosettaClient {
 
     pub async fn build_stake_neuron_operations(
         signer_principal: Principal,
-        // The index of the neuron relativ to the signer of the transaction
+        // The index of the neuron relative to the signer of the transaction
         neuron_index: u64,
     ) -> anyhow::Result<Vec<Operation>> {
         Ok(vec![Operation {

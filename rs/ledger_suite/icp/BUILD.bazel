@@ -207,9 +207,11 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp/index:ic-icp-index",
         "//rs/ledger_suite/icp/test_utils",
+        "//rs/ledger_suite/tests/sm-tests",
         "//rs/nns/constants",
         "//rs/nns/test_utils/golden_nns_state",
         "//rs/rust_canisters/canister_test",

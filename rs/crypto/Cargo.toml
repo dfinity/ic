@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 bincode = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics/server" }
 ic-async-utils = { path = "../async_utils" }
@@ -24,7 +24,7 @@ ic-crypto-internal-csp = { path = "internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold_sig/tecdsa" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
@@ -40,7 +40,7 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-types = { path = "../types/types" }
 parking_lot = { workspace = true }
-rustls = { workspace = true, features = ["std"] }
+rustls = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
 strum = { workspace = true }
@@ -60,7 +60,7 @@ ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig
 ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
-ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "internal/crypto_lib/threshold_sig/tecdsa/test_utils" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
 ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-node-key-validation = { path = "node_key_validation" }

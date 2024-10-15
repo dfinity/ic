@@ -1,41 +1,8 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
-
-system_test_nns(
-    name = "backup_manager_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "experimental_system_test_colocation",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
-        BACKUP_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/backup",
-        "//rs/registry/subnet_type",
-        "//rs/tests/consensus/tecdsa/utils",
-        "//rs/tests/consensus/utils",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/management_canister_types",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:hex",
-        "@crate_index//:serde_json",
-        "@crate_index//:slog",
-        "@crate_index//:tempfile",
-    ],
-)
 
 rust_library(
     name = "catch_up_test_common",
@@ -62,7 +29,6 @@ system_test(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -86,7 +52,6 @@ system_test(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,

@@ -88,8 +88,8 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm_nextmigrationversionmemorymanager() -> Vec<u8> {
-    std::fs::read(std::env::var("IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH").unwrap()).unwrap()
+fn ledger_wasm_nextledgerversion() -> Vec<u8> {
+    std::fs::read(std::env::var("IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 fn archive_wasm() -> Vec<u8> {
@@ -413,10 +413,11 @@ fn icrc1_test_upgrade_serialization() {
     ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
         ledger_mainnet_wasm(),
         ledger_wasm(),
-        Some(ledger_wasm_nextmigrationversionmemorymanager()),
+        None,
         init_args,
         upgrade_args,
         minter,
+        true,
         true,
     );
 }
@@ -426,16 +427,22 @@ fn icrc1_test_upgrade_serialization_fixed_tx() {
     ic_icrc1_ledger_sm_tests::icrc1_test_upgrade_serialization_fixed_tx(
         ledger_mainnet_wasm(),
         ledger_wasm(),
-        ledger_wasm_nextmigrationversionmemorymanager(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn icrc1_test_downgrade_from_incompatible_version() {
+    ic_icrc1_ledger_sm_tests::test_downgrade_from_incompatible_version(
+        ledger_mainnet_wasm(),
+        ledger_wasm_nextledgerversion(),
+        ledger_wasm(),
         encode_init_args,
     );
 }
 
 mod metrics {
-    use crate::{
-        encode_init_args, encode_upgrade_args, ledger_wasm,
-        ledger_wasm_nextmigrationversionmemorymanager,
-    };
+    use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
 
     #[test]
@@ -467,7 +474,7 @@ mod metrics {
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
         ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
-            Some(ledger_wasm_nextmigrationversionmemorymanager()),
+            None,
             encode_init_args,
             encode_upgrade_args,
         );

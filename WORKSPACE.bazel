@@ -3,168 +3,65 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-
-# Skylib helpers, loaded first in order to avoid inheriting potential versions pulled in by other deps
-http_archive(
-    name = "bazel_skylib",
-    sha256 = "bc283cdfcd526a52c3201279cda4bc298652efa898b10b4db0837dc51652756f",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.7.1/bazel-skylib-1.7.1.tar.gz",
-    ],
-)
-
-load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
-
-bazel_skylib_workspace()
-
-# Bazel helpers by Aspect
-http_archive(
-    name = "aspect_bazel_lib",
-    sha256 = "688354ee6beeba7194243d73eb0992b9a12e8edeeeec5b6544f4b531a3112237",
-    strip_prefix = "bazel-lib-2.8.1",
-    url = "https://github.com/aspect-build/bazel-lib/releases/download/v2.8.1/bazel-lib-v2.8.1.tar.gz",
-)
-
-load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies", "aspect_bazel_lib_register_toolchains")
-
-aspect_bazel_lib_dependencies()
-
-aspect_bazel_lib_register_toolchains()
-
-# Rules used to build Ubuntu systems
-http_archive(
-    name = "rules_distroless",
-    sha256 = "8a3440067453ad211f3b34d4a8f68f65663dc5fd6d7834bf81eecf0526785381",
-    strip_prefix = "rules_distroless-0.3.6",
-    url = "https://github.com/GoogleContainerTools/rules_distroless/releases/download/v0.3.6/rules_distroless-v0.3.6.tar.gz",
-)
-
-load("@rules_distroless//distroless:dependencies.bzl", "distroless_dependencies")
-
-distroless_dependencies()
-
-load("@rules_distroless//distroless:toolchains.bzl", "distroless_register_toolchains")
-
-distroless_register_toolchains()
-
-load("@rules_distroless//apt:index.bzl", "deb_index")
-
-# Packageset based on an Ubuntu noble snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @noble//:lock
-deb_index(
-    name = "noble",
-    lock = "//bazel:noble.lock.json",
-    manifest = "//bazel:noble.yaml",
-)
-
-load("@noble//:packages.bzl", "noble_packages")
-
-noble_packages()
-
-# OCI (docker, podman) container support
-http_archive(
-    name = "rules_oci",
-    sha256 = "79e7f80df2840d14d7bc79099b5ed4553398cce8cff1f0df97289a07f7fd213c",
-    strip_prefix = "rules_oci-2.0.0-rc0",
-    url = "https://github.com/bazel-contrib/rules_oci/releases/download/v2.0.0-rc0/rules_oci-v2.0.0-rc0.tar.gz",
-)
-
-load("@rules_oci//oci:dependencies.bzl", "rules_oci_dependencies")
-
-rules_oci_dependencies()
-
-load("@rules_oci//oci:repositories.bzl", "oci_register_toolchains")
-
-oci_register_toolchains(name = "oci")
-
-load("@rules_oci//oci:pull.bzl", "oci_pull")
+load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
-load("mainnet-canisters.bzl", "mainnet_ck_canisters", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
-# file server used in tests
-oci_pull(
-    name = "static-file-server",
-    # $ docker pull halverneus/static-file-server
-    # $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
-    # $ docker push dfinitydev/halverneus-static-file-server:latest
-    #latest: digest: sha256:...
-    image = "docker.io/dfinitydev/halverneus-static-file-server@sha256:80eb204716e0928e27e378ed817056c1167b2b1a878b1ac4ce496964dd9a3ccd",
-    platforms = [
-        "linux/amd64",
-    ],
+# We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
+# from the canister names because we use inconsistent repo names. Same goes for filenames.
+# For each new canister defined in the source JSON file (see `path`) a mapping can be added
+# from canister name (as per JSON) to filename (and to repo name, resp.).
+canisters(
+    name = "canisters",
+    filenames = {
+        "registry": "registry-canister.wasm.gz",
+        "governance": "governance-canister.wasm.gz",
+        "ledger": "ledger-canister_notify-method.wasm.gz",
+        "archive": "ledger-archive-node-canister.wasm.gz",
+        "index": "ic-icp-index-canister.wasm.gz",
+        "root": "root-canister.wasm.gz",
+        "lifeline": "lifeline_canister.wasm.gz",
+        "genesis-token": "genesis-token-canister.wasm.gz",
+        "cycles-minting": "cycles-minting-canister.wasm.gz",
+        "sns-wasm": "sns-wasm-canister.wasm.gz",
+        "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
+        "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
+        "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
+        "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
+        "sns_root": "sns-root-canister.wasm.gz",
+        "sns_governance": "sns-governance-canister.wasm.gz",
+        "swap": "sns-swap-canister.wasm.gz",
+        "sns_ledger": "ic-icrc1-ledger.wasm.gz",
+        "sns_archive": "ic-icrc1-archive.wasm.gz",
+        "sns_index": "ic-icrc1-index-ng.wasm.gz",
+    },
+    path = "//:mainnet-canisters.json",
+    reponames = {
+        "registry": "mainnet_nns_registry_canister",
+        "governance": "mainnet_nns_governance_canister",
+        "ledger": "mainnet_icp_ledger_canister",
+        "archive": "mainnet_icp_ledger-archive-node-canister",
+        "index": "mainnet_icp_index_canister",
+        "root": "mainnet_nns_root-canister",
+        "lifeline": "mainnet_nns_lifeline_canister",
+        "genesis-token": "mainnet_nns_genesis-token-canister",
+        "cycles-minting": "mainnet_nns_cycles-minting-canister",
+        "sns-wasm": "mainnet_nns_sns-wasm-canister",
+        "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
+        "ck_btc_index": "mainnet_ckbtc-index-ng",
+        "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
+        "ck_eth_index": "mainnet_cketh-index-ng",
+        "sns_root": "mainnet_sns-root-canister",
+        "sns_governance": "mainnet_sns-governance-canister",
+        "swap": "mainnet_sns-swap-canister",
+        "sns_ledger": "mainnet_ic-icrc1-ledger",
+        "sns_archive": "mainnet_ic-icrc1-archive",
+        "sns_index": "mainnet_ic-icrc1-index-ng",
+    },
 )
 
-# bitcoin container used in test
-oci_pull(
-    name = "bitcoind",
-    image = "docker.io/kylemanna/bitcoind@sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1",
-)
+load("@canisters//:defs.bzl", "canister_deps")
 
-# Tracing image used in tests
-# we can't use the official image: https://github.com/bazel-contrib/rules_oci/issues/695
-#
-# Instead we copy the official image to our repository:
-# $ docker pull halverneus/static-file-server
-# $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
-# $ docker push dfinitydev/halverneus-static-file-server:latest
-# > latest: digest: sha256:...
-oci_pull(
-    name = "jaeger",
-    image = "docker.io/dfinitydev/jaegertracing-all-in-one@sha256:b85a6bbb949a62377010b8418d7a860c9d0ea7058d83e7cb5ade4fba046c4a76",
-    platforms = [
-        "linux/amd64",
-    ],
-)
-
-# Used by tests
-oci_pull(
-    name = "minica",
-    image = "docker.io/ryantk/minica@sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
-    platforms = ["linux/amd64"],
-)
-
-# used by rosetta image
-oci_pull(
-    name = "rust_base",
-    image = "gcr.io/distroless/cc-debian12@sha256:3310655aac0d85eb9d579792387af1ff3eb7a1667823478be58020ab0e0d97a8",
-    platforms = ["linux/amd64"],
-)
-
-# used in various places as base
-oci_pull(
-    name = "ubuntu_base",
-    image = "docker.io/library/ubuntu@sha256:77d57fd89366f7d16615794a5b53e124d742404e20f035c22032233f1826bd6a",
-    platforms = ["linux/amd64"],
-)
-
-# used by boundary node tests
-oci_pull(
-    name = "coredns",
-    image = "docker.io/coredns/coredns@sha256:be7652ce0b43b1339f3d14d9b14af9f588578011092c1f7893bd55432d83a378",
-    platforms = ["linux/amd64"],
-)
-
-# used by custom domains tests
-oci_pull(
-    name = "pebble",
-    image = "docker.io/letsencrypt/pebble@sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258",
-    platforms = ["linux/amd64"],
-)
-
-oci_pull(
-    name = "python3",
-    image = "docker.io/library/python@sha256:0a56f24afa1fc7f518aa690cb8c7be661225e40b157d9bb8c6ef402164d9faa7",
-    platforms = ["linux/amd64"],
-)
-
-oci_pull(
-    name = "alpine_openssl",
-    image = "docker.io/alpine/openssl@sha256:cf89651f07a33d2faf4499f72e6f8b0ee2542cd40735d51c7e75b8965c17af0e",
-    platforms = ["linux/amd64"],
-)
+canister_deps()
 
 http_archive(
     name = "aspect_rules_sol",
@@ -181,33 +78,6 @@ sol_register_toolchains(
     name = "solc",
     sol_version = "0.8.18",
 )
-
-http_archive(
-    name = "io_bazel_rules_go",
-    sha256 = "6dc2da7ab4cf5d7bfc7c949776b1b7c733f05e56edc4bcd9022bb249d2e2a996",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-        "https://github.com/bazelbuild/rules_go/releases/download/v0.39.1/rules_go-v0.39.1.zip",
-    ],
-)
-
-http_archive(
-    name = "bazel_gazelle",
-    sha256 = "727f3e4edd96ea20c29e8c2ca9e8d2af724d8c7778e7923a854b2c80952bc405",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
-        "https://github.com/bazelbuild/bazel-gazelle/releases/download/v0.30.0/bazel-gazelle-v0.30.0.tar.gz",
-    ],
-)
-
-load("@bazel_gazelle//:deps.bzl", "gazelle_dependencies")
-load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains", "go_rules_dependencies")
-
-go_rules_dependencies()
-
-go_register_toolchains(go_version = "1.20.5")
-
-gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
 
 http_archive(
     name = "rules_rust",
@@ -248,26 +118,6 @@ load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_depende
 
 rules_foreign_cc_dependencies()
 
-http_archive(
-    name = "rules_proto",
-    sha256 = "66bfdf8782796239d3875d37e7de19b1d94301e8972b3cbd2446b332429b4df1",
-    strip_prefix = "rules_proto-4.0.0",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-        "https://github.com/bazelbuild/rules_proto/archive/refs/tags/4.0.0.tar.gz",
-    ],
-)
-
-load("@rules_proto//proto:repositories.bzl", "rules_proto_dependencies", "rules_proto_toolchains")
-load("//:go_deps.bzl", "go_dependencies")
-
-# gazelle:repository_macro go_deps.bzl%go_dependencies
-go_dependencies()
-
-rules_proto_dependencies()
-
-rules_proto_toolchains()
-
 load("//bazel:external_crates.bzl", "external_crates_repository")
 load("//bazel/sanitizers_enabled_env:defs.bzl", "sanitizers_enabled_env")
 
@@ -295,33 +145,9 @@ http_archive(
     urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
 )
 
-http_archive(
-    name = "motoko_base",
-    build_file_content = """
-filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
-      """,
-    sha256 = "b143d641b31b13fe2d21832d7372dccb067ea1a740396e9fd50af3fe9e713247",
-    strip_prefix = "motoko-base-moc-0.8.5/src",
-    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.8.5.tar.gz"],
-)
-
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
-
-# Support for constructing archives
-http_archive(
-    name = "rules_pkg",
-    sha256 = "8f9ee2dc10c1ae514ee599a8b42ed99fa262b757058f65ad3c384289ff70c4b8",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-        "https://github.com/bazelbuild/rules_pkg/releases/download/0.9.1/rules_pkg-0.9.1.tar.gz",
-    ],
-)
-
-load("@rules_pkg//:deps.bzl", "rules_pkg_dependencies")
-
-rules_pkg_dependencies()
 
 # Third party dependencies that require special treatment
 
@@ -393,7 +219,13 @@ http_archive(
 
 load("@io_bazel_rules_closure//closure:repositories.bzl", "rules_closure_dependencies", "rules_closure_toolchains")
 
-rules_closure_dependencies()
+# we instruct rules_closure to omit some dependencies that we already
+# pull via MODULE.bazel
+rules_closure_dependencies(
+    omit_com_google_protobuf = True,
+    omit_rules_java = True,
+    omit_rules_proto = True,
+)
 
 rules_closure_toolchains()
 
@@ -486,21 +318,30 @@ filegroup(
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
     name = "wasm_spec_testsuite",
-    build_file_content = """filegroup(
-         name = "wast_files",
-         srcs = glob(["**/*.wast"]),
-         visibility = ["//visibility:public"]
-     )""",
+    build_file_content = """
+# Exports the various test suites that we use
+
+filegroup(
+    name = "base_wast_files",
+    srcs = glob(["*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "multi_memory_wast_files",
+    srcs = glob(["proposals/multi-memory/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "memory64_wast_files",
+    srcs = glob(["proposals/memory64/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+
+     """,
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
 )
-
-mainnet_core_nns_canisters()
-
-mainnet_ck_canisters()
-
-mainnet_sns_canisters()
 
 # Asset canister
 
@@ -619,35 +460,6 @@ http_file(
     url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.1.0/subnet_rental_canister.wasm",
 )
 
-# Import Python rules
-
-http_archive(
-    name = "rules_python",
-    sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
-    strip_prefix = "rules_python-0.26.0",
-    url = "https://github.com/bazelbuild/rules_python/releases/download/0.26.0/rules_python-0.26.0.tar.gz",
-)
-
-load("@rules_python//python:repositories.bzl", "python_register_toolchains")
-
-python_register_toolchains(
-    name = "python3_10",
-    python_version = "3.10",
-)
-
-load("@python3_10//:defs.bzl", "interpreter")
-load("@rules_python//python:pip.bzl", "pip_parse")
-
-pip_parse(
-    name = "python_deps",
-    python_interpreter_target = interpreter,
-    requirements_lock = "//:requirements.txt",
-)
-
-load("@python_deps//:requirements.bzl", "install_deps")
-
-install_deps()
-
 # Financial Integration artifacts for upgrade testing
 
 # first ic-icrc1-ledger release (see https://dashboard.internetcomputer.org/proposal/104499)
@@ -676,148 +488,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "ccce0d8e3210db42ff12b03360c20246855ad8529da0f844faa343bf8b393529",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/release-2024-05-23/evm_rpc.wasm.gz",
-)
-
-# Haskell toolchain for spec_compliance tests
-
-http_archive(
-    name = "rules_haskell",
-    sha256 = "4cae22bc84f327bf3cb7605021c3663160ff6bc8a0b7b6266062366bcbd19e79",
-    strip_prefix = "rules_haskell-1.0",
-    urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],
-)
-
-# Load the rules_haskell dependencies necessary for loading the toolchains
-load(
-    "@rules_haskell//haskell:repositories.bzl",
-    "rules_haskell_dependencies",
-)
-
-rules_haskell_dependencies()
-
-# Load the Haskell toolchains
-load(
-    "@rules_haskell//haskell:toolchain.bzl",
-    "rules_haskell_toolchains",
-)
-
-rules_haskell_toolchains(
-    version = "9.6.6",
-)
-
-load(
-    "@rules_haskell//haskell:cabal.bzl",
-    "stack_snapshot",
-)
-
-#
-# Run this command to regenerate lock file after changing the rule above:
-# bazel run @stackage-unpinned//:pin
-#
-stack_snapshot(
-    name = "stackage",
-    components = {
-        "attoparsec": [
-            "lib",
-            "lib:attoparsec-internal",
-        ],
-    },
-    components_dependencies = {
-        "attoparsec": """{"lib:attoparsec": ["lib:attoparsec-internal"]}""",
-    },
-    packages = [
-        "QuickCheck",
-        "aeson",
-        "array",
-        "asn1-encoding",
-        "asn1-types",
-        "async",
-        "atomic-write",
-        "base",
-        "base16",
-        "base32",
-        "base64-bytestring",
-        "binary",
-        "bytes",
-        "bytestring",
-        "case-insensitive",
-        "cborg",
-        "cereal",
-        "conduit",
-        "constraints",
-        "containers",
-        "crypton-connection",
-        "crypton-x509",
-        "crypton-x509-store",
-        "crypton-x509-validation",
-        "cryptonite",
-        "data-default-class",
-        "deepseq",
-        "digest",
-        "directory",
-        "dlist",
-        "ed25519",
-        "either",
-        "entropy",
-        "file-embed",
-        "filepath",
-        "hashable",
-        "hex-text",
-        "hspec",
-        "http-client",
-        "http-client-tls",
-        "http-types",
-        "leb128-cereal",
-        "megaparsec",
-        "memory",
-        "mtl",
-        "murmur3",
-        "network",
-        "network-uri",
-        "optparse-applicative",
-        "parallel",
-        "parser-combinators",
-        "prettyprinter",
-        "primitive",
-        "process",
-        "quickcheck-io",
-        "random",
-        "row-types",
-        "safe",
-        "scientific",
-        "secp256k1-haskell",
-        "serialise",
-        "split",
-        "splitmix",
-        "string-conversions",
-        "tasty",
-        "tasty-ant-xml",
-        "tasty-html",
-        "tasty-hunit",
-        "tasty-quickcheck",
-        "tasty-rerun",
-        "template-haskell",
-        "temporary",
-        "text",
-        "time",
-        "tls",
-        "transformers",
-        "uglymemo",
-        "unordered-containers",
-        "utf8-string",
-        "vector",
-        "wai",
-        "wai-cors",
-        "wai-extra",
-        "warp",
-        "wide-word",
-        "word8",
-        "zlib",
-    ],
-    snapshot = "lts-22.30",
-    stack_snapshot_json = "//:stackage_snapshot.json",
+    sha256 = "5f4a871b2369768fb7e69b08d367ac0288b95dcdfda9bd2c37283aa84e6b58b4",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.1.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
@@ -953,10 +625,6 @@ http_file(
     sha256 = "bf3987bd483cf710ff0c54134350ca188c29ff0fdd38567aa4df5e74131543e4",
     url = "https://raw.githubusercontent.com/dfinity/interface-spec/a82220c1156f5e3e80ea65be6a4f69b766cbe6d1/spec/_attachments/ic.did",
 )
-
-load("//rs/tests:kubeconfig.bzl", "kubeconfig")
-
-kubeconfig()
 
 http_archive(
     name = "bitcoin_core",

@@ -1,10 +1,10 @@
 use assert_matches::assert_matches;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
-use ic_management_canister_types::CanisterSettingsArgsBuilder;
+use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_replicated_state::NumWasmPages;
-use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
 use ic_state_machine_tests::{Cycles, StateMachine};
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
 use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
@@ -139,8 +139,8 @@ fn heartbeat_doesnt_run_if_canister_is_stopped() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
@@ -162,8 +162,8 @@ fn global_timer_doesnt_run_if_canister_is_stopped() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
@@ -183,12 +183,9 @@ fn heartbeat_doesnt_run_if_canister_is_stopping() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
-    assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).system_state.status()
     );
     test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
@@ -208,12 +205,9 @@ fn global_timer_doesnt_run_if_canister_is_stopping() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
-    assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).system_state.status()
     );
     test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
