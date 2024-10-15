@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "//rs/types/types",
     "@crate_index//:assert_matches",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
 ]

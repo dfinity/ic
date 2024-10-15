@@ -549,7 +549,7 @@ impl IngressManager {
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::InvalidArtifact(match err {
-                RequestValidationError::InvalidIngressExpiry(msg)
+                RequestValidationError::InvalidRequestExpiry(msg)
                 | RequestValidationError::InvalidDelegationExpiry(msg) => {
                     InvalidIngressPayloadReason::IngressExpired(message_id, msg)
                 }

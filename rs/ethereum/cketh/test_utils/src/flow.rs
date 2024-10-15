@@ -371,6 +371,12 @@ impl ProcessWithdrawalParams {
                 },
             )
             .modify_response(
+                JsonRpcProvider::Alchemy,
+                &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                    response.status = Some(0.into())
+                },
+            )
+            .modify_response(
                 JsonRpcProvider::PublicNode,
                 &mut |response: &mut ethers_core::types::TransactionReceipt| {
                     response.status = Some(1.into())
