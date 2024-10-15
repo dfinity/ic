@@ -454,6 +454,9 @@ fn canister_post_upgrade() {
     });
 
     init_timers();
+
+    // TODO[NNS1-3386]: Remove this line.
+    swap_mut().migrate_state();
 }
 
 /// Serve an HttpRequest made to this canister

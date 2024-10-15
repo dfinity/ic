@@ -1013,6 +1013,32 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
+    // TODO[NNS1-3386]: Remove this function.
+    pub fn migrate_state(&mut self) {
+        if self.direct_participation_icp_e8s.is_none() {
+            let direct_participation_icp_e8s =
+                self.buyers
+                    .values()
+                    .fold(0_u64, |sum_icp_e8s, buyer_state| {
+                        let amount_icp_e8s = buyer_state.amount_icp_e8s();
+                        sum_icp_e8s.saturating_add(amount_icp_e8s)
+                    });
+            self.direct_participation_icp_e8s = Some(direct_participation_icp_e8s);
+        }
+
+        if self.neurons_fund_participation_icp_e8s.is_none() {
+            let neurons_fund_participation_icp_e8s =
+                self.cf_participants
+                    .iter()
+                    .fold(0_u64, |sum_icp_e8s, neurons_fund_participant| {
+                        let participant_total_icp_e8s =
+                            neurons_fund_participant.participant_total_icp_e8s();
+                        sum_icp_e8s.saturating_add(participant_total_icp_e8s)
+                    });
+            self.neurons_fund_participation_icp_e8s = Some(neurons_fund_participation_icp_e8s);
+        }
+    }
+
     /// Runs those tasks that should be run periodically.
     ///
     /// The argument 'now_fn' is a function that returns the current time for bookkeeping
