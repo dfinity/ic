@@ -561,7 +561,7 @@ ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 itertools = "0.12.0"
-k256 = { version = "0.13.3", default-features = false, features = [
+k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
     "pem",
