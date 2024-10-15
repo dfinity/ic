@@ -17,6 +17,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-networking-system-test-utils = { path = "utils" } 
 ic-prep = { path = "../../prep" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -28,7 +29,6 @@ ic-utils = { workspace = true }
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 reqwest = { workspace = true }
 slog = { workspace = true }
-tests = { path = ".." }
 tokio = { workspace = true }
 
 [[bin]]

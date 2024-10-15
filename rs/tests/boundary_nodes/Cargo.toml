@@ -18,6 +18,7 @@ ic-boundary-nodes-integration-test-common = { path = "integration_test_common" }
 ic-boundary-nodes-performance-test-common = { path = "performance_test_common" }
 ic-canister-client = { path = "../../canister_client" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-networking-system-test-utils = { path = "../networking/utils" } 
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
@@ -56,3 +57,7 @@ path = "bn_performance_test.rs"
 [[bin]]
 name = "ic-systest-mainnet-bn-performance"
 path = "mainnet_bn_performance_test.rs"
+
+[[bin]]
+name = "ic-systest-bn-update-workload"
+path = "bn_update_workload_test.rs"
