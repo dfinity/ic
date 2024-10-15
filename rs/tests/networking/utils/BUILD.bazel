@@ -16,6 +16,7 @@ rust_library(
         "//rs/registry/keys",   
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:slog",

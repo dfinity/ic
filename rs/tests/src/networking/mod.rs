@@ -1,4 +1,3 @@
-pub mod network_large;
 pub mod network_reliability;
 pub mod p2p_performance_workload;
 pub mod replica_query_workload;

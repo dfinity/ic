@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
-use ic_tests::networking::network_large::{setup, test};
+use ic_networking_system_test_utils::network_large::{setup, test};
 
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
