@@ -22,6 +22,7 @@ Success::
 . Backup tool is able to restore the state from pulled artifacts, including those after the upgrade. The state is also archived.
 
 end::catalog[] */
+use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use anyhow::Result;
 use ic_backup::{
     backup_helper::last_checkpoint,
@@ -70,17 +71,7 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
-fn main() -> Result<()> {
-    SystemTestGroup::new()
-        .with_setup(config)
-        .with_timeout_per_test(Duration::from_secs(15 * 60))
-        .add_test(systest!(test))
-        .execute_from_args()?;
-
-    Ok(())
-}
-
-pub fn config(env: TestEnv) {
+fn config_common() -> InternetComputer {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -99,10 +90,45 @@ pub fn config(env: TestEnv) {
                 })
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
+}
+
+pub fn config_upgrade(env: TestEnv) {
+    config_common()
+        .with_mainnet_config()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
+}
+
+pub fn config_downgrade(env: TestEnv) {
+    config_common()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+
+    install_nns_and_check_progress(env.topology_snapshot());
+}
+
+fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
+    let logger = env.logger();
+
+    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
+        .expect("tip-of-branch IC version");
+    let branch_version = format!("{}-test", original_branch_version);
+
+    // Bless branch version
+    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    block_on(bless_replica_version(
+        nns_node,
+        &original_branch_version,
+        UpdateImageType::ImageTest,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
+    info!(&logger, "Blessed branch version");
+    branch_version
 }
 
 pub fn test(env: TestEnv) {
@@ -124,6 +150,7 @@ pub fn test(env: TestEnv) {
 
     info!(log, "Fetch the replica version");
     let nns_node = get_nns_node(&env.topology_snapshot());
+    let branch_version = bless_branch_version(&env, &nns_node);
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
     let replica_version =
@@ -131,11 +158,18 @@ pub fn test(env: TestEnv) {
     let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
         .expect("Assigned replica version should be valid");
 
+        info!(log, "Proposal to upgrade the subnet replica version");
+        block_on(deploy_guestos_to_all_subnet_nodes(
+            &nns_node,
+            &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
+            subnet_id,
+        ));    
+
     info!(
         log,
         "Copy the binaries needed for replay of the current version"
     );
-    let backup_binaries_dir = backup_dir.join("binaries").join(&replica_version);
+    let backup_binaries_dir = backup_dir.join("binaries").join(&branch_version);
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
@@ -249,15 +283,15 @@ pub fn test(env: TestEnv) {
 
     let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
-    info!(log, "Elect the mainnet replica version");
-    info!(log, "TARGET_VERSION: {}", mainnet_version);
-    block_on(bless_public_replica_version(
-        &nns_node,
-        &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
-        &log,
-    ));
+    // info!(log, "Elect the mainnet replica version");
+    // info!(log, "TARGET_VERSION: {}", mainnet_version);
+    // block_on(bless_public_replica_version(
+    //     &nns_node,
+    //     &mainnet_version,
+    //     UpdateImageType::Image,
+    //     UpdateImageType::Image,
+    //     &log,
+    // ));
 
     info!(log, "Wait for archived checkpoint");
     let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
@@ -273,12 +307,12 @@ pub fn test(env: TestEnv) {
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(mainnet_version.clone()).expect("bad TARGET_VERSION string"),
+        &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
         subnet_id,
     ));
 
     info!(log, "Wait until the upgrade happens");
-    assert_assigned_replica_version(&nns_node, &mainnet_version, env.logger());
+    assert_assigned_replica_version(&nns_node, &branch_version, env.logger());
 
     let checkpoint_dir = backup_dir
         .join("data")

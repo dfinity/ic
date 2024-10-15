@@ -1,0 +1,76 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "common",
+    testonly = True,
+    srcs = ["common.rs"],
+    crate_name = "ic_consensus_system_test_backup_common",
+    deps = [
+        # Keep sorted.
+        "//rs/backup",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:hex",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+    ],
+)
+
+BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
+
+system_test_nns(
+    name = "backup_manager_downgrade_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+        "system_test_hourly",
+    ],
+    uses_guestos_dev_test = True,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "backup_manager_upgrade_test",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "experimental_system_test_colocation",
+        "system_test_hourly",
+    ],
+    uses_guestos_dev_test = True,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
