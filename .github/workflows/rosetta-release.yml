@@ -22,7 +22,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:7027729912789141064925ecc52d1bc3a4e8b23c204a904f33a64206df1b7c68
+      image: ghcr.io/dfinity/ic-build@sha256:5c16cd75d19935924949c1d20d9ac5a9e6bae6120280829e505b56229ae0c0f5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
