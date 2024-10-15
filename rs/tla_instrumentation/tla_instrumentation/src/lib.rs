@@ -179,7 +179,7 @@ pub fn log_request(
     global: GlobalState,
 ) -> ResolvedStatePair {
     // TODO: do we want to push the label to the location stack here, or just replace it?
-    state.context.location.0 = vec![LocationStackElem::Label(Label::new(label))];
+    *state.context.location.0.last_mut().expect("Asked to log a request, but the location stack is empty.") = LocationStackElem::Label(Label::new(label));
     let old_stage = mem::replace(&mut state.stage, Stage::Start);
     let start_state = match old_stage {
         Stage::End(start) => start,
