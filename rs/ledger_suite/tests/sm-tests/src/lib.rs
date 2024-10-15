@@ -2644,7 +2644,7 @@ pub fn test_upgrade_serialization(
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
 
-                    // Current mainnet ICP wasm (V0) cannot deserialize from memory manager, but ICRC (V1) can
+                    // Current mainnet ICP and ICRC wasms (V1) can both deserialize from memory manager
                     match env.upgrade_canister(
                         ledger_id,
                         ledger_wasm_mainnet.clone(),
@@ -2652,7 +2652,7 @@ pub fn test_upgrade_serialization(
                     ) {
                         Ok(_) => {
                             if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
+                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V1)!")
                             } else {
                                 // In case this succeeded, we need to upgrade the ledger back to
                                 // the next version (via the current version), so that the
