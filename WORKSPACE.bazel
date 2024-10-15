@@ -192,16 +192,6 @@ http_archive(
     urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
 )
 
-http_archive(
-    name = "motoko_base",
-    build_file_content = """
-filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
-      """,
-    sha256 = "b143d641b31b13fe2d21832d7372dccb067ea1a740396e9fd50af3fe9e713247",
-    strip_prefix = "motoko-base-moc-0.8.5/src",
-    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.8.5.tar.gz"],
-)
-
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
