@@ -28,7 +28,7 @@ use ic_agent::{
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
-use ic_constants::MAX_INGRESS_TTL;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -783,6 +783,7 @@ pub async fn agent_with_identity_mapping(
 ) -> Result<Agent, AgentError> {
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
+        .http2_prior_knowledge()
         .danger_accept_invalid_certs(true);
 
     let builder = match (
@@ -983,7 +984,7 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum EndpointsStatus {
     AllHealthy,
     AllUnhealthy,
@@ -1476,7 +1477,9 @@ impl LogStream {
 
         // Use plaintext instead of json, because some messages are too large for the journal json serializer
         stream
-            .write_all(b"GET /entries?follow HTTP/1.1\n\r\n\r")
+            .write_all(
+                format!("GET /entries?follow HTTP/1.1\r\nHost:{ip_addr}:19531\r\n\r\n").as_bytes(),
+            )
             .await?;
 
         let bf = BufReader::new(stream);

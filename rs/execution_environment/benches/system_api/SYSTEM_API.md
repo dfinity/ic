@@ -1,137 +1,143 @@
 System API Performance Report
 =============================
 
-Remote (old) commit:987f50c19 branch:987f50c19
-Local  (new) commit:69045aaa1 branch:andriy/fix-system-api-benchmarks-2
+Remote (old) commit:4fea8a2f4 branch:andriy/fix-system-api-benches
+Local  (new) commit:67cb8cb21 branch:andriy/fix-system-api-regression
 
-| API Type / System API Call                 | Old IPS  | New IPS  | Speedup | Round Time |
-| ------------------------------------------ | -------- | -------- | ------- | ---------- |
-| inspect/ic0_msg_method_name_size()         |    8.43G |    10.6G |    +25% |      0.66s |
-| inspect/ic0_msg_method_name_copy()/1B      |    4.13G |    4.51G |     +9% |      1.55s |
-| inspect/ic0_msg_method_name_copy()/30B     |    4.09G |    4.55G |    +11% |      1.54s |
-| inspect/ic0_accept_message()*              |    2.49M |    4.61M |    +85% |          - |
-| query/ic0_data_certificate_size()          |    7.99G |    9.63G |    +20% |      0.73s |
-| query/ic0_data_certificate_copy()/1B       |    3.83G |    4.29G |    +12% |      1.63s |
-| query/ic0_data_certificate_copy()/64B      |    4.11G |    4.79G |    +16% |      1.46s |
-| update/baseline/empty test*                |    10.3K |    22.7K |   +120% |          - |
-| update/baseline/empty loop                 |    6.29G |    6.48G |     +3% |      1.08s |
-| update/baseline/adds                       |    9.21G |    9.47G |     +2% |      0.74s |
-| update/ic0_msg_caller_size()               |    7.91G |    10.2G |    +28% |      0.69s |
-| update/ic0_msg_caller_copy()/1B            |    3.77G |    4.40G |    +16% |      1.59s |
-| update/ic0_msg_caller_copy()/10B           |    3.83G |    4.46G |    +16% |      1.57s |
-| update/ic0_msg_arg_data_size()             |    7.93G |    10.5G |    +32% |      0.67s |
-| update/ic0_msg_arg_data_copy()/1B          |    3.90G |    4.49G |    +15% |      1.56s |
-| update/ic0_msg_arg_data_copy()/1K          |    10.2G |    11.7G |    +14% |      0.60s |
-| update/ic0_msg_reply()*                    |    2.84M |    4.18M |    +47% |          - |
-| update/ic0_msg_reply_data_append()/1B      |    3.86G |    4.78G |    +23% |      1.46s |
-| update/ic0_msg_reply_data_append()/2B      |    3.86G |    5.15G |    +33% |      1.36s |
-| update/ic0_msg_reject()*                   |    2.78M |    4.07M |    +46% |          - |
-| update/ic0_canister_self_size()            |    7.91G |    9.70G |    +22% |      0.72s |
-| update/ic0_canister_self_copy()/1B         |    3.78G |    4.34G |    +14% |      1.61s |
-| update/ic0_canister_self_copy()/10B        |    3.79G |    4.40G |    +16% |      1.59s |
-| update/ic0_debug_print()/1B                |    1.93G |    2.30G |    +19% |      3.04s |
-| update/ic0_debug_print()/1K                |    18.6G |    22.1G |    +18% |      0.32s |
-| update/ic0_call_new()                      |    5.52G |    5.89G |     +6% |      1.19s |
-| update/call_new+ic0_call_data_append()/1B  |    4.63G |    5.17G |    +11% |      1.35s |
-| update/call_new+ic0_call_data_append()/1K  |    6.77G |     128G |  +1790% |      0.05s |
-| update/call_new+ic0_call_on_cleanup()      |    5.94G |    6.49G |     +9% |      1.08s |
-| update/call_new+ic0_call_cycles_add()      |    4.90G |    5.08G |     +3% |      1.38s |
-| update/call_new+ic0_call_cycles_add128()   |    4.86G |    4.98G |     +2% |      1.41s |
-| update/call_new+ic0_call_perform()         |    4.45G |    4.45G |     +0% |      1.57s |
-| update/ic0_stable_size()                   |    1.94G |    1.95G |     +0% |      3.59s |
-| update/ic0_stable_grow()                   |     577M |     640M |    +10% |     10.94s |
-| update/ic0_stable_read()/1B                |    1.28G |    1.27G |     -1% |      5.51s |
-| update/ic0_stable_read()/1K                |    25.7G |    25.7G |     +0% |      0.27s |
-| update/ic0_stable_write()/1B               |     810M |     645M |    -21% |     10.85s |
-| update/ic0_stable_write()/1K               |    18.1G |    13.8G |    -24% |      0.51s |
-| update/ic0_stable64_size()                 |    3.81G |    3.84G |     +0% |      1.82s |
-| update/ic0_stable64_grow()                 |     564M |     642M |    +13% |     10.90s |
-| update/ic0_stable64_read()/1B              |    1.19G |    1.26G |     +5% |      5.56s |
-| update/ic0_stable64_read()/1K              |    24.9G |    25.4G |     +2% |      0.28s |
-| update/ic0_stable64_write()/1B             |     777M |     634M |    -19% |     11.04s |
-| update/ic0_stable64_write()/1K             |    17.7G |    13.6G |    -24% |      0.51s |
-| update/ic0_time()                          |    7.98G |    9.53G |    +19% |      0.73s |
-| update/ic0_global_timer_set()              |    6.86G |    8.17G |    +19% |      0.86s |
-| update/ic0_performance_counter()           |    3.09G |    3.69G |    +19% |      1.90s |
-| update/ic0_canister_cycle_balance()        |    7.46G |    9.56G |    +28% |      0.73s |
-| update/ic0_canister_cycle_balance128()     |    3.76G |    4.53G |    +20% |      1.55s |
-| update/ic0_msg_cycles_available()          |    6.39G |    8.02G |    +25% |      0.87s |
-| update/ic0_msg_cycles_available128()       |    3.52G |    4.07G |    +15% |      1.72s |
-| update/ic0_msg_cycles_accept()             |    5.09G |    6.02G |    +18% |      1.16s |
-| update/ic0_msg_cycles_accept128()          |    2.96G |    3.46G |    +16% |      2.02s |
-| update/ic0_data_certificate_present()      |    8.02G |    10.4G |    +29% |      0.67s |
-| update/ic0_certified_data_set()/1B         |    3.46G |    3.96G |    +14% |      1.77s |
-| update/ic0_certified_data_set()/32B        |    3.63G |    4.23G |    +16% |      1.65s |
-| update/ic0_canister_status()               |    8.15G |    10.5G |    +28% |      0.67s |
-| update/ic0_mint_cycles()                   |     430M |     430M |     +0% |     16.28s |
-| update/ic0_is_controller()                 |    6.42G |    6.92G |     +7% |      1.01s |
-| update/ic0_cycles_burn128()                |     116M |     111M |     -5% |     63.06s |
+| API Type / System API Call                           | Old IPS | New IPS | Speedup | Round Time |
+| ---------------------------------------------------- | ------- | ------- | ------- | ---------- |
+| inspect/ic0_msg_method_name_size()                   | 6.89G   | 7.48G   | +8%     | 0.94s      |
+| inspect/ic0_msg_method_name_copy()/1B                | 2.06G   | 3.53G   | +71%    | 1.98s      |
+| inspect/ic0_msg_method_name_copy()/20B               | 2.14G   | 3.67G   | +71%    | 1.91s      |
+| inspect/ic0_accept_message()*                        | 3.39M   | 3.34M   | -2%     | -          |
+| query/ic0_data_certificate_size()                    | 7.36G   | 7.56G   | +2%     | 0.93s      |
+| query/ic0_data_certificate_copy()/1B                 | 2G      | 3.39G   | +69%    | 2.06s      |
+| query/ic0_data_certificate_copy()/64B                | 2.27G   | 3.85G   | +69%    | 1.82s      |
+| update/baseline/empty test*                          | 17.5K   | 18.1K   | +3%     | -          |
+| update/baseline/empty loop                           | 4.12G   | 4.17G   | +1%     | 1.68s      |
+| update/baseline/adds                                 | 5.94G   | 5.91G   | -1%     | 1.18s      |
+| update/ic0_msg_caller_size()                         | 7.10G   | 7.41G   | +4%     | 0.94s      |
+| update/ic0_msg_caller_copy()/1B                      | 2.06G   | 3.35G   | +62%    | 2.09s      |
+| update/ic0_msg_caller_copy()/10B                     | 2.06G   | 3.34G   | +62%    | 2.10s      |
+| update/ic0_msg_arg_data_size()                       | 7.49G   | 7.37G   | -2%     | 0.95s      |
+| update/ic0_msg_arg_data_copy()/1B                    | 2.02G   | 3.63G   | +79%    | 1.93s      |
+| update/ic0_msg_arg_data_copy()/1K                    | 5.73G   | 9.71G   | +69%    | 0.72s      |
+| update/ic0_msg_reply()*                              | 2.91M   | 3.04M   | +4%     | -          |
+| update/ic0_msg_reply_data_append()/1B                | 2.30G   | 3.75G   | +63%    | 1.87s      |
+| update/ic0_msg_reply_data_append()/2B                | 2.50G   | 4.08G   | +63%    | 1.72s      |
+| update/ic0_msg_reject()*                             | 2.88M   | 2.95M   | +2%     | -          |
+| update/ic0_canister_self_size()                      | 7.41G   | 6.96G   | -7%     | 1.01s      |
+| update/ic0_canister_self_copy()/1B                   | 2.07G   | 3.41G   | +64%    | 2.05s      |
+| update/ic0_canister_self_copy()/10B                  | 2.10G   | 3.41G   | +62%    | 2.05s      |
+| update/ic0_debug_print()/1B                          | 579M    | 887M    | +53%    | 7.89s      |
+| update/ic0_debug_print()/1K                          | 150G    | 232G    | +54%    | 0.03s      |
+| update/ic0_call_new()                                | 4.23G   | 5.79G   | +36%    | 1.21s      |
+| update/call_new+ic0_call_data_append()/1B            | 3.25G   | 4.74G   | +45%    | 1.48s      |
+| update/call_new+ic0_call_data_append()/1K            | 80.8G   | 118G    | +46%    | 0.06s      |
+| update/call_new+ic0_call_on_cleanup()                | 4.57G   | 6.01G   | +31%    | 1.16s      |
+| update/call_new+ic0_call_cycles_add()                | 3.97G   | 4.98G   | +25%    | 1.41s      |
+| update/call_new+ic0_call_cycles_add128()             | 3.97G   | 4.96G   | +24%    | 1.41s      |
+| update/call_new+ic0_call_perform()                   | 3.90G   | 4.29G   | +10%    | 1.63s      |
+| update/call_new+ic0_call_with_best_effort_response() | 4.57G   | 5.99G   | +31%    | 1.17s      |
+| update/ic0_stable_size()                             | 5.17G   | 5.23G   | +1%     | 1.34s      |
+| update/ic0_stable_grow()                             | 653M    | 635M    | -3%     | 11.02s     |
+| update/ic0_stable_read()/1B                          | 1.72G   | 1.72G   | +0%     | 4.07s      |
+| update/ic0_stable_read()/1K                          | 30.2G   | 30G     | -1%     | 0.23s      |
+| update/ic0_stable_write()/1B                         | 1.02G   | 1.02G   | +0%     | 6.86s      |
+| update/ic0_stable_write()/1K                         | 20.5G   | 20.5G   | +0%     | 0.34s      |
+| update/ic0_stable64_size()                           | 6.42G   | 6.45G   | +0%     | 1.09s      |
+| update/ic0_stable64_grow()                           | 657M    | 640M    | -3%     | 10.94s     |
+| update/ic0_stable64_read()/1B                        | 1.59G   | 1.53G   | -4%     | 4.58s      |
+| update/ic0_stable64_read()/1K                        | 28.9G   | 29.3G   | +1%     | 0.24s      |
+| update/ic0_stable64_write()/1B                       | 1.01G   | 1.01G   | +0%     | 6.93s      |
+| update/ic0_stable64_write()/1K                       | 20.6G   | 20.6G   | +0%     | 0.34s      |
+| update/ic0_time()                                    | 7.36G   | 7.49G   | +1%     | 0.93s      |
+| update/ic0_global_timer_set()                        | 6.90G   | 6.97G   | +1%     | 1.00s      |
+| update/ic0_performance_counter()                     | 2.51G   | 2.85G   | +13%    | 2.46s      |
+| update/ic0_canister_cycle_balance()                  | 7.10G   | 7.19G   | +1%     | 0.97s      |
+| update/ic0_canister_cycle_balance128()               | 3.64G   | 3.49G   | -5%     | 2.01s      |
+| update/ic0_msg_cycles_available()                    | 7G      | 7.24G   | +3%     | 0.97s      |
+| update/ic0_msg_cycles_available128()                 | 3.49G   | 3.65G   | +4%     | 1.92s      |
+| update/ic0_msg_cycles_accept()                       | 5.87G   | 5.83G   | -1%     | 1.20s      |
+| update/ic0_msg_cycles_accept128()                    | 3.09G   | 3.18G   | +2%     | 2.20s      |
+| update/ic0_data_certificate_present()                | 7.28G   | 8.09G   | +11%    | 0.87s      |
+| update/ic0_certified_data_set()/1B                   | 1.94G   | 3.13G   | +61%    | 2.24s      |
+| update/ic0_certified_data_set()/32B                  | 2.05G   | 3.35G   | +63%    | 2.09s      |
+| update/ic0_canister_status()                         | 7.13G   | 7.95G   | +11%    | 0.88s      |
+| update/ic0_mint_cycles()                             | 491M    | 485M    | -2%     | 14.43s     |
+| update/ic0_is_controller()                           | 3.84G   | 6.09G   | +58%    | 1.15s      |
+| update/ic0_in_replicated_execution()                 | 7.19G   | 7.24G   | +0%     | 0.97s      |
+| update/ic0_cycles_burn128()                          | 115M    | 109M    | -6%     | 64.22s     |
+| update/ic0_msg_deadline()                            | 6.88G   | 6.99G   | +1%     | 1.00s      |
 
-Average speedup of the local (new) changes: +44% (throughput)
+Average speedup of the local (new) changes: +21% (throughput)
 
-| API Type / System API Call (1M Iterations) | Old Time | New Time | Speedup |
-| ------------------------------------------ | -------- | -------- | ------- |
-| inspect/ic0_msg_method_name_size()         |   61.3ms |   48.7ms |    -21% |
-| inspect/ic0_msg_method_name_copy()/1B      |    125ms |    115ms |     -8% |
-| inspect/ic0_msg_method_name_copy()/30B     |    131ms |    118ms |    -10% |
-| inspect/ic0_accept_message()*              |    202µs |    109µs |    -47% |
-| query/ic0_data_certificate_size()          |   64.6ms |   53.6ms |    -18% |
-| query/ic0_data_certificate_copy()/1B       |    135ms |    121ms |    -11% |
-| query/ic0_data_certificate_copy()/64B      |    141ms |    121ms |    -15% |
-| update/baseline/empty test*                |    193µs |    131µs |    -33% |
-| update/baseline/empty loop                 |   1.74ms |   1.69ms |     -3% |
-| update/baseline/adds                       |   1.73ms |   1.68ms |     -3% |
-| update/ic0_msg_caller_size()               |   65.3ms |   50.6ms |    -23% |
-| update/ic0_msg_caller_copy()/1B            |    137ms |    118ms |    -14% |
-| update/ic0_msg_caller_copy()/10B           |    138ms |    118ms |    -15% |
-| update/ic0_msg_arg_data_size()             |   65.1ms |   49.1ms |    -25% |
-| update/ic0_msg_arg_data_copy()/1B          |    133ms |    115ms |    -14% |
-| update/ic0_msg_arg_data_copy()/1K          |    150ms |    130ms |    -14% |
-| update/ic0_msg_reply()*                    |    177µs |    120µs |    -33% |
-| update/ic0_msg_reply_data_append()/1B      |    134ms |    118ms |    -12% |
-| update/ic0_msg_reply_data_append()/2B      |    134ms |    119ms |    -12% |
-| update/ic0_msg_reject()*                   |    181µs |    124µs |    -32% |
-| update/ic0_canister_self_size()            |   65.3ms |   53.2ms |    -19% |
-| update/ic0_canister_self_copy()/1B         |    137ms |    119ms |    -14% |
-| update/ic0_canister_self_copy()/10B        |    139ms |    120ms |    -14% |
-| update/ic0_debug_print()/1B                |   61.6ms |   51.7ms |    -17% |
-| update/ic0_debug_print()/1K                |   61.3ms |   51.5ms |    -16% |
-| update/ic0_call_new()                      |    280ms |    263ms |     -7% |
-| update/call_new+ic0_call_data_append()/1B  |    444ms |    407ms |     -9% |
-| update/call_new+ic0_call_data_append()/1K  |    454ms |    415ms |     -9% |
-| update/call_new+ic0_call_on_cleanup()      |    346ms |    317ms |     -9% |
-| update/call_new+ic0_call_cycles_add()      |    419ms |    404ms |     -4% |
-| update/call_new+ic0_call_cycles_add128()   |    423ms |    412ms |     -3% |
-| update/call_new+ic0_call_perform()         |    1.47s |    1.47s |     +0% |
-| update/ic0_stable_size()                   |   8.74ms |   8.68ms |     -1% |
-| update/ic0_stable_grow()                   |    204ms |    184ms |    -10% |
-| update/ic0_stable_read()/1B                |   31.2ms |   31.3ms |     +0% |
-| update/ic0_stable_read()/1K                |   41.3ms |   41.2ms |     -1% |
-| update/ic0_stable_write()/1B               |   49.3ms |   61.9ms |    +25% |
-| update/ic0_stable_write()/1K               |   58.4ms |   76.9ms |    +31% |
-| update/ic0_stable64_size()                 |   4.46ms |   4.41ms |     -2% |
-| update/ic0_stable64_grow()                 |    208ms |    183ms |    -13% |
-| update/ic0_stable64_read()/1B              |   33.4ms |   31.6ms |     -6% |
-| update/ic0_stable64_read()/1K              |   42.6ms |   41.7ms |     -3% |
-| update/ic0_stable64_write()/1B             |   51.4ms |   62.9ms |    +22% |
-| update/ic0_stable64_write()/1K             |   59.8ms |     78ms |    +30% |
-| update/ic0_time()                          |   64.7ms |   54.2ms |    -17% |
-| update/ic0_global_timer_set()              |   75.5ms |   63.3ms |    -17% |
-| update/ic0_performance_counter()           |   70.4ms |   58.9ms |    -17% |
-| update/ic0_canister_cycle_balance()        |   69.2ms |     54ms |    -22% |
-| update/ic0_canister_cycle_balance128()     |    137ms |    114ms |    -17% |
-| update/ic0_msg_cycles_available()          |   80.8ms |   64.4ms |    -21% |
-| update/ic0_msg_cycles_available128()       |    146ms |    126ms |    -14% |
-| update/ic0_msg_cycles_accept()             |    101ms |   85.9ms |    -15% |
-| update/ic0_msg_cycles_accept128()          |    175ms |    149ms |    -15% |
-| update/ic0_data_certificate_present()      |   64.4ms |   49.3ms |    -24% |
-| update/ic0_certified_data_set()/1B         |    149ms |    130ms |    -13% |
-| update/ic0_certified_data_set()/32B        |    151ms |    129ms |    -15% |
-| update/ic0_canister_status()               |   63.3ms |   48.8ms |    -23% |
-| update/ic0_mint_cycles()                   |   41.8ms |   41.8ms |     +0% |
-| update/ic0_is_controller()                 |    163ms |    151ms |     -8% |
-| update/ic0_cycles_burn128()                |    162ms |    170ms |     +4% |
+| API Type / System API Call (1M Iterations)           | Old Time | New Time | Speedup |
+| ---------------------------------------------------- | -------- | -------- | ------- |
+| inspect/ic0_msg_method_name_size()                   | 75ms     | 69ms     | -8%     |
+| inspect/ic0_msg_method_name_copy()/1B                | 251ms    | 146ms    | -42%    |
+| inspect/ic0_msg_method_name_copy()/20B               | 250ms    | 146ms    | -42%    |
+| inspect/ic0_accept_message()*                        | 149µs    | 151µs    | +1%     |
+| query/ic0_data_certificate_size()                    | 70.1ms   | 68.3ms   | -3%     |
+| query/ic0_data_certificate_copy()/1B                 | 258ms    | 153ms    | -41%    |
+| query/ic0_data_certificate_copy()/64B                | 256ms    | 151ms    | -42%    |
+| update/baseline/empty test*                          | 171µs    | 164µs    | -5%     |
+| update/baseline/empty loop                           | 2.66ms   | 2.63ms   | -2%     |
+| update/baseline/adds                                 | 2.69ms   | 2.70ms   | +0%     |
+| update/ic0_msg_caller_size()                         | 72.7ms   | 69.6ms   | -5%     |
+| update/ic0_msg_caller_copy()/1B                      | 251ms    | 154ms    | -39%    |
+| update/ic0_msg_caller_copy()/10B                     | 256ms    | 158ms    | -39%    |
+| update/ic0_msg_arg_data_size()                       | 69ms     | 70.1ms   | +1%     |
+| update/ic0_msg_arg_data_copy()/1B                    | 256ms    | 143ms    | -45%    |
+| update/ic0_msg_arg_data_copy()/1K                    | 269ms    | 158ms    | -42%    |
+| update/ic0_msg_reply()*                              | 173µs    | 166µs    | -5%     |
+| update/ic0_msg_reply_data_append()/1B                | 246ms    | 151ms    | -39%    |
+| update/ic0_msg_reply_data_append()/2B                | 247ms    | 151ms    | -39%    |
+| update/ic0_msg_reject()*                             | 175µs    | 172µs    | -2%     |
+| update/ic0_canister_self_size()                      | 69.7ms   | 74.2ms   | +6%     |
+| update/ic0_canister_self_copy()/1B                   | 250ms    | 152ms    | -40%    |
+| update/ic0_canister_self_copy()/10B                  | 251ms    | 154ms    | -39%    |
+| update/ic0_debug_print()/1B                          | 293ms    | 191ms    | -35%    |
+| update/ic0_debug_print()/1K                          | 315ms    | 203ms    | -36%    |
+| update/ic0_call_new()                                | 366ms    | 267ms    | -28%    |
+| update/call_new+ic0_call_data_append()/1B            | 647ms    | 444ms    | -32%    |
+| update/call_new+ic0_call_data_append()/1K            | 658ms    | 450ms    | -32%    |
+| update/call_new+ic0_call_on_cleanup()                | 449ms    | 342ms    | -24%    |
+| update/call_new+ic0_call_cycles_add()                | 517ms    | 413ms    | -21%    |
+| update/call_new+ic0_call_cycles_add128()             | 517ms    | 414ms    | -20%    |
+| update/call_new+ic0_call_perform()                   | 1.67s    | 1.52s    | -9%     |
+| update/call_new+ic0_call_with_best_effort_response() | 449ms    | 343ms    | -24%    |
+| update/ic0_stable_size()                             | 3.28ms   | 3.24ms   | -2%     |
+| update/ic0_stable_grow()                             | 180ms    | 185ms    | +2%     |
+| update/ic0_stable_read()/1B                          | 23.1ms   | 23.2ms   | +0%     |
+| update/ic0_stable_read()/1K                          | 35.1ms   | 35.4ms   | +0%     |
+| update/ic0_stable_write()/1B                         | 39.2ms   | 39ms     | -1%     |
+| update/ic0_stable_write()/1K                         | 51.8ms   | 51.6ms   | -1%     |
+| update/ic0_stable64_size()                           | 2.64ms   | 2.63ms   | -1%     |
+| update/ic0_stable64_grow()                           | 179ms    | 184ms    | +2%     |
+| update/ic0_stable64_read()/1B                        | 25ms     | 26ms     | +3%     |
+| update/ic0_stable64_read()/1K                        | 36.7ms   | 36.2ms   | -2%     |
+| update/ic0_stable64_write()/1B                       | 39.3ms   | 39.4ms   | +0%     |
+| update/ic0_stable64_write()/1K                       | 51.5ms   | 51.6ms   | +0%     |
+| update/ic0_time()                                    | 70.1ms   | 68.9ms   | -2%     |
+| update/ic0_global_timer_set()                        | 75ms     | 74.3ms   | -1%     |
+| update/ic0_performance_counter()                     | 86.6ms   | 76.4ms   | -12%    |
+| update/ic0_canister_cycle_balance()                  | 72.7ms   | 71.8ms   | -2%     |
+| update/ic0_canister_cycle_balance128()               | 141ms    | 147ms    | +4%     |
+| update/ic0_msg_cycles_available()                    | 73.8ms   | 71.3ms   | -4%     |
+| update/ic0_msg_cycles_available128()                 | 147ms    | 141ms    | -5%     |
+| update/ic0_msg_cycles_accept()                       | 88.1ms   | 88.7ms   | +0%     |
+| update/ic0_msg_cycles_accept128()                    | 167ms    | 163ms    | -3%     |
+| update/ic0_data_certificate_present()                | 70.9ms   | 63.8ms   | -11%    |
+| update/ic0_certified_data_set()/1B                   | 266ms    | 165ms    | -38%    |
+| update/ic0_certified_data_set()/32B                  | 267ms    | 163ms    | -39%    |
+| update/ic0_canister_status()                         | 72.4ms   | 65ms     | -11%    |
+| update/ic0_mint_cycles()                             | 36.6ms   | 37.1ms   | +1%     |
+| update/ic0_is_controller()                           | 272ms    | 171ms    | -38%    |
+| update/ic0_in_replicated_execution()                 | 71.8ms   | 71.4ms   | -1%     |
+| update/ic0_cycles_burn128()                          | 164ms    | 173ms    | +5%     |
+| update/ic0_msg_deadline()                            | 75ms     | 73.9ms   | -2%     |
 
-Average speedup of the local (new) changes: -10% (time)
+Average speedup of the local (new) changes: -14% (time)
 
 Note: marked calls have no loop, so those results should not be compared with other calls

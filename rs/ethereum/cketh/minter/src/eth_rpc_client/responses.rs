@@ -4,7 +4,7 @@ use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Deserialize, Encode, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionReceipt {
     /// The hash of the block containing the transaction.
@@ -46,7 +46,7 @@ impl HttpResponsePayload for TransactionReceipt {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Encode, Decode)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Decode, Deserialize, Encode, Serialize)]
 #[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
     /// Transaction was mined and executed successfully.

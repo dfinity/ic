@@ -20,7 +20,7 @@ TODO: THIS MUST BE FILLED OUT
 git fetch
 git checkout {{to}}
 cd {{canister.repo_dir().as_path().display()}}
-{{upgrade_args.didc_encode_cmd()}}
+{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 
 ## Release Notes
@@ -36,6 +36,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout {{to}}
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 sha256sum ./{{canister.artifact().as_path().display()}}
 ```

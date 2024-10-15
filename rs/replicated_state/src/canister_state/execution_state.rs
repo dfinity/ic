@@ -1,4 +1,3 @@
-use super::SessionNonce;
 use crate::hash::ic_hashtree_leaf_hash;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
 use ic_protobuf::{
@@ -59,7 +58,7 @@ impl std::fmt::Debug for EmbedderCache {
 }
 
 /// An enum representing the possible values of a global variable.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 pub enum Global {
     I32(i32),
     I64(i64),
@@ -106,6 +105,8 @@ impl PartialEq<Global> for Global {
     }
 }
 
+impl Eq for Global {}
+
 impl From<&Global> for pb::Global {
     fn from(item: &Global) -> Self {
         match item {
@@ -146,7 +147,7 @@ impl TryFrom<pb::Global> for Global {
 /// A set of the functions that a Wasm module exports.
 ///
 /// Arc is used to make cheap clones of this during snapshots.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct ExportedFunctions {
     /// Since the value is only shared when taking a snapshot, there is no
     /// problem with serializing this field.
@@ -256,7 +257,7 @@ impl WasmBinary {
 }
 
 /// Represents a canister's wasm or stable memory.
-#[derive(Debug, Clone, ValidateEq)]
+#[derive(Clone, Debug, ValidateEq)]
 pub struct Memory {
     /// The contents of this memory.
     #[validate_eq(CompareWithValidateEq)]
@@ -376,7 +377,7 @@ impl SandboxMemoryHandle {
 }
 
 /// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
-#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, EnumIter)]
 pub enum NextScheduledMethod {
     #[default]
     GlobalTimer = 1,
@@ -435,15 +436,8 @@ impl NextScheduledMethod {
 pub struct ExecutionState {
     /// The path where Canister memory is located. Needs to be stored in
     /// ExecutionState in order to perform the exec system call.
-    pub canister_root: std::path::PathBuf,
-
-    /// Session state Nonce. If occupied, runtime is already
-    /// processing this execution state. This is being used to refer
-    /// to mutated `MappedState` and globals that reside in the
-    /// sandbox execution process (and not necessarily in memory) and
-    /// enable continuations.
     #[validate_eq(Ignore)]
-    pub session_nonce: Option<SessionNonce>,
+    pub canister_root: std::path::PathBuf,
 
     /// The wasm executable associated with this state. It represented here as
     /// a reference-counted object such that:
@@ -483,6 +477,9 @@ pub struct ExecutionState {
 
     /// Round-robin across canister method types.
     pub next_scheduled_method: NextScheduledMethod,
+
+    /// Checks if execution is in Wasm64 mode.
+    pub is_wasm64: bool,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -494,7 +491,6 @@ impl PartialEq for ExecutionState {
         // an error. Hence pointing to appropriate change here.
         let ExecutionState {
             canister_root: _,
-            session_nonce: _,
             wasm_binary,
             wasm_memory,
             stable_memory,
@@ -503,6 +499,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         } = rhs;
 
         (
@@ -514,6 +511,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
+            &self.is_wasm64,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -523,6 +521,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
+            is_wasm64,
         )
     }
 }
@@ -531,6 +530,9 @@ impl ExecutionState {
     /// Initializes a new execution state for a canister.
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
+    /// The state will be created with last_executed_round = 0, a
+    /// default next_scheduled_method, and is_wasm64 = false.
+    /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
         wasm_binary: Arc<WasmBinary>,
@@ -542,7 +544,6 @@ impl ExecutionState {
     ) -> Self {
         Self {
             canister_root,
-            session_nonce: None,
             wasm_binary,
             exports,
             wasm_memory,
@@ -551,6 +552,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64: false,
         }
     }
 
@@ -589,7 +591,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, EnumIter, serde::Deserialize, serde::Serialize)]
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,
@@ -619,7 +621,7 @@ impl TryFrom<pb::CustomSectionType> for CustomSectionType {
 }
 
 /// Represents the data a custom section holds.
-#[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub struct CustomSection {
     visibility: CustomSectionType,
     content: Vec<u8>,
@@ -687,7 +689,7 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
 }
 
 /// A struct that holds all the custom sections exported by the Wasm module.
-#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct WasmMetadata {
     /// Arc is used to make cheap clones of this during snapshots.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]

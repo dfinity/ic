@@ -8,7 +8,7 @@ use phantom_newtype::BitMask;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum StateManagerError {
     /// The state at the specified height was removed and cannot be recovered
     /// anymore.
@@ -23,7 +23,7 @@ pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
 /// Errors for functions returning state hashes that are permanent (i.e. no
 /// point in retrying)
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum PermanentStateHashError {
     #[error("state at height {0} has already been removed and cannot be recovered anymore")]
     StateRemoved(Height),
@@ -33,7 +33,7 @@ pub enum PermanentStateHashError {
 
 /// Errors for functions returning state hashes that rely on asynchronous
 /// computations that have not finished yet.
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum TransientStateHashError {
     #[error("state at height {0} is not committed yet")]
     StateNotCommittedYet(Height),
@@ -42,7 +42,7 @@ pub enum TransientStateHashError {
 }
 
 /// Errors for functions returning state hashes
-#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
 pub enum StateHashError {
     /// The error is permanent and will not change if retried later
     #[error(transparent)]
@@ -54,7 +54,7 @@ pub enum StateHashError {
 }
 
 /// Indicates the subset of the state that needs to be certified.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CertificationScope {
     /// Only certify the system metadata.
     Metadata,
@@ -77,7 +77,7 @@ pub const CERT_ANY: CertificationMask = CertificationMask::new(1 | 2);
 
 /// A node state with a `height` attached to it, indicating that the state was
 /// obtained by executing a block with the given `height`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Labeled<State> {
     height: Height,
     state: State,
@@ -221,23 +221,6 @@ pub trait StateManager: StateReader {
         root_hash: CryptoHashOfState,
         cup_interval_length: Height,
     );
-
-    /// Returns the list of heights corresponding to accessible states matching
-    /// the mask.  E.g. `list_state_heights(CERT_ANY)` will return all
-    /// accessible states.
-    ///
-    /// Note that the initial state at height 0 is considered uncertified from
-    /// the State Manager point of view.  This is because the protocol requires
-    /// each replica to individually obtain the initial state using some
-    /// out-of-band mechanism (i.e., not state sync).  Also note that the
-    /// authenticity of this initial state will be verified by some protocol
-    /// external to this component.
-    ///
-    /// The list of heights is guaranteed to be
-    /// * Non-empty if `cert_mask = CERT_ANY` as it will contain at least height
-    ///   0 even if no states were committed yet.
-    /// * Sorted in ascending order.
-    fn list_state_heights(&self, cert_mask: CertificationMask) -> Vec<Height>;
 
     /// Notify this state manager that states with heights strictly less than
     /// the specified `height` can be removed.

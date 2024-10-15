@@ -1,9 +1,0 @@
-= Script to get data about the number of engineers working on DFINITY's code
-
-Usage:
-
------
-pip install -r requirements.txt
-cd gitlab-ci/tools/git_statistics
-python3 git_statistics.py
-----

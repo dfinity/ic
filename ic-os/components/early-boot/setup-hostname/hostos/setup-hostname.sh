@@ -4,7 +4,7 @@ set -e
 
 # Set the transient or persistent hostname.
 
-# Source the functions required for writing metrics
+source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
@@ -53,16 +53,6 @@ function validate_arguments() {
     fi
 }
 
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
-
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could
     # otherwise lead to executing arbitrary shell code!
@@ -70,33 +60,27 @@ function read_variables() {
         case "$key" in
             "ipv6_prefix") ipv6_prefix="${value}" ;;
             "ipv6_gateway") ipv6_gateway="${value}" ;;
-            "ipv6_address") ipv6_address="${value}" ;;
-            "hostname") hostname="${value}" ;;
         esac
     done <"${CONFIG}"
 }
 
 function construct_hostname() {
-    if [ -z "${hostname}" ]; then
-        local mac=$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')
+    local mac=$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')
 
-        if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
-            HOSTNAME=$(echo ${TYPE}-${mac}-$(cat ${FILE}))
-            write_log "Using hostname: ${HOSTNAME}"
-            write_metric "hostos_setup_hostname" \
-                "1" \
-                "HostOS setup hostname" \
-                "gauge"
-        else
-            HOSTNAME=$(echo ${TYPE}-${mac})
-            write_log "Using hostname: ${HOSTNAME}"
-            write_metric "hostos_setup_hostname" \
-                "0" \
-                "HostOS setup hostname" \
-                "gauge"
-        fi
+    if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
+        HOSTNAME=$(echo ${TYPE}-${mac}-$(cat ${FILE}))
+        write_log "Using hostname: ${HOSTNAME}"
+        write_metric "hostos_setup_hostname" \
+            "1" \
+            "HostOS setup hostname" \
+            "gauge"
     else
-        HOSTNAME="${hostname}"
+        HOSTNAME=$(echo ${TYPE}-${mac})
+        write_log "Using hostname: ${HOSTNAME}"
+        write_metric "hostos_setup_hostname" \
+            "0" \
+            "HostOS setup hostname" \
+            "gauge"
     fi
 }
 

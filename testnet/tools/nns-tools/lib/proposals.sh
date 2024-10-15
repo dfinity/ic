@@ -39,7 +39,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 \`\`\`
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type swap).wasm.gz
 \`\`\`
 ## Current Version
@@ -65,7 +65,7 @@ generate_nns_upgrade_proposal_text() {
     local CANDID_ARGS=${4:-}
     local OUTPUT_FILE=${5:-}
 
-    assert_that_a_prebuilt_sns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
+    assert_that_a_prebuilt_nns_wasm_is_available "$CANISTER_NAME" "$NEXT_COMMIT"
 
     PROPOSER=$(git config user.email | sed 's/@/ at /')
 
@@ -95,12 +95,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
-
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -125,7 +119,15 @@ $CANDID_ARGS
 - Current Wasm Hash: $LAST_WASM_HASH
 
 
-## WASM Verification
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+
+### WASM Verification
 
 See ["Building the code"][prereqs] for prerequisites.
 
@@ -140,27 +142,28 @@ git fetch
 git checkout $NEXT_COMMIT
 
 # 2. Build canisters.
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
+This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CANDID_ARGS" ]; then
             echo "
 
 
-## Upgrade Arguments Verification
+### Upgrade Arguments Verification
 
 [\`didc\`][latest-didc] is required.
 
 [latest-didc]: https://github.com/dfinity/candid/releases/latest
 
 \`\`\`
-didc encode '$CANDID_ARGS'
+didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum
+
 \`\`\`
 
-This should match the \`arg_hex\` field of this proposal.
+This should match the \`arg_hash\` field of this proposal.
 "
         fi)
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -205,11 +208,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
 
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -219,6 +217,11 @@ $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_
 
 
 ## Wasm Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
 
 See ["Building the code"][prereqs] for prerequisites.
 
@@ -233,13 +236,13 @@ git fetch
 git checkout $NEXT_COMMIT
 
 # 2. Build canisters.
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 
 # 3. Fingerprint the result.
 sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE").wasm.gz
 \`\`\`
 
-This should match \`wasm_module\` field of this proposal.
+This should match \`wasm\` field of this proposal.
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
@@ -344,7 +347,9 @@ generate_forum_post_nns_upgrades() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -376,7 +381,9 @@ generate_forum_post_sns_wasm_publish() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -400,10 +407,16 @@ EOF
 #### Helper functions
 encode_candid_args_in_file() {
     ARGS=$1
-    ENCODED_ARGS_FILE=$(mktemp)
-    didc encode \
-        "$ARGS" \
-        | xxd -r -p >"$ENCODED_ARGS_FILE"
+    ENCODED_ARGS_FILE=$(mktemp) || {
+        echo "Failed to create temp file" >&2
+        return 1
+    }
+
+    if ! didc encode "$ARGS" | xxd -r -p >"$ENCODED_ARGS_FILE"; then
+        echo "Error: Failed to encode arguments. Do you have didc on your PATH?" >&2
+        rm -f "$ENCODED_ARGS_FILE"
+        return 1
+    fi
 
     echo "$ENCODED_ARGS_FILE"
 }

@@ -501,7 +501,7 @@ fn setup_boundary_node(
         sudo systemctl daemon-reload
         sudo systemctl restart ic-boundary
     "#)).unwrap_or_else(|e| {
-        panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
+        panic!("Could not reconfigure ic-boundary on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
     });
 
     info!(logger, "Waiting until {BOUNDARY_NODE_NAME} is healthy ...");
@@ -1476,8 +1476,8 @@ fn bless_replica_version(
                 &governance_canister,
                 proposal_sender,
                 neuron_id,
-                ReplicaVersion::try_from(replica_version.clone()).unwrap(),
-                sha256,
+                Some(ReplicaVersion::try_from(replica_version.clone()).unwrap()),
+                Some(sha256),
                 vec![upgrade_url.to_string()],
                 vec![],
             )

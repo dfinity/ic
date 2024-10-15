@@ -220,7 +220,7 @@ impl Default for Checkpoint {
 ///
 /// It contains sufficient information to reconstruct `Mapping`
 /// in another process.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct MappingSerialization {
     pub file_descriptor: FileDescriptor,
     pub file_len: FileOffset,
@@ -230,7 +230,7 @@ pub struct MappingSerialization {
 ///
 /// It contains sufficient information to reconstruct `Checkpoint`
 /// in another process.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CheckpointSerialization {
     pub mapping: Option<MappingSerialization>,
 }

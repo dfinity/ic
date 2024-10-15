@@ -4,11 +4,11 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icp/ledger",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/gtc",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rust_canisters/stable_reader",
     "//rs/types/base_types",
     "@crate_index//:clap_3_2_25",
@@ -21,7 +21,7 @@ DEPENDENCIES = [
 
 rust_binary(
     name = "inspector",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = {},
     crate_name = "ic_nns_inspector",
     proc_macro_deps = [],

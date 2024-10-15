@@ -13,21 +13,11 @@
 
 set -eo pipefail
 
-# Source the functions required for writing metrics
+source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
 SCRIPT="$(basename $0)[$$]"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
-
-write_log() {
-    local message=$1
-
-    if [ -t 1 ]; then
-        echo "${SCRIPT} ${message}" >/dev/stdout
-    fi
-
-    logger -t ${SCRIPT} "${message}"
-}
 
 function get_guestos_version() {
     if [ -r ${GUESTOS_VERSION_FILE} ]; then
@@ -144,6 +134,10 @@ write_metric_attr "guestos_boot_action" \
     "GuestOS boot action" \
     "gauge"
 
+# /boot/config/CONFIGURED serves as a tag to indicate that the one-time bootstrap configuration has been completed.
+# If the `/boot/config/CONFIGURED` file is not present, the boot sequence will
+# search for a virtual USB stick (the bootstrap config image)
+# containing the injected configuration files, and create the file.
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
 fi
@@ -180,7 +174,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
     fi
 
     # Fix up permissions. This is actually the wrong place.
-    chown ic-replica.nogroup -R /var/lib/ic/data
+    chown ic-replica:nogroup -R /var/lib/ic/data
 
     if [ "${DEV}" != "" ]; then
         umount /mnt

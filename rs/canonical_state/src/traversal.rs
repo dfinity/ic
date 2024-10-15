@@ -53,9 +53,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{
-                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
-            },
+            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
@@ -69,7 +67,7 @@ mod tests {
     };
     use ic_types::{
         xnet::{StreamFlags, StreamHeader},
-        CanisterId, Cycles, ExecutionRound,
+        CanisterId, Cycles,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -248,18 +246,15 @@ mod tests {
             String::from("dummy3") => CustomSection::new(CustomSectionType::Public, vec![8, 9]),
         };
 
-        let execution_state = ExecutionState {
-            canister_root: "NOT_USED".into(),
-            session_nonce: None,
+        let execution_state = ExecutionState::new(
+            "NOT_USED".into(),
             wasm_binary,
+            ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,
-            stable_memory: Memory::new_for_testing(),
-            exported_globals: vec![Global::I32(1)],
-            exports: ExportedFunctions::new(BTreeSet::new()),
-            metadata: WasmMetadata::new(metadata),
-            last_executed_round: ExecutionRound::from(0),
-            next_scheduled_method: NextScheduledMethod::default(),
-        };
+            Memory::new_for_testing(),
+            vec![Global::I32(1)],
+            WasmMetadata::new(metadata),
+        );
 
         canister_state.execution_state = Some(execution_state);
 

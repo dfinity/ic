@@ -3,6 +3,7 @@ use crate::metrics::{
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
+use crate::Config;
 use core::convert::TryFrom;
 use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
 use http_body_util::{BodyExt, Full};
@@ -12,15 +13,18 @@ use hyper::{
     Method,
 };
 use hyper_rustls::HttpsConnector;
+use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
-    CanisterHttpSendResponse, HttpHeader, HttpMethod,
+    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse,
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::str::FromStr;
+use std::time::Duration;
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -33,23 +37,59 @@ const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 /// By default most higher-level http libs like `curl` set some `User-Agent` so we do the same here to avoid getting rejected due to strict server requirements.
 const USER_AGENT_ADAPTER: &str = "ic/1.0";
 
-pub type CanisterRequestBody = Full<Bytes>;
+type OutboundRequestBody = Full<Bytes>;
 
-/// implements RPC
+/// Implements HttpsOutcallsService
+// TODO: consider making this private
 pub struct CanisterHttp {
-    client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
-    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
+    client: Client<HttpsConnector<HttpConnector>, OutboundRequestBody>,
+    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, OutboundRequestBody>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
 }
 
 impl CanisterHttp {
-    pub fn new(
-        client: Client<HttpsConnector<HttpConnector>, CanisterRequestBody>,
-        socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>, CanisterRequestBody>,
-        logger: ReplicaLogger,
-        metrics: &MetricsRegistry,
-    ) -> Self {
+    pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+        // Socks client setup
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector
+            .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
+        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
+        // Config validity check ensures that url includes scheme, host and port.
+        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
+        let proxy_connector = SocksConnector {
+            proxy_addr: config
+                .socks_proxy
+                .parse()
+                .expect("Failed to parse socks url."),
+            auth: None,
+            connector: http_connector.clone(),
+        };
+        let proxied_https_connector = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .expect("Failed to set native roots")
+            .https_only()
+            .enable_http1()
+            .wrap_connector(proxy_connector);
+
+        // Https client setup.
+        let builder = HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .expect("Failed to set native roots");
+        #[cfg(not(feature = "http"))]
+        let builder = builder.https_only();
+        #[cfg(feature = "http")]
+        let builder = builder.https_or_http();
+
+        let builder = builder.enable_http1();
+        let direct_https_connector = builder.wrap_connector(http_connector);
+
+        let socks_client =
+            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(proxied_https_connector);
+        let client =
+            Client::builder(TokioExecutor::new()).build::<_, Full<Bytes>>(direct_https_connector);
+
         Self {
             client,
             socks_client,
@@ -60,11 +100,11 @@ impl CanisterHttp {
 }
 
 #[tonic::async_trait]
-impl CanisterHttpService for CanisterHttp {
-    async fn canister_http_send(
+impl HttpsOutcallsService for CanisterHttp {
+    async fn https_outcall(
         &self,
-        request: Request<CanisterHttpSendRequest>,
-    ) -> Result<Response<CanisterHttpSendResponse>, Status> {
+        request: Request<HttpsOutcallRequest>,
+    ) -> Result<Response<HttpsOutcallResponse>, Status> {
         self.metrics.requests.inc();
 
         let req = request.into_inner();
@@ -122,12 +162,11 @@ impl CanisterHttpService for CanisterHttp {
             })?;
 
         // Build Http Request.
-        let mut headers = validate_headers(req.headers).map_err(|err| {
+        let mut headers = validate_headers(req.headers).inspect_err(|_| {
             self.metrics
                 .request_errors
                 .with_label_values(&[LABEL_REQUEST_HEADERS])
                 .inc();
-            err
         })?;
 
         // Add user-agent header if not present.
@@ -243,14 +282,20 @@ impl CanisterHttpService for CanisterHttp {
                 .request_errors
                 .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
                 .inc();
-            Status::new(tonic::Code::OutOfRange, err.to_string())
+            Status::new(
+                tonic::Code::OutOfRange,
+                format!(
+                    "Http body exceeds size limit of {} bytes.",
+                    req.max_response_size_bytes
+                ),
+            )
         })?;
 
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_DOWNLOAD])
             .inc_by(body_bytes.len() as u64 + headers_size_bytes as u64);
-        Ok(Response::new(CanisterHttpSendResponse {
+        Ok(Response::new(HttpsOutcallResponse {
             status,
             headers,
             content: body_bytes.to_vec(),

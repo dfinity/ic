@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 futures.workspace = true
 hex = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
@@ -45,7 +45,7 @@ slog = { workspace = true }
 slog-term = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-wasmparser = "0.201.0"
+wasmparser = { workspace = true }
 
 [[bin]]
 name = "drun"

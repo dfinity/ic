@@ -3,13 +3,14 @@ use candid::{CandidType, Nat};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use futures::join;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{E8, UNITS_PER_PERMYRIAD};
+use ic_nervous_system_common::{i2d, E8, UNITS_PER_PERMYRIAD};
+use ic_nervous_system_initial_supply::{initial_supply_e8s, InitialSupplyOptions};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
 use ic_sns_swap_proto_library::pb::v1::{GetDerivedStateRequest, GetDerivedStateResponse};
 use icrc_ledger_types::icrc1::account::Account;
 use mockall::automock;
+use num_traits::cast::ToPrimitive;
 use rust_decimal::Decimal;
 use std::{
     fmt::Debug,
@@ -45,7 +46,7 @@ pub async fn try_get_sns_token_balance_valuation(
     try_get_balance_valuation_factors(
         account,
         &mut LedgerCanister::<CdkRuntime>::new(sns_ledger_canister_id),
-        &mut IcpsPerSnsTokenClient::<CdkRuntime>::new(swap_canister_id),
+        &mut IcpsPerSnsTokenClient::<CdkRuntime>::new(swap_canister_id, sns_ledger_canister_id),
         &mut new_standard_xdrs_per_icp_client::<CdkRuntime>(),
     )
     .await
@@ -61,7 +62,7 @@ fn now() -> SystemTime {
     SystemTime::UNIX_EPOCH + Duration::from_nanos(ic_cdk::api::time())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum Token {
     Icp,
 
@@ -91,7 +92,7 @@ impl Token {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Valuation {
     pub token: Token,
     pub account: Account,
@@ -105,7 +106,7 @@ impl Valuation {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ValuationFactors {
     pub tokens: Decimal,
     pub icps_per_token: Decimal,
@@ -135,7 +136,7 @@ impl ValuationFactors {
 ///   IcpsPerIcpClient in this crate.
 /// * `xdrs_per_icp_client` - Supplies the ICP -> XDR conversion rate. This is probably the most
 ///   interesting of the clients used. A object suitable for production can be constructed by
-///   calling new_standard_xdrs_per_icp_client::<DfnRuntime> with zero arguments.
+///   calling new_standard_xdrs_per_icp_client::<CdkRuntime> with zero arguments.
 async fn try_get_balance_valuation_factors(
     account: Account,
     icrc1_client: &mut dyn Icrc1Client,
@@ -191,7 +192,7 @@ async fn try_get_balance_valuation_factors(
 
 // ValuationError
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ValuationError {
     pub species: ValuationErrorSpecies,
 
@@ -223,7 +224,7 @@ impl ValuationError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum ValuationErrorSpecies {
     /// Needed data from another canister, but was not able to get a reply.
     External,
@@ -293,73 +294,130 @@ impl IcpsPerTokenClient for IcpsPerIcpClient {
 
 struct IcpsPerSnsTokenClient<MyRuntime: Runtime + Send + Sync> {
     swap_canister_id: CanisterId,
+    sns_token_ledger_canister_id: CanisterId,
     _runtime: PhantomData<MyRuntime>,
 }
 
 impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
-    pub fn new(swap_canister_id: CanisterId) -> Self {
+    pub fn new(
+        swap_canister_id: CanisterId,
+        // This is used to determine the amount of inflation since genesis/swap execution.
+        sns_token_ledger_canister_id: CanisterId,
+    ) -> Self {
         Self {
             swap_canister_id,
+            sns_token_ledger_canister_id,
             _runtime: Default::default(),
         }
     }
 
     async fn fetch_icps_per_sns_token(&self) -> Result<Decimal, ValuationError> {
-        // Fetch SNS token price from swap.
-        let get_derived_state_response = self.call(GetDerivedStateRequest {}).await?;
+        // (Concurrently) fetch the various pieces that we need to sythensize the result:
+        let (get_derived_state_result, initial_supply_e8s_result, current_supply_result) = join!(
+            // 1. SNS token price from swap.
+            call::<_, MyRuntime>(self.swap_canister_id, GetDerivedStateRequest {}),
+            // 2. Initial SNS token supply.
+            initial_supply_e8s::<MyRuntime>(
+                self.sns_token_ledger_canister_id,
+                InitialSupplyOptions::new()
+            ),
+            // 3. Current SNS token supply.
+            MyRuntime::call_with_cleanup::<_, (Nat,)>(
+                self.sns_token_ledger_canister_id,
+                "icrc1_total_supply",
+                ()
+            ),
+        );
+        // (Factors 2 and 3 tell us how much inflation there has been. For
+        // example, if the amount of tokens has doubled since the beginning,
+        // then the current ICPs per SNS token should be half of what it was at
+        // the time of the swap.)
 
-        // Read the relevant field(s) out of the responses. Here, a floating point field is used. In
-        // general, floating point should not be used for financial accounting, but it is ok here,
-        // because we are using this to come up with a valuation, and valuations are not super
-        // precise in the same way that (for example) a bank account balance is supposed to be.
-        let sns_tokens_per_icp: f64 =
-            get_derived_state_response
-                .sns_tokens_per_icp
-                .ok_or_else(|| {
-                    ValuationError::new_mismatch(format!(
-                        "Response from swap ({}) get_derived_state call did not \
-                         contain sns_tokens_per_icp: {:#?}",
-                        self.swap_canister_id, get_derived_state_response,
-                    ))
-                })?;
-
-        // Convert data type.
-        let sns_tokens_per_icp = Decimal::from_f64_retain(sns_tokens_per_icp).ok_or_else(|| {
-            ValuationError::new_arithmetic(format!(
-                "Unable to convert sns_tokens_per_icp {} (double precision \
-                 floating point) to Decimal.",
-                sns_tokens_per_icp,
+        // Unwrap (intermediate) results.
+        let get_derived_state_response = get_derived_state_result.map_err(|err| {
+            ValuationError::new_external(format!(
+                "Unable to obtain SNS token price at the time of the SNS initialization swap: {:?}",
+                err,
+            ))
+        })?;
+        let initial_supply_e8s = initial_supply_e8s_result.map_err(|err| {
+            ValuationError::new_external(format!(
+                "Unable to determine the initial supply of SNS tokens: {:?}",
+                err,
+            ))
+        })?;
+        let (current_supply_e8s,) = current_supply_result.map_err(|err| {
+            ValuationError::new_external(format!(
+                "Unable to obtain the current supply of SNS tokens: {:?}",
+                err,
             ))
         })?;
 
-        // Flip the ratio from SNS tokens/ICP to ICPs/SNS token.
-        Decimal::from(1)
-            .checked_div(sns_tokens_per_icp)
+        // Read the relevant fields.
+
+        // Here, a floating point field is used. This is ok, because we are just
+        // using this to come up with a valuation, which isn't an exact science.
+        let initial_sns_tokens_per_icp: f64 = get_derived_state_response
+            .sns_tokens_per_icp
+            .ok_or_else(|| {
+                ValuationError::new_mismatch(format!(
+                    "Response from swap ({}) get_derived_state call did not \
+                     contain sns_tokens_per_icp: {:#?}",
+                    self.swap_canister_id, get_derived_state_response,
+                ))
+            })?;
+
+        // Convert all numbers to Decimal.
+
+        let initial_sns_tokens_per_icp = Decimal::from_f64_retain(initial_sns_tokens_per_icp)
             .ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
-                    "Unable to perform 1 / sns_tokens_per_icp (where sns_tokens_per_icp = {}).",
-                    sns_tokens_per_icp,
+                    "Unable to convert sns_tokens_per_icp {} (double precision \
+                     floating point) to Decimal.",
+                    initial_sns_tokens_per_icp,
                 ))
-            })
-    }
+            })?;
 
-    async fn call<MyRequest>(
-        &self,
-        request: MyRequest,
-    ) -> Result<MyRequest::MyResponse, ValuationError>
-    where
-        MyRequest: Request + Debug + Clone + Sync,
-        <MyRequest as Request>::MyResponse: CandidType,
-    {
-        call::<_, MyRuntime>(self.swap_canister_id, request.clone())
-            .await
-            .map_err(|err| {
-                ValuationError::new_external(format!(
-                    "Unable to determine ICPs per SNS token, because calling swap canister \
-                     {} failed. Request:\n{}\nerr: {:?}",
-                    self.swap_canister_id,
-                    clamp_debug_len(request, /* max_len = */ 100),
-                    err,
+        let initial_supply_e8s = i2d(initial_supply_e8s);
+
+        let current_supply_e8s =
+            Decimal::from(current_supply_e8s.0.to_u128().ok_or_else(|| {
+                ValuationError::new_arithmetic(format!(
+                    "Unable to convert current_supply_e8s ({}) from Nat to Decimal.",
+                    current_supply_e8s,
+                ))
+            })?);
+
+        // Do actual (simple) math.
+
+        // Flip the ratio from SNS tokens per ICP to ICPs per SNS token.
+        let initial_icps_per_sns_token = Decimal::from(1)
+            .checked_div(initial_sns_tokens_per_icp)
+            .ok_or_else(|| {
+            ValuationError::new_arithmetic(format!(
+                "Unable to perform 1 / sns_tokens_per_icp (where sns_tokens_per_icp = {}).",
+                initial_sns_tokens_per_icp,
+            ))
+        })?;
+
+        let total_inflation = current_supply_e8s
+            .checked_div(initial_supply_e8s)
+            .ok_or_else(|| {
+                ValuationError::new_arithmetic(format!(
+                    "Unable to perform current_supply / initial_supply \
+                     (where current_supply_e8s = {} and initial_supply_e8s = {})",
+                    current_supply_e8s, initial_supply_e8s,
+                ))
+            })?;
+
+        // Finally, current price = initial price scaled down by inflation (or deflation).
+        initial_icps_per_sns_token
+            .checked_div(total_inflation)
+            .ok_or_else(|| {
+                ValuationError::new_arithmetic(format!(
+                    "Unable to perform initial_icps_per_sns_token / total_inflation \
+                     (where initial_icps_per_sns_token = {} and total_inflation = {})",
+                    initial_icps_per_sns_token, total_inflation,
                 ))
             })
     }

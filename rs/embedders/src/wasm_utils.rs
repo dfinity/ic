@@ -24,7 +24,7 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,
@@ -35,12 +35,12 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
 pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
-#[derive(Debug, PartialEq, Eq, Default)]
+#[derive(Eq, PartialEq, Debug, Default)]
 pub struct WasmValidationDetails {
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
@@ -48,7 +48,7 @@ pub struct WasmValidationDetails {
     pub max_complexity: Complexity,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 struct Segment {
     offset: usize,
     #[serde(with = "serde_bytes")]
@@ -56,7 +56,7 @@ struct Segment {
 }
 
 /// Vector of heap data chunks with their offsets.
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Segments(Vec<Segment>);
 
 impl FromIterator<(usize, Vec<u8>)> for Segments {
@@ -146,7 +146,7 @@ impl Segments {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 enum SystemApiFunc {
     StableGrow,
     Stable64Grow,
@@ -237,8 +237,19 @@ fn compile_inner(
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
     let max_complexity = wasm_validation_details.max_complexity.0;
-    let serialized_module =
-        SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
+
+    let is_wasm64 = module
+        .get_export(crate::wasmtime_embedder::WASM_HEAP_MEMORY_NAME)
+        .map_or(false, |export| {
+            export.memory().map_or(false, |mem| mem.is_64())
+        });
+
+    let serialized_module = SerializedModule::new(
+        &module,
+        instrumentation_output,
+        wasm_validation_details,
+        is_wasm64,
+    )?;
     Ok((
         instance_pre,
         CompilationResult {

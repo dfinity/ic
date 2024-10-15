@@ -24,6 +24,7 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
+use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
@@ -40,10 +41,9 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000
 
 #[test]
 fn test_wasmtime_system_api() {
-    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(
-        &EmbeddersConfig::default(),
-    ))
-    .expect("Failed to initialize Wasmtime engine");
+    let config = EmbeddersConfig::default();
+    let engine = Engine::new(&WasmtimeEmbedder::wasmtime_execution_config(&config))
+        .expect("Failed to initialize Wasmtime engine");
     let canister_id = canister_test_id(53);
     let system_state = SystemState::new_running(
         canister_id,
@@ -89,8 +89,10 @@ fn test_wasmtime_system_api() {
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,
+        EmbeddersConfig::default().feature_flags.canister_backtrace,
         EmbeddersConfig::default().max_sum_exported_function_name_lengths,
         Memory::new_for_testing(),
+        NumWasmPages::from(0),
         Rc::new(DefaultOutOfInstructionsHandler::default()),
         no_op_logger(),
     );
@@ -102,6 +104,7 @@ fn test_wasmtime_system_api() {
             log: no_op_logger(),
             num_stable_dirty_pages_from_non_native_writes: ic_types::NumOsPages::from(0),
             limits: StoreLimits::default(),
+            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 
@@ -212,7 +215,7 @@ fn test_initial_wasmtime_config() {
             "function_references",
             "https://github.com/WebAssembly/function-references/",
             "(module (type $t (func (param i32))) (func $fn (param $f (ref $t))))",
-            "heap types not supported without the gc feature",
+            "function references required for index reference types",
         ),
         // Memory control
         // GC
@@ -230,7 +233,10 @@ fn test_initial_wasmtime_config() {
         });
         // Format error message with cause using '{:?}'
         let err_msg = format!("{:?}", err);
-        // Make sure the error is because of the feature being disabled.
+        // Verify that the error occurred because the expected feature was disabled.
+        // If this test fails, check whether:
+        // 1. The feature being tested is enabled by default (in that case, explicitly disable it in the config), or
+        // 2. The error message has changed in a new release (update the expected error message accordingly).
         assert!(
             err_msg.contains(expected_err_msg),
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"

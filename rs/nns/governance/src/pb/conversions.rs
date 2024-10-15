@@ -688,20 +688,11 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             pb_api::ProposalActionRequest::RewardNodeProvider(v) => {
                 pb::proposal::Action::RewardNodeProvider(v.into())
             }
-            pb_api::ProposalActionRequest::SetDefaultFollowees(v) => {
-                pb::proposal::Action::SetDefaultFollowees(v.into())
-            }
             pb_api::ProposalActionRequest::RewardNodeProviders(v) => {
                 pb::proposal::Action::RewardNodeProviders(v.into())
             }
             pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
-            }
-            pb_api::ProposalActionRequest::SetSnsTokenSwapOpenTimeWindow(v) => {
-                pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
-            }
-            pb_api::ProposalActionRequest::OpenSnsTokenSwap(v) => {
-                pb::proposal::Action::OpenSnsTokenSwap(v.into())
             }
             pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
@@ -2145,7 +2136,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
     for pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion
 {
     fn from(item: pb::neurons_fund_snapshot::NeuronsFundNeuronPortion) -> Self {
-        #[allow(deprecated)]
         Self {
             nns_neuron_id: item.nns_neuron_id,
             amount_icp_e8s: item.amount_icp_e8s,
@@ -2153,7 +2143,6 @@ impl From<pb::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -2169,7 +2158,6 @@ impl From<pb_api::neurons_fund_snapshot::NeuronsFundNeuronPortion>
             is_capped: item.is_capped,
             controller: item.controller,
             hotkeys: item.hotkeys,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -3243,6 +3231,8 @@ impl From<pb_api::Governance> for pb::Governance {
                 .collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             restore_aging_summary: item.restore_aging_summary.map(|x| x.into()),
+            // This is not intended to be initialized from outside of canister.
+            rng_seed: None,
         }
     }
 }
@@ -4094,7 +4084,6 @@ impl From<pb::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }
@@ -4109,7 +4098,6 @@ impl From<pb_api::settle_neurons_fund_participation_response::NeuronsFundNeuron>
             controller: item.controller,
             hotkeys: item.hotkeys,
             is_capped: item.is_capped,
-            hotkey_principal: item.hotkey_principal,
         }
     }
 }

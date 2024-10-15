@@ -111,7 +111,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
         // Set the TimeWarp one day in the future so a change to the WFQ deadline has a measurable
         // effect
         let delta_s = ONE_DAY_SECONDS as i64;
-        nns_canisters
+        () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
             .await?;

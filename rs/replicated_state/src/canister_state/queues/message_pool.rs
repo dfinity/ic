@@ -1,14 +1,15 @@
-// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
-#![allow(dead_code)]
-
+use super::CanisterInput;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,7 +23,7 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Kind {
     Request = 0,
     Response = Self::BIT,
@@ -44,7 +45,7 @@ impl From<&RequestOrResponse> for Kind {
 
 /// Bit encoding the message context (inbound or outbound).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Context {
     Inbound = 0,
     Outbound = Self::BIT,
@@ -57,7 +58,7 @@ impl Context {
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
 #[repr(u64)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub(super) enum Class {
     GuaranteedResponse = 0,
     BestEffort = Self::BIT,
@@ -81,8 +82,10 @@ impl From<&RequestOrResponse> for Class {
 /// A generated identifier for a message held in a `MessagePool` that also
 /// encodes the message kind (request or response), context (incoming or
 /// outgoing) and class (guaranteed response or best-effort).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct Id(u64);
+///
+/// This is the key used internally by `MessagePool` to identify messages.
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+struct Id(u64);
 
 impl Id {
     /// Number of `Id` bits used as flags.
@@ -91,11 +94,7 @@ impl Id {
     /// The minimum `Id` value, for use in e.g. `BTreeSet::split_off()` calls.
     const MIN: Self = Self(0);
 
-    fn new(kind: Kind, context: Context, class: Class, generator: u64) -> Self {
-        Self(kind as u64 | context as u64 | class as u64 | generator << Id::BITMASK_LEN)
-    }
-
-    pub(super) fn kind(&self) -> Kind {
+    fn kind(&self) -> Kind {
         if self.0 & Kind::BIT == Kind::Request as u64 {
             Kind::Request
         } else {
@@ -103,7 +102,7 @@ impl Id {
         }
     }
 
-    pub(super) fn context(&self) -> Context {
+    fn context(&self) -> Context {
         if self.0 & Context::BIT == Context::Inbound as u64 {
             Context::Inbound
         } else {
@@ -111,54 +110,256 @@ impl Id {
         }
     }
 
-    pub(super) fn class(&self) -> Class {
+    fn class(&self) -> Class {
         if self.0 & Class::BIT == Class::GuaranteedResponse as u64 {
             Class::GuaranteedResponse
         } else {
             Class::BestEffort
         }
     }
+
+    /// Tests whether this `Id` represents an inbound best-effort response.
+    fn is_inbound_best_effort_response(&self) -> bool {
+        self.0 & (Context::BIT | Class::BIT | Kind::BIT)
+            == (Context::Inbound as u64 | Class::BestEffort as u64 | Kind::Response as u64)
+    }
+
+    /// Tests whether this `Id` represents an outbound guaranteed-response request.
+    fn is_outbound_guaranteed_request(&self) -> bool {
+        self.0 & (Context::BIT | Class::BIT | Kind::BIT)
+            == (Context::Outbound as u64 | Class::GuaranteedResponse as u64 | Kind::Request as u64)
+    }
 }
 
-impl From<&Id> for pb_queues::canister_queue::QueueItem {
-    fn from(item: &Id) -> Self {
+/// A typed reference -- inbound (`CanisterInput`) or outbound
+/// (`RequestOrResponse`) -- to a message in the `MessagePool`.
+#[derive(Debug)]
+pub(super) struct Reference<T>(u64, PhantomData<T>);
+
+impl<T> Reference<T>
+where
+    T: ToContext,
+{
+    /// Constructs a new `Reference<T>` of the given `class` and `kind`.
+    fn new(class: Class, kind: Kind, generator: u64) -> Self {
+        Self(
+            T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
+            PhantomData,
+        )
+    }
+}
+
+impl<T> Reference<T> {
+    pub(super) fn kind(&self) -> Kind {
+        Id::from(self).kind()
+    }
+
+    fn context(&self) -> Context {
+        Id::from(self).context()
+    }
+
+    #[allow(dead_code)]
+    fn class(&self) -> Class {
+        Id::from(self).class()
+    }
+
+    /// Tests whether this is a reference to an inbound best-effort response.
+    pub(super) fn is_inbound_best_effort_response(&self) -> bool {
+        Id::from(self).is_inbound_best_effort_response()
+    }
+}
+
+impl<T> Clone for Reference<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+// This and other traits must be explicitly implemented because
+// `#[derive(Copy)]` generates something like `impl<T> Copy for Reference<T>
+// where T: Copy`. And because neither `CanisterInput` nor `RequestOrResponse`
+// are `Copy`, the attribute does nothing.
+impl<T> Copy for Reference<T> {}
+
+impl<T> PartialEq for Reference<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<T> Eq for Reference<T> {}
+
+impl<T> PartialOrd for Reference<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for Reference<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<T> From<&Reference<T>> for Id {
+    fn from(reference: &Reference<T>) -> Id {
+        Id(reference.0)
+    }
+}
+
+impl<T> From<Reference<T>> for Id {
+    fn from(reference: Reference<T>) -> Id {
+        Id(reference.0)
+    }
+}
+
+/// A reference to an inbound message (returned as a `CanisterInput`).
+pub(super) type InboundReference = Reference<CanisterInput>;
+
+/// A reference to an outbound message (returned as a `RequestOrResponse`).
+pub(super) type OutboundReference = Reference<RequestOrResponse>;
+
+/// A means for queue item types to declare whether they're inbound or outbound.
+pub(super) trait ToContext {
+    /// The context (inbound or outbound) of this queue item type.
+    fn context() -> Context;
+}
+
+impl ToContext for CanisterInput {
+    fn context() -> Context {
+        Context::Inbound
+    }
+}
+
+impl ToContext for RequestOrResponse {
+    fn context() -> Context {
+        Context::Outbound
+    }
+}
+
+/// An enum that can hold either an inbound or an outbound reference.
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub(super) enum SomeReference {
+    Inbound(InboundReference),
+    Outbound(OutboundReference),
+}
+
+impl From<Id> for SomeReference {
+    fn from(id: Id) -> SomeReference {
+        match id.context() {
+            Context::Inbound => SomeReference::Inbound(Reference(id.0, PhantomData)),
+            Context::Outbound => SomeReference::Outbound(Reference(id.0, PhantomData)),
+        }
+    }
+}
+
+impl<T> From<&Reference<T>> for pb_queues::canister_queue::QueueItem {
+    fn from(item: &Reference<T>) -> Self {
         use pb_queues::canister_queue::queue_item::R;
 
-        pb_queues::canister_queue::QueueItem {
+        Self {
             r: Some(R::Reference(item.0)),
         }
     }
 }
 
-impl TryFrom<pb_queues::canister_queue::QueueItem> for Id {
+impl TryFrom<pb_queues::canister_queue::QueueItem> for InboundReference {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
         match item.r {
-            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => Ok(Self(id)),
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
+                let reference = Reference(id, PhantomData);
+                if reference.context() == Context::Inbound {
+                    Ok(reference)
+                } else {
+                    Err(ProxyDecodeError::Other(
+                        "Not an inbound reference".to_string(),
+                    ))
+                }
+            }
             None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
         }
     }
 }
 
-/// A placeholder for a potential late inbound best-effort response.
-///
-/// Does not implement `Clone` or `Copy` to ensure that it can only be used
-/// once.
-pub(super) struct ResponsePlaceholder(Id);
+impl TryFrom<pb_queues::canister_queue::QueueItem> for OutboundReference {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queue::QueueItem) -> Result<Self, Self::Error> {
+        match item.r {
+            Some(pb_queues::canister_queue::queue_item::R::Reference(id)) => {
+                let reference = Reference(id, PhantomData);
+                if reference.context() == Context::Outbound {
+                    Ok(reference)
+                } else {
+                    Err(ProxyDecodeError::Other(
+                        "Not an outbound reference".to_string(),
+                    ))
+                }
+            }
+            None => Err(ProxyDecodeError::MissingField("QueueItem::r")),
+        }
+    }
+}
 
-impl ResponsePlaceholder {
-    /// Returns the message ID within.
-    pub(super) fn id(&self) -> Id {
-        self.0
+impl<T> TryFrom<u64> for Reference<T>
+where
+    T: ToContext,
+{
+    type Error = ProxyDecodeError;
+    fn try_from(item: u64) -> Result<Self, Self::Error> {
+        let id = Id(item);
+        if id.context() == T::context() {
+            Ok(Reference(item, PhantomData))
+        } else {
+            Err(ProxyDecodeError::Other(format!(
+                "Mismatched reference context: {}",
+                item
+            )))
+        }
+    }
+}
+
+impl<T> From<&Reference<T>> for u64 {
+    fn from(item: &Reference<T>) -> Self {
+        item.0
+    }
+}
+
+/// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);
+
+impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
+    fn from(item: CallbackReference) -> Self {
+        Self {
+            id: item.0 .0,
+            callback_id: item.1.get(),
+        }
+    }
+}
+
+impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReference {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
+        let reference = Reference(item.id, PhantomData);
+        if reference.is_inbound_best_effort_response() {
+            Ok(CallbackReference(reference, item.callback_id.into()))
+        } else {
+            Err(ProxyDecodeError::Other(
+                "Not an inbound best-effort response".to_string(),
+            ))
+        }
     }
 }
 
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
 ///
-/// Messages in the pool are identified by an `Id` generated by the pool.
-/// The `Id` also encodes the message kind (request or response); and
-/// context (inbound or outbound).
+/// Messages in the pool are identified by a key (`Id`) generated by the pool.
+/// The key also encodes the message kind (request or response); and context
+/// (inbound or outbound). The public API however, uses exclusively typed
+/// references (`Reference<CantisterInput>` for inbound references  and
+/// `Reference<RequestOrResponse>` for outbound references).
 ///
 /// Messages are added to the deadline queue based on their class (best-effort
 /// vs guaranteed response) and context: i.e. all best-effort messages except
@@ -169,13 +370,20 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_message_stats()` (only called during deserialization) execute in
 /// at most `O(log(N))` time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, ValidateEq)]
 pub(super) struct MessagePool {
     /// Pool contents.
+    #[validate_eq(CompareWithValidateEq)]
     messages: BTreeMap<Id, RequestOrResponse>,
 
     /// Records the (implicit) deadlines of all the outbound guaranteed response
     /// requests (only).
+    ///
+    /// Invariants:
+    ///  * Contains all outbound guaranteed requests:
+    ///    `outbound_guaranteed_request_deadlines.keys().collect() == messages.keys().filter(|id| (id.context(), id.class(), id.kind()) == (Context::Outbound, Class::GuaranteedResponse, Kind::Request)).collect()`
+    ///  * The deadline matches the one recorded in `deadline_queue`:
+    ///    `outbound_guaranteed_request_deadlines.iter().all(|(id, deadline)| deadline_queue.contains(&(deadline, id)))`
     outbound_guaranteed_request_deadlines: BTreeMap<Id, CoarseTime>,
 
     /// Running message stats for the pool.
@@ -207,7 +415,7 @@ impl MessagePool {
     /// (best effort responses that already made it into an input queue should not
     /// expire). It is added to the load shedding queue if it is a best-effort
     /// message.
-    pub(super) fn insert_inbound(&mut self, msg: RequestOrResponse) -> Id {
+    pub(super) fn insert_inbound(&mut self, msg: RequestOrResponse) -> InboundReference {
         let actual_deadline = match &msg {
             RequestOrResponse::Request(request) => request.deadline,
 
@@ -218,14 +426,26 @@ impl MessagePool {
         self.insert_impl(msg, actual_deadline, Context::Inbound)
     }
 
+    /// Reserves an `InboundReference` for a timeout reject response for a
+    /// best-effort callback.
+    ///
+    /// This is equivalent to inserting and then immediately removing the response.
+    pub(super) fn make_inbound_timeout_response_reference(&mut self) -> InboundReference {
+        self.next_reference(Class::BestEffort, Kind::Response)
+    }
+
     /// Inserts an outbound request (one that is to be enqueued in an output queue)
-    /// into the pool. Returns the ID assigned to the request.
+    /// into the pool. Returns the reference assigned to the request.
     ///
     /// The request is always added to the deadline queue: if it is a best-effort
     /// request, with its explicit deadline; if it is a guaranteed response call
     /// request, with a deadline of `now + REQUEST_LIFETIME`. It is added to the
     /// load shedding queue iff it is a best-effort request.
-    pub(super) fn insert_outbound_request(&mut self, request: Arc<Request>, now: Time) -> Id {
+    pub(super) fn insert_outbound_request(
+        &mut self,
+        request: Arc<Request>,
+        now: Time,
+    ) -> OutboundReference {
         let actual_deadline = if request.deadline == NO_DEADLINE {
             // Guaranteed response call requests in canister output queues expire after
             // `REQUEST_LIFETIME`.
@@ -243,11 +463,14 @@ impl MessagePool {
     }
 
     /// Inserts an outbound response (one that is to be enqueued in an output queue)
-    /// into the pool. Returns the ID assigned to the response.
+    /// into the pool. Returns the reference assigned to the response.
     ///
     /// The response is added to both the deadline queue and the load shedding queue
     /// iff it is a best-effort response.
-    pub(super) fn insert_outbound_response(&mut self, response: Arc<Response>) -> Id {
+    pub(super) fn insert_outbound_response(
+        &mut self,
+        response: Arc<Response>,
+    ) -> OutboundReference {
         let actual_deadline = response.deadline;
         self.insert_impl(
             RequestOrResponse::Response(response),
@@ -256,23 +479,27 @@ impl MessagePool {
         )
     }
 
-    /// Inserts the given message into the pool. Returns the ID assigned to the
-    /// message.
+    /// Inserts the given message into the pool. Returns the reference assigned to
+    /// the message.
     ///
     /// The message is recorded into the deadline queue with the provided
     /// `actual_deadline` iff it is non-zero (as opposed to the message's nominal
     /// deadline; this is so we can expire outgoing guaranteed response requests;
     /// and not expire incoming best-effort responses). It is recorded in the load
     /// shedding priority queue iff it is a best-effort message.
-    fn insert_impl(
+    fn insert_impl<T>(
         &mut self,
         msg: RequestOrResponse,
         actual_deadline: CoarseTime,
         context: Context,
-    ) -> Id {
+    ) -> Reference<T>
+    where
+        T: ToContext,
+    {
         let kind = Kind::from(&msg);
         let class = Class::from(&msg);
-        let id = self.next_message_id(kind, context, class);
+        let reference = self.next_reference(class, kind);
+        let id = reference.into();
 
         let size_bytes = msg.count_bytes();
 
@@ -306,66 +533,29 @@ impl MessagePool {
             self.size_queue.insert((size_bytes, id));
         }
 
-        id
+        reference
     }
 
-    /// Prepares a placeholder for a potential late inbound best-effort response.
-    pub(super) fn insert_inbound_timeout_response(&mut self) -> ResponsePlaceholder {
-        ResponsePlaceholder(self.next_message_id(
-            Kind::Response,
-            Context::Inbound,
-            Class::BestEffort,
-        ))
-    }
-
-    /// Inserts a late inbound best-effort response into a response placeholder.
-    pub(super) fn replace_inbound_timeout_response(
-        &mut self,
-        placeholder: ResponsePlaceholder,
-        msg: RequestOrResponse,
-    ) {
-        // Message must be a best-effort response.
-        match &msg {
-            RequestOrResponse::Response(rep) if rep.deadline != NO_DEADLINE => {}
-            _ => panic!("Message must be a best-effort response"),
-        }
-
-        let id = placeholder.0;
-        debug_assert!(Context::Inbound == id.context());
-        debug_assert!(Class::BestEffort == id.class());
-        debug_assert!(Kind::Response == id.kind());
-        let size_bytes = msg.count_bytes();
-
-        // Update message stats.
-        self.message_stats += MessageStats::stats_delta(&msg, id.context());
-
-        // Insert. Cannot lead to a conflict because the placeholder is consumed on use.
-        assert!(self.messages.insert(id, msg).is_none());
-        debug_assert_eq!(
-            Self::calculate_message_stats(&self.messages),
-            self.message_stats
-        );
-
-        // Record in load shedding queue only.
-        self.size_queue.insert((size_bytes, id));
-    }
-
-    /// Reserves and returns a new message ID.
-    fn next_message_id(&mut self, kind: Kind, context: Context, class: Class) -> Id {
-        let id = Id::new(kind, context, class, self.message_id_generator);
+    /// Reserves and returns a new message reference.
+    fn next_reference<T>(&mut self, class: Class, kind: Kind) -> Reference<T>
+    where
+        T: ToContext,
+    {
+        let reference = Reference::new(class, kind, self.message_id_generator);
         self.message_id_generator += 1;
-        id
+        reference
     }
 
-    /// Retrieves the message with the given `Id`.
-    pub(super) fn get(&self, id: Id) -> Option<&RequestOrResponse> {
-        self.messages.get(&id)
+    /// Retrieves the message with the given `Reference`.
+    pub(super) fn get<T>(&self, reference: Reference<T>) -> Option<&RequestOrResponse> {
+        self.messages.get(&reference.into())
     }
 
-    /// Removes the message with the given `Id` from the pool.
+    /// Removes the message with the given `Reference` from the pool.
     ///
     /// Updates the stats; and the priority queues, where applicable.
-    pub(super) fn take(&mut self, id: Id) -> Option<RequestOrResponse> {
+    pub(super) fn take<T>(&mut self, reference: Reference<T>) -> Option<RequestOrResponse> {
+        let id = reference.into();
         let msg = self.take_impl(id)?;
 
         self.remove_from_deadline_queue(id, &msg);
@@ -375,7 +565,7 @@ impl MessagePool {
         Some(msg)
     }
 
-    /// Removes the message with the given `Id` from the pool.
+    /// Removes the message with the given `Reference` from the pool.
     ///
     /// Updates the stats, but not the priority queues.
     fn take_impl(&mut self, id: Id) -> Option<RequestOrResponse> {
@@ -452,7 +642,7 @@ impl MessagePool {
     /// now`). Updates the stats; and the priority queues, where applicable.
     ///
     /// Time complexity per expired message: `O(log(self.len()))`.
-    pub(super) fn expire_messages(&mut self, now: Time) -> Vec<(Id, RequestOrResponse)> {
+    pub(super) fn expire_messages(&mut self, now: Time) -> Vec<(SomeReference, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
             // No messages with deadlines, bail out.
             return Vec::new();
@@ -473,9 +663,11 @@ impl MessagePool {
             .into_iter()
             .map(|(_, id)| {
                 let msg = self.take_impl(id).unwrap();
-                self.outbound_guaranteed_request_deadlines.remove(&id);
+                if id.is_outbound_guaranteed_request() {
+                    self.outbound_guaranteed_request_deadlines.remove(&id);
+                }
                 self.remove_from_size_queue(id, &msg);
-                (id, msg)
+                (id.into(), msg)
             })
             .collect();
 
@@ -487,13 +679,15 @@ impl MessagePool {
     /// Updates the stats; and the priority queues, where applicable.
     ///
     /// Time complexity: `O(log(self.len()))`.
-    pub(super) fn shed_largest_message(&mut self) -> Option<(Id, RequestOrResponse)> {
+    pub(super) fn shed_largest_message(&mut self) -> Option<(SomeReference, RequestOrResponse)> {
         if let Some((_, id)) = self.size_queue.pop_last() {
+            debug_assert_eq!(Class::BestEffort, id.class());
+
             let msg = self.take_impl(id).unwrap();
             self.remove_from_deadline_queue(id, &msg);
 
             debug_assert_eq!(Ok(()), self.check_invariants());
-            return Some((id, msg));
+            return Some((id.into(), msg));
         }
 
         // Nothing to shed.
@@ -503,12 +697,6 @@ impl MessagePool {
     /// Returns the number of messages in the pool.
     pub(super) fn len(&self) -> usize {
         self.messages.len()
-    }
-
-    /// Returns the implicitly assigned deadlines of enqueued outbound guaranteed
-    /// response requests.
-    pub(super) fn outbound_guaranteed_request_deadlines(&self) -> &BTreeMap<Id, CoarseTime> {
-        &self.outbound_guaranteed_request_deadlines
     }
 
     /// Returns a reference to the pool's message stats.
@@ -573,10 +761,7 @@ impl MessagePool {
         // guaranteed response requests (and nothing else).
         let mut expected_outbound_guaranteed_request_ids = BTreeSet::new();
         self.messages.keys().for_each(|id| {
-            if id.context() == Context::Outbound
-                && id.class() == Class::GuaranteedResponse
-                && id.kind() == Kind::Request
-            {
+            if id.is_outbound_guaranteed_request() {
                 expected_outbound_guaranteed_request_ids.insert(id);
             }
         });
@@ -733,7 +918,7 @@ impl TryFrom<pb_queues::MessagePool> for MessagePool {
 ///
 /// All operations (computing stats deltas and retrieving the stats) are
 /// constant time.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub(super) struct MessageStats {
     /// Total byte size of all messages in the pool.
     pub(super) size_bytes: usize,

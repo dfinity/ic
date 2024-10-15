@@ -3,6 +3,8 @@ Rules for system-tests.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
@@ -46,18 +48,16 @@ def _run_system_test(ctx):
         if value.startswith("$"):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
-    env = dict(env.items() + [
-        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
-    ])
+    env |= {
+        "VOLATILE_STATUS_FILE_PATH": ctx.version_file.short_path,
+    }
     if ctx.executable.colocated_test_bin != None:
         env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
 
     if k8s:
         env["KUBECONFIG"] = ctx.file._k8sconfig.path
 
-    # version_file_path contains the "direct" path to the volatile status file.
-    # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path, ctx.file._k8sconfig])]
+    runtime_deps = [depset([ctx.file._k8sconfig])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -72,6 +72,7 @@ def _run_system_test(ctx):
                 files = [
                     run_test_script_file,
                     ctx.executable.src,
+                    ctx.version_file,
                 ],
                 transitive_files = depset(
                     direct = [],
@@ -97,7 +98,6 @@ run_system_test = rule(
         "runtime_deps": attr.label_list(allow_files = True),
         "env_deps": attr.label_keyed_string_dict(allow_files = True),
         "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
-        "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
 
@@ -206,8 +206,8 @@ def system_test(
 
     if uses_setupos_dev:
         _env_deps[_setupos + "disk-img.tar.zst"] = "ENV_DEPS__DEV_SETUPOS_IMG_TAR_ZST"
-        _env_deps["//rs/ic_os/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
-        _env_deps["//rs/ic_os/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-disable-checks"] = "ENV_DEPS__SETUPOS_DISABLE_CHECKS"
+        _env_deps["//rs/ic_os/dev_test_tools/setupos-inject-configuration"] = "ENV_DEPS__SETUPOS_INJECT_CONFIGS"
 
     if uses_guestos_dev_test:
         _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
@@ -374,4 +374,53 @@ def uvm_config_image(name, tags = None, visibility = None, srcs = None, remap_pa
         tags = tags,
         target_compatible_with = ["@platforms//os:linux"],
         visibility = visibility,
+    )
+
+def oci_tar(name, image, repo_tags = []):
+    """Create a tarball from an OCI image. The target is marked as 'manual'.
+
+    Args:
+      name: This name will be used for the tarball (must end with '.tar').
+      repo_tags: OCI tags for oci_load.
+      image: The OCI image to bundle.
+    """
+
+    if not name.endswith(".tar"):
+        fail("Expected tarname to end with '.tar': " + name)
+
+    basename = name.removesuffix(".tar")
+
+    name_image = basename + "_image"
+
+    # First load the image
+    oci_load(
+        name = name_image,
+        image = image,
+        repo_tags = repo_tags,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    # create the tarball
+    name_tarballdir = basename + "_tarballdir"
+    native.filegroup(
+        name = name_tarballdir,
+        srcs = [":" + name_image],
+        output_group = "tarball",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
+    )
+
+    # Copy the tarball out so we can reference the file by 'name'
+    copy_file(
+        name = basename + "_tar",
+        src = ":" + name_tarballdir,
+        out = name,
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
     )

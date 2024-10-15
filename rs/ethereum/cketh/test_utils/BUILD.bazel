@@ -16,12 +16,12 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-ethereum-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/cketh/minter",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-        "//rs/ethereum/types",
-        "//rs/rosetta-api/icrc1/ledger",
+        "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
@@ -29,6 +29,7 @@ rust_library(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",
+        "@crate_index//:evm_rpc_types",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:num-traits",

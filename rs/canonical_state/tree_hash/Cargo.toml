@@ -18,6 +18,6 @@ assert_matches = { workspace = true }
 ic-canonical-state-tree-hash-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash-test-utils = { path = "../../crypto/tree_hash/test_utils" }
-proptest = "1.0"
+proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

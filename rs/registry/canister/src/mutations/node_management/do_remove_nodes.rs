@@ -92,7 +92,7 @@ impl Registry {
 }
 
 /// The payload of an update request to remove some nodes.
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct RemoveNodesPayload {
     /// The list of Node IDs that will be removed
     pub node_ids: Vec<NodeId>,

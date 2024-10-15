@@ -27,13 +27,13 @@ def modify_file_contents(path, find, replacement):
         f.write(new_contents)
 
 
-def run_example_did_git_test(test_bin = "TEST_BIN"):
+def run_example_did_git_test(test_bin="TEST_BIN"):
     return subprocess.run(
         [os.environ[test_bin]],
         env={
             "BUILD_WORKSPACE_DIRECTORY": workspace_dir,
             "TEST_TMPDIR": os.environ["TEST_TMPDIR"],
-            "CI_MERGE_REQUEST_TITLE": os.environ.get("CI_MERGE_REQUEST_TITLE", ""),
+            "OVERRIDE_DIDC_CHECK": os.environ.get("OVERRIDE_DIDC_CHECK", ""),
         },
         capture_output=True,
     )
@@ -71,7 +71,7 @@ def test_remove_variants_check_fails():
 
 
 def test_adding_new_did_file_succeeds():
-    res = run_example_did_git_test(test_bin = "NEW_DID_TEST")
+    res = run_example_did_git_test(test_bin="NEW_DID_TEST")
 
     message = "is a new file, skipping backwards compatibility check"
     assert message in res.stdout.decode("utf-8")
@@ -95,7 +95,7 @@ def test_remove_required_field_from_input_check_fails():
         replacement="// Blank.",
     )
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
@@ -110,7 +110,7 @@ def test_remove_required_field_from_output_check_fails():
         replacement="// Blank.",
     )
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
@@ -124,7 +124,7 @@ def test_adding_a_required_field_to_input_check_fails():
         replacement="new_required_int : int;",
     )
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     error_message = "Method dance: func (DanceRequest) -> (DanceResponse) is not a subtype of func (DanceRequest/1) -> (DanceResponse/1)"
     assert error_message in res.stderr.decode("utf-8")
@@ -138,7 +138,7 @@ def test_adding_optional_field_succeeds():
         replacement="new_optional_int : opt int;",
     )
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     message = "bazel/candid_integration_tests/example.did passed candid checks"
     assert message in res.stdout.decode("utf-8")
@@ -152,7 +152,7 @@ def test_adding_optional_field_reverse_succeeds():
         replacement="new_optional_int : opt int;",
     )
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     message = "bazel/candid_integration_tests/example.did passed candid checks"
     assert message in res.stdout.decode("utf-8")
@@ -162,19 +162,16 @@ def test_adding_optional_field_reverse_succeeds():
 def test_override_didc_checks_failing_check_succeeds():
     modify_file_contents(path=did_file_path, find="happy; sad", replacement="happy")
 
-    res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
 
     error_message = "Method do_stuff: func (Request) -> () is not a subtype of func (Request/1) -> ()"
     assert error_message in res.stderr.decode("utf-8")
     assert res.returncode == 101
 
-    with mock.patch.dict(os.environ, {"CI_MERGE_REQUEST_TITLE": "Best change ever [override-didc-check]"}):
-        res = run_example_did_git_test(test_bin = "TEST_BIN_ALSO_REVERSE")
+    with mock.patch.dict(os.environ, {"OVERRIDE_DIDC_CHECK": "true"}):
+        res = run_example_did_git_test(test_bin="TEST_BIN_ALSO_REVERSE")
         assert res.returncode == 0
-        assert (
-            "Found [override-didc-check] in merge request title. Skipping didc_check."
-            in res.stdout.decode("utf-8")
-        )
+        assert "Override didc check requested. Skipping didc_check." in res.stdout.decode("utf-8")
 
 
 if __name__ == "__main__":

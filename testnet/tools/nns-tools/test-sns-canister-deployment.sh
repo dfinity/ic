@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <VERSION> <SNS_CANISTER_TYPE> (<SNS_CANISTER_TYPE>...)
-  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on gitlab commit list have assets)
+  VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on GitHub commit list have assets)
   SNS_CANISTER_TYPE: Human readable SNS canister name (root, governance, ledger, swap, archive, index)
 
   This script will test upgrading the canisters to a particular version, and will test doing so

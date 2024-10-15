@@ -13,7 +13,7 @@ mod tests;
 
 pub use idkg::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum MasterPublicKeyExtractionError {
     UnsupportedAlgorithm(String),
     SerializationError(String),

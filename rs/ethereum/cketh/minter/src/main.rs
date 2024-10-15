@@ -837,7 +837,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             read_state(|s| {
                 w.encode_gauge(
                     "cketh_minter_stable_memory_bytes",
-                    ic_cdk::api::stable::stable64_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
+                    ic_cdk::api::stable::stable_size() as f64 * WASM_PAGE_SIZE_IN_BYTES,
                     "Size of the stable memory allocated by this canister.",
                 )?;
 
@@ -1022,7 +1022,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             max_skip_timestamp,
         ));
 
-        const MAX_BODY_SIZE: usize = 3_000_000;
+        const MAX_BODY_SIZE: usize = 2_000_000;
         HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
             .with_body_and_content_length(log.serialize_logs(MAX_BODY_SIZE))

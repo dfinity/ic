@@ -1,7 +1,6 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::{SecretArray, SecretBytes};
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
@@ -177,47 +176,6 @@ pub fn verify(
             sig_bytes: sig.0.to_vec(),
             internal_error: e.to_string(),
         })
-}
-
-/// Verifies one or more signatures of the same message using
-/// the respective Ed25519 public key(s).
-///
-/// # Errors
-/// * `MalformedPublicKey` if the public key is malformed
-/// * `SignatureVerification` if the signature is invalid
-/// * `MalformedSignature` if the signature is malformed
-pub fn verify_batch(
-    key_signature_map: &[(&types::PublicKeyBytes, &types::SignatureBytes)],
-    msg: &[u8],
-    seed: Seed,
-) -> CryptoResult<()> {
-    let mut messages = Vec::new();
-    let mut signatures = Vec::new();
-    let mut keys = Vec::new();
-
-    for (key, signature) in key_signature_map {
-        messages.push(msg);
-        signatures.push(signature.0.as_ref());
-        keys.push(
-            ic_crypto_ed25519::PublicKey::deserialize_raw(&key.0).map_err(|e| {
-                CryptoError::MalformedPublicKey {
-                    algorithm: AlgorithmId::Ed25519,
-                    key_bytes: Some(key.0.to_vec()),
-                    internal_error: e.to_string(),
-                }
-            })?,
-        );
-    }
-
-    let rng = &mut seed.into_rng();
-    ic_crypto_ed25519::PublicKey::batch_verify(&messages, &signatures, &keys, rng).map_err(|e| {
-        CryptoError::SignatureVerification {
-            algorithm: AlgorithmId::Ed25519,
-            public_key_bytes: vec![],
-            sig_bytes: vec![],
-            internal_error: e.to_string(),
-        }
-    })
 }
 
 /// Verifies whether the given key is a valid Ed25519 public key.

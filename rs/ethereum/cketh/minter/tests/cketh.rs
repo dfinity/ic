@@ -22,12 +22,12 @@ use ic_cketh_test_utils::response::{
     hash_transaction, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT,
-    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
-    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
-    EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, GAS_USED,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
+    use_evm_rpc_canister, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE,
+    CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
+    EXPECTED_BALANCE, GAS_USED, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -206,26 +206,53 @@ fn should_block_deposit_from_blocked_address() {
 }
 
 #[test]
-fn should_not_mint_when_logs_inconsistent() {
+fn should_not_mint_when_logs_too_inconsistent() {
     let deposit_params = DepositParams::default();
-    let (ankr_logs, public_node_logs) = {
-        let ankr_log_entry = deposit_params.eth_log_entry();
-        let mut llama_nodes_log_entry = ankr_log_entry.clone();
+    let (block_pi_logs, public_node_logs) = {
+        let block_pi_log_entry = deposit_params.eth_log_entry();
+        let mut llama_nodes_log_entry = block_pi_log_entry.clone();
         llama_nodes_log_entry.amount += 1;
         (
-            vec![ethers_core::types::Log::from(ankr_log_entry)],
+            vec![ethers_core::types::Log::from(block_pi_log_entry)],
             vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
         )
     };
-    assert_ne!(ankr_logs, public_node_logs);
+    assert_ne!(block_pi_logs, public_node_logs);
 
     CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-            mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
+            mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::LlamaNodes, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
+                .respond_with(JsonRpcProvider::Alchemy, public_node_logs.clone())
         }))
         .expect_no_mint();
+}
+
+#[test]
+fn should_mint_when_1_error_with_3_out_of_4_strategy() {
+    if use_evm_rpc_canister() {
+        let deposit_params = DepositParams::default();
+        let (block_pi_logs, public_node_logs) = {
+            let block_pi_log_entry = deposit_params.eth_log_entry();
+            let mut llama_nodes_log_entry = block_pi_log_entry.clone();
+            llama_nodes_log_entry.amount += 1;
+            (
+                vec![ethers_core::types::Log::from(block_pi_log_entry)],
+                vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
+            )
+        };
+        assert_ne!(block_pi_logs, public_node_logs);
+
+        CkEthSetup::default_with_maybe_evm_rpc()
+            .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
+                mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
+                    .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
+                    .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
+                    .respond_with(JsonRpcProvider::Alchemy, block_pi_logs.clone())
+            }))
+            .expect_mint();
+    }
 }
 
 #[test]
@@ -354,7 +381,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .start_processing_withdrawals()
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Ankr,
+                JsonRpcProvider::BlockPi,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740742_u64.into()
                 },
@@ -712,7 +739,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
-        .respond_with(JsonRpcProvider::PublicNode, json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
+        .respond_for_providers_with([JsonRpcProvider::PublicNode, JsonRpcProvider::Alchemy], json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
         .build()
         .expect_rpc_calls(&cketh);
 

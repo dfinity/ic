@@ -7,9 +7,10 @@ extern crate slog_scope;
 // extern crate tokio;
 use byte_unit::Byte;
 use chrono::Utc;
-use clap::{Arg, ArgEnum};
+use clap::{value_parser, Arg, ValueEnum};
 use slog::Drain;
 use std::{
+    ffi::OsString,
     fs, io,
     path::{Path, PathBuf},
     process::Command,
@@ -68,7 +69,7 @@ fn write_output_json(filename: &str, summaries: &[Summary]) -> io::Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, ArgEnum)]
+#[derive(Copy, Clone, Debug, ValueEnum)]
 #[clap(rename_all = "camel")]
 pub enum RequestType {
     // Needs to expose "read"
@@ -85,7 +86,7 @@ pub enum RequestType {
     Query,
 }
 
-#[derive(ArgEnum, Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
 #[clap(rename_all = "camel")]
 pub enum ChartSize {
     None,
@@ -107,21 +108,21 @@ async fn main() {
         .arg(
             Arg::new("nonce")
                 .long("nonce")
-                .takes_value(true)
+                .num_args(1)
                 .help("Nonce to use for update requests"),
         )
         .arg(
             Arg::new("duration")
                 .short('n')
                 .default_value("600")
-                .takes_value(true)
+                .num_args(1)
                 .help("The number of seconds to run(in seconds)."),
         )
         .arg(
             Arg::new("rps")
                 .short('r')
                 .required(true)
-                .takes_value(true)
+                .num_args(1)
                 .help("Requests per second to generate. Accepts fractional values, e.g. 1.5 rps."),
         )
         .arg(
@@ -136,33 +137,33 @@ async fn main() {
         .arg(
             Arg::new("canister-id")
                 .long("canister-id")
-                .takes_value(true)
+                .num_args(1)
                 .help("Canister ID, in text format (xxxxx-xxx), of a pre-installed canister. When absent, a canister must be installed instead")
         )
         .arg(
             Arg::new("canister")
                 .long("canister")
-                .takes_value(true)
-                .allow_invalid_utf8(true)
+                .num_args(1)
+                .value_parser(value_parser!(PathBuf))
                 .help("Path to the canister code. Needs to match selected --method. If --canister-id is also given then the code will be installed on the existing canister, otherwise a new canister will be created."),
         )
         .arg(
             Arg::new("install-endpoint")
                 .long("install-endpoint")
-                .takes_value(true)
+                .num_args(1)
                 .help("Path to the canister code. Needs to expose \"read\" for queries and \"write\" for updates."),
         )
         .arg(
             Arg::new("prometheus-port")
                 .long("pport")
                 .short('p')
-                .takes_value(true)
+                .num_args(1)
                 .help("Export prometheus metrics on given port"),
         )
         .arg(
             Arg::new("method")
                 .short('m')
-                .possible_values(RequestType::value_variants().iter().filter_map(|a| a.to_possible_value()))
+                .value_parser(value_parser!(RequestType))
                 .ignore_case(true)
                 .default_value("QueryCounter")
                 .help("What method to issue"),
@@ -170,7 +171,7 @@ async fn main() {
         .arg(
             Arg::new("call-method")
                 .long("call-method")
-                .takes_value(true)
+                .num_args(1)
                 .help("The name of the canister method to call. It works only with --method=Update and --method=Query")
         )
         .arg(
@@ -187,91 +188,91 @@ async fn main() {
         .arg(
             Arg::new("payload-size")
                 .long("payload-size")
-                .takes_value(true)
+                .num_args(1)
                 .help("Size of the ingress canister calls (both updates and queries). The content will be all zeros. Format: <number><suffix>, with suffix any of B, KB, KiB, MB, GiB, GB. The 'B' is always optional.")
         )
         .arg(
             Arg::new("payload")
                 .long("payload")
-                .takes_value(true)
+                .num_args(1)
                 .help("Hex string of the bytes that will be sent as input to the canister method")
         )
         .arg(
             Arg::new("chart-size")
                 .long("chart-size")
-                .takes_value(true)
+                .num_args(1)
                 .ignore_case(true)
                 .default_value("None")
-                .possible_values(ChartSize::value_variants().iter().filter_map(|a| a.to_possible_value()))
+                .value_parser(value_parser!(ChartSize))
                 .help("Size of chart to render"),
         )
         .arg(
             Arg::new("summary-file")
                 .long("summary-file")
                 .value_name("FILE")
-                .takes_value(true)
+                .num_args(1)
                 .help("Filename to output the summary of the run, in JSON format. File will be created if not present."),
         )
         .arg(
             Arg::new("periodic-output")
                 .long("periodic-output")
-                .takes_value(false)
+                .num_args(0)
                 .help("Periodically print output instead of using a progress bar."),
         )
         .arg(
             Arg::new("principal-id")
                 .long("principal-id")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, this base32 encoding of the principal id, is used for sending request to the IC."),
         )
         .arg(
             Arg::new("host")
                 .long("host")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, this, host is used as a header on requests sent to the IC."),
         )
         .arg(
             Arg::new("pem-file")
                 .long("pem-file")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, use the given pem-file instead of the default principal's pem file."),
         )
         .arg(
             Arg::new("http2-only")
                 .long("http2-only")
                 .default_value("true")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, sets this option when building the hyper http client."),
         )
         .arg(
             Arg::new("pool-max-idle-per-host")
                 .long("pool-max-idle-per-host")
                 .default_value("20000")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, sets this option when building the hyper http client."),
         )
         .arg(
             Arg::new("pool-idle-timeout-secs")
                 .long("pool-idle-timeout-secs")
-                .takes_value(true)
+                .num_args(1)
                 .help("If specified, sets this option when building the hyper http client."),
         )
         .arg(
             Arg::new("query-timeout-secs")
                 .long("query-timeout-secs")
-                .takes_value(true)
+                .num_args(1)
                 .help("The number of seconds to wait before timing out queries."),
         )
         .arg(
             Arg::new("ingress-timeout-secs")
                 .long("ingress-timeout-secs")
-                .takes_value(true)
+                .num_args(1)
                 .help("The number of seconds to wait before timing out ingress messages."),
         )
         .arg(
             Arg::new("random-query-payload")
                 .long("random-query-payload")
-                .takes_value(false)
+                .num_args(0)
                 .help("If specified, each query gets a random payload to prevent caching on the boundary nodes."),
         )
 
@@ -297,14 +298,14 @@ async fn main() {
     };
 
     let url: Vec<_> = matches
-        .value_of("URL")
+        .get_one::<String>("URL")
         .unwrap()
         .split(',')
         .map(ToString::to_string)
         .collect();
 
     let install_endpoint;
-    let install_endpoint = match matches.value_of("install-endpoint") {
+    let install_endpoint = match matches.get_one::<String>("install-endpoint") {
         Some(endpoint) => {
             install_endpoint = endpoint.split(',').map(ToString::to_string).collect();
             &install_endpoint
@@ -313,18 +314,22 @@ async fn main() {
     };
 
     let duration = matches
-        .value_of("duration")
+        .get_one::<String>("duration")
         .unwrap()
         .parse::<usize>()
         .unwrap();
-    let rps = matches.value_of("rps").unwrap().parse::<f64>().unwrap();
+    let rps = matches
+        .get_one::<String>("rps")
+        .unwrap()
+        .parse::<f64>()
+        .unwrap();
     let rpms = (rps * 1000f64).floor() as usize;
 
     let principal_id = matches
-        .value_of("principal-id")
+        .get_one::<String>("principal-id")
         .map(|x| PrincipalId::from_str(x).unwrap());
 
-    let nonce: String = match matches.value_of("nonce") {
+    let nonce: String = match matches.get_one::<String>("nonce") {
         Some(s) => s.to_string(),
         None => {
             let s = Utc::now().to_string();
@@ -336,14 +341,19 @@ async fn main() {
     let log = get_logger();
     let _guard = slog_scope::set_global_logger(log);
 
-    let periodic_output = matches.is_present("periodic-output");
+    let periodic_output = matches.contains_id("periodic-output");
 
-    let random_query_payload = matches.is_present("random-query-payload");
+    let random_query_payload = matches.contains_id("random-query-payload");
 
-    let call_payload_size = Byte::from_str(matches.value_of("payload-size").unwrap_or("0").trim())
-        .expect("Could not parse the value of --payload-size");
+    let call_payload_size = Byte::from_str(
+        matches
+            .get_one::<String>("payload-size")
+            .map_or("0", |v| v)
+            .trim(),
+    )
+    .expect("Could not parse the value of --payload-size");
 
-    let call_payload = hex::decode(matches.value_of("payload").unwrap_or(""))
+    let call_payload = hex::decode(matches.get_one::<String>("payload").map_or("", |v| v))
         .expect("Payload must be in hex format");
 
     if call_payload_size.get_bytes() > 0 && !call_payload.is_empty() {
@@ -354,7 +364,7 @@ async fn main() {
         );
     }
 
-    let mut metrics_runtime = match matches.value_of("prometheus-port") {
+    let mut metrics_runtime = match matches.get_one::<String>("prometheus-port") {
         Some(prometheus_port) => {
             let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
             let logger =
@@ -384,23 +394,23 @@ async fn main() {
     let mut exit_code_success = true;
 
     let mut http_client_config = HttpClientConfig::default();
-    if let Some(val) = matches.value_of("http2-only") {
+    if let Some(val) = matches.get_one::<String>("http2-only") {
         http_client_config.http2_only = val.parse::<bool>().unwrap();
     }
-    if let Some(val) = matches.value_of("pool-max-idle-per-host") {
+    if let Some(val) = matches.get_one::<String>("pool-max-idle-per-host") {
         http_client_config.pool_max_idle_per_host = val.parse::<usize>().unwrap();
     }
-    if let Some(val) = matches.value_of("pool-idle-timeout-secs") {
+    if let Some(val) = matches.get_one::<String>("pool-idle-timeout-secs") {
         http_client_config.pool_idle_timeout =
             Some(Duration::from_secs(val.parse::<u64>().unwrap()));
     }
-    let host = matches.value_of("host").map(ToString::to_string);
+    let host = matches.get_one::<String>("host").map(ToString::to_string);
 
     let query_timeout = matches
-        .value_of("query-timeout-secs")
+        .get_one::<String>("query-timeout-secs")
         .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
     let ingress_timeout = matches
-        .value_of("ingress-timeout-secs")
+        .get_one::<String>("ingress-timeout-secs")
         .map(|s| Duration::from_secs(s.parse::<u64>().unwrap()));
 
     let http_client = HttpClient::new();
@@ -409,7 +419,7 @@ async fn main() {
             AgentSender::from_keypair(&TEST_IDENTITY_KEYPAIR),
             TEST_IDENTITY_KEYPAIR.public_key.to_vec(),
         ),
-        Some(_principal_id) => match matches.value_of("pem-file") {
+        Some(_principal_id) => match matches.get_one::<String>("pem-file") {
             Some(f) => {
                 let pem_file = fs::read_to_string(f).unwrap();
                 let keypair: ic_canister_client::Ed25519KeyPair = { get_pair(Some(&pem_file)) };
@@ -435,19 +445,22 @@ async fn main() {
     slog_scope::scope(
         &slog_scope::logger().new(slog_o!("scope" => "1")),
         || async {
-            let request_type = if matches.is_present("updates") {
+            let request_type = if matches.contains_id("updates") {
                 RequestType::UpdateCounter
             } else {
                 // case insensitive
                 RequestType::from_str(
                     matches
-                        .value_of("method")
+                        .get_one::<String>("method")
                         .expect("Method option not specified"),
                     true,
                 )
                 .expect("Failed to parse method option.")
             };
-            let canister_method_name = matches.value_of("call-method").unwrap_or("").to_string();
+            let canister_method_name = matches
+                .get_one::<String>("call-method")
+                .map_or("", |v| v)
+                .to_string();
             match request_type {
                 RequestType::Update | RequestType::Query => {
                     assert!(
@@ -467,18 +480,19 @@ async fn main() {
                 ingress_timeout,
             );
 
-            if !matches.is_present("no-status-check") {
+            if !matches.contains_id("no-status-check") {
                 eng.wait_for_all_agents_to_be_healthy().await;
             }
 
             // use id of install canister if no id specified
-            let canister_id = if let Some(s) = matches.value_of("canister-id") {
+            let canister_id = if let Some(s) = matches.get_one::<String>("canister-id") {
                 let canister_id =
                     CanisterId::try_from(PrincipalId::from_str(s).unwrap_or_else(|_| {
                         panic!("Illegal value for option --canister-id: '{}'", s);
                     }))
                     .unwrap();
-                if let Some(wasm_file_path) = matches.value_of_os("canister").map(Path::new) {
+                if let Some(wasm_file_path) = matches.get_one::<OsString>("canister").map(Path::new)
+                {
                     let mut install_succeeded = false;
                     for url in install_endpoint {
                         match canister::install_canister(
@@ -507,7 +521,7 @@ async fn main() {
                 }
                 canister_id
             } else {
-                let wasm_file_path = matches.value_of_os("canister").map(Path::new);
+                let wasm_file_path = matches.get_one::<OsString>("canister").map(Path::new);
                 canister::setup_canister(http_client, sender, install_endpoint, wasm_file_path)
                     .await
                     .unwrap_or_else(|err| {
@@ -518,7 +532,7 @@ async fn main() {
             // case insensitive
             let chart_size = ChartSize::from_str(
                 matches
-                    .value_of("chart-size")
+                    .get_one::<String>("chart-size")
                     .expect("chart-size option not specified"),
                 true,
             )
@@ -562,7 +576,7 @@ async fn main() {
                 std::mem::drop(metrics);
             }
 
-            if let Some(filename) = matches.value_of("summary-file") {
+            if let Some(filename) = matches.get_one::<String>("summary-file") {
                 if let Err(e) = write_output_json(filename, &summaries) {
                     println!(
                         "Error while writing the summaries to file {}: {}",

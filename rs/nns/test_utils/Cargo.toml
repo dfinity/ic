@@ -29,7 +29,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
-ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1 = { path = "../../ledger_suite/icrc1" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
@@ -59,7 +59,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
-icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline/impl" }
 maplit = "1.0.2"
@@ -71,4 +71,3 @@ rand = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 serde = { workspace = true }
 tokio = { workspace = true }
-walrus = "0.19.0"

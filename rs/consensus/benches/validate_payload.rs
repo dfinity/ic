@@ -15,14 +15,13 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressP
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact},
+    consensus_pool::{ChangeAction, ConsensusPool, Mutations, ValidatedConsensusArtifact},
     p2p::consensus::MutablePool,
     time_source::TimeSource,
     validation::ValidationResult,
@@ -30,6 +29,7 @@ use ic_interfaces::{
 use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::IC_00;
 use ic_metrics::MetricsRegistry;
@@ -263,7 +263,7 @@ fn add_past_blocks(
         .next()
         .unwrap();
     let mut parent = cup.content.block.into_inner();
-    let mut changeset = ChangeSet::new();
+    let mut changeset = Mutations::new();
     let to_add = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 1;
     for i in 1..=to_add {
         let mut block = Block::from_parent(&parent);
@@ -290,7 +290,7 @@ fn add_past_blocks(
             timestamp: UNIX_EPOCH,
         }));
     }
-    consensus_pool.apply_changes(changeset);
+    consensus_pool.apply(changeset);
     parent
 }
 

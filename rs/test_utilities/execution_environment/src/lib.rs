@@ -7,7 +7,6 @@ use ic_config::{
     subnet_config::SchedulerConfig,
     subnet_config::SubnetConfig,
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
     wasm_utils::{compile, decoding::decode_wasm},
@@ -25,6 +24,7 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
+use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
@@ -154,6 +154,17 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
 pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
     let cost = wasm_compilation_cost(UNIVERSAL_CANISTER_WASM);
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
+}
+
+/// Helper function to test that cycles are reserved for both
+/// application and verified application subnets.
+///
+/// Expects a test function that takes a `SubnetType` as an argument
+/// so it can be tested over the desired subnet types.
+pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test: T) {
+    for subnet_type in [SubnetType::Application, SubnetType::VerifiedApplication] {
+        test(subnet_type);
+    }
 }
 
 /// A helper for execution tests.
@@ -996,19 +1007,25 @@ impl ExecutionTest {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::Heartbeat);
+                    .enqueue(ExecutionTask::Heartbeat);
             }
             CanisterTask::GlobalTimer => {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::GlobalTimer);
+                    .enqueue(ExecutionTask::GlobalTimer);
             }
             CanisterTask::OnLowWasmMemory => {
+                // Set `OnLowWasmMemoryHookStatus` to `ConditionNotSatisfied`.
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::OnLowWasmMemory);
+                    .remove(ExecutionTask::OnLowWasmMemory);
+                // Set `OnLowWasmMemoryHookStatus` to `Ready`.
+                canister
+                    .system_state
+                    .task_queue
+                    .enqueue(ExecutionTask::OnLowWasmMemory);
             }
         }
         let result = execute_canister(
@@ -1976,6 +1993,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_max_wasm_memory_size(mut self, wasm_memory_size: NumBytes) -> Self {
+        self.execution_config.embedders_config.max_wasm_memory_size = wasm_memory_size;
+        self
+    }
+
     pub fn with_metering_type(mut self, metering_type: MeteringType) -> Self {
         self.execution_config.embedders_config.metering_type = metering_type;
         self
@@ -1999,21 +2021,6 @@ impl ExecutionTestBuilder {
             .embedders_config
             .feature_flags
             .best_effort_responses = status;
-        self
-    }
-
-    pub fn with_ic00_compute_initial_i_dkg_dealings(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_compute_initial_i_dkg_dealings = status;
-        self
-    }
-
-    pub fn with_ic00_schnorr_public_key(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_schnorr_public_key = status;
-        self
-    }
-
-    pub fn with_ic00_sign_with_schnorr(mut self, status: FlagStatus) -> Self {
-        self.execution_config.ic00_sign_with_schnorr = status;
         self
     }
 

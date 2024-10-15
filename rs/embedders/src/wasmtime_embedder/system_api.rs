@@ -1,8 +1,12 @@
-use crate::wasmtime_embedder::{
-    system_api_complexity::{overhead, overhead_native},
-    StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+use crate::{
+    wasm_utils::instrumentation::WasmMemoryType,
+    wasmtime_embedder::{
+        convert_backtrace,
+        system_api_complexity::{overhead, overhead_native},
+        StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+    },
+    InternalErrorCode,
 };
-
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},
     flag_status::FlagStatus,
@@ -14,16 +18,14 @@ use ic_interfaces::execution_environment::{
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
-use ic_types::{Cycles, NumBytes, NumInstructions, NumOsPages, Time};
-use ic_wasm_types::WasmEngineError;
-
-use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
-
-use crate::InternalErrorCode;
-use std::convert::TryFrom;
-
-use crate::wasm_utils::instrumentation::WasmMemoryType;
 use ic_system_api::SystemApiImpl;
+use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_wasm_types::WasmEngineError;
+use num_traits::ops::saturating::SaturatingAdd;
+
+use wasmtime::{AsContext, AsContextMut, Caller, Global, Linker, Val, WasmBacktrace};
+
+use std::convert::TryFrom;
 
 /// The amount of instructions required to process a single byte in a payload.
 /// This includes the cost of memory as well as time passing the payload
@@ -36,8 +38,9 @@ fn unexpected_err(s: String) -> HypervisorError {
 
 fn process_err(
     store: &mut impl AsContextMut<Data = StoreData>,
-    e: HypervisorError,
+    mut e: HypervisorError,
 ) -> anyhow::Error {
+    add_backtrace(&mut e, &store);
     match store.as_context_mut().data_mut().system_api_mut() {
         Ok(api) => {
             let result = anyhow::Error::msg(format! {"{}", e});
@@ -47,6 +50,24 @@ fn process_err(
         Err(_) => anyhow::Error::msg(
             format! {"Failed to access system api while processing error: {}", e},
         ),
+    }
+}
+
+fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
+    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
+        match e {
+            HypervisorError::Trapped {
+                trap_code: _,
+                backtrace,
+            }
+            | HypervisorError::CalledTrap {
+                message: _,
+                backtrace,
+            } => {
+                *backtrace = Some(convert_backtrace(&WasmBacktrace::capture(store)));
+            }
+            _ => {}
+        }
     }
 }
 
@@ -84,7 +105,7 @@ fn store_value(
 /// Updates heap bytemap marking which pages have been written to dst and size
 /// need to have valid values (need to pass checks performed by the function
 /// that actually writes to the heap)
-#[inline(never)]
+#[inline(always)]
 fn mark_writes_on_bytemap(
     caller: &mut Caller<'_, StoreData>,
     dst: usize,
@@ -116,6 +137,7 @@ fn mark_writes_on_bytemap(
 }
 
 /// Charge for system api call that doesn't involve touching memory
+#[inline(always)]
 fn charge_for_cpu(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -124,6 +146,7 @@ fn charge_for_cpu(
 }
 
 /// Charge for system api call that involves writing/reading heap
+#[inline(always)]
 fn charge_for_cpu_and_mem(
     caller: &mut Caller<'_, StoreData>,
     overhead: NumInstructions,
@@ -134,7 +157,7 @@ fn charge_for_cpu_and_mem(
 
 /// Charge for system api call that involves writing/reading stable memory
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_stable_write(
     caller: &mut Caller<'_, StoreData>,
     mut overhead: NumInstructions,
@@ -148,32 +171,17 @@ fn charge_for_stable_write(
 
     let dirty_page_limit = system_api.get_page_limit(&dirty_page_limit);
 
-    overhead = overhead
-        .get()
-        .checked_add(dirty_page_cost.get())
-        .ok_or(unexpected_err(format!(
-            "Overflow while calculating charge for stable write:\
-             overhead: {}, dirty page cost: {}",
-            overhead, dirty_page_cost
-        )))?
-        .into();
-
-    #[allow(non_upper_case_globals)]
-    const KiB: u64 = 1024;
+    overhead = overhead.saturating_add(&dirty_page_cost);
 
     let stable_dirty_pages = &mut caller
         .data_mut()
         .num_stable_dirty_pages_from_non_native_writes;
-    let total_pages = NumOsPages::from(
-        stable_dirty_pages
-            .get()
-            .saturating_add(new_stable_dirty_pages.get()),
-    );
+    let total_pages = stable_dirty_pages.saturating_add(&new_stable_dirty_pages);
 
     if total_pages > dirty_page_limit {
         let error = HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
-                            dirty_page_limit * (PAGE_SIZE as u64 / KiB),
+                            dirty_page_limit * (PAGE_SIZE as u64 / 1024),
                             ),
                         );
         return Err(error);
@@ -199,39 +207,24 @@ fn charge_for_stable_write(
 //
 // Note: marked not for inlining as we don't want to spill this code into every system API call.
 // TODO: RUN-841: Cover with tests
-#[inline(never)]
+#[inline(always)]
 fn charge_for_system_api_call(
     caller: &mut Caller<'_, StoreData>,
-    mut overhead: NumInstructions,
+    overhead: NumInstructions,
     num_bytes: usize,
 ) -> HypervisorResult<()> {
     let system_api = caller.data_mut().system_api()?;
-    if num_bytes > 0 {
-        let bytes_charge =
-            system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
-        overhead = overhead
-            .get()
-            .checked_add(bytes_charge.get())
-            .ok_or(unexpected_err(format!(
-                "Overflow while calculating charge for System API call:\
-             overhead: {}, bytes charge: {}",
-                overhead, bytes_charge
-            )))?
-            .into();
-    }
-
+    let bytes_charge = system_api.get_num_instructions_from_bytes(NumBytes::from(num_bytes as u64));
+    let overhead = overhead.saturating_add(&bytes_charge);
     charge_direct_fee(caller, overhead)
 }
 
 // TODO: RUN-841: Cover with tests
+#[inline(always)]
 fn charge_direct_fee(
     caller: &mut Caller<'_, StoreData>,
     fee: NumInstructions,
 ) -> HypervisorResult<()> {
-    if fee == NumInstructions::from(0) {
-        return Ok(());
-    }
-
     let num_instructions_global = get_num_instructions_global(caller)?;
     let mut instruction_counter = load_value(&num_instructions_global, caller)?;
     // Assert the current instruction counter is sane
@@ -1089,7 +1082,10 @@ pub(crate) fn syscalls<
                         additional_pages as u64,
                         stable_memory_api
                             .try_into()
-                            .map_err(|()| HypervisorError::Trapped(TrapCode::Other))?,
+                            .map_err(|()| HypervisorError::Trapped {
+                                trap_code: TrapCode::Other,
+                                backtrace: None,
+                            })?,
                     )? {
                         StableGrowOutcome::Success => Ok(current_size),
                         StableGrowOutcome::Failure => Ok(-1),
@@ -1213,10 +1209,8 @@ pub(crate) fn syscalls<
                         system_api.ic0_call_with_best_effort_response(timeout_seconds)
                     })
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::call_with_best_effort_response is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1231,10 +1225,8 @@ pub(crate) fn syscalls<
                 if feature_flags.best_effort_responses == FlagStatus::Enabled {
                     with_system_api(&mut caller, |system_api| system_api.ic0_msg_deadline())
                 } else {
-                    let err = HypervisorError::UserContractViolation {
+                    let err = HypervisorError::ToolchainContractViolation {
                         error: "ic0::msg_deadline is not enabled.".to_string(),
-                        suggestion: "".to_string(),
-                        doc_link: "".to_string(),
                     };
                     Err(process_err(&mut caller, err))
                 }
@@ -1246,38 +1238,52 @@ pub(crate) fn syscalls<
         .func_wrap("__", "internal_trap", {
             move |mut caller: Caller<'_, StoreData>, err_code: i32| -> Result<(), _> {
                 let err = match InternalErrorCode::from_i32(err_code) {
-                    InternalErrorCode::HeapOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryOutOfBounds => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
-                    }
-                    InternalErrorCode::StableMemoryTooBigFor32Bit => {
-                        HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
-                    }
+                    InternalErrorCode::HeapOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::HeapOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryOutOfBounds => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryOutOfBounds,
+                        backtrace: None,
+                    },
+                    InternalErrorCode::StableMemoryTooBigFor32Bit => HypervisorError::Trapped {
+                        trap_code: TrapCode::StableMemoryTooBigFor32Bit,
+                        backtrace: None,
+                    },
                     InternalErrorCode::MemoryWriteLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single execution: limit {} KB for regular messages, {} KB for upgrade messages and {} KB for queries.",
-                            stable_memory_dirty_page_limit.message.get() * (PAGE_SIZE as u64 / 1024),
-                            stable_memory_dirty_page_limit.upgrade.get() * (PAGE_SIZE as u64 / 1024),
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            modified pages in the stable memory in a single \
+                            execution: limit {} KB for regular messages, {} KB \
+                            for upgrade messages and {} KB for queries.",
+                            stable_memory_dirty_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_dirty_page_limit.upgrade.get()
+                                * (PAGE_SIZE as u64 / 1024),
                             stable_memory_dirty_page_limit.query.get() * (PAGE_SIZE as u64 / 1024)
-                            )
-                        )
+                        ))
                     }
                     InternalErrorCode::MemoryAccessLimitExceeded => {
-                        HypervisorError::MemoryAccessLimitExceeded(
-                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit {} KB for regular messages and {} KB for queries.",
-                                    stable_memory_access_page_limit.message.get() * (PAGE_SIZE as u64 / 1024), stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
-                            )
-                        )
+                        HypervisorError::MemoryAccessLimitExceeded(format!(
+                            "Exceeded the limit for the number of \
+                            accessed pages in the stable memory in a single \
+                            message execution: limit {} KB for regular messages \
+                            and {} KB for queries.",
+                            stable_memory_access_page_limit.message.get()
+                                * (PAGE_SIZE as u64 / 1024),
+                            stable_memory_access_page_limit.query.get() * (PAGE_SIZE as u64 / 1024),
+                        ))
                     }
-                    InternalErrorCode::StableGrowFailed => {
-                        HypervisorError::CalledTrap("Internal error: `memory.grow` instruction failed to grow stable memory".to_string())
-                    }
-                    InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
-                        "Trapped with internal error code: {}",
-                        err_code
-                    )),
+                    InternalErrorCode::StableGrowFailed => HypervisorError::CalledTrap {
+                        message:
+                            "Internal error: `memory.grow` instruction failed to grow stable memory"
+                                .to_string(),
+                        backtrace: None,
+                    },
+                    InternalErrorCode::Unknown => HypervisorError::CalledTrap {
+                        message: format!("Trapped with internal error code: {}", err_code),
+                        backtrace: None,
+                    },
                 };
                 Err(process_err(&mut caller, err))
             }

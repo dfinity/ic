@@ -93,7 +93,7 @@ function afl_env() {
         AFL_IGNORE_TIMEOUTS=1 \
         AFL_KEEP_TIMEOUTS=1 \
         AFL_SKIP_CPUFREQ=1 \
-        /usr/local/bin/afl-fuzz -t +5000 $@
+        /usr/local/bin/afl-fuzz -t +20000 $@
 }
 
 # To run multiple fuzzers in parallel, use the AFL_PARALLEL env variable

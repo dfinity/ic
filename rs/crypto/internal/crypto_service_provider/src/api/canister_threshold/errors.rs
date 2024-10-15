@@ -5,7 +5,7 @@ use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
 use serde::{Deserialize, Serialize};
 
 /// Errors encountered during generation of a MEGa encryption key pair.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CspCreateMEGaKeyError {
     SerializationError(CanisterThresholdSerializationError),
     TransientInternalError { internal_error: String },

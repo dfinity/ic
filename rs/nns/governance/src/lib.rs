@@ -137,6 +137,7 @@ use std::{
     cell::Cell,
     collections::{BTreeMap, HashMap},
     io,
+    time::{Duration, SystemTime},
 };
 
 #[cfg(test)]
@@ -187,6 +188,8 @@ thread_local! {
     static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+
+    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -217,6 +220,20 @@ pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
     Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
 }
 
+pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
+    ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
+    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+}
+
 pub fn decoder_config() -> DecoderConfig {
     let mut config = DecoderConfig::new();
     config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
@@ -230,7 +247,7 @@ trait Clock {
     fn set_time_warp(&mut self, new_time_warp: TimeWarp);
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct IcClock {
     time_warp: TimeWarp,
 }
@@ -243,13 +260,21 @@ impl IcClock {
     }
 }
 
+fn now_seconds() -> u64 {
+    let duration = if cfg!(target_arch = "wasm32") {
+        Duration::from_nanos(ic_cdk::api::time())
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+    };
+    duration.as_secs()
+}
+
 impl Clock for IcClock {
     fn now(&self) -> u64 {
         // Step 1: Read the real time.
-        let real_timestamp_seconds = dfn_core::api::now()
-            .duration_since(std::time::SystemTime::UNIX_EPOCH)
-            .expect("IcClock malfunctioned.")
-            .as_secs();
+        let real_timestamp_seconds = now_seconds();
 
         // Step 2: Apply time warp.
         let TimeWarp { delta_s } = self.time_warp;
@@ -319,6 +344,8 @@ pub fn encode_metrics(
     governance: &Governance,
     w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
 ) -> std::io::Result<()> {
+    // Space
+
     w.encode_gauge(
         "governance_stable_memory_size_bytes",
         ic_nervous_system_common::stable_memory_size_bytes() as f64,
@@ -330,6 +357,14 @@ pub fn encode_metrics(
         "Size of the total memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
+        "governance_latest_gc_timestamp_seconds",
+        governance.latest_gc_timestamp_seconds as f64,
+        "Timestamp of the last proposal garbage collection event, in seconds since the Unix epoch.",
+    )?;
+
+    // Proposals (more detailed breakdowns later).
+
+    w.encode_gauge(
         "governance_proposals_total",
         governance.heap_data.proposals.len() as f64,
         "Total number of proposals that haven't been gc'd.",
@@ -339,21 +374,32 @@ pub fn encode_metrics(
         governance.num_ready_to_be_settled_proposals() as f64,
         "Total number of proposals that are ready to be settled.",
     )?;
+
+    // Neurons (many many more detailed breakdowns later).
+
     w.encode_gauge(
         "governance_neurons_total",
         governance.neuron_store.len() as f64,
         "Total number of neurons.",
     )?;
     w.encode_gauge(
-        "governance_latest_gc_timestamp_seconds",
-        governance.latest_gc_timestamp_seconds as f64,
-        "Timestamp of the last proposal gc, in seconds since the Unix epoch.",
-    )?;
-    w.encode_gauge(
         "governance_locked_neurons_total",
         governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
     )?;
+    w.encode_gauge(
+        "governance_heap_neuron_count",
+        governance.neuron_store.heap_neuron_store_len() as f64,
+        "The number of neurons in NNS Governance canister's heap memory.",
+    )?;
+    w.encode_gauge(
+        "governance_stable_memory_neuron_count",
+        governance.neuron_store.stable_neuron_store_len() as f64,
+        "The number of neurons in NNS Governance canister's stable memory.",
+    )?;
+
+    // Rewards
+
     w.encode_gauge(
         "governance_latest_reward_event_timestamp_seconds",
         governance.latest_reward_event().actual_timestamp_seconds as f64,
@@ -393,6 +439,8 @@ pub fn encode_metrics(
         "Total number of available rewards in e8s in the latest reward event (including rollovers).",
     )?;
 
+    // Voting Power
+
     let total_voting_power = match governance
         .heap_data
         .proposals
@@ -418,6 +466,8 @@ pub fn encode_metrics(
         total_voting_power,
         "The total voting power, according to the most recent proposal.",
     )?;
+
+    // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
         subaccount: subaccount_index_len,
@@ -453,16 +503,12 @@ pub fn encode_metrics(
         "Total number of entries in the account_id index",
     )?;
 
-    w.encode_gauge(
-        "governance_stable_memory_neuron_count",
-        governance.neuron_store.stable_neuron_store_len() as f64,
-        "The number of neurons in stable memory.",
-    )?;
-
     let mut builder = w.gauge_vec(
         "governance_proposal_deadline_timestamp_seconds",
         "The deadline for open proposals, labelled with proposal id",
     )?;
+
+    // Detailed Proposal Breakdowns
 
     let open_proposals_deadline = governance
         .heap_data
@@ -500,6 +546,8 @@ pub fn encode_metrics(
             .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
+
+    // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
     if let Some(metrics) = &governance.heap_data.metrics {
         let GovernanceCachedMetrics {
@@ -546,6 +594,8 @@ pub fn encode_metrics(
             public_neuron_subset_metrics,
         } = metrics;
 
+        // ICP
+
         w.encode_gauge(
             "governance_total_locked_e8s",
             *total_locked_e8s as f64,
@@ -563,6 +613,8 @@ pub fn encode_metrics(
             *total_staked_e8s as f64,
             "Total number of e8s that are staked.",
         )?;
+
+        // Detailed Neuron Breakdowns (This section is loooong.)
 
         w.encode_gauge(
             "governance_dissolved_neurons_count",
@@ -941,10 +993,6 @@ impl NeuronSubsetMetricsPb {
 
         Ok(())
     }
-}
-
-fn enable_new_canister_management_topics() -> bool {
-    true
 }
 
 #[cfg(test)]

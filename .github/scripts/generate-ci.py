@@ -17,6 +17,7 @@ def transform_yaml(input_file, output_file):
         # Remove anchors
         command = f"yq -i eval 'del(.anchors)' {output_file}"
         run_command(command)
+        print(f"Generating {output_file} from {input_file}")
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
         print(f"Failed to transform {input_file} to {output_file}")
@@ -33,7 +34,7 @@ def main():
     for file in os.listdir(workflows_source):
         if file.endswith(".yaml") or file.endswith(".yml"):
             input_file = workflows_source / file
-            output_file = workflows_output /file
+            output_file = workflows_output / file
             transform_yaml(input_file, output_file)
 
 

@@ -7,7 +7,7 @@
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
-//   $ ./gitlab-ci/tools/docker-run
+//   $ ./ci/tools/docker-run
 //   $ ict testnet create src_testing --lifetime-mins=180 --output-dir=./src_testing -- --test_tmpdir=./src_testing
 //
 // The --output-dir=./src_testing will store the debug output of the test driver in the specified directory.
@@ -56,11 +56,11 @@ use ic_system_test_driver::driver::{
     },
 };
 use ic_system_test_driver::util::{block_on, create_canister};
-use ic_tests::nns_dapp::{
+use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
     set_icp_xdr_exchange_rate,
 };
-use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use std::env;
 use std::str::FromStr;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};

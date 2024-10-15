@@ -1,20 +1,20 @@
 #[cfg(test)]
 mod tests;
 
-pub mod types;
-
-use crate::types::candid::{
-    Block, BlockTag, FeeHistory, FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs, LogEntry,
-    MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices, SendRawTransactionStatus,
-    TransactionReceipt,
-};
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
-use candid::{CandidType, Nat, Principal};
+use candid::{CandidType, Principal};
 use ic_canister_log::{log, Sink};
 use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
+
+pub use evm_rpc_types::{
+    Block, BlockTag, ConsensusStrategy, EthMainnetService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
+    GetTransactionCountArgs, Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError, JsonRpcError,
+    LogEntry, MultiRpcResult, Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult,
+    RpcService, RpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
+};
 
 #[async_trait]
 pub trait Runtime {
@@ -30,7 +30,7 @@ pub trait Runtime {
         Out: CandidType + DeserializeOwned + 'static;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct EvmRpcClient<R: Runtime, L: Sink> {
     runtime: R,
     logger: L,
@@ -41,7 +41,7 @@ pub struct EvmRpcClient<R: Runtime, L: Sink> {
     max_num_retries: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct OverrideRpcConfig {
     pub eth_get_block_by_number: Option<RpcConfig>,
     pub eth_get_logs: Option<RpcConfig>,
@@ -107,7 +107,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
     pub async fn eth_get_transaction_count(
         &self,
         args: GetTransactionCountArgs,
-    ) -> MultiRpcResult<Nat> {
+    ) -> MultiRpcResult<Nat256> {
         self.call_internal(
             "eth_getTransactionCount",
             self.override_rpc_config.eth_get_transaction_count.clone(),
@@ -161,8 +161,10 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
                     attached_cycles,
                 )
                 .await
-                .unwrap_or_else(|(code, msg)| {
-                    MultiRpcResult::Consistent(Err(RpcError::from_rejection(code, msg)))
+                .unwrap_or_else(|(code, message)| {
+                    MultiRpcResult::Consistent(Err(RpcError::HttpOutcallError(
+                        HttpOutcallError::IcError { code, message },
+                    )))
                 });
             log!(
                 self.logger,
@@ -192,8 +194,7 @@ impl<R: Runtime, L: Sink> EvmRpcClient<R, L> {
 }
 
 fn max_expected_too_few_cycles_error<Out>(result: &MultiRpcResult<Out>) -> Option<u128> {
-    result
-        .iter()
+    multi_rpc_result_iter(result)
         .filter_map(|res| match res {
             Err(RpcError::ProviderError(ProviderError::TooFewCycles {
                 expected,
@@ -202,6 +203,17 @@ fn max_expected_too_few_cycles_error<Out>(result: &MultiRpcResult<Out>) -> Optio
             _ => None,
         })
         .max()
+}
+
+fn multi_rpc_result_iter<Out>(
+    result: &MultiRpcResult<Out>,
+) -> Box<dyn Iterator<Item = &RpcResult<Out>> + '_> {
+    match result {
+        MultiRpcResult::Consistent(result) => Box::new(std::iter::once(result)),
+        MultiRpcResult::Inconsistent(results) => {
+            Box::new(results.iter().map(|(_service, result)| result))
+        }
+    }
 }
 
 pub struct EvmRpcClientBuilder<R: Runtime, L: Sink> {
@@ -291,7 +303,7 @@ impl<R: Runtime, L: Sink> EvmRpcClientBuilder<R, L> {
     }
 }
 
-#[derive(Clone, Debug, Copy, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct IcRuntime {}
 
 #[async_trait]

@@ -17,7 +17,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -26,6 +26,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -43,7 +44,8 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -60,7 +62,8 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         #TODO: enable k8s when there's enough capacity
@@ -78,7 +81,7 @@ system_test(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    flaky = True,
+    flaky = False,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -95,6 +98,7 @@ system_test_nns(
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_nightly",

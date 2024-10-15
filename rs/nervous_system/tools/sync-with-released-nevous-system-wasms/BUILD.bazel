@@ -10,10 +10,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
-    "//rs/sns/governance",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
@@ -23,6 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-wasm__ic-wasm",
     "@crate_index//:rgb",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]
@@ -32,10 +29,10 @@ rust_binary(
     srcs = [
         "src/main.rs",
     ],
-    args = ["$(location //:mainnet-canisters.bzl) $(location @crate_index//:ic-wasm__ic-wasm)"],
+    args = ["$(location //:mainnet-canisters.json) $(location @crate_index//:ic-wasm__ic-wasm)"],
     data = [
         ":tools",
-        "//:mainnet-canisters.bzl",
+        "//:mainnet-canisters.json",
     ],
     deps = DEPENDENCIES,
 )

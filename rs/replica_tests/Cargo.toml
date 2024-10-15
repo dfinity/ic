@@ -47,7 +47,7 @@ tokio = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 tracing-subscriber = { workspace = true }
-wat = "1.0.52"
+wat = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

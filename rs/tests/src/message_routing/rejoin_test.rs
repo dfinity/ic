@@ -33,12 +33,13 @@ use std::time::Duration;
 
 const DKG_INTERVAL: u64 = 14;
 const NOTARY_DELAY: Duration = Duration::from_millis(100);
+const STORE_TO_STABLE_RETRIES: u64 = 3;
 
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
 }
@@ -143,7 +144,7 @@ pub async fn rejoin_test(
     let canister_update_calls = 3 * dkg_interval;
     for i in 0..canister_update_calls {
         info!(logger, "Performing canister update call {i}");
-        store_and_read_stable(i.to_le_bytes().as_slice(), &universal_canister).await;
+        store_and_read_stable(&logger, i.to_le_bytes().as_slice(), &universal_canister).await;
     }
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
@@ -163,7 +164,7 @@ pub async fn rejoin_test(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(message, &universal_canister).await;
+    store_and_read_stable(&logger, message, &universal_canister).await;
 
     info!(
         logger,
@@ -190,8 +191,21 @@ pub async fn rejoin_test(
     );
 }
 
-pub async fn store_and_read_stable(message: &[u8], universal_canister: &UniversalCanister<'_>) {
-    universal_canister.store_to_stable(0, message).await;
+pub async fn store_and_read_stable(
+    logger: &slog::Logger,
+    message: &[u8],
+    universal_canister: &UniversalCanister<'_>,
+) {
+    let mut attempts = 1;
+    // There seem to be situations where we need to retry this, especially after the subnet just unstalled itself and
+    // a rejoining node reports healthy again. Not 100% clear why that is.
+    while let Err(err) = universal_canister.try_store_to_stable(0, message).await {
+        if attempts >= STORE_TO_STABLE_RETRIES {
+            panic!("Failed to write to stable memory.");
+        }
+        info!(logger, "Retrying writing to stable: {:?}", err);
+        attempts += 1;
+    }
     assert_eq!(
         universal_canister
             .try_read_stable(0, message.len() as u32)

@@ -39,7 +39,7 @@ mod tests;
 
 /// Indicates whether the memory is kept or replaced with new (initial) memory.
 /// Applicable to both the stable memory and the main memory of a canister.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) enum MemoryHandling {
     /// Retain the memory.
     Keep,
@@ -55,7 +55,7 @@ pub(crate) enum MemoryHandling {
 ///     Retain both the main memory and the stable memory.
 ///   - For all other canisters:
 ///     Retain only the stable memory and erase the main memory.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) struct CanisterMemoryHandling {
     pub stable_memory_handling: MemoryHandling,
     pub main_memory_handling: MemoryHandling,

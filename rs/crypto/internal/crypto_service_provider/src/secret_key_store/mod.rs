@@ -153,7 +153,7 @@ impl From<SecretKeyStoreWriteError> for SecretKeyStoreInsertionError {
 }
 
 /// Errors that can occur while writing a secret key store to disk
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum SecretKeyStoreWriteError {
     SerializationError(String),
     TransientError(String),

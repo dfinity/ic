@@ -9,9 +9,11 @@ use axum::Router;
 use clap::Parser;
 use http;
 use ic_base_types::NodeId;
+use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
+use ic_limits::INITIAL_NOTARY_DELAY;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
@@ -39,12 +41,11 @@ use crate::{
     cache::Cache,
     cli::Cli,
     core::setup_router,
-    http::HttpClient,
     persist::{Persist, Persister, Routes},
     snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
-    socket::TcpConnectInfo,
 };
 
+#[derive(Debug)]
 struct TestHttpClient(usize);
 
 #[async_trait]
@@ -111,7 +112,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_ingress_messages_per_block: 1000,
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
-        initial_notary_delay_millis: 1500,
+        initial_notary_delay_millis: INITIAL_NOTARY_DELAY.as_millis() as u64,
         replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 59,
         dkg_dealings_per_block: 1,
@@ -250,6 +251,16 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+async fn add_conninfo(
+    mut request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    request
+        .extensions_mut()
+        .insert(Arc::new(ConnInfo::default()));
+    next.run(request).await
+}
+
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
@@ -258,9 +269,6 @@ pub fn setup_test_router(
     response_size: usize,
     rate_limit_subnet: Option<usize>,
 ) -> (Router, Vec<Subnet>) {
-    use axum::extract::connect_info::MockConnectInfo;
-    use std::net::SocketAddr;
-
     let mut args = vec![
         "",
         "--local-store-path",
@@ -320,10 +328,7 @@ pub fn setup_test_router(
         )),
     );
 
-    let router = router.layer(MockConnectInfo(TcpConnectInfo(SocketAddr::from((
-        [0, 0, 0, 0],
-        1337,
-    )))));
+    let router = router.layer(axum::middleware::from_fn(add_conninfo));
 
     (router, subnets)
 }

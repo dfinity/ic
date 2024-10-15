@@ -8,7 +8,7 @@ mod conversions;
 mod generic_traits;
 
 /// A wrapper for Ed25519 secret key bytes.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyBytes(pub SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = 32;

@@ -1,13 +1,17 @@
-use crate::message_routing::{ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys};
-use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
+use crate::message_routing::{
+    ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+};
+use crate::routing::demux::Demux;
+use crate::routing::stream_builder::StreamBuilder;
 use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{error, fatal, ReplicaLogger};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_types::{batch::Batch, ExecutionRound};
+use ic_types::batch::Batch;
+use ic_types::ExecutionRound;
 use std::time::Instant;
 
 #[cfg(test)]
@@ -16,7 +20,7 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
-const PHASE_TIME_OUT_REQUESTS: &str = "time_out_requests";
+const PHASE_TIME_OUT_MESSAGES: &str = "time_out_messages";
 
 pub(crate) trait StateMachine: Send {
     fn execute_round(
@@ -109,12 +113,29 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        // Time out requests.
-        let timed_out_requests = state.time_out_requests();
+        // Time out expired messages.
+        let timed_out_messages = state.time_out_messages();
         self.metrics
-            .timed_out_requests_total
-            .inc_by(timed_out_requests);
-        self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &since);
+            .timed_out_messages_total
+            .inc_by(timed_out_messages as u64);
+
+        // Time out expired callbacks.
+        let (timed_out_callbacks, errors) = state.time_out_callbacks();
+        self.metrics
+            .timed_out_callbacks_total
+            .inc_by(timed_out_callbacks as u64);
+        for error in errors {
+            // Critical error, responses should always be inducted successfully.
+            error!(
+                self.log,
+                "{}: Inducting deadline expired response failed: {}",
+                CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+                error
+            );
+            self.metrics.critical_error_induct_response_failed.inc();
+        }
+
+        self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();

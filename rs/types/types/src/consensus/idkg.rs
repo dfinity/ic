@@ -57,7 +57,7 @@ pub mod schnorr;
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedSignature {
     ReportedToExecution,
@@ -67,7 +67,7 @@ pub enum CompletedSignature {
 /// Common data that is carried in both `IDkgSummaryPayload` and `IDkgDataPayload`.
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
@@ -291,7 +291,7 @@ impl IDkgPayload {
 
 /// The unmasked transcript is paired with its attributes, which will be used
 /// in creating reshare params.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
 
@@ -359,7 +359,7 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct MasterKeyTranscript {
     /// The key transcript used for the current interval.
@@ -548,7 +548,7 @@ impl TryFrom<&pb::MasterKeyTranscript> for MasterKeyTranscript {
 /// If in the future there is a membership change, we will create a new key transcript
 /// by going through the second path above. Then the switch-over will happen at
 /// the next 'IDkgSummaryPayload'.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum KeyTranscriptCreation {
     Begin,
@@ -658,7 +658,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 }
 
 /// Internal format of the resharing request from execution.
-#[derive(Clone, Debug, Hash, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgReshareRequest {
     pub master_key_id: MasterPublicKeyId,
@@ -702,7 +702,7 @@ impl TryFrom<&pb::IDkgReshareRequest> for IDkgReshareRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
@@ -711,7 +711,7 @@ pub enum CompletedReshareRequest {
 
 /// To make sure all ids used in IDkg payload are uniquely generated,
 /// we use a generator to keep track of this state.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgUIDGenerator {
     next_unused_transcript_id: IDkgTranscriptId,
@@ -746,7 +746,7 @@ impl IDkgUIDGenerator {
 }
 
 /// The IDKG artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum IDkgMessage {
     Dealing(SignedIDkgDealing),
     DealingSupport(IDkgDealingSupport),
@@ -852,7 +852,7 @@ impl TryFrom<pb::IDkgMessage> for IDkgMessage {
 /// would need to do an exact match to filter as needed. But the collisions are expected to
 /// be rare, and the prefix lookup should usually return a single entry.
 ///
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgPrefix {
     group_tag: u64,
     meta_hash: u64,
@@ -983,7 +983,7 @@ pub fn opening_prefix(
 
 pub type IDkgArtifactIdDataOf<T> = Id<T, IDkgArtifactIdData>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgArtifactIdData {
     /// The height at which this IDkg instance was requested.
     pub height: Height,
@@ -1020,7 +1020,7 @@ impl TryFrom<pb::IDkgArtifactIdData> for IDkgArtifactIdData {
 
 pub type SigShareIdDataOf<T> = Id<T, SigShareIdData>;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub struct SigShareIdData {
     /// The height at which the signature request was paired with a pre-signature
     pub height: Height,
@@ -1049,7 +1049,7 @@ impl TryFrom<pb::SigShareIdData> for SigShareIdData {
 
 /// The identifier for artifacts/messages consists of a prefix and additional Id data.
 /// The prefix may be used for sorting and range queries in tree-like structures.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum IDkgArtifactId {
     Dealing(
         IDkgPrefixOf<SignedIDkgDealing>,
@@ -1208,7 +1208,7 @@ impl TryFrom<pb::IDkgArtifactId> for IDkgArtifactId {
 }
 
 #[derive(
-    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, EnumIter,
+    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
 )]
 pub enum IDkgMessageType {
     Dealing,
@@ -1259,7 +1259,7 @@ impl IDkgMessageType {
 }
 
 /// The ECDSA signature share
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct EcdsaSigShare {
     /// The node that signed the share
     pub signer_id: NodeId,
@@ -1308,7 +1308,7 @@ impl Display for EcdsaSigShare {
 }
 
 /// The Schnorr signature share
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct SchnorrSigShare {
     /// The node that signed the share
     pub signer_id: NodeId,
@@ -1356,7 +1356,7 @@ impl Display for SchnorrSigShare {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SigShare {
     Ecdsa(EcdsaSigShare),
     Schnorr(SchnorrSigShare),
@@ -1395,7 +1395,7 @@ impl SigShare {
 }
 
 /// Complaint related defines
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgComplaintContent {
     pub idkg_complaint: IDkgComplaint,
 }
@@ -1475,7 +1475,7 @@ impl SignedBytesWithoutDomainSeparator for SignedIDkgComplaint {
 }
 
 /// Opening related defines
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct IDkgOpeningContent {
     /// The opening
     pub idkg_opening: IDkgOpening,

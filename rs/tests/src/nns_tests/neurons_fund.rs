@@ -67,7 +67,7 @@ fn nns_neuron_info(rng: &mut ChaChaRng) -> (EdKeypair, PrincipalId, NeuronId, Su
     (key_pair, principal_id, id, account)
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct NnsNfNeuron {
     pub neuron: Neuron,
     pub controller_identity: EdKeypair,

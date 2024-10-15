@@ -7,10 +7,10 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
-    "//rs/constants",
     "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/memory_tracker",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -44,6 +44,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/registry/routing_table",
     "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
     "@crate_index//:mockall",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",

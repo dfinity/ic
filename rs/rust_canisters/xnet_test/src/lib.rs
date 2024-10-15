@@ -13,7 +13,7 @@ pub type NetworkTopology = Vec<Vec<CanisterId>>;
 /// Metrics observed by this canister.
 ///
 /// This message is used as reply payload for "metrics" query.
-#[derive(Default, CandidType, Deserialize, Debug)]
+#[derive(Debug, Default, CandidType, Deserialize)]
 pub struct Metrics {
     /// Number of requests sent.
     pub requests_sent: usize,
@@ -54,7 +54,7 @@ impl Metrics {
 ///
 /// The latency is measured using IC time, which is not guaranteed to be
 /// particularly accurate.
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(Debug, CandidType, Deserialize)]
 pub struct LatencyDistribution {
     buckets: Vec<(i64, usize)>,
     sum_millis: usize,

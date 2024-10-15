@@ -26,20 +26,13 @@ thread_local! {
     static CANISTER_IDS: RefCell<BTreeSet<CanisterId>> = const { RefCell::new(BTreeSet::new()) };
 }
 
-fn store_canister_id(canister_id: CanisterId) {
-    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
-}
-
 async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     // Create canister.
     let canister_id = create_canister(
         CreateCanisterArgument {
             settings: Some(CanisterSettings {
                 controllers: Some(vec![ic_cdk::api::id()]),
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-                reserved_cycles_limit: None,
+                ..CanisterSettings::default()
             }),
         },
         INITIAL_CYCLES_BALANCE,
@@ -49,7 +42,7 @@ async fn spinup_canister(wasm_module: Vec<u8>) -> CallResult<()> {
     .canister_id;
 
     // Store canister id.
-    store_canister_id(canister_id);
+    CANISTER_IDS.with(|canister_ids| canister_ids.borrow_mut().insert(canister_id));
 
     // Install code if provided.
     let is_wasm_module_empty = wasm_module.is_empty();
@@ -91,7 +84,7 @@ async fn spinup_canisters(args: SpinupCanistersArgs) {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Serialize, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct SpinupCanistersArgs {
     pub canisters_number: u64,
     pub wasm_module: Vec<u8>,

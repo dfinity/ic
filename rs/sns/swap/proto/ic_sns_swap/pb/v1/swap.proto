@@ -275,6 +275,15 @@ message Swap {
 
   // Amount of contributions from the Neurons' Fund committed to this SNS so far.
   optional uint64 neurons_fund_participation_icp_e8s = 20;
+
+  // Information about the timers that perform periodic tasks of this Swap canister.
+  optional Timers timers = 22;
+}
+
+message Timers {
+  optional bool requires_periodic_tasks = 1;
+  optional uint64 last_reset_timestamp_seconds = 2;
+  optional uint64 last_spawned_timestamp_seconds = 3;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -528,7 +537,7 @@ message CfParticipant {
   repeated CfNeuron cf_neurons = 2;
 
   // The principal that can vote on behalf of these Neurons' Fund neurons.
-  // Deprecated. Please use `controller` instead (not `hotkeys`!)
+  // Deprecated. Please use `controller` instead
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -701,7 +710,7 @@ message CfInvestment {
 
   fixed64 nns_neuron_id = 2;
 
-  // Deprecated. Please use `controller` instead (not `hotkey_principal`)!
+  // Deprecated. Please use `controller` instead (not `hotkeys`!)
   // TODO(NNS1-3198): Remove
   string hotkey_principal = 1 [deprecated = true];
 }
@@ -784,6 +793,9 @@ message GetStateResponse {
   Swap swap = 1;
   DerivedState derived = 2;
 }
+
+message ResetTimersRequest {}
+message ResetTimersResponse {}
 
 message GetBuyerStateRequest {
   // The principal_id of the user who's buyer state is being queried for.
@@ -1194,9 +1206,8 @@ message SettleNeuronsFundParticipationResponse {
     // has been capped to reflect the maximum participation amount for this SNS swap.
     optional bool is_capped = 4;
 
-    // Deprecated. Please use `controller` instead (not `hotkeys`!)
-    // TODO(NNS1-3198): Remove
-    optional string hotkey_principal = 3 [deprecated = true];
+    reserved 3;
+    reserved "hotkey_principal";
   }
 
   // Request was completed successfully.

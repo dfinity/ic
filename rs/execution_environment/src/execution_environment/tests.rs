@@ -1,4 +1,3 @@
-use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
@@ -523,12 +522,9 @@ fn stopping_canister_rejects_requests() {
     test.execute_message(a_id);
     test.induct_messages();
     test.stop_canister(b_id);
-    assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+    assert_eq!(
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -570,8 +566,8 @@ fn stopped_canister_rejects_requests() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
     test.execute_message(b_id);
     let system_state = &mut test.canister_state_mut(b_id).system_state;
@@ -679,24 +675,28 @@ fn stopping_a_canister_with_incorrect_controller_fails() {
     test.set_user_id(user_test_id(13));
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(
-        ingress_status,
-        IngressStatus::Known {
-            receiver: ic00::IC_00.get(),
-            user_id: user_test_id(13),
-            time: test.time(),
-            state: IngressState::Failed(UserError::new(
-                ErrorCode::CanisterInvalidController,
-                format!(
-                    "Only the controllers of the canister {} can control it.\n\
+    let IngressStatus::Known {
+        receiver,
+        user_id,
+        time,
+        state: IngressState::Failed(error),
+    } = ingress_status
+    else {
+        panic!("Unexpected ingress status {ingress_status:?}")
+    };
+    assert_eq!(receiver, ic00::IC_00.get());
+    assert_eq!(user_id, user_test_id(13));
+    assert_eq!(time, test.time());
+    error.assert_contains(
+        ErrorCode::CanisterInvalidController,
+        &format!(
+            "Only the controllers of the canister {} can control it.\n\
                     Canister's controllers: {}\n\
                     Sender's ID: {}",
-                    canister_id,
-                    controller.get(),
-                    user_test_id(13).get()
-                )
-            )),
-        }
+            canister_id,
+            controller.get(),
+            user_test_id(13).get()
+        ),
     );
 }
 
@@ -1444,7 +1444,7 @@ fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls
             if let CanisterStatus::Stopping {
                 call_context_manager: _,
                 stop_contexts,
-            } = &canister.system_state.status
+            } = canister.system_state.get_status()
             {
                 Some(stop_contexts.iter().cloned())
             } else {
@@ -2365,7 +2365,6 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_caller(nns_subnet, nns_canister)
             .with_idkg_key(key_id.clone())
-            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
             .build();
 
         test.inject_call_to_ic00(
@@ -2390,7 +2389,6 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_caller(other_subnet, other_canister)
             .with_idkg_key(key_id.clone())
-            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
             .build();
 
         test.inject_call_to_ic00(
@@ -2420,7 +2418,6 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
             .with_own_subnet_id(own_subnet)
             .with_nns_subnet_id(nns_subnet)
             .with_caller(nns_subnet, nns_canister)
-            .with_ic00_compute_initial_i_dkg_dealings(FlagStatus::Enabled)
             .build();
 
         test.inject_call_to_ic00(
@@ -2466,7 +2463,6 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
 
         let canister_id = test.universal_canister().unwrap();
@@ -2542,7 +2538,6 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
         let canister_id = test.universal_canister().unwrap();
         let run = wasm()
@@ -2587,7 +2582,6 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_idkg_key(correct_key.clone())
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
         let canister_id = test.universal_canister().unwrap();
         let run = wasm()
@@ -2642,8 +2636,6 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
             .with_nns_subnet_id(subnet_test_id(2))
             .with_signing_disabled_idkg_key(signing_disabled_key.clone())
             .with_caller(own_subnet_id, canister_id)
-            .with_ic00_schnorr_public_key(FlagStatus::Enabled)
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
 
         // Requesting disabled public key (should succeed).
@@ -2718,7 +2710,6 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
             .with_own_subnet_id(subnet_test_id(1))
             .with_nns_subnet_id(subnet_test_id(2))
             .with_idkg_key(correct_key.clone())
-            .with_ic00_schnorr_public_key(FlagStatus::Enabled)
             .build();
         let canister_id = test.universal_canister().unwrap();
         let run = wasm()
@@ -2769,7 +2760,6 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
 
         let canister_id = test.universal_canister().unwrap();
@@ -2839,7 +2829,6 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
             .with_idkg_key(key_id.clone())
-            .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
             .build();
         let canister_id = test.universal_canister().unwrap();
         let run = wasm()
@@ -3657,120 +3646,6 @@ fn test_fetch_canister_logs_should_accept_ingress_message() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_api_flag() {
-    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
-        let key_id = make_schnorr_key("correct_key");
-        let own_subnet = subnet_test_id(1);
-        let nns_subnet = subnet_test_id(2);
-        let nns_canister = canister_test_id(0x10);
-        let mut test = ExecutionTestBuilder::new()
-            .with_own_subnet_id(own_subnet)
-            .with_nns_subnet_id(nns_subnet)
-            .with_caller(nns_subnet, nns_canister)
-            .with_idkg_key(key_id.clone())
-            .with_ic00_compute_initial_i_dkg_dealings(flag)
-            .build();
-        test.inject_call_to_ic00(
-            Method::ComputeInitialIDkgDealings,
-            ic00::ComputeInitialIDkgDealingsArgs::new(
-                key_id,
-                own_subnet,
-                Default::default(),
-                RegistryVersion::from(100),
-            )
-            .encode(),
-            Cycles::new(0),
-        );
-        test.execute_all();
-        if flag == FlagStatus::Enabled {
-            assert_eq!(test.xnet_messages().len(), 0)
-        } else {
-            assert_eq!(
-                get_reject_message(test.xnet_messages()[0].clone()),
-                "compute_initial_i_dkg_dealings API is not yet implemented.",
-            )
-        }
-    }
-}
-
-#[test]
-fn test_schnorr_public_key_api_flag() {
-    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
-        let key_id = make_schnorr_key("correct_key");
-        let own_subnet = subnet_test_id(1);
-        let nns_subnet = subnet_test_id(2);
-        let nns_canister = canister_test_id(0x10);
-        let mut test = ExecutionTestBuilder::new()
-            .with_own_subnet_id(own_subnet)
-            .with_nns_subnet_id(nns_subnet)
-            .with_caller(nns_subnet, nns_canister)
-            .with_idkg_key(key_id.clone())
-            .with_ic00_schnorr_public_key(flag)
-            .build();
-        test.inject_call_to_ic00(
-            Method::SchnorrPublicKey,
-            ic00::SchnorrPublicKeyArgs {
-                canister_id: None,
-                derivation_path: DerivationPath::new(vec![]),
-                key_id: into_inner_schnorr(key_id),
-            }
-            .encode(),
-            Cycles::new(0),
-        );
-        test.execute_all();
-        if flag == FlagStatus::Enabled {
-            // Note this fails with internal error as the test environment doesn't hold a valid key.
-            // However, this is enough to assert that the correct endpoint is reached.
-            assert_eq!(
-                get_reject_message(test.xnet_messages()[0].clone()),
-                "InternalError(\"InvalidPoint\")",
-            )
-        } else {
-            assert_eq!(
-                get_reject_message(test.xnet_messages()[0].clone()),
-                "schnorr_public_key API is not yet implemented."
-            )
-        }
-    }
-}
-
-#[test]
-fn test_sign_with_schnorr_api_flag() {
-    for flag in [FlagStatus::Disabled, FlagStatus::Enabled] {
-        let key_id = make_schnorr_key("correct_key");
-        let own_subnet = subnet_test_id(1);
-        let nns_subnet = subnet_test_id(2);
-        let nns_canister = canister_test_id(0x10);
-        let mut test = ExecutionTestBuilder::new()
-            .with_own_subnet_id(own_subnet)
-            .with_nns_subnet_id(nns_subnet)
-            .with_caller(nns_subnet, nns_canister)
-            .with_idkg_key(key_id.clone())
-            .with_ic00_sign_with_schnorr(flag)
-            .build();
-        test.inject_call_to_ic00(
-            Method::SignWithSchnorr,
-            ic00::SignWithSchnorrArgs {
-                message: vec![],
-                derivation_path: DerivationPath::new(vec![]),
-                key_id: into_inner_schnorr(key_id),
-            }
-            .encode(),
-            Cycles::new(0),
-        );
-        test.execute_all();
-        if flag == FlagStatus::Enabled {
-            assert_eq!(test.xnet_messages().len(), 0)
-        } else {
-            assert_eq!(
-                get_reject_message(test.xnet_messages()[0].clone()),
-                "sign_with_schnorr API is not yet implemented.",
-            )
-        }
-    }
-}
-
-#[test]
 fn test_sign_with_schnorr_api_is_enabled() {
     // TODO(EXC-1629): upgrade to more of e2e test with mocking the response
     // from consensus and producing the response to the canister.
@@ -3785,7 +3660,6 @@ fn test_sign_with_schnorr_api_is_enabled() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(nns_subnet, nns_canister)
         .with_idkg_key(key_id.clone())
-        .with_ic00_sign_with_schnorr(FlagStatus::Enabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
     // Check that the SubnetCallContextManager is empty.

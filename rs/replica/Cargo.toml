@@ -21,6 +21,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
+ic-http-endpoints-xnet = { path = "../http_endpoints/xnet" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
@@ -41,7 +42,6 @@ ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
-ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
 libc = { workspace = true }
 nix = { workspace = true }
@@ -71,7 +71,7 @@ ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "3.0.4"
-wat = "1.0.52"
+wat = { workspace = true }
 
 [[bench]]
 name = "calls"

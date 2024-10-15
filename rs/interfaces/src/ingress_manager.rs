@@ -50,7 +50,7 @@ impl IngressSetQuery for IngressSets {
 }
 
 /// Reasons for why an ingress payload might be invalid.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum InvalidIngressPayloadReason {
     IngressValidationError(MessageId, String),
     IngressPayloadError(IngressPayloadError),
@@ -66,7 +66,7 @@ pub enum InvalidIngressPayloadReason {
 }
 
 /// Reasons for validation failures.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum IngressPayloadValidationFailure {
     StateManagerError(Height, StateManagerError),
     IngressHistoryError(Height, IngressHistoryError),

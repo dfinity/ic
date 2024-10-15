@@ -2,7 +2,7 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::{neuron_id_range_to_u64_range, types::Neuron},
+    neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
@@ -17,10 +17,9 @@ use crate::{
     },
     Clock, IcClock,
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nervous_system_governance::index::{
     neuron_following::{HeapNeuronFollowingIndex, NeuronFollowingIndex},
     neuron_principal::NeuronPrincipalIndex,
@@ -37,7 +36,7 @@ use std::{
 pub mod metrics;
 pub(crate) use metrics::NeuronMetrics;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
     NeuronNotFound {
         neuron_id: NeuronId,
@@ -64,6 +63,7 @@ pub enum NeuronStoreError {
         principal_id: PrincipalId,
         neuron_id: NeuronId,
     },
+    NeuronIdGenerationUnavailable,
 }
 
 impl NeuronStoreError {
@@ -161,6 +161,13 @@ impl Display for NeuronStoreError {
                     principal_id, neuron_id
                 )
             }
+            NeuronStoreError::NeuronIdGenerationUnavailable => {
+                write!(
+                    f,
+                    "Neuron ID generation is not available currently. \
+                    Likely due to uninitialized RNG."
+                )
+            }
         }
     }
 }
@@ -177,6 +184,7 @@ impl From<NeuronStoreError> for GovernanceError {
             NeuronStoreError::NeuronAlreadyExists(_) => ErrorType::PreconditionFailed,
             NeuronStoreError::InvalidData { .. } => ErrorType::PreconditionFailed,
             NeuronStoreError::NotAuthorizedToGetFullNeuron { .. } => ErrorType::NotAuthorized,
+            NeuronStoreError::NeuronIdGenerationUnavailable => ErrorType::Unavailable,
         };
         GovernanceError::new_with_message(error_type, value.to_string())
     }
@@ -188,7 +196,7 @@ dyn_clone::clone_trait_object!(PracticalClock);
 impl PracticalClock for IcClock {}
 
 /// This structure represents a whole Neuron's Fund neuron.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct NeuronsFundNeuron {
     pub id: NeuronId,
     pub maturity_equivalent_icp_e8s: u64,
@@ -385,10 +393,11 @@ impl NeuronStore {
         self.clock.set_time_warp(new_time_warp);
     }
 
-    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> NeuronId {
+    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> Result<NeuronId, NeuronStoreError> {
         loop {
             let id = env
                 .random_u64()
+                .map_err(|_| NeuronStoreError::NeuronIdGenerationUnavailable)?
                 // Let there be no question that id was chosen
                 // intentionally, not just 0 by default.
                 .saturating_add(1);
@@ -397,10 +406,10 @@ impl NeuronStore {
             let is_unique = !self.contains(neuron_id);
 
             if is_unique {
-                return neuron_id;
+                return Ok(neuron_id);
             }
 
-            dfn_core::println!(
+            ic_cdk::println!(
                 "{}WARNING: A suspiciously near-impossible event has just occurred: \
                  we randomly picked a NeuronId, but it's already used: \
                  {:?}. Trying again...",
@@ -679,13 +688,7 @@ impl NeuronStore {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
 
-    /// Get a reference to heap neurons.  Temporary method to allow
-    /// access to the heap neurons during transition to better data hiding.
-    pub fn heap_neurons(&self) -> &BTreeMap<u64, Neuron> {
-        &self.heap_neurons
-    }
-
-    fn heap_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
+    pub fn active_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
         self.heap_neurons.values()
     }
 
@@ -693,24 +696,38 @@ impl NeuronStore {
     ///
     /// The len of the result is at most limit. It is also maximal; that is, if the return value has
     /// len < limit, then the caller can assume that there are no more Neurons.
-    pub fn range_heap_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    pub fn active_neurons_range<R>(&self, range: R) -> impl Iterator<Item = &Neuron> + '_
     where
         R: RangeBounds<NeuronId>,
     {
+        fn neuron_id_range_to_u64_range(
+            range: &impl RangeBounds<NeuronId>,
+        ) -> impl RangeBounds<u64> {
+            let first = match range.start_bound() {
+                std::ops::Bound::Included(start) => start.id,
+                std::ops::Bound::Excluded(start) => start.id + 1,
+                std::ops::Bound::Unbounded => 0,
+            };
+            let last = match range.end_bound() {
+                std::ops::Bound::Included(end) => end.id,
+                std::ops::Bound::Excluded(end) => end.id - 1,
+                std::ops::Bound::Unbounded => u64::MAX,
+            };
+            first..=last
+        }
+
         let range = neuron_id_range_to_u64_range(&range);
 
-        self.heap_neurons
-            .range(range)
-            .map(|(_id, neuron)| neuron.clone())
+        self.heap_neurons.range(range).map(|(_, neuron)| neuron)
     }
 
     /// Internal - map over neurons after filtering
-    fn map_heap_neurons_filtered<R>(
+    fn filter_map_active_neurons<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
         f: impl FnMut(&Neuron) -> R,
     ) -> Vec<R> {
-        self.heap_neurons_iter()
+        self.active_neurons_iter()
             .filter(|n| filter(n))
             .map(f)
             .collect()
@@ -725,7 +742,7 @@ impl NeuronStore {
                     .unwrap_or_default()
                     > 0
         };
-        self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
+        self.filter_map_active_neurons(filter, |n| NeuronsFundNeuron {
             id: n.id(),
             controller: n.controller(),
             hotkeys: pick_most_important_hotkeys(&n.hot_keys),
@@ -738,7 +755,7 @@ impl NeuronStore {
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
         let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
-        self.map_heap_neurons_filtered(filter, |neuron| neuron.id())
+        self.filter_map_active_neurons(filter, |neuron| neuron.id())
     }
 
     /// List all neuron ids of known neurons
@@ -757,14 +774,14 @@ impl NeuronStore {
             // so it would be quite surprising if it is missing here (impossible in fact)
             now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
         };
-        self.map_heap_neurons_filtered(filter, |n| n.id())
+        self.filter_map_active_neurons(filter, |n| n.id())
     }
 
     /// Returns an iterator of all voting-eligible neurons
     pub fn voting_eligible_neurons(&self, now_seconds: u64) -> impl Iterator<Item = &Neuron> {
         // This should be safe to do without with_neuron because
         // all voting_eligible neurons should be in the heap
-        self.heap_neurons_iter().filter(move |&neuron| {
+        self.active_neurons_iter().filter(move |&neuron| {
             neuron.dissolve_delay_seconds(now_seconds)
                 >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
         })
@@ -991,6 +1008,10 @@ impl NeuronStore {
     }
 
     // Census
+
+    pub fn heap_neuron_store_len(&self) -> usize {
+        self.heap_neurons.len()
+    }
 
     pub fn stable_neuron_store_len(&self) -> usize {
         with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.len())

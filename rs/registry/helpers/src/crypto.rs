@@ -220,7 +220,7 @@ pub mod root_of_trust {
         }
     }
 
-    #[derive(Error, Clone, Debug, PartialEq, Eq)]
+    #[derive(Clone, Eq, PartialEq, Debug, Error)]
     pub enum RegistryRootOfTrustProviderError {
         #[error("registry client error: {0}")]
         RegistryError(RegistryClientError),

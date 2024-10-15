@@ -90,7 +90,7 @@ pub fn config_fast(env: TestEnv) {
     install_aggregator(&env);
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AggregatorClient {
     canister_id: PrincipalId,
 }
@@ -426,7 +426,7 @@ pub fn validate_aggregator_data(env: TestEnv) {
             // We've already checked above that the SNS sale params had propagated through the aggregator canister.
             // Thus, they must also be available while querying the SNS directly.
             let mut sns_sale_params = res.swap.unwrap().params.unwrap();
-            let sns_sale_params_json = serde_json::to_value(sns_sale_params.clone()).unwrap();
+            let sns_sale_params_json = serde_json::to_value(sns_sale_params).unwrap();
             info!(
                 log,
                 "Obtained SNS sale parameters from SNS sale canister: {sns_sale_params_json:#}"

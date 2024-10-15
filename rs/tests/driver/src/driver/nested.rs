@@ -16,6 +16,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use deterministic_ips::{calculate_deterministic_mac, Deployment, HwAddr, IpVariant};
 use serde::{Deserialize, Serialize};
+use slog::info;
 use ssh2::Session;
 use url::Url;
 
@@ -34,7 +35,7 @@ impl NestedNode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NestedNetwork {
     pub guest_ip: Ipv6Addr,
     pub host_ip: Ipv6Addr,
@@ -143,6 +144,10 @@ impl NestedVms for TestEnv {
         let guest_ip = guest_mac.calculate_slaac(&prefix).unwrap();
 
         let nested_network = NestedNetwork { guest_ip, host_ip };
+        info!(
+            self.logger(),
+            "Nested network Host IP: {host_ip}, Guest IP: {guest_ip}"
+        );
         let mapped_vm = AllocatedVm {
             ipv6: host_ip,
             ..vm.clone()

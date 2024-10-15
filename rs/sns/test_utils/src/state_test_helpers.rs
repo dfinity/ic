@@ -50,7 +50,7 @@ pub fn state_machine_builder_for_sns_tests() -> StateMachineBuilder {
     StateMachineBuilder::new().with_current_time()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone, Debug)]
 pub struct SnsTestCanisterIds {
     pub root_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
@@ -316,7 +316,7 @@ pub fn participate_in_swap(
     Decode!(&response, RefreshBuyerTokensResponse).unwrap()
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum SnsCanisterType {
     Ledger,
     Root,

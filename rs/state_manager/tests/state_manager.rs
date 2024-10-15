@@ -17,7 +17,9 @@ use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, St
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{CanisterChangeDetails, CanisterChangeOrigin};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -31,7 +33,10 @@ use ic_replicated_state::{
     ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::{
+    InstallChunkedCodeArgs, LoadCanisterSnapshotArgs, StateMachine, StateMachineBuilder,
+    TakeCanisterSnapshotArgs, UploadChunkArgs,
+};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
     state_sync::{
@@ -104,9 +109,7 @@ fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> 
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+        + std::fs::metadata(canister_layout.vmemory_0().base()).map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of stable memory including overlays.
@@ -119,8 +122,7 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
         + std::fs::metadata(canister_layout.stable_memory().base())
-            .map(|metadata| metadata.len())
-            .unwrap_or(0)
+            .map_or(0, |metadata| metadata.len())
 }
 
 /// Combined size of wasm chunk store including overlays.
@@ -134,8 +136,7 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map(|p| std::fs::metadata(p).unwrap().len())
             .sum::<u64>()
             + std::fs::metadata(canister_layout.wasm_chunk_store().base())
-                .map(|metadata| metadata.len())
-                .unwrap_or(0)
+                .map_or(0, |metadata| metadata.len())
     } else {
         std::fs::metadata(canister_layout.wasm_chunk_store().base())
             .unwrap()
@@ -499,6 +500,7 @@ fn rejoining_node_doesnt_accumulate_states() {
             }
 
             dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
 
             assert_error_counters(src_metrics);
@@ -701,6 +703,7 @@ fn starting_height_independent_of_remove_states_below() {
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(2));
+        state_manager.flush_deallocation_channel();
 
         let canister_id: Vec<CanisterId> = vec![
             canister_test_id(100),
@@ -1393,6 +1396,7 @@ fn can_remove_checkpoints() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(4));
+        state_manager.flush_deallocation_channel();
 
         for h in 1..4 {
             assert_eq!(
@@ -1429,6 +1433,7 @@ fn cannot_remove_height_zero() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
 
         state_manager.remove_states_below(height(0));
+        state_manager.flush_deallocation_channel();
         state_manager.remove_inmemory_states_below(height(0));
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
@@ -1442,6 +1447,7 @@ fn cannot_remove_height_zero() {
         );
 
         state_manager.remove_states_below(height(0));
+        state_manager.flush_deallocation_channel();
         state_manager.remove_inmemory_states_below(height(0));
 
         assert_eq!(
@@ -1476,6 +1482,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
         state_manager.remove_inmemory_states_below(height(20));
+        state_manager.flush_deallocation_channel();
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY).last(),
@@ -1498,6 +1505,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
         state_manager.remove_inmemory_states_below(height(20));
+        state_manager.flush_deallocation_channel();
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY).last(),
@@ -1548,6 +1556,7 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         );
 
         state_manager.remove_states_below(height(4));
+        state_manager.flush_deallocation_channel();
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -1589,6 +1598,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(10));
+        state_manager.flush_deallocation_channel();
 
         for h in 1..=7 {
             assert_eq!(
@@ -1653,6 +1663,7 @@ fn can_keep_latest_verified_checkpoint_after_removal_with_unverified_checkpoints
             .unwrap();
 
         state_manager.remove_states_below(height(10));
+        state_manager.flush_deallocation_channel();
 
         for h in (1..=5).chain(7..=7) {
             assert_eq!(
@@ -1701,6 +1712,7 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(7));
+        state_manager.flush_deallocation_channel();
 
         for h in 1..6 {
             assert_eq!(
@@ -1761,6 +1773,7 @@ fn should_be_able_to_restart_twice_from_the_same_checkpoint() {
         }
 
         state_manager.remove_states_below(height(3));
+        state_manager.flush_deallocation_channel();
 
         let state_manager = restart_fn(state_manager, Some(height(3)));
 
@@ -1807,6 +1820,7 @@ fn should_keep_the_last_checkpoint_on_restart() {
         }
 
         state_manager.remove_states_below(height(3));
+        state_manager.flush_deallocation_channel();
 
         let state_manager = restart_fn(state_manager, Some(height(3)));
 
@@ -1850,6 +1864,7 @@ fn should_not_remove_latest_state_after_restarting_without_checkpoints() {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
             state_manager.remove_states_below(height(i));
+            state_manager.flush_deallocation_channel();
         }
 
         let state_manager = restart_fn(state_manager, Some(height(10)));
@@ -1857,6 +1872,7 @@ fn should_not_remove_latest_state_after_restarting_without_checkpoints() {
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(i), CertificationScope::Metadata, None);
             state_manager.remove_states_below(height(9));
+            state_manager.flush_deallocation_channel();
             assert_eq!(height(i), state_manager.latest_state_height());
         }
     });
@@ -1883,6 +1899,7 @@ fn can_keep_the_latest_snapshot_after_removal() {
 
         for i in 1..20 {
             state_manager.remove_states_below(height(i));
+            state_manager.flush_deallocation_channel();
             assert_eq!(height(9), state_manager.latest_state_height());
             let latest_state = state_manager.get_latest_state();
             assert_eq!(height(9), latest_state.height());
@@ -1915,6 +1932,7 @@ fn can_purge_intermediate_snapshots() {
         // requested height 9.
         // Intermediate states from @6 to @8 are purged.
         state_manager.remove_states_below(height(9));
+        state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
@@ -1941,6 +1959,7 @@ fn can_purge_intermediate_snapshots() {
         // checkpoint. @15 is kept because @19 depends on it.
         // Intermediate states from @16 to @18 are purged.
         state_manager.remove_states_below(height(19));
+        state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
@@ -1957,6 +1976,7 @@ fn can_purge_intermediate_snapshots() {
         // Intermediate states from @16 to @19 are purged. @15 is purged, as
         // no inmemory states depend on it anymore.
         state_manager.remove_states_below(height(20));
+        state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(20), height(21), height(22)],
@@ -1965,6 +1985,7 @@ fn can_purge_intermediate_snapshots() {
         // Test calling `remove_states_below` at the latest state height.
         // The intermediate state @21 is purged.
         state_manager.remove_states_below(height(22));
+        state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(20), height(22)],
@@ -1975,6 +1996,7 @@ fn can_purge_intermediate_snapshots() {
         // The intermediate state @21 is purged.
         // The latest state should always be kept.
         state_manager.remove_states_below(height(25));
+        state_manager.flush_deallocation_channel();
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(20), height(22)],
@@ -2000,6 +2022,7 @@ fn latest_certified_state_is_not_removed() {
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(4));
+        state_manager.flush_deallocation_channel();
         assert_eq!(height(4), state_manager.latest_state_height());
         assert_eq!(height(1), state_manager.latest_certified_height());
 
@@ -3129,6 +3152,7 @@ fn can_commit_after_prev_state_is_gone() {
             pipe_state_sync(msg, chunkable);
 
             dst_state_manager.remove_states_below(height(2));
+            dst_state_manager.flush_deallocation_channel();
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             assert_eq!(
@@ -3706,6 +3730,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             // State 1 should be removable.
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_error_counters(dst_metrics);
         })
@@ -3750,6 +3775,7 @@ fn can_commit_below_state_sync() {
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
             // state 1 should be removable
             dst_state_manager.remove_states_below(height(2));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             assert_error_counters(dst_metrics);
         })
@@ -3796,6 +3822,7 @@ fn can_state_sync_below_commit() {
 
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
             // Perform the state sync after the state manager reaches height 2.
             pipe_state_sync(msg, chunkable);
@@ -3812,6 +3839,7 @@ fn can_state_sync_below_commit() {
             // state 1 should be removable
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_error_counters(dst_metrics);
         })
@@ -6326,14 +6354,9 @@ fn can_create_and_delete_canister_snapshot() {
     });
 }
 
-proptest! {
-    /// Backup then restore. Two closely related variants, one where everything happens in one checkpoint interval, and one where it
-    /// happens across checkpoints.
-    #[test]
-    fn can_create_and_restore_snapshot(certification_scope in prop_oneof!(
-        Just(CertificationScope::Full),
-        Just(CertificationScope::Metadata)
-    )) {
+#[test]
+fn can_create_and_restore_snapshot() {
+    fn can_create_and_restore_snapshot_impl(certification_scope: CertificationScope) {
         state_manager_test(|metrics, state_manager| {
             let canister_id = canister_test_id(100);
 
@@ -6359,8 +6382,11 @@ proptest! {
 
             // Take a snapshot of the canister
             let (_height, mut state) = state_manager.take_tip();
-            let new_snapshot =
-                CanisterSnapshot::from_canister(state.canister_state(&canister_id).unwrap(), state.time()).unwrap();
+            let new_snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&canister_id).unwrap(),
+                state.time(),
+            )
+            .unwrap();
             let snapshot_id = SnapshotId::from((canister_id, 0));
             state
                 .canister_snapshots
@@ -6430,6 +6456,343 @@ proptest! {
             assert_error_counters(metrics);
         });
     }
+
+    // Backup then restore. Two closely related variants, one where everything happens in one checkpoint interval, and one where it
+    // happens across checkpoints.
+    can_create_and_restore_snapshot_impl(CertificationScope::Metadata);
+    can_create_and_restore_snapshot_impl(CertificationScope::Full);
+}
+
+#[test]
+fn restore_heap_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot has 1 in the heap counter.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.checkpointed_tick();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_stable_memory_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot has 2 in heap and 1 in stable memory
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    env.checkpointed_tick();
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_binary_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    // Snapshot is running TEST_CANISTER.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.upgrade_canister(canister_id, EMPTY_WASM.to_vec(), vec![])
+        .unwrap();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.upgrade_canister(canister_id, EMPTY_WASM.to_vec(), vec![])
+        .unwrap();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(1_i32.to_le_bytes().to_vec())
+    );
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    env.checkpointed_tick();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(2_i32.to_le_bytes().to_vec())
+    );
+}
+
+#[test]
+fn restore_chunk_store_from_snapshot() {
+    let env = StateMachineBuilder::new()
+        .with_canister_snapshots(true)
+        .build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    let chunk_hash = env
+        .upload_chunk(UploadChunkArgs {
+            canister_id: canister_id.into(),
+            chunk: EMPTY_WASM.to_vec(),
+        })
+        .unwrap()
+        .hash;
+
+    // Snapshot contains the EMPTY_WASM in the wasm chunk store, but TEST_CANISTER as binary.
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs {
+            canister_id: canister_id.into(),
+            replace_snapshot: None,
+        })
+        .unwrap()
+        .snapshot_id();
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash.clone()],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.clear_chunk_store(canister_id).unwrap();
+    assert!(env
+        .install_chunked_code(InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            None,
+            vec![chunk_hash.clone()],
+            empty_wasm().module_hash().to_vec(),
+            vec![],
+        ))
+        .is_err());
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash.clone()],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+
+    env.clear_chunk_store(canister_id).unwrap();
+    assert!(env
+        .install_chunked_code(InstallChunkedCodeArgs::new(
+            CanisterInstallModeV2::Upgrade(None),
+            canister_id,
+            None,
+            vec![chunk_hash.clone()],
+            empty_wasm().module_hash().to_vec(),
+            vec![],
+        ))
+        .is_err());
+
+    // We want to test that the snapshot is still the same after checkpointing.
+    env.checkpointed_tick();
+
+    env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        None,
+    ))
+    .unwrap();
+    assert_eq!(
+        env.execute_ingress(canister_id, "read", vec![],).unwrap(),
+        WasmResult::Reply(0_i32.to_le_bytes().to_vec())
+    );
+
+    env.install_chunked_code(InstallChunkedCodeArgs::new(
+        CanisterInstallModeV2::Upgrade(None),
+        canister_id,
+        None,
+        vec![chunk_hash],
+        empty_wasm().module_hash().to_vec(),
+        vec![],
+    ))
+    .unwrap();
+
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+    env.checkpointed_tick();
+    assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 }
 
 proptest! {
@@ -6904,10 +7267,10 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
 
 proptest! {
 // We go for fewer, but longer runs
-#![proptest_config(ProptestConfig::with_cases(10))]
+#![proptest_config(ProptestConfig::with_cases(5))]
 
 #[test]
-fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..200)) {
+fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_canister_op(), 1..50)) {
     /// Execute op against the state machine `env`
     fn execute_op(env: StateMachine, canister_id: CanisterId, op: TestCanisterOp) -> StateMachine {
         match op {

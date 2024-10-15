@@ -31,6 +31,7 @@ use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
+use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -52,7 +53,7 @@ const SEND_RATE_THRESHOLD: f64 = 0.3;
 const ERROR_PERCENTAGE_THRESHOLD: f64 = 5.0;
 const TARGETED_LATENCY_SECONDS: u64 = 20;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     subnets: usize,
     nodes_per_subnet: usize,
@@ -64,6 +65,7 @@ pub struct Config {
     subnet_to_subnet_rate: usize,
     canisters_per_subnet: usize,
     canister_to_subnet_rate: usize,
+    with_prometheus: bool,
 }
 
 impl Config {
@@ -111,7 +113,14 @@ impl Config {
             subnet_to_subnet_rate,
             canisters_per_subnet,
             canister_to_subnet_rate,
+            with_prometheus: false,
         }
+    }
+
+    pub fn with_prometheus(self) -> Self {
+        let mut config = self.clone();
+        config.with_prometheus = true;
+        config
     }
 
     /// Builds the IC instance.
@@ -133,11 +142,20 @@ fn setup(env: TestEnv, config: Config) {
         })
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
+    if config.with_prometheus {
+        PrometheusVm::default()
+            .start(&env)
+            .expect("failed to start prometheus VM");
+    }
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
+    if config.with_prometheus {
+        env.sync_with_prometheus();
+    }
 }
 
 pub fn test(env: TestEnv, config: Config) {
@@ -421,7 +439,7 @@ pub(crate) fn check_success(
 /// # Panics
 /// - If the nodes provided in `nodes` are incompatible with `config`.
 /// - On test failure.
-pub(crate) async fn test_async_impl(
+pub async fn test_async_impl(
     env: TestEnv,
     endpoints_runtimes: impl Iterator<Item = Runtime>,
     config: Config,

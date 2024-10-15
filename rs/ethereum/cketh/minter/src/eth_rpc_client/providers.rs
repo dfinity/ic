@@ -1,23 +1,21 @@
-use evm_rpc_client::types::candid::{
-    EthSepoliaService as EvmEthSepoliaService, RpcService as EvmRpcService,
-    RpcServices as EvmRpcServices,
-};
+use crate::lifecycle::EthereumNetwork;
+use evm_rpc_client::{RpcService as EvmRpcService, RpcServices as EvmRpcServices};
 
-pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
-    RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
+pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 4] = [
+    RpcNodeProvider::Ethereum(EthereumProvider::BlockPi),
     RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
     RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
+    RpcNodeProvider::Ethereum(EthereumProvider::Alchemy),
 ];
 
-pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
-    RpcNodeProvider::Sepolia(SepoliaProvider::Ankr),
+pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 4] = [
+    RpcNodeProvider::Sepolia(SepoliaProvider::BlockPi),
     RpcNodeProvider::Sepolia(SepoliaProvider::PublicNode),
+    RpcNodeProvider::Sepolia(SepoliaProvider::Alchemy),
+    RpcNodeProvider::Sepolia(SepoliaProvider::RpcSepolia),
 ];
 
-const EVM_RPC_SEPOLIA_PROVIDERS: [EvmEthSepoliaService; 2] =
-    [EvmEthSepoliaService::Ankr, EvmEthSepoliaService::PublicNode];
-
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub(crate) enum RpcNodeProvider {
     Ethereum(EthereumProvider),
     Sepolia(SepoliaProvider),
@@ -37,61 +35,74 @@ impl RpcNodeProvider {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum EthereumProvider {
-    // https://www.ankr.com/rpc/
-    Ankr,
+    // https://blockpi.io/
+    BlockPi,
     // https://publicnode.com/
     PublicNode,
     // https://llamanodes.com/
     LlamaNodes,
+    Alchemy,
 }
 
 impl EthereumProvider {
     fn ethereum_mainnet_endpoint_url(&self) -> &str {
         match self {
-            EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
+            EthereumProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             EthereumProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             EthereumProvider::LlamaNodes => "https://eth.llamarpc.com",
+            EthereumProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
         }
     }
 
     // TODO XC-131: Replace using Custom providers with EthMainnetService,
     // when LlamaNodes is supported as a provider.
     pub(crate) fn evm_rpc_node_providers() -> EvmRpcServices {
-        use evm_rpc_client::types::candid::RpcApi as EvmRpcApi;
-
-        let services = MAINNET_PROVIDERS
-            .iter()
-            .map(|provider| EvmRpcApi {
-                url: provider.url().to_string(),
-                headers: None,
-            })
-            .collect();
-        EvmRpcServices::Custom {
-            chain_id: 1,
-            services,
-        }
+        evm_rpc_node_providers(&EthereumNetwork::Mainnet)
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub(crate) enum SepoliaProvider {
-    // https://www.ankr.com/rpc/
-    Ankr,
+    // https://blockpi.io/
+    BlockPi,
     // https://publicnode.com/
     PublicNode,
+    // https://www.alchemy.com/chain-connect/endpoints/rpc-sepolia-sepolia
+    Alchemy,
+    RpcSepolia,
 }
 
 impl SepoliaProvider {
     fn ethereum_sepolia_endpoint_url(&self) -> &str {
         match self {
-            SepoliaProvider::Ankr => "https://rpc.ankr.com/eth_sepolia",
+            SepoliaProvider::BlockPi => "https://ethereum-sepolia.blockpi.network/v1/rpc/public",
             SepoliaProvider::PublicNode => "https://ethereum-sepolia-rpc.publicnode.com",
+            SepoliaProvider::Alchemy => "https://eth-sepolia.g.alchemy.com/v2/demo",
+            SepoliaProvider::RpcSepolia => "https://rpc.sepolia.org",
         }
     }
 
     pub(crate) fn evm_rpc_node_providers() -> EvmRpcServices {
-        EvmRpcServices::EthSepolia(Some(EVM_RPC_SEPOLIA_PROVIDERS.to_vec()))
+        evm_rpc_node_providers(&EthereumNetwork::Sepolia)
     }
+}
+
+fn evm_rpc_node_providers(ethereum_network: &EthereumNetwork) -> EvmRpcServices {
+    use evm_rpc_client::RpcApi as EvmRpcApi;
+
+    let providers = match ethereum_network {
+        EthereumNetwork::Mainnet => MAINNET_PROVIDERS.as_slice(),
+        EthereumNetwork::Sepolia => SEPOLIA_PROVIDERS.as_slice(),
+    };
+    let chain_id = ethereum_network.chain_id();
+    let services = providers
+        .iter()
+        .map(|provider| EvmRpcApi {
+            url: provider.url().to_string(),
+            headers: None,
+        })
+        .collect();
+    EvmRpcServices::Custom { chain_id, services }
 }

@@ -14,7 +14,7 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential},
+    governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
@@ -39,6 +39,12 @@ use std::{
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
+
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{
+    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+};
+use ic_nns_governance::{tla_log_request, tla_log_response};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -258,6 +264,18 @@ impl IcpLedger for FakeDriver {
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
         );
+        tla_log_request!(
+            "WaitForTransfer",
+            Destination::new("ledger"),
+            "Transfer",
+            tla::TlaValue::Record(BTreeMap::from([
+                ("amount".to_string(), amount_e8s.to_tla_value()),
+                ("fee".to_string(), fee_e8s.to_tla_value()),
+                ("from".to_string(), account_to_tla(from_account)),
+                ("to".to_string(), account_to_tla(to_account)),
+            ]))
+        );
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -277,6 +295,13 @@ impl IcpLedger for FakeDriver {
         }
 
         *accounts.entry(to_account).or_default() += amount_e8s;
+        tla_log_response!(
+            Destination::new("ledger"),
+            tla::TlaValue::Variant {
+                tag: "TransferOk".to_string(),
+                value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+            }
+        );
 
         Ok(0)
     }
@@ -312,14 +337,22 @@ impl Environment for FakeDriver {
         self.state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> u64 {
-        self.state.try_lock().unwrap().rng.next_u64()
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        Ok(self.state.try_lock().unwrap().rng.next_u64())
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         let mut bytes = [0u8; 32];
         self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
-        bytes
+        Ok(bytes)
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
     }
 
     fn execute_nns_function(
@@ -336,7 +369,7 @@ impl Environment for FakeDriver {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -544,7 +577,7 @@ pub fn register_vote_assert_success(
 
 /// When testing proposals, three different proposal topics available:
 /// Governance, NetworkEconomics, and ExchangeRate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
@@ -553,7 +586,7 @@ pub enum ProposalTopicBehavior {
 
 /// A struct to help setting up tests concisely thanks to a concise format to
 /// specifies who proposes something and who votes on that proposal.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ProposalNeuronBehavior {
     /// Neuron id of the proposer.
     pub proposer: u64,

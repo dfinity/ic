@@ -25,7 +25,7 @@ pub struct MockJsonRpcProviders {
 
 //variants are prefixed by Eth because it's the names of those methods in the Ethereum JSON-RPC API
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, PartialEq, strum_macros::EnumString, Clone, strum_macros::Display)]
+#[derive(Clone, PartialEq, Debug, strum_macros::Display, strum_macros::EnumString)]
 pub enum JsonRpcMethod {
     #[strum(serialize = "eth_getBlockByNumber")]
     EthGetBlockByNumber,
@@ -46,20 +46,22 @@ pub enum JsonRpcMethod {
     EthSendRawTransaction,
 }
 
-#[derive(Copy, Debug, PartialEq, Eq, Clone, PartialOrd, Ord, strum_macros::EnumIter)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
 pub enum JsonRpcProvider {
     //order is top-to-bottom and must match order used in production
-    Ankr,
+    BlockPi,
     PublicNode,
     LlamaNodes,
+    Alchemy,
 }
 
 impl JsonRpcProvider {
     fn url(&self) -> &str {
         match self {
-            JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
+            JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
             JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
+            JsonRpcProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
         }
     }
 }
@@ -93,7 +95,7 @@ impl FromStr for JsonRpcRequest {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct JsonRpcRequestMatcher {
     http_method: CanisterHttpMethod,
     provider: JsonRpcProvider,
@@ -196,7 +198,7 @@ impl Matcher for JsonRpcRequestMatcher {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct StubOnce {
     matcher: JsonRpcRequestMatcher,
     response_result: serde_json::Value,
@@ -366,9 +368,19 @@ impl MockJsonRpcProvidersBuilder {
         self
     }
 
-    pub fn respond_with<T: Serialize>(mut self, provider: JsonRpcProvider, response: T) -> Self {
-        self.responses
-            .insert(provider, serde_json::to_value(response).unwrap());
+    pub fn respond_with<T: Serialize>(self, provider: JsonRpcProvider, response: T) -> Self {
+        self.respond_for_providers_with(std::iter::once(provider), response)
+    }
+
+    pub fn respond_for_providers_with<T: Serialize, I: IntoIterator<Item = JsonRpcProvider>>(
+        mut self,
+        providers: I,
+        response: T,
+    ) -> Self {
+        let response = serde_json::to_value(response).unwrap();
+        for provider in providers {
+            self.responses.insert(provider, response.clone());
+        }
         self
     }
 
@@ -387,11 +399,8 @@ impl MockJsonRpcProvidersBuilder {
         self.respond_with(provider, previous_response)
     }
 
-    pub fn respond_for_all_with<T: Serialize + Clone>(mut self, response: T) -> Self {
-        for provider in JsonRpcProvider::iter() {
-            self = self.respond_with(provider, response.clone());
-        }
-        self
+    pub fn respond_for_all_with<T: Serialize>(self, response: T) -> Self {
+        self.respond_for_providers_with(JsonRpcProvider::iter(), response)
     }
 
     pub fn modify_response_for_all<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(

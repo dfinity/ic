@@ -46,7 +46,7 @@ const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height"
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Config {
     nodes_count: usize,
     size_level: usize,
@@ -219,7 +219,7 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Get the latest certified height of an active node");
     let message = b"Are you actively making progress?";
-    store_and_read_stable(message, &universal_canister).await;
+    store_and_read_stable(&logger, message, &universal_canister).await;
     let res =
         fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
     let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
@@ -245,7 +245,7 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(message, &universal_canister).await;
+    store_and_read_stable(&logger, message, &universal_canister).await;
 
     info!(
         logger,

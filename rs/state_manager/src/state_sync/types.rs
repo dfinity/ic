@@ -132,7 +132,7 @@ const _: () = assert!(MANIFEST_CHUNK_ID_OFFSET > FILE_GROUP_CHUNK_ID_OFFSET);
 pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
 
 /// The type and associated index (if applicable) of a chunk in state sync.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Eq, PartialEq, Debug)]
 pub enum StateSyncChunk {
     /// The chunk representing the meta-manifest.
     MetaManifestChunk,
@@ -165,7 +165,7 @@ pub fn state_sync_chunk_type(chunk_id: u32) -> StateSyncChunk {
 }
 
 /// An entry of the file table.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, serde::Deserialize, serde::Serialize)]
 pub struct FileInfo {
     /// Path relative to the checkpoint root.
     pub relative_path: std::path::PathBuf,
@@ -177,7 +177,7 @@ pub struct FileInfo {
 }
 
 /// An entry of the chunk table.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, serde::Deserialize, serde::Serialize)]
 pub struct ChunkInfo {
     /// Index of the file in the file table.
     pub file_index: u32,
@@ -199,7 +199,7 @@ impl ChunkInfo {
 
 /// We wrap the actual Manifest (ManifestData) in an Arc, in order to
 /// make Manifest both immutable and cheap to copy
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Manifest(
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
@@ -246,7 +246,7 @@ impl Deref for Manifest {
 /// ...
 /// [45]: (8, 93000, 0, <hash>)
 /// ```
-#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Eq, PartialEq, Hash, Debug, serde::Deserialize, serde::Serialize)]
 pub struct ManifestData {
     /// Which version of the hashing procedure should be used.
     pub version: StateSyncVersion,
@@ -272,7 +272,7 @@ pub struct ManifestData {
 /// ```
 ///
 /// The `meta_manifest_hash` is used as the manifest hash when the manifest version is greater than or equal to `StateSyncVersion::V1`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, serde::Deserialize, serde::Serialize)]
 pub struct MetaManifest {
     pub version: StateSyncVersion,
     pub sub_manifest_hashes: Vec<[u8; 32]>,
@@ -387,7 +387,7 @@ type ManifestChunkTableIndex = u32;
 
 /// A chunk id from the P2P level is mapped to a group of indices from the manifest chunk table.
 /// `FileGroupChunks` stores the mapping and can be used to assemble or split the file group chunk.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>);
 
 impl FileGroupChunks {
@@ -426,7 +426,7 @@ impl FileGroupChunks {
 //
 // P2P will call get_chunk() on it to get a byte array to send to a peer, and
 // this byte array will be read from the FS.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct StateSyncMessage {
     pub height: Height,
     pub root_hash: CryptoHashOfState,
