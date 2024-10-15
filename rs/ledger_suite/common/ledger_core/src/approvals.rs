@@ -491,7 +491,7 @@ impl<Tokens: Clone + Into<Nat> + TryFrom<Nat, Error = String>> Storable for Allo
         if let Some(expires_at) = self.expires_at {
             buffer.extend(expires_at.as_nanos_since_unix_epoch().to_le_bytes());
         }
-        // We don't seriazlize arrived_at - it is not used after stable structures migration.
+        // We don't serialize arrived_at - it is not used after stable structures migration.
         Cow::Owned(buffer)
     }
 
