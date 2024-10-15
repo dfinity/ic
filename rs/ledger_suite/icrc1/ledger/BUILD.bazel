@@ -64,6 +64,23 @@ package(default_visibility = ["//visibility:public"])
                 "@crate_index//:canbench-rs",
             ],
         ),
+        (
+            "_nextledgerversion",
+            "",
+            ["next-ledger-version"],
+            [
+            ],
+        ),
+        (
+            "_u256_nextledgerversion",
+            "_u256",
+            [
+                "next-ledger-version",
+                "u256-tokens",
+            ],
+            [
+            ],
+        ),
     ]
 ]
 
@@ -158,20 +175,19 @@ package(default_visibility = ["//visibility:public"])
         ),
         (
             "_nextledgerversion",
-            ["next-ledger-version"],
+            [],
             [
-                ":ledger",
+                ":ledger_nextledgerversion",
                 "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
         (
             "_u256_nextledgerversion",
             [
-                "next-ledger-version",
                 "u256-tokens",
             ],
             [
-                ":ledger_u256",
+                ":ledger_u256_nextledgerversion",
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),

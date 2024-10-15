@@ -14,8 +14,8 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::UPGRADES_MEMORY;
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -124,12 +124,6 @@ fn init_state(init_args: InitArgs) {
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
 
-#[cfg(not(feature = "next-ledger-version"))]
-const LEDGER_VERSION: u64 = 0;
-
-#[cfg(feature = "next-ledger-version")]
-const LEDGER_VERSION: u64 = 1;
-
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
@@ -148,10 +142,6 @@ fn pre_upgrade() {
             buffered_writer
                 .write_all(&counter_bytes)
                 .expect("failed to write instructions consumed to UPGRADES_MEMORY");
-            let ledger_version_bytes: [u8; 8] = LEDGER_VERSION.to_le_bytes();
-            buffered_writer
-                .write_all(&ledger_version_bytes)
-                .expect("failed to write the ledger version to UPGRADES_MEMORY");
         });
     });
 }
@@ -206,24 +196,21 @@ fn post_upgrade(args: Option<LedgerArgument>) {
                         0u64
                     }
                 };
-            let mut ledger_version_bytes = [0u8; 8];
-            if buffered_reader
-                .read_exact(&mut ledger_version_bytes)
-                .is_ok()
-            {
-                let ledger_version = u64::from_le_bytes(ledger_version_bytes);
-                if ledger_version > LEDGER_VERSION {
-                    panic!(
-                        "Trying to downgrade from incompatible version {}. Current version is {}.",
-                        ledger_version, LEDGER_VERSION
-                    );
-                }
-            };
             state
         });
         ic_cdk::println!("Successfully read state from memory manager managed stable structures");
         LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
     }
+
+    Access::with_ledger_mut(|ledger| {
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
+            );
+        }
+        ledger.ledger_version = LEDGER_VERSION;
+    });
 
     if let Some(args) = args {
         match args {
