@@ -789,7 +789,7 @@
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Note: Using a magic number `8181818181` in the query turns `NaN` values from zeros to chart gaps.",
+          "description": "",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -829,23 +829,37 @@
               "mappings": [
                 {
                   "options": {
-                    "from": 0.5,
+                    "from": 0,
                     "result": {
+                      "color": "purple",
                       "index": 0,
-                      "text": "yes"
+                      "text": "undefined"
                     },
-                    "to": 1
+                    "to": 0.4
                   },
                   "type": "range"
                 },
                 {
                   "options": {
-                    "from": 0,
+                    "from": 0.4,
                     "result": {
+                      "color": "red",
                       "index": 1,
-                      "text": "no"
+                      "text": "disabled"
                     },
-                    "to": 0.5
+                    "to": 0.6
+                  },
+                  "type": "range"
+                },
+                {
+                  "options": {
+                    "from": 0.6,
+                    "result": {
+                      "color": "green",
+                      "index": 2,
+                      "text": "enabled"
+                    },
+                    "to": 1
                   },
                   "type": "range"
                 }
@@ -856,7 +870,8 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green"
+                    "color": "green",
+                    "value": null
                   },
                   {
                     "color": "#EAB839",
@@ -871,7 +886,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 34
+            "y": 3
           },
           "id": 46,
           "options": {
@@ -893,8 +908,10 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "((api_access_target{job=\"bitcoin-watchdog-$network-canister\"} +8181818181)>0) -8181818181",
-              "legendFormat": "target_{{flag}}",
+              "exemplar": false,
+              "expr": "sum (\n    0.99 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access_target{job=\"bitcoin-watchdog-$network-canister\", flag=\"undefined\"},\n)",
+              "instant": false,
+              "legendFormat": "target {{flag}}",
               "range": true,
               "refId": "api_access_target"
             },
@@ -904,9 +921,9 @@
                 "uid": "000000001"
               },
               "editorMode": "code",
-              "expr": "((api_access{job=\"bitcoin-$network-canister\"} +8181818181)>0) -8181818181",
+              "expr": "sum (\n    0.99 * api_access{job=\"bitcoin-$network-canister\", flag=\"enabled\"},\n    0.5 * api_access{job=\"bitcoin-$network-canister\", flag=\"disabled\"},\n    0.01 * api_access{job=\"bitcoin-$network-canister\", flag=\"undefined\"},\n)",
               "hide": false,
-              "legendFormat": "actual_{{flag}}",
+              "legendFormat": "actual {{flag}}",
               "range": true,
               "refId": "api_access_actual"
             }
@@ -2662,6 +2679,6 @@
   "timezone": "utc",
   "title": "Bitcoin",
   "uid": "bitcoin",
-  "version": 7,
+  "version": 8,
   "weekStart": ""
 }

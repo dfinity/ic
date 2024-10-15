@@ -103,8 +103,8 @@ impl PocketIc {
             bitcoind_addr,
         };
 
-        let parent_pid = std::os::unix::process::parent_id();
-        let log_guard = setup_tracing(parent_pid);
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
         let instance_id = match reqwest_client

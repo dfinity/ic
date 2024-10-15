@@ -38,7 +38,7 @@ jobs:
             exit 0
           # if a job was successful, don't post it to slack, unless it was a release testing job (see below)
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(success)$ ]]; then
-            FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:
+            FULL_MESSAGE=":white_check_mark: ${MESSAGE} :relaxed:"
             POST_TO_SLACK="false"
           # if a job failed or timed out, always post it to slack
           elif [[ "${{ github.event.workflow_run.conclusion }}" =~ ^(failure|timed_out)$ ]]; then

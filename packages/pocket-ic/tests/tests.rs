@@ -1800,8 +1800,8 @@ fn test_get_default_effective_canister_id_invalid_url() {
         .with_application_subnet()
         .build();
 
-    let parent_pid = std::os::unix::process::parent_id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+    let test_driver_pid = std::process::id();
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
     let port = std::fs::read_to_string(port_file_path).unwrap();
 
     let server_url = format!("http://localhost:{}", port);

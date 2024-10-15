@@ -516,7 +516,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "hyper-util": crate.spec(
-                version = "^0.1.8",
+                version = "^0.1.9",
                 features = ["full"],
             ),
             "hyper-rustls": crate.spec(
