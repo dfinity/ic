@@ -76,11 +76,11 @@ impl Context {
         }
     }
 
-    fn call_function(&mut self) {
+    pub fn call_function(&mut self) {
         self.location.0.push(LocationStackElem::Placeholder);
     }
 
-    fn return_from_function(&mut self) {
+    pub fn return_from_function(&mut self) {
         let _f = self.location.0.pop().expect("No function in call stack");
     }
 
@@ -179,7 +179,13 @@ pub fn log_request(
     global: GlobalState,
 ) -> ResolvedStatePair {
     // TODO: do we want to push the label to the location stack here, or just replace it?
-    *state.context.location.0.last_mut().expect("Asked to log a request, but the location stack is empty.") = LocationStackElem::Label(Label::new(label));
+    *state
+        .context
+        .location
+        .0
+        .last_mut()
+        .expect("Asked to log a request, but the location stack is empty.") =
+        LocationStackElem::Label(Label::new(label));
     let old_stage = mem::replace(&mut state.stage, Stage::Start);
     let start_state = match old_stage {
         Stage::End(start) => start,
@@ -263,6 +269,13 @@ pub fn log_method_return(
         state.context.update.process_id.as_str(),
         state.context.update.canister_name.as_str(),
     )
+}
+
+pub fn log_label(state: &mut MessageHandlerState, label: &str) {
+    *state.context.location.0.last_mut().unwrap_or_else(|| panic!(
+        "Asked to log label {}, but the location stack empty",
+        label
+    )) = LocationStackElem::Label(Label::new(label));
 }
 
 /// Logs the value of local variables at the end of the current message handler.
@@ -387,5 +400,21 @@ macro_rules! tla_log_response {
 macro_rules! tla_log_method_call {
     ($update:expr, $global:expr) => {{
         $crate::log_method_call($update, $global)
+    }};
+}
+
+#[macro_export]
+macro_rules! tla_log_label {
+    ($label:expr) => {{
+        let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
+            let mut handler_state = state.handler_state.borrow_mut();
+            $crate::log_label(&mut handler_state, $label);
+        });
+        match res {
+            Ok(_) => (),
+            Err(_) => {
+                println!("Asked to log label {}, but instrumentation not initialized", $label);
+            }
+        };
     }};
 }

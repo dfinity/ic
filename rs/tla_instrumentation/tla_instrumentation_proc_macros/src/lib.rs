@@ -173,3 +173,72 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     output.into()
 }
+
+#[proc_macro_attribute]
+pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse the input tokens of the attribute and the function
+    let input_fn = parse_macro_input!(item as ItemFn);
+
+    let mut modified_fn = input_fn.clone();
+
+    // Deconstruct the function elements
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block: _,
+    } = input_fn;
+
+    let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
+    modified_fn.sig.ident = mangled_name.clone();
+
+    let has_receiver = sig.inputs.iter().any(|arg| match arg {
+        syn::FnArg::Receiver(_) => true,
+        syn::FnArg::Typed(_) => false,
+    });
+    // Creating the modified original function which calls f_impl
+    let args: Vec<_> = sig
+        .inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(pat_type) => Some(&*pat_type.pat),
+        })
+        .collect();
+
+    let asyncness = sig.asyncness;
+
+    let call = match (asyncness.is_some(), has_receiver) {
+        (true, true) => quote! { self.#mangled_name(#(#args),*).await },
+        (true, false) => quote! { #mangled_name(#(#args),*).await },
+        (false, true) => quote! { self.#mangled_name(#(#args),*) },
+        (false, false) => quote! { #mangled_name(#(#args),*) },
+    };
+
+    let output =
+        quote! {
+            #modified_fn
+
+            #(#attrs)* #vis #sig {
+               let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
+                    {
+                        let mut handler_state = state.handler_state.borrow_mut();
+                        handler_state.context.call_function();
+                    }
+                    let res = #call;
+                    {
+                        let mut handler_state = state.handler_state.borrow_mut();
+                        handler_state.context.return_from_function();
+                    }
+                    res
+               });
+               match res {
+                    Ok(r) => r,
+                    // TODO: fail if there's an error and if we're in some kind of strict mode
+                    Err(_) => #call,
+               }
+            }
+        };
+
+    output.into()
+}

@@ -9,10 +9,11 @@ use std::{
 use tla_instrumentation::{
     checker::{check_tla_code_link, PredicateDescription},
     tla_log_locals, tla_log_request, tla_log_response,
+    tla_log_label,
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
-use tla_instrumentation_proc_macros::tla_update_method;
+use tla_instrumentation_proc_macros::{tla_update_method, tla_function};
 
 // Example of how to separate as much of the instrumentation code as possible from the main code
 #[macro_use]
@@ -22,7 +23,7 @@ mod tla_stuff {
 
     use candid::Nat;
 
-    pub const PID: &str = "Counter";
+    pub const PID: &str = "Multiple_Calls";
     pub const CAN_NAME: &str = "mycan";
 
     use local_key::task_local;
@@ -117,6 +118,8 @@ struct StructCanister {
 
 static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
+// TODO: why doesn't this work if I make it async?
+#[tla_function]
 fn call_maker() {
     tla_log_request!(
         "WaitForResponse",
@@ -139,12 +142,12 @@ impl StructCanister {
         self.counter += 1;
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
-        tla_label_prefix!("Phase1");
+        tla_log_label!("Phase1");
         call_maker();
         self.counter += 1;
         my_local = self.counter;
         tla_log_locals! {my_local: my_local};
-        tla_label_prefix!("Phase2");
+        tla_log_label!("Phase2");
         call_maker();
         // Note that this would not be necessary (and would be an error) if
         // we defined my_local in default_end_locals in my_f_desc
@@ -178,7 +181,7 @@ fn struct_test() {
         println!("{:?}", pair.end);
     }
     println!("----------------");
-    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs.len(), 3);
     let first = &pairs[0];
     assert_eq!(first.start.get("counter"), Some(&0_u64.to_tla_value()));
     assert_eq!(first.end.get("counter"), Some(&1_u64.to_tla_value()));
@@ -268,7 +271,19 @@ fn struct_test() {
     );
     assert_eq!(
         second.end.get(outgoing),
-        Some(&Vec::<TlaValue>::new().to_tla_value())
+        Some(
+            &vec![TlaValue::Record(BTreeMap::from([
+                ("caller".to_string(), PID.to_tla_value()),
+                (
+                    "method_and_args".to_string(),
+                    TlaValue::Variant {
+                        tag: "Target_Method".to_string(),
+                        value: Box::new(2_u64.to_tla_value())
+                    }
+                )
+            ]))]
+            .to_tla_value()
+        )
     );
 
     let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
