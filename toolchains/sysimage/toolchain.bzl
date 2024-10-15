@@ -179,6 +179,12 @@ build_container_filesystem = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
+        # Add the container_utils attribute
+        "container_utils": attr.label(
+            default = "//toolchains/sysimage:container_utils",
+            executable = True,
+            cfg = "exec",
+        ),
     },
 )
 
