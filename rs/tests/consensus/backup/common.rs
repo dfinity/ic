@@ -2,7 +2,7 @@
 
 Title:: Backup Manager
 
-Goal:: Ensure that the backup tool is able to restore a subnet state across a replica upgrade.
+Goal:: Ensure that the backup tool is able to restore a subnet state across a replica up- and downgrade.
 
 Description::
 In this test we create 4 nodes NNS network and run the backup tool on its backup artifacts. It includes an upgrade to a new replica version.
@@ -22,7 +22,6 @@ Success::
 . Backup tool is able to restore the state from pulled artifacts, including those after the upgrade. The state is also archived.
 
 end::catalog[] */
-use anyhow::Result;
 use ic_backup::{
     backup_helper::last_checkpoint,
     config::{ColdStorage, Config, SubnetConfig},
@@ -47,16 +46,15 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
-        group::SystemTestGroup,
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    systest,
     util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
 };
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
+use std::fs::File;
 use std::{
     ffi::OsStr,
     fs::{self, OpenOptions},
@@ -65,7 +63,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-use std::{fs::File, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -108,9 +105,10 @@ pub fn config_downgrade(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
-    let logger = env.logger();
-
+pub fn test_upgrade(env: TestEnv) {
+    let log = env.logger();
+    let nns_node = get_nns_node(&env.topology_snapshot());
+    info!(log, "Elect the branch replica version");
     let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
         .expect("tip-of-branch IC version");
     let branch_version = format!("{}-test", original_branch_version);
@@ -119,18 +117,37 @@ fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {
     let sha256 = get_ic_os_update_img_test_sha256().unwrap();
     let upgrade_url = get_ic_os_update_img_test_url().unwrap();
     block_on(bless_replica_version(
-        nns_node,
+        &nns_node,
         &original_branch_version,
         UpdateImageType::ImageTest,
-        &logger,
+        &log,
         &sha256,
         vec![upgrade_url.to_string()],
     ));
-    info!(&logger, "Blessed branch version");
-    branch_version
+    info!(log, "TARGET_VERSION: {}", branch_version);
+    test(env, branch_version.clone(), branch_version);
 }
 
-pub fn test(env: TestEnv) {
+pub fn test_downgrade(env: TestEnv) {
+    let log = env.logger();
+    let nns_node = get_nns_node(&env.topology_snapshot());
+    let initial_version =
+        get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
+    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .expect("could not read mainnet version!");
+    info!(log, "Elect the mainnet replica version");
+    info!(log, "TARGET_VERSION: {}", mainnet_version);
+    block_on(bless_public_replica_version(
+        &nns_node,
+        &mainnet_version,
+        UpdateImageType::Image,
+        UpdateImageType::Image,
+        &log,
+    ));
+    test(env, initial_version, mainnet_version);
+}
+
+fn test(env: TestEnv, binary_version: String, target_version: String) {
     let log = env.logger();
 
     info!(log, "Create all directories");
@@ -149,7 +166,6 @@ pub fn test(env: TestEnv) {
 
     info!(log, "Fetch the replica version");
     let nns_node = get_nns_node(&env.topology_snapshot());
-    let branch_version = bless_branch_version(&env, &nns_node);
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
     let replica_version =
@@ -157,18 +173,11 @@ pub fn test(env: TestEnv) {
     let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
         .expect("Assigned replica version should be valid");
 
-    info!(log, "Proposal to upgrade the subnet replica version");
-    block_on(deploy_guestos_to_all_subnet_nodes(
-        &nns_node,
-        &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
-        subnet_id,
-    ));
-
     info!(
         log,
         "Copy the binaries needed for replay of the current version"
     );
-    let backup_binaries_dir = backup_dir.join("binaries").join(&branch_version);
+    let backup_binaries_dir = backup_dir.join("binaries").join(&binary_version);
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
@@ -280,18 +289,6 @@ pub fn test(env: TestEnv) {
         .expect("Failed to start backup process");
     info!(log, "Started process: {}", child.id());
 
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("could not read mainnet version!");
-    // info!(log, "Elect the mainnet replica version");
-    // info!(log, "TARGET_VERSION: {}", mainnet_version);
-    // block_on(bless_public_replica_version(
-    //     &nns_node,
-    //     &mainnet_version,
-    //     UpdateImageType::Image,
-    //     UpdateImageType::Image,
-    //     &log,
-    // ));
-
     info!(log, "Wait for archived checkpoint");
     let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
     // make sure we have some archive of the old version before upgrading to the new one
@@ -306,12 +303,12 @@ pub fn test(env: TestEnv) {
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
+        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
         subnet_id,
     ));
 
     info!(log, "Wait until the upgrade happens");
-    assert_assigned_replica_version(&nns_node, &branch_version, env.logger());
+    assert_assigned_replica_version(&nns_node, &target_version, env.logger());
 
     let checkpoint_dir = backup_dir
         .join("data")
@@ -325,7 +322,7 @@ pub fn test(env: TestEnv) {
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(mainnet_version)
+        .join(target_version)
         .join("0");
 
     info!(

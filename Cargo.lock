@@ -2343,6 +2343,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-backup-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "ic-backup",
+ "ic-base-types",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "serde_json",
+ "slog",
+ "tempfile",
+]
+
+[[package]]
 name = "consensus-orchestrator-system-tests"
 version = "0.9.0"
 dependencies = [
