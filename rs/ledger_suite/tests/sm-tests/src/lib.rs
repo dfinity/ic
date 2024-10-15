@@ -2824,6 +2824,7 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
 }
 
 pub fn test_downgrade_from_incompatible_version<T>(
+    ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_nextledgerversion: Vec<u8>,
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -2831,8 +2832,45 @@ pub fn test_downgrade_from_incompatible_version<T>(
     T: CandidType,
 {
     // Setup ledger with unsupported future version.
-    let (env, canister_id) = setup(ledger_wasm_nextledgerversion, encode_init_args, vec![]);
+    let (env, canister_id) = setup(
+        ledger_wasm_nextledgerversion.clone(),
+        encode_init_args,
+        vec![],
+    );
 
+    // For now the mainnet ledger does not perform the check and downgrade is possible.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to downgrade to mainnet");
+
+    // Upgrade to current version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the same verison.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the next version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_nextledgerversion,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to next version");
+
+    // Downgrade not possible.
     match env.upgrade_canister(
         canister_id,
         ledger_wasm,
