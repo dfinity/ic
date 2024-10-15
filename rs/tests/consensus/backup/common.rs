@@ -22,13 +22,13 @@ Success::
 . Backup tool is able to restore the state from pulled artifacts, including those after the upgrade. The state is also archived.
 
 end::catalog[] */
-use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use anyhow::Result;
 use ic_backup::{
     backup_helper::last_checkpoint,
     config::{ColdStorage, Config, SubnetConfig},
 };
 use ic_base_types::SubnetId;
+use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
@@ -72,24 +72,23 @@ const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
 fn config_common() -> InternetComputer {
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .add_nodes(SUBNET_SIZE)
-                .with_chain_key_config(ChainKeyConfig {
-                    key_configs: make_key_ids_for_all_schemes()
-                        .into_iter()
-                        .map(|key_id| KeyConfig {
-                            max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: 7,
-                            key_id,
-                        })
-                        .collect(),
-                    signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
-                })
-                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-        )
+    InternetComputer::new().add_subnet(
+        Subnet::new(SubnetType::System)
+            .add_nodes(SUBNET_SIZE)
+            .with_chain_key_config(ChainKeyConfig {
+                key_configs: make_key_ids_for_all_schemes()
+                    .into_iter()
+                    .map(|key_id| KeyConfig {
+                        max_queue_size: 20,
+                        pre_signatures_to_create_in_advance: 7,
+                        key_id,
+                    })
+                    .collect(),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: None,
+            })
+            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+    )
 }
 
 pub fn config_upgrade(env: TestEnv) {
@@ -158,12 +157,12 @@ pub fn test(env: TestEnv) {
     let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
         .expect("Assigned replica version should be valid");
 
-        info!(log, "Proposal to upgrade the subnet replica version");
-        block_on(deploy_guestos_to_all_subnet_nodes(
-            &nns_node,
-            &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
-            subnet_id,
-        ));    
+    info!(log, "Proposal to upgrade the subnet replica version");
+    block_on(deploy_guestos_to_all_subnet_nodes(
+        &nns_node,
+        &ReplicaVersion::try_from(branch_version.clone()).expect("bad TARGET_VERSION string"),
+        subnet_id,
+    ));
 
     info!(
         log,
