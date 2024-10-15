@@ -108,6 +108,23 @@ fn set_java_path() {
     std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
 }
 
+/// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
+/// TLA modules are read from $TLA_MODULES (space-separated list)
+/// NOTE: this assumes unique basenames amongst the modules
+fn get_tla_module_path(module: &str) -> PathBuf {
+    let modules = std::env::var("TLA_MODULES").expect(
+        "environment variable 'TLA_MODULES' should be a space-separated list of TLA modules",
+    );
+
+    modules
+        .split(" ")
+        .map(|f| f.into()) /* str -> PathBuf */
+        .find(|f: &PathBuf| f.file_name().is_some_and(|file_name| file_name == module))
+        .unwrap_or_else(|| {
+            panic!("Could not find TLA module {module}, check 'TLA_MODULES' is set correctly")
+        })
+}
+
 /// Checks a trace against the model.
 ///
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
@@ -121,11 +138,14 @@ pub fn check_traces() {
     };
 
     set_java_path();
-    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
-    // Construct paths to the data files
-    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/nns/governance/tla");
+    let apalache = std::env::var("TLA_APALACHE_BIN")
+        .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
+    let apalache = PathBuf::from(apalache);
+
+    if !apalache.as_path().is_file() {
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+    }
 
     let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {
@@ -140,7 +160,9 @@ pub fn check_traces() {
             let apalache = apalache.clone();
             let constants = constants.clone();
             let pair = pair.clone();
-            let tla_module = tla_models_path.join(format!("{}_Apalache.tla", update.process_id));
+            // NOTE: the 'process_id" is actually the tla module name
+            let tla_module = format!("{}_Apalache.tla", update.process_id);
+            let tla_module = get_tla_module_path(&tla_module);
             let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,

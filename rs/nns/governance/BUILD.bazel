@@ -293,11 +293,6 @@ rust_test(
     ],
 )
 
-filegroup(
-    name = "tla_models",
-    srcs = glob(["tla/**/*.tla"]),
-)
-
 rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
@@ -337,6 +332,13 @@ rust_bench(
     ],
 )
 
+# all TLA modules
+# NOTE: the test runner assumes unique basenames
+filegroup(
+    name = "tla_modules",
+    srcs = glob(["tla/*.tla"]),
+)
+
 rust_test_suite_with_extra_srcs(
     name = "governance_integration_test",
     srcs = glob(
@@ -344,7 +346,7 @@ rust_test_suite_with_extra_srcs(
         exclude = [
             # fake.rs is a module dependency, not a test
             "tests/fake.rs",
-            # check generated files is handed in the generated_files_check rule above
+            # check generated files is handled in the generated_files_check rule above
             "tests/check_generated_files.rs",
         ],
     ),
@@ -352,13 +354,15 @@ rust_test_suite_with_extra_srcs(
     crate_features = test_with_tla(),
     data = [
         "tests/neurons.csv",
-        ":tla_models",
+        ":tla_modules",
         "@bazel_tools//tools/jdk:current_java_runtime",
-        "@tla_apalache//:contents",
+        "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
         "NEURON_CSV_PATH": "rs/nns/governance/tests/neurons.csv",
         "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_modules)",
     },
     extra_srcs = glob([
         "tests/*/*.rs",
