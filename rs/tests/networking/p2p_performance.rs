@@ -1,11 +1,11 @@
 use anyhow::Result;
 use std::time::Duration;
 
+use ic_networking_system_test_utils::p2p_performance_workload::{config, test};
 use ic_system_test_driver::{
     driver::{group::SystemTestGroup, simulate_network::ProductionSubnetTopology},
     systest,
 };
-use ic_networking_system_test_utils::p2p_performance_workload::{config, test};
 
 // Test parameters
 const RPS: usize = 10;

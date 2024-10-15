@@ -22,6 +22,14 @@ CANISTER_HTTP_BASE_DEPS = [
     "@crate_index//:slog",
 ]
 
+COMMON_DEPS = [
+    # Keep sorted.
+    "//rs/limits",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/tests/networking/utils",
+    "@crate_index//:anyhow",
+]
+
 system_test_nns(
     name = "canister_http_test",
     env = {
@@ -139,7 +147,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -151,7 +159,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -166,7 +174,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -180,7 +188,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -196,7 +204,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -210,7 +218,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+    deps = COMMON_DEPS,
 )
 
 system_test_nns(
@@ -223,7 +231,7 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = COMMON_DEPS,
 )
 
 system_test(
