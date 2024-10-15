@@ -1,21 +1,21 @@
-use crate::registry::node::v1::NodeType;
+use crate::registry::node::v1::NodeRewardType;
 
 #[allow(clippy::all)]
 #[path = "../gen/registry/registry.node.v1.rs"]
 pub mod v1;
 
-impl From<NodeType> for String {
-    fn from(value: NodeType) -> Self {
+impl From<NodeRewardType> for String {
+    fn from(value: NodeRewardType) -> Self {
         match value {
-            NodeType::Unspecified => {
+            NodeRewardType::Unspecified => {
                 panic!("Cannot create a node type string from unspecified")
             }
-            NodeType::Type0 => "type0".to_string(),
-            NodeType::Type1 => "type1".to_string(),
-            NodeType::Type2 => "type2".to_string(),
-            NodeType::Type3 => "type3".to_string(),
-            NodeType::Type3dot1 => "type3.1".to_string(),
-            NodeType::Type1dot1 => "type1.1".to_string(),
+            NodeRewardType::Type0 => "type0".to_string(),
+            NodeRewardType::Type1 => "type1".to_string(),
+            NodeRewardType::Type2 => "type2".to_string(),
+            NodeRewardType::Type3 => "type3".to_string(),
+            NodeRewardType::Type3dot1 => "type3.1".to_string(),
+            NodeRewardType::Type1dot1 => "type1.1".to_string(),
         }
     }
 }

@@ -50,7 +50,7 @@ pub struct NodeRecord {
     /// If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
     #[prost(string, optional, tag = "19")]
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(enumeration = "NodeType", optional, tag = "20")]
+    #[prost(enumeration = "NodeRewardType", optional, tag = "20")]
     pub node_type: ::core::option::Option<i32>,
 }
 /// The type of the node.
@@ -68,7 +68,7 @@ pub struct NodeRecord {
     ::prost::Enumeration,
 )]
 #[repr(i32)]
-pub enum NodeType {
+pub enum NodeRewardType {
     Unspecified = 0,
     /// type0
     Type0 = 1,
@@ -83,32 +83,32 @@ pub enum NodeType {
     /// type1.1
     Type1dot1 = 6,
 }
-impl NodeType {
+impl NodeRewardType {
     /// String value of the enum field names used in the ProtoBuf definition.
     ///
     /// The values are not transformed in any way and thus are considered stable
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
-            NodeType::Unspecified => "NODE_TYPE_UNSPECIFIED",
-            NodeType::Type0 => "NODE_TYPE_TYPE0",
-            NodeType::Type1 => "NODE_TYPE_TYPE1",
-            NodeType::Type2 => "NODE_TYPE_TYPE2",
-            NodeType::Type3 => "NODE_TYPE_TYPE3",
-            NodeType::Type3dot1 => "NODE_TYPE_TYPE3DOT1",
-            NodeType::Type1dot1 => "NODE_TYPE_TYPE1DOT1",
+            Self::Unspecified => "NODE_REWARD_TYPE_UNSPECIFIED",
+            Self::Type0 => "NODE_REWARD_TYPE_TYPE0",
+            Self::Type1 => "NODE_REWARD_TYPE_TYPE1",
+            Self::Type2 => "NODE_REWARD_TYPE_TYPE2",
+            Self::Type3 => "NODE_REWARD_TYPE_TYPE3",
+            Self::Type3dot1 => "NODE_REWARD_TYPE_TYPE3DOT1",
+            Self::Type1dot1 => "NODE_REWARD_TYPE_TYPE1DOT1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
-            "NODE_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
-            "NODE_TYPE_TYPE0" => Some(Self::Type0),
-            "NODE_TYPE_TYPE1" => Some(Self::Type1),
-            "NODE_TYPE_TYPE2" => Some(Self::Type2),
-            "NODE_TYPE_TYPE3" => Some(Self::Type3),
-            "NODE_TYPE_TYPE3DOT1" => Some(Self::Type3dot1),
-            "NODE_TYPE_TYPE1DOT1" => Some(Self::Type1dot1),
+            "NODE_REWARD_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "NODE_REWARD_TYPE_TYPE0" => Some(Self::Type0),
+            "NODE_REWARD_TYPE_TYPE1" => Some(Self::Type1),
+            "NODE_REWARD_TYPE_TYPE2" => Some(Self::Type2),
+            "NODE_REWARD_TYPE_TYPE3" => Some(Self::Type3),
+            "NODE_REWARD_TYPE_TYPE3DOT1" => Some(Self::Type3dot1),
+            "NODE_REWARD_TYPE_TYPE1DOT1" => Some(Self::Type1dot1),
             _ => None,
         }
     }

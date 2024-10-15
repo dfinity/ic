@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
         invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
     },
 };
-use ic_protobuf::registry::{node::v1::NodeType, node_operator::v1::NodeOperatorRecord};
+use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
@@ -59,7 +59,7 @@ fn node_is_created_on_receiving_the_request() {
         // Check if some fields are present
         assert!(node_record.is_some());
         let node_record = node_record.unwrap();
-        assert_eq!(node_record.node_type, Some(NodeType::Type3 as i32));
+        assert_eq!(node_record.node_type, Some(NodeRewardType::Type3 as i32));
 
         // Check that other fields are present
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();

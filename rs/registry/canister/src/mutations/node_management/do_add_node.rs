@@ -11,7 +11,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeType},
+    node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
 };
 use idna::domain_to_ascii_strict;
 
@@ -161,16 +161,18 @@ impl Registry {
     }
 }
 
-// try to convert input string into NodeType enum
+// try to convert input string into NodeRewardType enum
 // If a type is no longer supported for newly registered nodes, it should be removed from this function
-fn validate_str_as_node_type<T: AsRef<str> + Display>(type_string: T) -> Result<NodeType, String> {
+fn validate_str_as_node_type<T: AsRef<str> + Display>(
+    type_string: T,
+) -> Result<NodeRewardType, String> {
     Ok(match type_string.as_ref() {
-        "type0" => NodeType::Type0,
-        "type1" => NodeType::Type1,
-        "type2" => NodeType::Type2,
-        "type3" => NodeType::Type3,
-        "type3.1" => NodeType::Type3dot1,
-        "type1.1" => NodeType::Type1dot1,
+        "type0" => NodeRewardType::Type0,
+        "type1" => NodeRewardType::Type1,
+        "type2" => NodeRewardType::Type2,
+        "type3" => NodeRewardType::Type3,
+        "type3.1" => NodeRewardType::Type3dot1,
+        "type1.1" => NodeRewardType::Type1dot1,
         _ => return Err(format!("Invalid node type: {}", type_string)),
     })
 }
