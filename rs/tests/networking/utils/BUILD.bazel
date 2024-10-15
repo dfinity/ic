@@ -10,10 +10,13 @@ rust_library(
     crate_name = "ic_networking_system_test_utils",
     deps = [
         # Keep sorted.
+        "//rs/interfaces/registry",
         "//rs/nns/governance/api",
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",   
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",

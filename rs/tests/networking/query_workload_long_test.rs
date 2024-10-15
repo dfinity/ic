@@ -7,7 +7,7 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::ImageSizeGiB;
 use ic_system_test_driver::systest;
-use ic_tests::networking::replica_query_workload::test;
+use ic_networking_system_test_utils::replica_query_workload::test;
 use ic_tests::networking::subnet_update_workload::config;
 
 // Test parameters

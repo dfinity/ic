@@ -6,7 +6,7 @@ use std::time::Duration;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
-use ic_tests::networking::subnet_update_workload::{config, test};
+use ic_networking_system_test_utils::subnet_update_workload::{config, test};
 
 // Test parameters
 const RPS: usize = 5;
