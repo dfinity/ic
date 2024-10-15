@@ -44,6 +44,10 @@ def _build_container_base_image_impl(ctx):
     outputs.append(output_tar_file)
 
     inputs += ctx.files.context_files
+
+    container_utils = ctx.file.container_utils
+    inputs.append(container_utils)
+
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
 
@@ -112,6 +116,10 @@ def _build_container_filesystem_impl(ctx):
     outputs.append(output_tar_file)
 
     inputs += ctx.files.context_files
+
+    container_utils = ctx.file.container_utils
+    inputs.append(container_utils)
+
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
 
