@@ -2652,7 +2652,7 @@ pub fn test_upgrade_serialization(
                     ) {
                         Ok(_) => {
                             if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V1)!")
+                                panic!("Downgrade from memory manager directly to mainnet should fail!")
                             } else {
                                 // In case this succeeded, we need to upgrade the ledger back to
                                 // the next version (via the current version), so that the
