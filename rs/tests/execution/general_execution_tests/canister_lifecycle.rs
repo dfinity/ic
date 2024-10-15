@@ -29,7 +29,7 @@ AKA:: Testcase 2.4
 end::catalog[] */
 
 use candid::{Decode, Encode};
-use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
+use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
 use ic_management_canister_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,

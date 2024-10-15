@@ -1,13 +1,12 @@
-#[rustfmt::skip]
+mod inter_canister_queries_tests;
 
 use anyhow::Result;
-
+use execution_system_tests_common::config_system_verified_subnets;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::group::SystemTestSubGroup;
 use ic_system_test_driver::systest;
-use ic_tests::execution::call_on_cleanup::*;
-use ic_tests::execution::config_system_verified_subnets;
-use ic_tests::execution::inter_canister_queries::*;
+use inter_canister_queries_tests::call_on_cleanup::*;
+use inter_canister_queries_tests::inter_canister_queries::*;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -26,6 +25,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(
                     inter_canister_query_first_canister_multiple_request
                 ))
+                .add_test(systest!(composite_query_three_canisters))
                 .add_test(systest!(is_called_if_reply_traps))
                 .add_test(systest!(is_called_if_reject_traps))
                 .add_test(systest!(changes_are_discarded_if_trapped))
@@ -33,6 +33,5 @@ fn main() -> Result<()> {
                 .add_test(systest!(is_called_in_query)),
         )
         .execute_from_args()?;
-
     Ok(())
 }

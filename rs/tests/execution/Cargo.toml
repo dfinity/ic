@@ -33,6 +33,8 @@ serde_cbor = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 tokio = { workspace = true }
 wat = { workspace = true }
+assert_matches = { workspace = true }
+
 
 [[bin]]
 name = "compute_allocation_test"
@@ -45,3 +47,7 @@ path = "cycles_restrictions_test.rs"
 [[bin]]
 name = "general_execution_test"
 path = "general_execution_test.rs"
+
+[[bin]]
+name = "inter_canister_queries_test"
+path = "inter_canister_queries_test.rs"

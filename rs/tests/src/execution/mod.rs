@@ -1,5 +1,3 @@
-pub mod call_on_cleanup;
-pub mod inter_canister_queries;
 pub mod system_api_security_test;
 
 use ic_registry_subnet_type::SubnetType;
