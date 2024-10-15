@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_networking_system_test_utils::network_large::{setup, test};
+use ic_networking_system_test_utilss::network_large::{setup, test};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 
