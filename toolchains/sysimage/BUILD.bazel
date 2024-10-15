@@ -31,7 +31,6 @@ py_binary(
     ],
     deps = [
         ":container_utils",
-        requirement("invoke"),
         requirement("loguru"),
         requirement("simple_parsing"),
     ],
@@ -44,7 +43,6 @@ py_binary(
     ],
     deps = [
         ":container_utils",
-        requirement("invoke"),
     ],
 )
 
