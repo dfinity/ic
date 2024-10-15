@@ -31,12 +31,12 @@ BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
 
 system_test_nns(
     name = "backup_manager_downgrade_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -55,12 +55,12 @@ system_test_nns(
 
 system_test_nns(
     name = "backup_manager_upgrade_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "experimental_system_test_colocation",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,

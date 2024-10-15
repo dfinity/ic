@@ -162,7 +162,7 @@ rust_ic_test(
     },
     proc_macro_deps = [],
     tags = [
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     deps = [
         # Keep sorted.

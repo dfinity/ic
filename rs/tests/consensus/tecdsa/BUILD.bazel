@@ -5,7 +5,7 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "tecdsa_complaint_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -32,12 +32,12 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_add_nodes_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -65,7 +65,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -85,12 +85,12 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_remove_nodes_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -230,13 +230,13 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_life_cycle_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     # Remove when CON-937 is resolved
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
@@ -281,12 +281,12 @@ system_test_nns(
 
 system_test_nns(
     name = "tecdsa_signature_timeout_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,

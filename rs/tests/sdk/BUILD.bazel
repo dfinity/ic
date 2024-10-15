@@ -35,10 +35,10 @@ BOUNDARY_NODE_RUNTIME_DEPS = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
 
 system_test_nns(
     name = "dfx_smoke_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on on_push_to_master.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     tags = [
-        "on_push_to_master",  # since it takes longer than 5 minutes.
+        "slow_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = RUNTIME_DEPS + BOUNDARY_NODE_RUNTIME_DEPS,
