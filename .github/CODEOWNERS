@@ -230,6 +230,7 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
 /rs/tests/dashboards/IC/execution-metrics.json          @dfinity/execution @dfinity/idx
+/rs/tests/dashboards/IC/bitcoin.json                    @dfinity/execution @dfinity/idx
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
