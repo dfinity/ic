@@ -740,6 +740,13 @@ impl ApiState {
         }
     }
 
+    pub async fn delete_all_instances(&self) {
+        let num_instances = self.instances.read().await.len();
+        for instance_id in 0..num_instances {
+            self.delete_instance(instance_id).await;
+        }
+    }
+
     pub async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,

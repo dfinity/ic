@@ -11,6 +11,7 @@ use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_utils::interfaces::ManagementCanister;
+use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
@@ -647,7 +648,48 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
 /// can be successfully restored from the respective subnet states,
 /// using `with_nns_state` and `with_subnet_state` on `PocketIcBuilder`.
 #[test]
-fn canister_state_dir() {
+fn canister_state_dir_with_graceful_shutdown() {
+    canister_state_dir(None);
+}
+
+/// Tests that the PocketIC topology and canister states
+/// can be successfully restored from a `state_dir`
+/// after the PocketIC server has received SIGINT.
+#[test]
+fn canister_state_dir_with_sigint() {
+    canister_state_dir(Some(Signal::SIGINT));
+}
+
+/// Tests that the PocketIC topology and canister states
+/// can be successfully restored from a `state_dir`
+/// after the PocketIC server has received SIGTERM.
+#[test]
+fn canister_state_dir_with_sigterm() {
+    canister_state_dir(Some(Signal::SIGTERM));
+}
+
+fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<Signal>) {
+    if let Some(signal) = shutdown_signal {
+        // send shutdown signal to PocketIC server
+        nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(child.id().try_into().unwrap()),
+            signal,
+        )
+        .unwrap();
+        let status = child.wait().unwrap();
+        assert!(status.success());
+        // the PocketIC instance can't be deleted and thus dropping the PocketIC instance panics
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drop(pic);
+        }))
+        .unwrap_err();
+    } else {
+        // Delete the PocketIC instance.
+        drop(pic);
+    }
+}
+
+fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
     // Create a temporary state directory persisted throughout the test.
@@ -655,8 +697,10 @@ fn canister_state_dir() {
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
+    let (server_url, child) = start_server_helper(None, false, false);
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url)
         .with_nns_subnet()
         .with_application_subnet()
         .build();
@@ -726,11 +770,10 @@ fn canister_state_dir() {
         .unwrap();
     check_counter(&pic, spec_canister_id, 3);
 
-    // Delete the PocketIC instance.
-    drop(pic);
+    send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (new_server_url, _) = start_server_helper(None, false, false);
+    let (new_server_url, child) = start_server_helper(None, false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -768,8 +811,7 @@ fn canister_state_dir() {
     check_counter(&pic, app_canister_id, 2);
     check_counter(&pic, spec_canister_id, 4);
 
-    // Delete the PocketIC instance.
-    drop(pic);
+    send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
     let (newest_server_url, _) = start_server_helper(None, false, false);

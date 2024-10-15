@@ -35,6 +35,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
@@ -211,6 +212,7 @@ async fn start(runtime: Arc<Runtime>) {
     let shutdown_handle = handle.clone();
     let axum_handle = handle.clone();
     let port_file_path_clone = port_file_path.clone();
+    let app_state_clone = app_state.clone();
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
         loop {
@@ -222,15 +224,18 @@ async fn start(runtime: Arc<Runtime>) {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        debug!("The PocketIC server will terminate");
-
-        shutdown_handle.shutdown();
-
-        if let Some(port_file_path) = port_file_path_clone {
-            // Clean up port file.
-            let _ = std::fs::remove_file(port_file_path);
-        }
+        terminate(app_state, shutdown_handle, port_file_path_clone).await;
     });
+    // Register a signal handler.
+    let (tx, rx) = channel();
+    let shutdown_handle = handle.clone();
+    let port_file_path_clone = port_file_path.clone();
+    tokio::spawn(async move {
+        rx.recv().expect("Did not receive a signal.");
+        terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
+    });
+    ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
+        .expect("Error setting Ctrl-C handler");
 
     let main_task = tokio::spawn(async move {
         axum_server::from_tcp(listener)
@@ -251,6 +256,23 @@ async fn start(runtime: Arc<Runtime>) {
     info!("The PocketIC server is listening on port {}", real_port);
 
     main_task.await.unwrap();
+}
+
+async fn terminate(
+    app_state: AppState,
+    shutdown_handle: axum_server::Handle,
+    port_file_path: Option<PathBuf>,
+) {
+    debug!("The PocketIC server will terminate");
+
+    app_state.api_state.delete_all_instances().await;
+
+    if let Some(port_file_path) = port_file_path {
+        // Clean up port file.
+        let _ = std::fs::remove_file(port_file_path);
+    }
+
+    shutdown_handle.shutdown();
 }
 
 async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
