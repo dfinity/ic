@@ -68,7 +68,7 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
-fn config_common() -> InternetComputer {
+fn setup_common() -> InternetComputer {
     InternetComputer::new().add_subnet(
         Subnet::new(SubnetType::System)
             .add_nodes(SUBNET_SIZE)
@@ -88,8 +88,8 @@ fn config_common() -> InternetComputer {
     )
 }
 
-pub fn config_upgrade(env: TestEnv) {
-    config_common()
+pub fn setup_upgrade(env: TestEnv) {
+    setup_common()
         .with_mainnet_config()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -97,8 +97,8 @@ pub fn config_upgrade(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-pub fn config_downgrade(env: TestEnv) {
-    config_common()
+pub fn setup_downgrade(env: TestEnv) {
+    setup_common()
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
