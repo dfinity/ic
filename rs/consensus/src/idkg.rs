@@ -568,6 +568,7 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use test_utils::request_id;
 
     #[test]
     fn test_idkg_priority_fn_args() {
@@ -579,11 +580,11 @@ mod tests {
             .expect_latest_certified_height()
             .returning(move || height);
 
-        let block_reader = TestIDkgBlockReader::for_signer_test(height, vec![]);
+        let block_reader = TestIDkgBlockReader::for_signer_test(height.increment(), vec![]);
 
-        // Only the context with matched quadruple should be in "requested"
         let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
         assert_eq!(args.certified_height, height);
+        assert_eq!(args.finalized_height, height.increment());
     }
 
     fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {
@@ -685,18 +686,10 @@ mod tests {
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
         let local_subnet_id = SUBNET_2;
-        let request_id_fetch_1 = RequestId {
-            callback_id: CallbackId::from(1),
-            height: Height::from(80),
-        };
-        let request_id_fetch_2 = RequestId {
-            callback_id: CallbackId::from(3),
-            height: Height::from(102),
-        };
-        let request_id_stash = RequestId {
-            callback_id: CallbackId::from(4),
-            height: Height::from(200),
-        };
+        let request_id_fetch_1 = request_id(1, Height::from(80));
+        let request_id_fetch_2 = request_id(2, Height::from(102));
+        let request_id_stash = request_id(3, Height::from(200));
+
         let args = IDkgBouncerArgs {
             finalized_height: Height::from(100),
             certified_height: Height::from(100),

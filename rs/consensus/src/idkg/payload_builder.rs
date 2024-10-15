@@ -1063,10 +1063,7 @@ mod tests {
     fn test_signature_is_only_delivered_once(key_id: MasterPublicKeyId) {
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
-        let request_id = RequestId {
-            callback_id: CallbackId::from(0),
-            height: Height::from(0),
-        };
+        let request_id = request_id(0, Height::from(0));
         let context =
             fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, &request_id);
         let signature_request_contexts = BTreeMap::from([context.clone()]);

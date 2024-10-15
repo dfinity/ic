@@ -268,10 +268,7 @@ mod tests {
             .map(|i| create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
         let ids = (0..5)
-            .map(|i| RequestId {
-                callback_id: CallbackId::from(i),
-                height: Height::from(0),
-            })
+            .map(|i| request_id(i, Height::from(0)))
             .collect::<Vec<_>>();
         let missing_pre_signature = idkg_payload.uid_generator.next_pre_signature_id();
 

@@ -879,18 +879,10 @@ mod test {
         let pre_sig_id2 = idkg_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id3 = idkg_payload.uid_generator.next_pre_signature_id();
 
-        let id1 = RequestId {
-            callback_id: CallbackId::from(1),
-            height: Height::from(0),
-        };
-        let id2 = RequestId {
-            callback_id: CallbackId::from(2),
-            height: Height::from(0),
-        };
-        let id3 = RequestId {
-            callback_id: CallbackId::from(3),
-            height: Height::from(0),
-        };
+        let height = Height::from(0);
+        let id1 = request_id(1, height);
+        let id2 = request_id(2, height);
+        let id3 = request_id(3, height);
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
@@ -1055,14 +1047,8 @@ mod test {
         let pre_sig_id = prev_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id2 = prev_payload.uid_generator.next_pre_signature_id();
 
-        let id1 = RequestId {
-            callback_id: CallbackId::from(1),
-            height: Height::from(0),
-        };
-        let id2 = RequestId {
-            callback_id: CallbackId::from(2),
-            height: Height::from(0),
-        };
+        let id1 = request_id(1, height);
+        let id2 = request_id(2, height);
 
         let signature_request_contexts = BTreeMap::from_iter([
             fake_signature_request_context_with_pre_sig(&id1, key_id.clone(), Some(pre_sig_id)),

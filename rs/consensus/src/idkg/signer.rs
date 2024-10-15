@@ -826,23 +826,16 @@ mod tests {
     use std::ops::Deref;
     use std::sync::RwLock;
 
-    fn create_request_id(id: u64, height: Height) -> RequestId {
-        RequestId {
-            callback_id: CallbackId::from(id),
-            height,
-        }
-    }
-
     #[test]
     fn test_ecdsa_signer_action() {
         let key_id = fake_ecdsa_master_public_key_id();
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
-            create_request_id(1, height),
-            create_request_id(2, Height::from(10)),
-            create_request_id(3, height),
-            create_request_id(4, height),
-            create_request_id(5, Height::from(200)),
+            request_id(1, height),
+            request_id(2, Height::from(10)),
+            request_id(3, height),
+            request_id(4, height),
+            request_id(5, Height::from(200)),
         );
 
         let requested = BTreeMap::from([
@@ -866,11 +859,11 @@ mod tests {
 
         // Messages for transcripts not being currently requested
         assert_eq!(
-            Action::new(&requested, &create_request_id(6, Height::from(100)), height,),
+            Action::new(&requested, &request_id(6, Height::from(100)), height,),
             Action::Drop
         );
         assert_eq!(
-            Action::new(&requested, &create_request_id(7, Height::from(10)), height,),
+            Action::new(&requested, &request_id(7, Height::from(10)), height,),
             Action::Drop
         );
 
@@ -918,8 +911,8 @@ mod tests {
                         ))
                     });
 
-                let id_1 = create_request_id(1, height_0);
-                let id_2 = create_request_id(2, height_30);
+                let id_1 = request_id(1, height_0);
+                let id_2 = request_id(2, height_30);
 
                 let share1 = create_signature_share(&key_id, NODE_1, id_1.clone());
                 let msg_id1 = share1.message_id();
@@ -969,11 +962,11 @@ mod tests {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
-            create_request_id(1, height),
-            create_request_id(2, height),
-            create_request_id(3, height),
-            create_request_id(4, height),
-            create_request_id(5, height),
+            request_id(1, height),
+            request_id(2, height),
+            request_id(3, height),
+            request_id(4, height),
+            request_id(5, height),
         );
 
         // Set up the IDKG pool. Pool has shares for requests 1, 2, 3.
@@ -1095,11 +1088,11 @@ mod tests {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4, id_5) = (
-            create_request_id(1, height),
-            create_request_id(2, height),
-            create_request_id(3, height),
-            create_request_id(4, height),
-            create_request_id(5, height),
+            request_id(1, height),
+            request_id(2, height),
+            request_id(3, height),
+            request_id(4, height),
+            request_id(5, height),
         );
         let (pid_1, pid_2, pid_3, pid_4, pid_5) = (
             generator.next_pre_signature_id(),
@@ -1181,9 +1174,9 @@ mod tests {
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
                 let ids = [
-                    create_request_id(1, height),
-                    create_request_id(2, height),
-                    create_request_id(3, height),
+                    request_id(1, height),
+                    request_id(2, height),
+                    request_id(3, height),
                 ];
                 let pids = [
                     generator.next_pre_signature_id(),
@@ -1252,9 +1245,9 @@ mod tests {
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let height = Height::from(100);
                 let ids = [
-                    create_request_id(1, height),
-                    create_request_id(2, height),
-                    create_request_id(3, height),
+                    request_id(1, height),
+                    request_id(2, height),
+                    request_id(3, height),
                 ];
                 let pids = [
                     generator.next_pre_signature_id(),
@@ -1383,7 +1376,7 @@ mod tests {
                     .crypto();
                 let (_, signer) =
                     create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = create_request_id(1, Height::from(5));
+                let id = request_id(1, Height::from(5));
                 let message = create_signature_share(&key_id, NODE_2, id);
                 let share = match message {
                     IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
@@ -1411,10 +1404,10 @@ mod tests {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3, id_4) = (
-            create_request_id(1, Height::from(200)),
-            create_request_id(2, height),
-            create_request_id(3, Height::from(10)),
-            create_request_id(4, Height::from(5)),
+            request_id(1, Height::from(200)),
+            request_id(2, height),
+            request_id(3, Height::from(10)),
+            request_id(4, Height::from(5)),
         );
         let (pid_2, pid_3) = (
             generator.next_pre_signature_id(),
@@ -1520,7 +1513,7 @@ mod tests {
     fn test_validate_signature_shares_mismatching_schemes(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let (id_1, id_2) = (create_request_id(1, height), create_request_id(2, height));
+        let (id_1, id_2) = (request_id(1, height), request_id(2, height));
         let (pid_1, pid_2) = (
             generator.next_pre_signature_id(),
             generator.next_pre_signature_id(),
@@ -1596,9 +1589,9 @@ mod tests {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
         let (id_1, id_2, id_3) = (
-            create_request_id(1, height),
-            create_request_id(2, height),
-            create_request_id(3, height),
+            request_id(1, height),
+            request_id(2, height),
+            request_id(3, height),
         );
         let (pid_1, pid_2, pid_3) = (
             generator.next_pre_signature_id(),
@@ -1694,7 +1687,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_2 = create_request_id(2, Height::from(100));
+                let id_2 = request_id(2, Height::from(100));
                 let pid_2 = generator.next_pre_signature_id();
 
                 let block_reader = TestIDkgBlockReader::for_signer_test(
@@ -1750,7 +1743,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let height = Height::from(100);
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let id_1 = create_request_id(1, Height::from(100));
+                let id_1 = request_id(1, Height::from(100));
                 let pid_1 = generator.next_pre_signature_id();
 
                 let block_reader = TestIDkgBlockReader::for_signer_test(
@@ -1826,9 +1819,9 @@ mod tests {
                 let height = Height::from(100);
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
-                    create_request_id(1, Height::from(10)),
-                    create_request_id(2, Height::from(20)),
-                    create_request_id(3, Height::from(200)),
+                    request_id(1, Height::from(10)),
+                    request_id(2, Height::from(20)),
+                    request_id(3, Height::from(200)),
                 );
                 let (pid_1, pid_3) = (
                     generator.next_pre_signature_id(),
@@ -1893,9 +1886,9 @@ mod tests {
                 let height = Height::from(100);
                 let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let (id_1, id_2, id_3) = (
-                    create_request_id(1, Height::from(10)),
-                    create_request_id(2, Height::from(20)),
-                    create_request_id(3, Height::from(200)),
+                    request_id(1, Height::from(10)),
+                    request_id(2, Height::from(20)),
+                    request_id(3, Height::from(200)),
                 );
                 let (pid_1, pid_3) = (
                     generator.next_pre_signature_id(),
@@ -1959,7 +1952,7 @@ mod tests {
                     caller: canister_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let req_id = create_request_id(1, Height::from(10));
+                let req_id = request_id(1, Height::from(10));
                 let pre_sig_id = PreSigId(1);
                 let message_hash = [0; 32];
                 let callback_id = CallbackId::from(1);
@@ -2085,7 +2078,7 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut idkg_pool, _) = create_signer_dependencies(pool_config, logger.clone());
-                let req_id = create_request_id(1, Height::from(10));
+                let req_id = request_id(1, Height::from(10));
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (dealers, receivers) = env.choose_dealers_and_receivers(
                     &IDkgParticipants::AllNodesAsDealersAndReceivers,
