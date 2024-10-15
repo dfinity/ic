@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Callable, List, Optional, TypeVar
 
 import invoke
-from container_utils import (
+
+from toolchains.sysimage.container_utils import (
     generate_container_command,
     path_owned_by_root,
     process_temp_sys_dir_args,

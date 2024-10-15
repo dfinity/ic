@@ -15,15 +15,22 @@ exports_files([
     "verity_sign.py",
 ])
 
+py_library(
+    name = "container_utils",
+    srcs = ["container_utils.py"],
+    deps = [
+        requirement("invoke"),
+    ],
+)
+
 # Creates a tar file as output
 py_binary(
     name = "build_container_base_image",
     srcs = [
         "build_container_base_image.py",
-        "container_utils.py",
     ],
     deps = [
-        requirement("invoke"),
+        ":container_utils",
         requirement("loguru"),
         requirement("simple_parsing"),
     ],
@@ -33,10 +40,9 @@ py_binary(
     name = "build_container_filesystem_tar",
     srcs = [
         "build_container_filesystem_tar.py",
-        "container_utils.py",
     ],
     deps = [
-        requirement("invoke"),
+        ":container_utils",
     ],
 )
 
