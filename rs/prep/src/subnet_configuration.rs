@@ -184,7 +184,7 @@ pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> S
     let dynamic_config = if use_app_config {
         DynamicConfig {
             unit_delay: ic_limits::UNIT_DELAY_APP_SUBNET,
-            initial_notary_delay: ic_limits::INITIAL_NOTARY_DELAY_APP_SUBNET,
+            initial_notary_delay: ic_limits::INITIAL_NOTARY_DELAY,
             dkg_interval_length: ic_limits::DKG_INTERVAL_HEIGHT.into(),
             max_ingress_bytes_per_message: ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
         }

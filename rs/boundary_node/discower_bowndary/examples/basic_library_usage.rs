@@ -25,7 +25,7 @@ const CANISTER_METHOD: &str = "read";
 
 /// Example usage of the HealthCheckRouteProvider (custom implementation of the RouteProvider trait defined `ic-agent`).
 /// devenv-container$ bazel run //rs/boundary_node/discower_bowndary:basic-library-usage
-/// ic$ cargo run --bin basic_library_usage
+/// ic$ cargo run --example basic_library_usage
 
 #[tokio::main]
 async fn main() {

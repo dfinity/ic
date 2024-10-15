@@ -260,6 +260,10 @@ async fn test_icps_per_sns_token_client() {
         fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
             unimplemented!()
         }
+
+        fn canister_version() -> u64 {
+            unimplemented!()
+        }
     }
 
     // Step 2: Call code under test.
@@ -371,6 +375,10 @@ async fn test_new_standard_xdrs_per_icp_client() {
         }
 
         fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
+            unimplemented!()
+        }
+
+        fn canister_version() -> u64 {
             unimplemented!()
         }
     }

@@ -12,12 +12,10 @@
 
 set -eEuo pipefail
 
-# Whether to update the results file.
-UPDATE=${1:-}
-
 RUNFILES="$PWD"
 REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
 REPO_RESULTS_PATH="${REPO_PATH}/${CANBENCH_RESULTS_PATH}"
+CANBENCH_OUTPUT="$(mktemp -t canbench_output.txt.XXXX)"
 
 # Generates a canbench.yml dynamically to be used by canbench.
 CANBENCH_YML="${RUNFILES}/canbench.yml"
@@ -32,9 +30,12 @@ fi
 
 echo ${RUNFILES}
 
-if [ -n "${UPDATE}" ]; then
+if [ $# -eq 0 ]; then
+    # Runs the benchmark without updating the results file.
+    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN}
+elif [ "$1" = "--update" ]; then
     # Runs the benchmark while updating the results file.
-    ${CANBENCH_BIN} --persist
+    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} --persist
 
     # Since we cannot specify an empty results file for the first time, we need to copy the default
     # results file to the desired location.
@@ -42,6 +43,16 @@ if [ -n "${UPDATE}" ]; then
         cp "${RUNFILES}/canbench_results.yml" "${REPO_RESULTS_PATH}"
     fi
 else
-    # Runs the benchmark without updating the results file.
-    ${CANBENCH_BIN}
+    # Runs the benchmark test that fails if the diffs are new or above the threshold.
+    ${CANBENCH_BIN} --no-runtime-integrity-check --runtime-path ${POCKET_IC_BIN} >$CANBENCH_OUTPUT
+    if grep -q "(regress\|(improved by \|(new)" "$CANBENCH_OUTPUT"; then
+        cat "$CANBENCH_OUTPUT"
+        echo "**\`$REPO_RESULTS_PATH\` is not up to date ❌**
+        If the performance change is expected, run \`_update\` target to save the updated benchmark results."
+        exit 1
+    else
+        cat "$CANBENCH_OUTPUT"
+        echo "**\`$REPO_RESULTS_PATH\` is up to date ✅**"
+        exit 0
+    fi
 fi

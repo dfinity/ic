@@ -236,7 +236,7 @@ fn verify_paths(
     targets: &CanisterIdSet,
     effective_principal_id: PrincipalId,
 ) -> Result<(), HttpError> {
-    let mut request_status_id: Option<MessageId> = None;
+    let mut last_request_status_id: Option<MessageId> = None;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -279,51 +279,44 @@ fn verify_paths(
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
-                // Verify that the request was signed by the same user.
-                if let Ok(message_id) = MessageId::try_from(*request_id) {
-                    if let Some(request_status_id) = request_status_id {
-                        if request_status_id != message_id {
-                            return Err(HttpError {
+                let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
+                    status: StatusCode::BAD_REQUEST,
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                })?;
+
+                if let Some(x) = last_request_status_id {
+                    if x != message_id {
+                        return Err(HttpError {
                                 status: StatusCode::BAD_REQUEST,
-                                message:
-                                    "Can only request a single request ID in request_status paths."
-                                        .to_string(),
+                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
+                                   x, message_id),
                             });
-                        }
                     }
+                }
+                last_request_status_id = Some(message_id.clone());
 
-                    let ingress_status = state.get_ingress_status(&message_id);
-                    if let Some(ingress_user_id) = ingress_status.user_id() {
-                        if let Some(receiver) = ingress_status.receiver() {
-                            if ingress_user_id != *user {
-                                return Err(HttpError {
+                // Verify that the request was signed by the same user.
+                let ingress_status = state.get_ingress_status(&message_id);
+                if let Some(ingress_user_id) = ingress_status.user_id() {
+                    if ingress_user_id != *user {
+                        return Err(HttpError {
+                            status: StatusCode::FORBIDDEN,
+                            message:
+                                "The user tries to access Request ID not signed by the caller."
+                                    .to_string(),
+                        });
+                    }
+                }
+
+                if let Some(receiver) = ingress_status.receiver() {
+                    if !targets.contains(&receiver) {
+                        return Err(HttpError {
                                     status: StatusCode::FORBIDDEN,
                                     message:
-                                        "Request IDs must be for requests signed by the caller."
+                                        "The user tries to access request IDs for canisters not belonging to sender delegation targets."
                                             .to_string(),
                                 });
-                            }
-
-                            if !targets.contains(&receiver) {
-                                return Err(HttpError {
-                                    status: StatusCode::FORBIDDEN,
-                                    message:
-                                        "Request IDs must be for requests to canisters belonging to sender delegation targets."
-                                            .to_string(),
-                                });
-                            }
-                        }
                     }
-
-                    request_status_id = Some(message_id);
-                } else {
-                    return Err(HttpError {
-                        status: StatusCode::BAD_REQUEST,
-                        message: format!(
-                            "Request IDs must be {} bytes in length.",
-                            EXPECTED_MESSAGE_ID_LENGTH
-                        ),
-                    });
                 }
             }
             _ => {
