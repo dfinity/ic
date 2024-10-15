@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",
     "//rs/interfaces/registry",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/protobuf",
     "//rs/registry/fake",
