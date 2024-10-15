@@ -3767,8 +3767,11 @@ where
     assert_eq!(total_supply(&env, canister_id), credited - 1 - 2);
 }
 
-pub fn test_approval_trimming<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
+pub fn test_approval_trimming<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    trimming_enabled: bool,
+) where
     T: CandidType,
 {
     let env = StateMachine::new();
@@ -3851,7 +3854,14 @@ where
         .expect("failed to mint tokens");
         new_accounts += 1;
 
-        let remaining_approvals = cmp::max(num_approvals as i64 - (new_accounts + 1) / 2, 0) as u64;
+        let remaining_approvals = if trimming_enabled {
+            cmp::max(num_approvals as i64 - (new_accounts + 1) / 2, 0) as u64
+        } else {
+            // The ICRC ledger does not trim approvals. We still want to run
+            // this test to make sure the trimming code does not cause panic, etc.
+            // Once ICP ledger approvals are not trimmed, this test will be removed entirely.
+            num_approvals
+        };
         assert_eq!(
             total_allowance(&env, canister_id, num_approvals),
             Nat::from(10_000 * remaining_approvals)
