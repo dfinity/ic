@@ -1125,7 +1125,7 @@ impl PocketIc {
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
                             if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
                             {
-                                panic!("'post' request to PocketIC server timed out.");
+                                panic!("request to PocketIC server timed out.");
                             }
                         }
                     }
@@ -1133,7 +1133,7 @@ impl PocketIc {
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
                 if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("'post' request to PocketIC server timed out.");
+                    panic!("request to PocketIC server timed out.");
                 }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
