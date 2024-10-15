@@ -34,19 +34,19 @@ use tempfile::{NamedTempFile, TempDir};
 pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
-    parent_pid: Option<u32>,
+    test_driver_pid: Option<u32>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    let port_file_path = if let Some(parent_pid) = parent_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid))
+    let port_file_path = if let Some(test_driver_pid) = test_driver_pid {
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
     let mut cmd = Command::new(PathBuf::from(bin_path));
-    if let Some(parent_pid) = parent_pid {
-        cmd.arg("--pid").arg(parent_pid.to_string());
+    if let Some(test_driver_pid) = test_driver_pid {
+        cmd.arg("--pid").arg(test_driver_pid.to_string());
     } else {
         cmd.arg("--port-file").arg(port_file_path.clone());
     }
@@ -77,8 +77,8 @@ fn start_server_helper(
 }
 
 pub fn start_server() -> Url {
-    let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(Some(parent_pid), false, false).0
+    let test_driver_pid = std::process::id();
+    start_server_helper(Some(test_driver_pid), false, false).0
 }
 
 #[test]
