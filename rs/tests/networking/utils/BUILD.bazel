@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "utils",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_root = "src/lib.rs",
+    crate_name = "ic_networking_system_test_utils",
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
+)

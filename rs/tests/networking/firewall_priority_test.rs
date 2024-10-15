@@ -7,9 +7,9 @@ use ic_system_test_driver::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(ic_tests::networking::firewall_priority::config)
+        .with_setup(ic_networking_system_test_utils::firewall_priority::config)
         .add_test(systest!(
-            ic_tests::networking::firewall_priority::override_firewall_rules_with_priority
+            ic_networking_system_test_utils::firewall_priority::override_firewall_rules_with_priority
         ))
         .execute_from_args()?;
 

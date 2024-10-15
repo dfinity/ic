@@ -139,7 +139,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
 )
 
 system_test_nns(
@@ -151,7 +151,7 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
 )
 
 system_test_nns(
