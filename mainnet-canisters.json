@@ -56,8 +56,8 @@
     "sha256": "6dd00ebe425ba360be161c880ce3a3b3cda5a3738d6b323a9fd0366debf590ce"
   },
   "sns_archive": {
-    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
-    "sha256": "9476aa71bcee621aba93a3d7c115c543f42c543de840da3224c5f70a32dbfe4d"
+    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
+    "sha256": "4f002f50679af4cc2d5a91b842eeff47bc1aff22286a42cf4c605a28b46b6689"
   },
   "sns_governance": {
     "rev": "db5901a6e90b718918978ae5167b9c98d5aa7ab6",
@@ -68,8 +68,8 @@
     "sha256": "612410c71e893bb64772ab8131d77264740398f3932d873cb4f640fc257f9e61"
   },
   "sns_ledger": {
-    "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
-    "sha256": "a170bfdce5d66e751a3cc03747cb0f06b450af500e75e15976ec08a3f5691f4c"
+    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
+    "sha256": "10265a7d88461317953030fb0e6da20b9035260a11d077a1b249d4a18a5b8577"
   },
   "sns_root": {
     "rev": "db5901a6e90b718918978ae5167b9c98d5aa7ab6",
