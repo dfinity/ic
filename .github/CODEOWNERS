@@ -16,14 +16,15 @@
 /bin/fuzzing_coverage.sh  @dfinity/product-security
 
 # [Bazel]
-/bazel/                   @dfinity/idx
-/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
-/third_party/             @dfinity/idx
-/WORKSPACE.bazel          @dfinity/idx
-/mainnet-canisters.json   @dfinity/idx @dfinity/nns-team
-/BUILD.bazel              @dfinity/idx
 .bazelrc                  @dfinity/idx
 .bazelversion             @dfinity/idx
+/bazel/                   @dfinity/idx
+/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
+/BUILD.bazel              @dfinity/idx
+/third_party/             @dfinity/idx
+/mainnet-canisters.json   @dfinity/idx @dfinity/nns-team
+/MODULE.bazel             @dfinity/idx
+/WORKSPACE.bazel          @dfinity/idx
 
 # [Rust Lang]
 rust-toolchain.toml       @dfinity/networking
