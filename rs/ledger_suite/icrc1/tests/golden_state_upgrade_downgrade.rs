@@ -32,12 +32,20 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(not(feature = "u256-tokens"))]
 lazy_static! {
-    pub static ref MAINNET_WASMS: Wasms = Wasms::new(
+    pub static ref MAINNET_CKBTC_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -54,14 +62,6 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-        ))
-    );
-    pub static ref MAINNET_U64_WASMS: Wasms = Wasms::new(
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
-        )),
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -351,7 +351,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             CK_BTC_INDEX_CANISTER_ID,
             CK_BTC_LEDGER_CANISTER_NAME,
         ),
-        &MAINNET_WASMS,
+        &MAINNET_CKBTC_WASMS,
         &MASTER_WASMS,
         Some(burns_without_spender),
         true,
@@ -492,7 +492,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
-#[cfg(feature = "u256-tokens")]
+#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
@@ -644,7 +644,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
         OPENCHAT_LEDGER_SUITE,
-        &MAINNET_U64_WASMS,
+        &MAINNET_SNS_WASMS,
         &MASTER_WASMS,
         None,
         true,
@@ -681,7 +681,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &MAINNET_U64_WASMS,
+            &MAINNET_SNS_WASMS,
             &MASTER_WASMS,
         ));
     }
