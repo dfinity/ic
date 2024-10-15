@@ -89,16 +89,15 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
 
         tla_log_response!(
             Destination::new("ledger"),
-            if let Ok(balance) = result {
-                tla::TlaValue::Variant {
+            match result {
+                Ok(balance) => tla::TlaValue::Variant {
                     tag: "BalanceQueryOk".to_string(),
                     value: Box::new(balance.get_e8s().to_tla_value()),
-                }
-            } else {
-                tla::TlaValue::Variant {
+                },
+                _ => tla::TlaValue::Variant {
                     tag: "Fail".to_string(),
                     value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
-                }
+                },
             }
         );
 
