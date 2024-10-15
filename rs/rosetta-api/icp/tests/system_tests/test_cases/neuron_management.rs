@@ -104,7 +104,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
 
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
-            // When a neuron is created its dissolve delay timestamp is set to 0 seconds in the future and is dissolving
+            // When a neuron is created its dissolve delay timestamp is set to now which corresponds to the state DISSOLVED
             DissolveState::WhenDissolvedTimestampSeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
@@ -113,12 +113,21 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 k
             ),
         };
-        assert_eq!(dissolve_delay_timestamp, 0);
+        assert_eq!(
+            dissolve_delay_timestamp,
+            env.pocket_ic
+                .get_time()
+                .await
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
+        let additional_dissolve_delay = 1000;
         let new_dissolve_delay_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            + 1000;
+            + additional_dissolve_delay;
 
         env.rosetta_client
             .set_neuron_dissolve_delay(
@@ -134,6 +143,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         // The State of the Neuron should still be in NOT_DISSOLVING
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
+            // The neuron now has a new dissolve delay timestamp and is in NOT DISSOLVING which corresponds to a dissolve delay that is greater than 0
             DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
@@ -143,6 +153,6 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             ),
         };
         // The Dissolve Delay Timestamp should be updated
-        assert_eq!(dissolve_delay_timestamp, new_dissolve_delay_timestamp);
+        assert_eq!(dissolve_delay_timestamp, additional_dissolve_delay);
     });
 }
