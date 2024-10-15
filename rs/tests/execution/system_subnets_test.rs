@@ -1,13 +1,24 @@
 use anyhow::Result;
+use candid::{Decode, Encode};
 use execution_system_tests_common::config_many_system_subnets;
+use ic_agent::agent::RejectCode;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
+use ic_system_test_driver::types::CreateCanisterResult;
+use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
+use ic_types::Cycles;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(execution::config_many_system_subnets)
-        .add_test(systest!(execution::nns_shielding::non_nns_canister_attempt_to_create_canister_on_another_subnet_fails))
-        .add_test(systest!(execution::nns_shielding::nns_canister_attempt_to_create_canister_on_another_subnet_succeeds))
+        .with_setup(config_many_system_subnets)
+        .add_test(systest!(
+            non_nns_canister_attempt_to_create_canister_on_another_subnet_fails
+        ))
+        .add_test(systest!(
+            nns_canister_attempt_to_create_canister_on_another_subnet_succeeds
+        ))
         .execute_from_args()?;
     Ok(())
 }

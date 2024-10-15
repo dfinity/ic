@@ -58,3 +58,7 @@ path = "max_number_of_canisters_test.rs"
 [[bin]]
 name = "system_api_security_test"
 path = "system_api_security_test.rs"
+
+[[bin]]
+name = "system_subnets_test"
+path = "system_subnets_test.rs"

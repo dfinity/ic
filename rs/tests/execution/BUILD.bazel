@@ -147,13 +147,19 @@ system_test(
 system_test(
     name = "system_subnets_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/execution/common:execution_system_tests_common",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+    ],
 )
 
 system_test(
