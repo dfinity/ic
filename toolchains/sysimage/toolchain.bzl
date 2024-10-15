@@ -44,10 +44,6 @@ def _build_container_base_image_impl(ctx):
     outputs.append(output_tar_file)
 
     inputs += ctx.files.context_files
-
-    container_utils = ctx.file.container_utils
-    inputs.append(container_utils)
-
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
 
@@ -98,11 +94,6 @@ build_container_base_image = _icos_build_rule(
             executable = True,
             cfg = "exec",
         ),
-        # Add the container_utils attribute
-        "container_utils": attr.label(
-            default = "//toolchains/sysimage:container_utils",
-            allow_single_file = True,
-        ),
     },
 )
 
@@ -116,9 +107,6 @@ def _build_container_filesystem_impl(ctx):
     outputs.append(output_tar_file)
 
     inputs += ctx.files.context_files
-
-    container_utils = ctx.file.container_utils
-    inputs.append(container_utils)
 
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
@@ -185,11 +173,6 @@ build_container_filesystem = _icos_build_rule(
             default = "//toolchains/sysimage:build_container_filesystem_tar",
             executable = True,
             cfg = "exec",
-        ),
-        # Add the container_utils attribute
-        "container_utils": attr.label(
-            default = "//toolchains/sysimage:container_utils",
-            allow_single_file = True,
         ),
     },
 )
