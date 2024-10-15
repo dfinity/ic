@@ -66,7 +66,7 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 
-use super::utils::{algorithm_for_key_id, get_context_request_id};
+use super::utils::algorithm_for_key_id;
 
 pub(crate) fn dealings_context_from_reshare_request(
     request: idkg::IDkgReshareRequest,
@@ -150,7 +150,7 @@ pub fn fake_signature_request_context_from_id(
         args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [pre_sig_id.get() as u8; 32],
+        pseudo_random_id: [pre_sig_id.0 as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
         nonce: Some([0; 32]),
     };
@@ -329,7 +329,6 @@ pub(crate) struct TestIDkgBlockReader {
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
-    requested_signatures: Vec<(RequestId, ThresholdSigInputsRef)>,
     available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     fail_to_resolve: bool,
@@ -622,8 +621,13 @@ impl ThresholdSignatureBuilder for TestThresholdSignatureBuilder {
         callback_id: CallbackId,
         context: &SignWithThresholdContext,
     ) -> Option<CombinedSignature> {
-        let request_id = get_context_request_id(callback_id, context)?;
-        self.signatures.get(&request_id).cloned()
+        let height = context.matched_pre_signature.map(|(_, h)| h)?;
+        self.signatures
+            .get(&RequestId {
+                callback_id,
+                height,
+            })
+            .cloned()
     }
 }
 

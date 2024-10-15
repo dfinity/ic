@@ -554,15 +554,13 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
-    use self::test_utils::{fake_ecdsa_master_public_key_id, TestIDkgBlockReader};
-    use self::utils::get_context_request_id;
+    use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::idkg::IDkgUIDGenerator;
     use ic_types::consensus::idkg::{
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData, PreSigId,
+        opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData,
     };
     use ic_types::messages::CallbackId;
     use ic_types::{
@@ -570,8 +568,6 @@ mod tests {
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
     };
     use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
-
-    use tests::test_utils::create_sig_inputs;
 
     #[test]
     fn test_idkg_priority_fn_args() {
@@ -689,7 +685,6 @@ mod tests {
     #[test]
     fn test_idkg_priority_fn_sig_shares() {
         let local_subnet_id = SUBNET_2;
-        let mut uid_generator = IDkgUIDGenerator::new(local_subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
             callback_id: CallbackId::from(1),
             height: Height::from(80),

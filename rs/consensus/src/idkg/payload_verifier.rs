@@ -611,7 +611,7 @@ mod test {
             signatures::update_signature_agreements,
         },
         test_utils::*,
-        utils::{algorithm_for_key_id, get_context_request_id},
+        utils::algorithm_for_key_id,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
@@ -896,13 +896,13 @@ mod test {
         // missing its nonce.
         let signature_request_contexts = BTreeMap::from_iter([
             fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, &id1),
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, &id2),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, &id2),
             fake_signature_request_context_with_pre_sig(&id3, key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
-        let request_ids = signature_request_contexts
+        let request_ids: Vec<RequestId> = signature_request_contexts
             .iter()
             .flat_map(|(callback_id, context)| {
                 context.matched_pre_signature.map(|(_, height)| RequestId {
@@ -910,7 +910,16 @@ mod test {
                     height,
                 })
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<RequestId>>();
+
+        let pseudo_random_id = |i| {
+            let request_id: &RequestId = &request_ids[i];
+            let callback_id = request_id.callback_id;
+            signature_request_contexts
+                .get(&callback_id)
+                .unwrap()
+                .pseudo_random_id
+        };
 
         let (key_transcript, key_transcript_ref) =
             idkg_payload.generate_current_key(&key_id, &env, &mut rng);
@@ -961,7 +970,7 @@ mod test {
         assert_matches!(
             idkg_payload
                 .signature_agreements
-                .get(&request_ids[0].pseudo_random_id)
+                .get(&pseudo_random_id(0))
                 .unwrap(),
             CompletedSignature::Unreported(_)
         );
@@ -987,14 +996,14 @@ mod test {
         assert_matches!(
             idkg_payload
                 .signature_agreements
-                .get(&request_ids[0].pseudo_random_id)
+                .get(&pseudo_random_id(0))
                 .unwrap(),
             CompletedSignature::ReportedToExecution
         );
         assert_matches!(
             idkg_payload
                 .signature_agreements
-                .get(&request_ids[1].pseudo_random_id)
+                .get(&pseudo_random_id(1))
                 .unwrap(),
             CompletedSignature::Unreported(_)
         );
@@ -1009,7 +1018,7 @@ mod test {
         )
         .unwrap();
         assert_eq!(res.len(), 1);
-        assert_eq!(res.keys().next().unwrap(), &request_ids[1].pseudo_random_id);
+        assert_eq!(res.keys().next().unwrap(), &pseudo_random_id(1));
 
         // Repeated signature leads to error
         let res = validate_new_signature_agreements(
@@ -1024,7 +1033,7 @@ mod test {
             Err(ValidationError::InvalidArtifact(
                 InvalidIDkgPayloadReason::NewSignatureUnexpected(id)
             ))
-            if id == request_ids[1].pseudo_random_id
+            if id == pseudo_random_id(1)
         );
     }
 
@@ -1113,9 +1122,10 @@ mod test {
             &mut idkg_payload_mismatched_context,
             [(pre_sig_id2, create_sig_inputs(2, &wrong_key_id))],
         );
+        let pseudo_random_id = signature_request_contexts[&id2.callback_id].pseudo_random_id;
         idkg_payload_mismatched_context
             .signature_agreements
-            .insert([2; 32], fake_response.clone());
+            .insert(pseudo_random_id, fake_response.clone());
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,

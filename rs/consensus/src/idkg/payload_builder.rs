@@ -677,7 +677,6 @@ mod tests {
     use crate::idkg::test_utils::*;
     use crate::idkg::utils::algorithm_for_key_id;
     use crate::idkg::utils::block_chain_reader;
-    use crate::idkg::utils::get_context_request_id;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;

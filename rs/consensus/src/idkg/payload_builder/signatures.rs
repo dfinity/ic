@@ -293,18 +293,16 @@ mod tests {
         ]);
 
         // insert agreement for completed request
+        let pseudo_random_id = contexts.get(&ids[2].callback_id).unwrap().pseudo_random_id;
         idkg_payload.signature_agreements.insert(
-            [2; 32],
+            pseudo_random_id,
             idkg::CompletedSignature::Unreported(empty_response()),
         );
 
         let mut signature_builder = TestThresholdSignatureBuilder::new();
-        for (i, pre_sig_id) in pre_sig_ids.iter().enumerate().skip(1) {
+        for (i, _) in pre_sig_ids.iter().enumerate().skip(1) {
             signature_builder.signatures.insert(
-                RequestId {
-                    callback_id: CallbackId::from(i as u64),
-                    height: Height::from(1),
-                },
+                ids[i],
                 match key_id {
                     MasterPublicKeyId::Ecdsa(_) => {
                         CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {

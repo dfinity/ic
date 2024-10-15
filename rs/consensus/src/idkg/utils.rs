@@ -224,17 +224,6 @@ pub(super) fn block_chain_cache(
     }
 }
 
-/// Helper to build the [`RequestId`] if the context is already completed
-pub(super) fn get_context_request_id(
-    callback_id: CallbackId,
-    context: &SignWithThresholdContext,
-) -> Option<RequestId> {
-    context.matched_pre_signature.map(|(_, height)| RequestId {
-        callback_id,
-        height,
-    })
-}
-
 #[derive(Debug)]
 #[allow(dead_code)]
 pub(crate) enum BuildSignatureInputsError {
