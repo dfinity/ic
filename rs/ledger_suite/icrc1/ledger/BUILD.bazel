@@ -156,25 +156,6 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
-        (
-            "_nextmigrationversionmemorymanager",
-            ["next-migration-version-memory-manager"],
-            [
-                ":ledger",
-                "//rs/ledger_suite/icrc1/tokens_u64",
-            ],
-        ),
-        (
-            "_u256_nextmigrationversionmemorymanager",
-            [
-                "next-migration-version-memory-manager",
-                "u256-tokens",
-            ],
-            [
-                ":ledger_u256",
-                "//rs/ledger_suite/icrc1/tokens_u256",
-            ],
-        ),
     ]
 ]
 
@@ -198,7 +179,6 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
-            ":ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -213,7 +193,6 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
         },
         deps = [
             # Keep sorted.
@@ -279,17 +258,18 @@ rust_test(
 # Benchmarking:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64 for legder using u64 tokens.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256 for legder using u256 tokens.
+# Testing:
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u64_test for legder using u64 tokens.
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u256_test for legder using u256 tokens.
 # Updating the results file:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64_update for updating the results file.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256_update for updating the results file.
-# Currently, updating the results file is not automated, and there are no tests to avoid
-# regression. For now, we can use it as an example for benchmarking as part of an
-# investigation of potential performance issues, or when we make a change that can affect
-# the performance measured in this benchmark.
+#  If the performance change is expected, run these targets to save the updated benchmark results.
 [
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
+        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.

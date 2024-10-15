@@ -1,5 +1,5 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -88,8 +88,8 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/registry/transport",
-        "//rs/rosetta-api",
-        "//rs/rosetta-api/rosetta_core:rosetta-core",
+        "//rs/rosetta-api/common/rosetta_core:rosetta-core",
+        "//rs/rosetta-api/icp:rosetta-api",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
@@ -178,4 +178,9 @@ rust_library(
         "@crate_index//:wat",
         "@crate_index//:zstd",
     ],
+)
+
+rust_test(
+    name = "generic_workload_engine",
+    crate = ":ic-system-test-driver",
 )

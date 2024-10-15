@@ -24,13 +24,12 @@ members = [
     "rs/bitcoin/kyt",
     "rs/bitcoin/mock",
     "rs/bitcoin/replica_types",
+    "rs/bitcoin/validation",
     "rs/boundary_node/canary_proxy",
     "rs/boundary_node/certificate_issuance/certificate_issuer",
     "rs/boundary_node/certificate_issuance/certificate_orchestrator",
     "rs/boundary_node/discower_bowndary",
-    "rs/boundary_node/ic_balance_exporter",
     "rs/boundary_node/ic_boundary",
-    "rs/boundary_node/prober",
     "rs/boundary_node/systemd_journal_gatewayd_shim",
     "rs/canister_client",
     "rs/canister_client/sender",
@@ -255,37 +254,37 @@ members = [
     "rs/replica",
     "rs/replica_tests",
     "rs/replicated_state",
-    "rs/rosetta-api",
-    "rs/rosetta-api/rosetta_core",
-    "rs/rosetta-api/runner",
-    "rs/rosetta-api/client",
+    "rs/rosetta-api/icp",
+    "rs/rosetta-api/common/rosetta_core",
+    "rs/rosetta-api/icp/runner",
+    "rs/rosetta-api/icp/client",
     "rs/ledger_suite/icp",
     "rs/ledger_suite/icp/archive",
     "rs/ledger_suite/icp/ledger",
     "rs/ledger_suite/icp/protobuf_generator",
     "rs/ledger_suite/icp/index",
-    "rs/ledger_suite/icp/rosetta-integration-tests",
+    "rs/rosetta-api/icp/tests/integration_tests",
     "rs/ledger_suite/icp/test_utils",
     "rs/ledger_suite/common/ledger_core",
     "rs/ledger_suite/common/ledger_canister_core",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer",
-    "rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer",
+    "rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "rs/ledger_suite/icrc1",
     "rs/ledger_suite/icrc1/benchmark/generator",
     "rs/ledger_suite/icrc1/benchmark/worker",
     "rs/ledger_suite/icrc1/index",
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
-    "rs/ledger_suite/icrc1/rosetta",
-    "rs/ledger_suite/icrc1/rosetta/client",
-    "rs/ledger_suite/icrc1/rosetta/runner",
     "rs/ledger_suite/tests/sm-tests",
     "rs/ledger_suite/icrc1/archive",
     "rs/ledger_suite/icrc1/test_utils",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/icrc1/tokens_u256",
-    "rs/rosetta-api/test_utils",
-    "rs/rosetta-api/test_utils/sender_canister",
+    "rs/ledger_suite/icp/test_utils",
+    "rs/rosetta-api/icp/test_utils/sender_canister",
+    "rs/rosetta-api/icrc1",
+    "rs/rosetta-api/icrc1/client",
+    "rs/rosetta-api/icrc1/runner",
     "rs/rosetta-api/tvl",
     "rs/rosetta-api/tvl/xrc_mock",
     "rs/rust_canisters/call_tree_test",
@@ -350,6 +349,11 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests",
+    "rs/tests/boundary_nodes",
+    "rs/tests/boundary_nodes/integration_test_common",
+    "rs/tests/boundary_nodes/performance_test_common",
+    "rs/tests/boundary_nodes/utils",
+    "rs/tests/ckbtc",
     "rs/tests/consensus",
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
@@ -362,8 +366,11 @@ members = [
     "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
     "rs/tests/nested",
+    "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
+    "rs/tests/nns/nns_dapp",
+    "rs/tests/node",
     "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
@@ -468,10 +475,11 @@ axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
+bitcoin = { version = "0.28.2", features = ["default", "use-serde", "rand"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
-bytes = "1.7.1"
+bytes = "1.7.2"
 candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
@@ -514,7 +522,7 @@ http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
 hyper = { version = "1.4.1", features = ["full"] }
-hyper-rustls = { version = "0.27.2", default-features = false, features = [
+hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
     "native-tokio",
@@ -522,7 +530,7 @@ hyper-rustls = { version = "0.27.2", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.7", features = ["full"] }
+hyper-util = { version = "0.1.9", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
     "hyper",
@@ -533,7 +541,7 @@ ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
 ic-btc-validation = "0.1.0"
 ic-cbor = "2.6.0"
-ic-cdk = "0.13.5"
+ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic-certificate-verification = "2.6.0"
@@ -592,6 +600,7 @@ parking_lot = "0.12.3"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.13.0", default-features = false, features = [
+    "criterion",
     "flamegraph",
     "prost-codec",
 ] }
@@ -628,7 +637,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
 rolling-file = "0.2.0"
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.12", default-features = false, features = [
+rustls = { version = "0.23.14", default-features = false, features = [
     "ring",
     "std",
     "brotli",
@@ -653,8 +662,8 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.2", features = ["derive"] }
-strum_macros = "0.26.2"
+strum = { version = "0.26.3", features = [ "derive" ] }
+strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
 tar = "=0.4.39"
@@ -693,9 +702,9 @@ url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 walkdir = "=2.3.3"
 walrus = "0.21.1"
-wasm-encoder = { version = "0.215.0", features = ["wasmparser"] }
-wasmparser = "0.215.0"
-wasmprinter = "0.215.0"
+wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
+wasmparser = "0.217.0"
+wasmprinter = "0.217.0"
 wast = "212.0.0"
 wat = "=1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }

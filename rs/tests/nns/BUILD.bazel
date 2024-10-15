@@ -1,11 +1,34 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
     "secret_key.pem",
 ])
+
+# TODO: Once we stop loading DEPENDENCIES from //rs/tests::common.bzl, rename this to just DEPENDENCIES.
+MIGRATED_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/test_utils",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    # Do *NOT* add //rs/tests here.
+    "//rs/tests/ckbtc",
+    "//rs/tests/consensus/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/tests/nns/nns_dapp",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:libflate",
+    "@crate_index//:reqwest",
+    "@crate_index//:slog",
+]
 
 # nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
@@ -34,6 +57,39 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/ic_mainnet_nns_recovery",
         "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "nns_dapp_test",
+    env = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
+        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
+        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    },
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "@ii_dev_canister//file",
+        "@nns_dapp_canister//file",
+        "@subnet_rental_canister//file",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nns/nns_dapp",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:libflate",
+        "@crate_index//:reqwest",
     ],
 )
 
@@ -112,7 +168,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["@btc_canister//file"],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = MIGRATED_DEPENDENCIES,
 )
 
 system_test(
