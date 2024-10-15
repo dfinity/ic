@@ -1066,25 +1066,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bincode"
-version = "2.0.0-rc.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f11ea1a0346b94ef188834a65c068a03aec181c94896d481d7a0a40d85b0ce95"
-dependencies = [
- "bincode_derive",
- "serde",
-]
-
-[[package]]
-name = "bincode_derive"
-version = "2.0.0-rc.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e30759b3b99a1b802a7a3aa21c85c3ded5c28e1c83170d82d70f08bbf7f3e4c"
-dependencies = [
- "virtue",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.59.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1465,7 +1446,7 @@ source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df1
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "build-info-common",
  "cargo_metadata",
  "glob",
@@ -1493,7 +1474,7 @@ source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df1
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "build-info-common",
  "num-bigint 0.4.6",
  "num-traits",
@@ -1955,7 +1936,7 @@ name = "certificate_orchestrator"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "candid_parser",
  "certificate_orchestrator_interface",
@@ -5359,7 +5340,7 @@ dependencies = [
 name = "ic-artifact-pool"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "byteorder",
  "clap 4.5.19",
  "criterion",
@@ -5968,7 +5949,7 @@ dependencies = [
 name = "ic-canister-sandbox-backend-lib"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "cc",
  "ic-base-types",
@@ -6714,7 +6695,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
- "bincode 1.3.3",
+ "bincode",
  "clap 4.5.19",
  "criterion",
  "hex",
@@ -7070,7 +7051,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "educe",
  "futures",
@@ -7340,7 +7321,6 @@ dependencies = [
  "k256",
  "p256",
  "rand 0.8.5",
- "schnorr_fun",
  "sha2 0.10.8",
 ]
 
@@ -10580,7 +10560,7 @@ dependencies = [
 name = "ic-protobuf"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "erased-serde",
  "hex",
@@ -12372,7 +12352,7 @@ dependencies = [
  "async-trait",
  "backon",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "canister-test",
  "chrono",
@@ -12615,7 +12595,7 @@ version = "0.9.0"
 name = "ic-test-utilities-consensus"
 version = "0.9.0"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "ic-base-types",
  "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
@@ -12800,7 +12780,7 @@ name = "ic-test-utilities-types"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "bincode 1.3.3",
+ "bincode",
  "ic-canister-client-sender",
  "ic-crypto-ed25519",
  "ic-types",
@@ -12900,7 +12880,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "candid",
  "chrono",
  "hex",
@@ -13542,7 +13522,6 @@ dependencies = [
  "ic-types-test-utils",
  "k256",
  "registry-canister",
- "schnorr_fun",
  "serde",
  "sha2 0.10.8",
  "slog",
@@ -18463,15 +18442,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schnorr_fun"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56f8fbe78e3698a49208f5dd1a1d602908493ec800dd49147b1570b4eae84a1e"
-dependencies = [
- "secp256kfun",
-]
-
-[[package]]
 name = "scoped-tls"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18577,15 +18547,6 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.28.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d24b59d129cdadea20aea4fb2352fa053712e5d713eee47d700cd4b2bc002f10"
-dependencies = [
- "secp256k1-sys 0.9.2",
-]
-
-[[package]]
-name = "secp256k1"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
@@ -18614,46 +18575,11 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "secp256k1-sys"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4387882333d3aa8cb20530a17c69a3752e97837832f34f6dccc760e715001d9"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "secp256kfun"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ecc2adce3ef929c5dc7dacdd612d65ab98002ee18119215ce25d8054ed53c1a"
-dependencies = [
- "bincode 2.0.0-rc.3",
- "digest 0.10.7",
- "rand_core 0.6.4",
- "secp256k1 0.27.0",
- "secp256k1 0.28.2",
- "secp256kfun_arithmetic_macros",
- "serde",
- "subtle-ng",
-]
-
-[[package]]
-name = "secp256kfun_arithmetic_macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91b7c385a72530ebfe6010ff476ad9e235743fb33408a360052bb706f1481e1e"
-dependencies = [
- "proc-macro2",
- "quote",
 ]
 
 [[package]]
@@ -19933,7 +19859,7 @@ dependencies = [
  "axum 0.7.7",
  "backon",
  "base64 0.13.1",
- "bincode 1.3.3",
+ "bincode",
  "bitcoincore-rpc",
  "candid",
  "canister-test",
@@ -20067,7 +19993,6 @@ dependencies = [
  "rosetta-core",
  "rsa",
  "rust_decimal",
- "schnorr_fun",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -20395,7 +20320,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "911a61637386b789af998ee23f50aa30d5fd7edcec8d6d3dedae5e5815205466"
 dependencies = [
- "bincode 1.3.3",
+ "bincode",
  "bytes",
  "educe",
  "futures-core",
@@ -21156,12 +21081,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "virtue"
-version = "0.0.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dcc60c0624df774c82a0ef104151231d37da4962957d691c011c852b2473314"
 
 [[package]]
 name = "vsock"

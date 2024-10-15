@@ -31,24 +31,17 @@ pub fn random_polynomial_commitment<R: Rng + CryptoRng>(
 }
 
 pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use schnorr_fun::{
-        fun::{marker::*, Point},
-        Message, Schnorr, Signature,
-    };
-    use sha2::Sha256;
+    let signature = match k256::schnorr::Signature::try_from(sig) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
 
-    let sig_array = <[u8; 64]>::try_from(sig).expect("signature is not 64 bytes");
-    assert_eq!(sec1_pk.len(), 33);
-    // The public key is a BIP-340 public key, which is a 32-byte
-    // compressed public key ignoring the y coordinate in the first byte of the
-    // SEC1 encoding.
-    let bip340_pk_array = <[u8; 32]>::try_from(&sec1_pk[1..]).expect("public key is not 32 bytes");
-
-    let schnorr = Schnorr::<Sha256>::verify_only();
-    let public_key = Point::<EvenY, Public>::from_xonly_bytes(bip340_pk_array)
-        .expect("failed to parse public key");
-    let signature = Signature::<Public>::from_bytes(sig_array).unwrap();
-    schnorr.verify(&public_key, Message::<Secret>::raw(msg), &signature)
+    // from_bytes takes just the x coordinate encoding:
+    if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+        bip340.verify_raw(msg, &signature).is_ok()
+    } else {
+        false
+    }
 }
 
 pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
