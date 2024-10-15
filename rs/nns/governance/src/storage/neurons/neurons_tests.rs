@@ -530,3 +530,36 @@ fn test_range_neurons_reconstitutes_fully() {
 
     assert_eq!(result, neurons);
 }
+
+#[test]
+fn test_range_neurons_ranges_work_correctly() {
+    // This test is here to ensure that the conversions that happen inside range_neurons are correct.
+    let mut store = new_heap_based();
+    let neurons = {
+        let mut neurons = vec![];
+        for i in 1..=10 {
+            let neuron = create_model_neuron(i);
+            store.create(neuron.clone()).unwrap();
+            neurons.push(neuron);
+        }
+        neurons
+    };
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..NeuronId::from_u64(9))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..8]);
+
+    let result = store
+        .range_neurons(NeuronId::from_u64(2)..=NeuronId::from_u64(3))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[1..3]);
+
+    let result = store
+        .range_neurons((
+            std::ops::Bound::Excluded(NeuronId::from_u64(2)),
+            std::ops::Bound::Included(NeuronId::from_u64(3)),
+        ))
+        .collect::<Vec<_>>();
+    assert_eq!(result, neurons[2..3]);
+}

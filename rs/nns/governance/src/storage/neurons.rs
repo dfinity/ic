@@ -344,61 +344,71 @@ where
     /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
-        R: RangeBounds<NeuronId> + Copy,
+        R: RangeBounds<NeuronId> + Clone,
     {
-        let (start, end) = extract_range_ends(range);
+        let (start, end) = get_range_boundaries(range.clone());
 
-        let hotkeys_range = (start, u64::MIN)..(end, u64::MAX);
-        let ballots_range = (start, u64::MIN)..(end, u64::MAX);
+        // We want our ranges for sub iterators to include start and end
+        let hotkeys_range = (start, u64::MIN)..=(end, u64::MAX);
+        let ballots_range = (start, u64::MIN)..=(end, u64::MAX);
 
         let followees_range = FolloweesKey {
             follower_id: start,
             ..FolloweesKey::MIN
-        }..FolloweesKey {
+        }..=FolloweesKey {
             follower_id: end,
             ..FolloweesKey::MAX
         };
 
-        let main_range = self.main.range(range);
+        // Instead of randomly accessing each map (which is expensive for StableBTreeMaps), we
+        // use a range query on each map, and iterate all of the ranges at the same time.  This
+        // uses 40% less instructions compared to just iterating on the top level range, and
+        // accessing the other maps for each neuron_id.
+
+        let main_range = self.main.range(range.clone());
         let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
         let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
-        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range).peekable();
+        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
         let mut transfer_iter = self.transfer_map.range(range).peekable();
 
         main_range.map(move |(main_neuron_id, abridged_neuron)| {
             // We'll collect data from all relevant maps for this neuron_id
 
-            let hot_keys = collect_for_neuron_id(
+            let hot_keys = collect_values_for_neuron(
                 &mut hot_keys_iter,
                 main_neuron_id,
-                |((neuron_id, _index), principal)| (*neuron_id, PrincipalId::from(*principal)),
+                |((neuron_id, _), _)| *neuron_id,
+                |((_, _), principal)| PrincipalId::from(principal),
             );
 
-            let ballots = collect_for_neuron_id(
+            let ballots = collect_values_for_neuron(
                 &mut recent_ballots_iter,
                 main_neuron_id,
-                |((neuron_id, _index), ballot_info)| (*neuron_id, *ballot_info),
+                |((neuron_id, _), _)| *neuron_id,
+                |((_, _), ballot_info)| ballot_info,
             );
 
-            let followees = collect_for_neuron_id(
+            let followees = collect_values_for_neuron(
                 &mut followees_iter,
                 main_neuron_id,
-                |(followees_key, followee_id)| {
-                    (followees_key.follower_id, (*followees_key, *followee_id))
-                },
+                |(followees_key, _)| followees_key.follower_id,
+                |x| x,
             );
 
-            let current_known_neuron_data = collect_for_neuron_id(
+            let current_known_neuron_data = collect_values_for_neuron(
                 &mut known_neuron_data_iter,
                 main_neuron_id,
-                |(neuron_id, known_neuron_data)| (*neuron_id, known_neuron_data.clone()),
+                |(neuron_id, _)| *neuron_id,
+                |(_, known_neuron_data)| known_neuron_data,
             )
             .pop();
-            let current_transfer = collect_for_neuron_id(
+
+            let current_transfer = collect_values_for_neuron(
                 &mut transfer_iter,
                 main_neuron_id,
-                |(neuron_id, transfer)| (*neuron_id, transfer.clone()),
+                |(neuron_id, _)| *neuron_id,
+                |(_, transfer)| transfer,
             )
             .pop();
 
@@ -683,7 +693,7 @@ impl Storable for NeuronStakeTransfer {
 // Private Helpers
 // ===============
 
-fn extract_range_ends<R>(range_bound: R) -> (NeuronId, NeuronId)
+fn get_range_boundaries<R>(range_bound: R) -> (NeuronId, NeuronId)
 where
     R: RangeBounds<NeuronId>,
 {
@@ -701,26 +711,33 @@ where
     (start, end)
 }
 
-fn collect_for_neuron_id<I, T, F, R>(
-    iter: &mut Peekable<I>,
+/// Skips until extract_neuron_id(item) == target_neuron_id, then maps corresponding items through
+/// extract_value and returns the result as a vector.
+fn collect_values_for_neuron<Iter, T, R, FNeuronId, FValue>(
+    iter: &mut Peekable<Iter>,
     target_neuron_id: NeuronId,
-    mut extract_key_and_value: F,
+    extract_neuron_id: FNeuronId,
+    extract_value: FValue,
 ) -> Vec<R>
 where
-    F: FnMut(&T) -> (NeuronId, R),
-    I: Iterator<Item = T>,
+    Iter: Iterator<Item = T>,
+    FNeuronId: Fn(&T) -> NeuronId,
+    FValue: Fn(T) -> R,
 {
     let mut result = vec![];
 
     while let Some(item) = iter.peek() {
-        let (neuron_id, value) = extract_key_and_value(item);
+        let neuron_id = extract_neuron_id(item);
         if neuron_id > target_neuron_id {
             break;
         }
+        let item = iter
+            .next()
+            .expect("Peek had a value, but next did not!  This should be impossible.");
+
         if neuron_id == target_neuron_id {
-            result.push(value);
+            result.push(extract_value(item));
         }
-        iter.next();
     }
 
     result
