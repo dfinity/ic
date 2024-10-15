@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, TryRecvError};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
@@ -231,8 +231,20 @@ async fn start(runtime: Arc<Runtime>) {
     let shutdown_handle = handle.clone();
     let port_file_path_clone = port_file_path.clone();
     tokio::spawn(async move {
-        rx.recv().expect("Did not receive a signal.");
-        terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
+        loop {
+            match rx.try_recv() {
+                Ok(()) => {
+                    terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
+                    break;
+                }
+                Err(TryRecvError::Empty) => {
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+                Err(TryRecvError::Disconnected) => {
+                    break;
+                }
+            }
+        }
     });
     ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
         .expect("Error setting Ctrl-C handler");
