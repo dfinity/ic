@@ -9,6 +9,8 @@ use ic_types::PrincipalId;
 use icp_ledger::AccountIdentifier;
 use lazy_static::lazy_static;
 use std::sync::Arc;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 use tokio::runtime::Runtime;
 
 lazy_static! {
@@ -102,6 +104,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
 
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
+            // When a neuron is created its dissolve delay timestamp is set to 0 seconds in the future and is dissolving
             DissolveState::WhenDissolvedTimestampSeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
@@ -110,7 +113,12 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 k
             ),
         };
-        let new_dissolve_delay_timestamp = dissolve_delay_timestamp + 1000;
+        assert_eq!(dissolve_delay_timestamp, 0);
+        let new_dissolve_delay_timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + 1000;
 
         env.rosetta_client
             .set_neuron_dissolve_delay(
@@ -126,11 +134,11 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         // The State of the Neuron should still be in NOT_DISSOLVING
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
-            DissolveState::WhenDissolvedTimestampSeconds(dissolve_delay_timestamp) => {
+            DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
                 k
             ),
         };
