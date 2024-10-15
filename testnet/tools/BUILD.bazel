@@ -1,5 +1,3 @@
-exports_files(["build-guestos-configs.sh"])
-
 genrule(
     name = "icos_deploy",
     testonly = True,
@@ -10,6 +8,7 @@ genrule(
         "//ic-os/guestos/envs/prod:upload_update-img",
         "//ic-os/boundary-guestos/envs/dev:upload_disk-img",
         "//ic-os/boundary-guestos/envs/prod:upload_disk-img",
+        "build-guestos-config.sh",
         "//publish/binaries:legacy_upload",
         "//publish/canisters:upload",
     ],
