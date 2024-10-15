@@ -2352,6 +2352,7 @@ dependencies = [
  "ic-base-types",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
