@@ -149,9 +149,9 @@ use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 # we can't use the official image: https://github.com/bazel-contrib/rules_oci/issues/695
 #
 # Instead we copy the official image to our repository:
-# $ docker pull halverneus/static-file-server
-# $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
-# $ docker push dfinitydev/halverneus-static-file-server:latest
+# $ docker pull jaegertracing/all-in-one
+# $ docker tag jaegertracing/all-in-one dfinitydev/jaegertracing-all-in-one:latest
+# $ docker push jaegertracing-all-in-one:latest
 # > latest: digest: sha256:...
 oci.pull(
     name = "jaeger",
@@ -213,6 +213,191 @@ oci.pull(
     platforms = ["linux/amd64"],
 )
 use_repo(oci, "alpine_openssl", "alpine_openssl_linux_amd64")
+
+# Ubuntu snapshots
+
+bazel_dep(name = "rules_distroless", version = "0.3.8")
+
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+
+## Packageset based on an Ubuntu focal snapshot, see manifest file
+## for details
+## To update, comment out the `lock` field below and run:
+##   bazel run @focal//:lock
+apt.install(
+    name = "focal",
+    lock = "//bazel:focal.lock.json",
+    manifest = "//bazel:focal.yaml",
+)
+use_repo(apt, "focal")
+
+# Packageset based on an Ubuntu noble snapshot, see manifest file
+# for details
+# To update, comment out the `lock` field below and run:
+#   bazel run @noble//:lock
+apt.install(
+    name = "noble",
+    lock = "//bazel:noble.lock.json",
+    manifest = "//bazel:noble.yaml",
+)
+use_repo(apt, "noble")
+
+# Haskell toolchain for spec_compliance tests
+
+bazel_dep(
+    name = "rules_haskell",
+    version = "1.0",
+)
+
+# patched to work around https://github.com/tweag/rules_haskell/issues/2254
+archive_override(
+    module_name = "rules_haskell",
+    integrity = "sha384-bL1ZOn6DZpfsl4+a3PA9T4OAOJnioHXUhoRR9jChk4oy9ykbMAjCBpZ+AxRdRu7V",
+    patch_strip = 1,
+    patches = ["//bazel:rules_haskell.patch"],
+    strip_prefix = "rules_haskell-1.0",
+    urls = ["https://github.com/tweag/rules_haskell/releases/download/v1.0/rules_haskell-1.0.tar.gz"],
+)
+
+haskell_toolchains = use_extension(
+    "@rules_haskell//extensions:haskell_toolchains.bzl",
+    "haskell_toolchains",
+)
+haskell_toolchains.bindists(version = "9.6.6")
+
+rules_haskell_dependencies = use_extension(
+    "@rules_haskell//extensions:rules_haskell_dependencies.bzl",
+    "rules_haskell_dependencies",
+)
+use_repo(
+    rules_haskell_dependencies,
+    "Cabal",
+)
+
+# Stack snapshot. To update, run
+# bazel run @stackage-unpinned//:pin
+stack_snapshot = use_extension(
+    "@rules_haskell//extensions:stack_snapshot.bzl",
+    "stack_snapshot",
+)
+use_repo(
+    stack_snapshot,
+    "stackage",
+    "stackage-unpinned",
+)
+stack_snapshot.stack_snapshot_json(label = "//:stackage_snapshot.json")
+stack_snapshot.snapshot(name = "lts-22.30")
+
+[
+    stack_snapshot.package(
+        name = pkg,
+    )
+    for pkg in [
+        "QuickCheck",
+        "aeson",
+        "array",
+        "asn1-encoding",
+        "asn1-types",
+        "async",
+        "atomic-write",
+        "base",
+        "base16",
+        "base32",
+        "base64-bytestring",
+        "binary",
+        "bytes",
+        "bytestring",
+        "case-insensitive",
+        "cborg",
+        "cereal",
+        "conduit",
+        "constraints",
+        "containers",
+        "crypton-connection",
+        "crypton-x509",
+        "crypton-x509-store",
+        "crypton-x509-validation",
+        "cryptonite",
+        "data-default-class",
+        "deepseq",
+        "digest",
+        "directory",
+        "dlist",
+        "ed25519",
+        "either",
+        "entropy",
+        "file-embed",
+        "filepath",
+        "hashable",
+        "hex-text",
+        "hspec",
+        "http-client",
+        "http-client-tls",
+        "http-types",
+        "leb128-cereal",
+        "megaparsec",
+        "memory",
+        "mtl",
+        "murmur3",
+        "network",
+        "network-uri",
+        "optparse-applicative",
+        "parallel",
+        "parser-combinators",
+        "prettyprinter",
+        "primitive",
+        "process",
+        "quickcheck-io",
+        "random",
+        "row-types",
+        "safe",
+        "scientific",
+        "secp256k1-haskell",
+        "serialise",
+        "split",
+        "splitmix",
+        "string-conversions",
+        "tasty",
+        "tasty-ant-xml",
+        "tasty-html",
+        "tasty-hunit",
+        "tasty-quickcheck",
+        "tasty-rerun",
+        "template-haskell",
+        "temporary",
+        "text",
+        "time",
+        "tls",
+        "transformers",
+        "uglymemo",
+        "unordered-containers",
+        "utf8-string",
+        "vector",
+        "wai",
+        "wai-cors",
+        "wai-extra",
+        "warp",
+        "wide-word",
+        "word8",
+        "zlib",
+    ]
+]
+
+stack_snapshot.package(
+    name = "attoparsec",
+    components =
+        [
+            # attoparsec contains an internal library which is not exposed publicly,
+            # but required to build the public library, hence the declaration of
+            # those 2 components, as well as the explicit declaration of the
+            # dependency between them.
+            "lib",
+            "lib:attoparsec-internal",
+        ],
+    components_dependencies = {
+        "lib:attoparsec": ["lib:attoparsec-internal"],
+    },
+)
 
 # Kubernetes helper
 

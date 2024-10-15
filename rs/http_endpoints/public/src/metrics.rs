@@ -22,6 +22,8 @@ pub const CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str = "ingress_wa
 pub const CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
 pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
 pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
+pub const CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
+    "message_already_in_certified_state";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
