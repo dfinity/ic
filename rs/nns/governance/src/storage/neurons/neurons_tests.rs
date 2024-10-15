@@ -3,7 +3,6 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{abridged_neuron::DissolveState, Vote},
-    storage::with_stable_neuron_store,
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;

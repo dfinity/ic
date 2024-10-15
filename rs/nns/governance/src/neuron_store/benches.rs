@@ -189,10 +189,10 @@ fn range_neurons_performance() -> BenchResult {
     let _neuron_store = set_up_neuron_store(&mut rng, 100, 200);
 
     bench_fn(|| {
-        let _ = with_stable_neuron_store(|stable_store| {
+        with_stable_neuron_store(|stable_store| {
             let iter = stable_store.range_neurons(..);
             for n in iter {
-                let n = n.id();
+                n.id();
             }
         });
     })

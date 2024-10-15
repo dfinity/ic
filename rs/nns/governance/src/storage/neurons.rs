@@ -359,7 +359,7 @@ where
             ..FolloweesKey::MAX
         };
 
-        let mut main_range = self.main.range(range.clone());
+        let main_range = self.main.range(range.clone());
         let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
         let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
         let mut followees_iter = self.followees_map.range(followees_range).peekable();
@@ -372,25 +372,20 @@ where
             let hot_keys = collect_for_neuron_id(
                 &mut hot_keys_iter,
                 main_neuron_id,
-                |((neuron_id, _index), principal)| {
-                    (*neuron_id, PrincipalId::from(principal.clone()))
-                },
+                |((neuron_id, _index), principal)| (*neuron_id, PrincipalId::from(*principal)),
             );
 
             let ballots = collect_for_neuron_id(
                 &mut recent_ballots_iter,
                 main_neuron_id,
-                |((neuron_id, _index), ballot_info)| (*neuron_id, ballot_info.clone()),
+                |((neuron_id, _index), ballot_info)| (*neuron_id, *ballot_info),
             );
 
             let followees = collect_for_neuron_id(
                 &mut followees_iter,
                 main_neuron_id,
                 |(followees_key, followee_id)| {
-                    (
-                        followees_key.follower_id,
-                        (followees_key.clone(), *followee_id),
-                    )
+                    (followees_key.follower_id, (*followees_key, *followee_id))
                 },
             );
 
@@ -696,13 +691,13 @@ where
     R: RangeBounds<NeuronId>,
 {
     let start = match range_bound.start_bound() {
-        RangeBound::Included(start) => start.clone(),
-        RangeBound::Excluded(start) => start.clone(),
+        RangeBound::Included(start) => *start,
+        RangeBound::Excluded(start) => *start,
         RangeBound::Unbounded => NeuronId::MIN,
     };
     let end = match range_bound.end_bound() {
-        RangeBound::Included(start) => start.clone(),
-        RangeBound::Excluded(start) => start.clone(),
+        RangeBound::Included(end) => *end,
+        RangeBound::Excluded(end) => *end,
         RangeBound::Unbounded => NeuronId::MAX,
     };
 
