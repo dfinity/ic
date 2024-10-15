@@ -395,7 +395,7 @@ impl ThresholdSignerImpl {
                     |share| {
                         let sig_share = EcdsaSigShare {
                             signer_id: self.node_id,
-                            request_id: request_id.clone(),
+                            request_id,
                             share,
                         };
                         Ok(IDkgMessage::EcdsaSigShare(sig_share))
@@ -408,7 +408,7 @@ impl ThresholdSignerImpl {
                     |share| {
                         let sig_share = SchnorrSigShare {
                             signer_id: self.node_id,
-                            request_id: request_id.clone(),
+                            request_id,
                             share,
                         };
                         Ok(IDkgMessage::SchnorrSigShare(sig_share))
