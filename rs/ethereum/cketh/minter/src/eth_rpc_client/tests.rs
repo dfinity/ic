@@ -6,7 +6,7 @@ const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider:
 
 mod eth_rpc_client {
     use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider, SepoliaProvider};
-    use crate::eth_rpc_client::EthRpcClient;
+    use crate::eth_rpc_client::{EthRpcClient, TOTAL_NUMBER_OF_PROVIDERS};
     use crate::lifecycle::EthereumNetwork;
 
     #[test]
@@ -41,6 +41,15 @@ mod eth_rpc_client {
                 RpcNodeProvider::Ethereum(EthereumProvider::Alchemy)
             ]
         );
+    }
+
+    #[test]
+    fn should_query_same_number_of_providers_as_with_evm_rpc_canister() {
+        let client = EthRpcClient::new(EthereumNetwork::Sepolia);
+        assert_eq!(client.providers().len() as u8, TOTAL_NUMBER_OF_PROVIDERS);
+
+        let client = EthRpcClient::new(EthereumNetwork::Mainnet);
+        assert_eq!(client.providers().len() as u8, TOTAL_NUMBER_OF_PROVIDERS);
     }
 }
 
