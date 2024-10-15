@@ -294,7 +294,7 @@ go_deps.bzl               @dfinity/idx
 /rs/xnet/                                               @dfinity/ic-message-routing-owners
 
 # [No-Approvals]
-# Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
+# Ghost is a group with no direct members. GitHub will bypass codeowners for files that match ghost ownership.
 *.lock
 Cargo.toml
 .gitignore
