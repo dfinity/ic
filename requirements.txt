@@ -752,7 +752,6 @@ numpy==2.1.2 \
     --hash=sha256:faa88bc527d0f097abdc2c663cddf37c05a1c2f113716601555249805cf573f1 \
     --hash=sha256:fc44e3c68ff00fd991b59092a54350e6e4911152682b4782f68070985aa9e648
     # via
-    #   -r requirements.in
     #   contourpy
     #   matplotlib
 oauthlib==3.2.2 \
