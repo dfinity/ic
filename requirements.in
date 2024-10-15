@@ -11,7 +11,7 @@ invoke
 jira>=3.4.1
 junit-xml
 loguru
-matplotlib>=3.6.2
+# matplotlib>=3.6.2  # matplotlib does not appear to be actively used, only for one-off plotting. Remove as it installs a lot of complex dependencies
 mypy
 nested_lookup>=0.2.25
 node_semver>=0.9.0
@@ -26,5 +26,6 @@ simple-parsing
 tqdm
 uuid
 PyGithub>=2.3.0
-# numpy>=1.26.4 # numpy is only required by other packages, but breaks on python3.12 if version is not correctly set
-pillow>=10.1
+# packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
+# numpy>=1.26.4
+# pillow>=10.1
