@@ -181,6 +181,7 @@ async fn start(runtime: Arc<Runtime>) {
         .nest("/instances", instances_routes::<AppState>())
         // All HTTP gateway routes.
         .nest("/http_gateway", http_gateway_routes::<AppState>())
+        .fallback(|| async { (StatusCode::NOT_FOUND, "") })
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),

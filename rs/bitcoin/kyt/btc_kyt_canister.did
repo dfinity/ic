@@ -24,13 +24,13 @@ type CheckTransactionResponse = variant {
 type CheckTransactionStatus = variant {
     // Caller should call with a minimum of 40 billion cycles.
     NotEnoughCycles;
-    // The result is pending, and the caller can call again later.
-    Pending: CheckTransactionPending;
+    // The result is not available, but calls can be retried.
+    Retriable: CheckTransactionRetriable;
     /// The result is unknown due to an irrecoverable error.
-    Error: CheckTransactionError;
+    Error: CheckTransactionIrrecoverableError;
 };
 
-type CheckTransactionPending = variant {
+type CheckTransactionRetriable = variant {
     // Work is already in progress, and the result is pending.
     Pending;
     // The service is experience high load.
@@ -39,14 +39,30 @@ type CheckTransactionPending = variant {
     TransientInternalError: text;
 };
 
-type CheckTransactionError = variant {
+type CheckTransactionIrrecoverableError = variant {
     // Response size is too large (>400kB) when fetching transaction data.
     ResponseTooLarge : record { txid: blob };
-    // Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
-    InvalidTransaction : text;
+    // Invalid transaction id.
+    InvalidTransactionId : text;
 };
 
-service : {
+type InitArg = record {
+    btc_network : BtcNetwork
+};
+
+type UpgradeArg = record {};
+
+type KytArg = variant {
+    InitArg : InitArg;
+    UpgradeArg: opt UpgradeArg;
+};
+
+type BtcNetwork = variant {
+    mainnet;
+    testnet
+};
+
+service : (KytArg) -> {
     // Check input addresses of a transaction matching the given transaction id.
     // See `CheckTransactionResponse` for more details on the return result.
     //

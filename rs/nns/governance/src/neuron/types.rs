@@ -16,9 +16,8 @@ use crate::{
         Visibility, Vote,
     },
 };
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
@@ -955,7 +954,8 @@ impl Neuron {
 
         // 3.2: Now, we know when self is "dissolved" (could be in the past, present, or future).
         // Thus, we can evaluate whether that happened sufficiently long ago.
-        let max_dissolved_at_timestamp_seconds_to_be_inactive = now - 2 * 7 * ONE_DAY_SECONDS;
+        let max_dissolved_at_timestamp_seconds_to_be_inactive =
+            now.saturating_sub(2 * 7 * ONE_DAY_SECONDS);
         if dissolved_at_timestamp_seconds > max_dissolved_at_timestamp_seconds_to_be_inactive {
             return false;
         }

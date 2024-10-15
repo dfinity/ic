@@ -9,7 +9,8 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+        Environment, Governance, HeapGrowthPotential, RngError,
+        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     },
     pb::v1::{
         governance_error::ErrorType,
@@ -35,12 +36,20 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn random_u64(&mut self) -> u64 {
-        4 // https://xkcd.com/221
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        Ok(4) // https://xkcd.com/221
     }
 
-    fn random_byte_array(&mut self) -> [u8; 32] {
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
         unimplemented!()
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        todo!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        todo!()
     }
 
     fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
@@ -52,7 +61,7 @@ impl Environment for DegradedEnv {
     }
 
     async fn call_canister_method(
-        &mut self,
+        &self,
         _target: CanisterId,
         _method_name: &str,
         _request: Vec<u8>,

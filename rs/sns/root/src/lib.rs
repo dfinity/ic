@@ -27,10 +27,12 @@ use std::{
     fmt::Write,
     thread::LocalKey,
 };
+use types::SnsCanisterType;
 
 pub use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 pub mod logs;
 pub mod pb;
+mod request_impls;
 pub mod types;
 
 // The number of dapp canisters that can be registered with the SNS Root
@@ -115,6 +117,39 @@ impl GetSnsCanistersSummaryResponse {
 
     pub fn index_canister_summary(&self) -> &CanisterSummary {
         self.index.as_ref().unwrap()
+    }
+}
+
+impl IntoIterator for GetSnsCanistersSummaryResponse {
+    type Item = (Option<CanisterSummary>, SnsCanisterType);
+
+    // Using Box<dyn Iterator<...>> because the type is very long otherwise.
+    // But this could be changed to a more specific type.
+    type IntoIter = Box<dyn Iterator<Item = Self::Item>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let canisters = [
+            (self.root, SnsCanisterType::Root),
+            (self.governance, SnsCanisterType::Governance),
+            (self.ledger, SnsCanisterType::Ledger),
+            (self.swap, SnsCanisterType::Swap),
+            (self.index, SnsCanisterType::Index),
+        ];
+
+        Box::new(
+            canisters
+                .into_iter()
+                .chain(
+                    self.dapps
+                        .into_iter()
+                        .map(|d| (Some(d), SnsCanisterType::Dapp)),
+                )
+                .chain(
+                    self.archives
+                        .into_iter()
+                        .map(|a| (Some(a), SnsCanisterType::Archive)),
+                ),
+        )
     }
 }
 
@@ -2762,7 +2797,7 @@ mod tests {
     async fn test_get_sns_canisters_summary_reports_settings() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = const { RefCell::new(SnsRootCanister {
                 governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
@@ -2770,7 +2805,7 @@ mod tests {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
                 testflight: false,
-            });
+            }) };
         }
 
         let root_canister_id = CanisterId::from_u64(4);

@@ -95,12 +95,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
-
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -125,7 +119,15 @@ $CANDID_ARGS
 - Current Wasm Hash: $LAST_WASM_HASH
 
 
-## WASM Verification
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+
+### WASM Verification
 
 See ["Building the code"][prereqs] for prerequisites.
 
@@ -150,7 +152,7 @@ This should match \`wasm_module_hash\` field of this proposal.$(if [ ! -z "$CAND
             echo "
 
 
-## Upgrade Arguments Verification
+### Upgrade Arguments Verification
 
 [\`didc\`][latest-didc] is required.
 
@@ -206,11 +208,6 @@ __Source Code__: [$NEXT_COMMIT][new-commit]
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
 
-## Features, Fixes, and Optimizations
-
-TODO TO BE FILLED OUT BY THE PROPOSER
-
-
 ## New Commits
 
 \`\`\`
@@ -220,6 +217,11 @@ $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_
 
 
 ## Wasm Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
 
 See ["Building the code"][prereqs] for prerequisites.
 
@@ -345,7 +347,9 @@ generate_forum_post_nns_upgrades() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -377,7 +381,9 @@ generate_forum_post_sns_wasm_publish() {
 
     OUTPUT=$(
         cat <<EOF
-The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+The NNS Team submitted the following proposals to publish new versions of SNS canisters to SNS-WASM.  DFINITY plans to vote on these proposals the following Monday.
+
+TODO proposal links
 
 ## Additional Notes / Breaking Changes
 
@@ -401,10 +407,16 @@ EOF
 #### Helper functions
 encode_candid_args_in_file() {
     ARGS=$1
-    ENCODED_ARGS_FILE=$(mktemp)
-    didc encode \
-        "$ARGS" \
-        | xxd -r -p >"$ENCODED_ARGS_FILE"
+    ENCODED_ARGS_FILE=$(mktemp) || {
+        echo "Failed to create temp file" >&2
+        return 1
+    }
+
+    if ! didc encode "$ARGS" | xxd -r -p >"$ENCODED_ARGS_FILE"; then
+        echo "Error: Failed to encode arguments. Do you have didc on your PATH?" >&2
+        rm -f "$ENCODED_ARGS_FILE"
+        return 1
+    fi
 
     echo "$ENCODED_ARGS_FILE"
 }

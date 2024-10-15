@@ -8,7 +8,7 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 DEPENDENCIES = [
@@ -16,6 +16,9 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-client:icrc_ledger_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
+    "//rs/ledger_suite/common/ledger_core",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
     "//rs/nervous_system/common",
@@ -27,13 +30,8 @@ DEPENDENCIES = [
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
     "//rs/protobuf",
-    "//rs/rosetta-api/icp_ledger",
-    "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/canister_profiler",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
@@ -46,7 +44,9 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:comparable",
+    "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -64,6 +64,7 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -86,7 +87,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
-    "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
@@ -124,19 +124,6 @@ rust_library(
     deps = DEPENDENCIES + [":build_script"],
 )
 
-rust_library(
-    name = "governance--test_feature",
-    srcs = LIB_SRCS,
-    aliases = ALIASES,
-    crate_features = ["test"],
-    crate_name = "ic_sns_governance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.9.0",
-    deps = DEPENDENCIES + [
-        ":build_script",
-    ],
-)
-
 rust_canister(
     name = "sns-governance-canister",
     srcs = ["canister/canister.rs"],
@@ -161,14 +148,14 @@ rust_canister(
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES + [
         ":build_script",
-        ":governance--test_feature",
+        ":governance",
         "//rs/nervous_system/canisters",
     ],
 )
 
 rust_test(
     name = "governance_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
@@ -196,7 +183,7 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":governance--test_feature",
+        ":governance",
         "//rs/nervous_system/canisters",
     ],
 )
@@ -217,7 +204,7 @@ rust_test_suite_with_extra_srcs(
         "tests/fixtures/environment_fixture.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(
@@ -225,9 +212,9 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**"]) + [
         ":protos",
+        "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/protobuf:protos",
-        "//rs/rosetta-api/icp_ledger:protos",
         "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/sns/governance",

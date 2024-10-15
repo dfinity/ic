@@ -47,5 +47,8 @@ lvs /dev/store/var-log >/dev/null 2>&1 || (
     if [ "${LV_SIZE}" -gt "${LV_SIZE_LIMIT}" ]; then
         LV_SIZE="${LV_SIZE_LIMIT}"
     fi
+
+    # Needed because lvcreate tries to write to /etc/lvm and rootfs is read-only
+    mount -t tmpfs none /etc/lvm
     retry lvcreate --yes -L "$LV_SIZE"M -n var-log store
 )

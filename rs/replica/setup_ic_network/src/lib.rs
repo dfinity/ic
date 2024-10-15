@@ -61,6 +61,10 @@ use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
+/// This limit is used to protect against a malicious peer advertising many ingress messages.
+/// If no malicious peers are present the ingress pools are bounded by a separate limit.
+const SLOT_TABLE_LIMIT_INGRESS: usize = 50_000;
+const SLOT_TABLE_NO_LIMIT: usize = usize::MAX;
 
 /// The collection of all artifact pools.
 struct ArtifactPools {
@@ -337,7 +341,7 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        let bouncer = Arc::new(ConsensusBouncer::new(message_router));
+        let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -345,7 +349,7 @@ fn start_consensus(
             bouncer,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(consensus_rx, client, assembler);
+        new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     let ingress_sender = {
@@ -369,7 +373,12 @@ fn start_consensus(
             metrics_registry.clone(),
         );
 
-        new_p2p_consensus.add_client(ingress_rx, client.clone(), assembler);
+        new_p2p_consensus.add_client(
+            ingress_rx,
+            client.clone(),
+            assembler,
+            SLOT_TABLE_LIMIT_INGRESS,
+        );
         client
     };
 
@@ -395,7 +404,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = CertifierBouncer::new(Arc::clone(&consensus_pool_cache));
+        let bouncer = CertifierBouncer::new(metrics_registry, Arc::clone(&consensus_pool_cache));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -403,7 +412,7 @@ fn start_consensus(
             Arc::new(bouncer),
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(certification_rx, client, assembler);
+        new_p2p_consensus.add_client(certification_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -424,7 +433,7 @@ fn start_consensus(
         );
         join_handles.push(jh);
 
-        let bouncer = Arc::new(dkg::DkgBouncer);
+        let bouncer = Arc::new(dkg::DkgBouncer::new(metrics_registry));
         let assembler = ic_artifact_downloader::FetchArtifact::new(
             log.clone(),
             rt_handle.clone(),
@@ -432,7 +441,7 @@ fn start_consensus(
             bouncer,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(dkg_rx, client, assembler);
+        new_p2p_consensus.add_client(dkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -469,6 +478,7 @@ fn start_consensus(
         join_handles.push(jh);
 
         let bouncer = Arc::new(idkg::IDkgBouncer::new(
+            metrics_registry,
             subnet_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&state_reader),
@@ -480,7 +490,7 @@ fn start_consensus(
             bouncer,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(idkg_rx, client, assembler);
+        new_p2p_consensus.add_client(idkg_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     {
@@ -514,7 +524,7 @@ fn start_consensus(
             bouncer,
             metrics_registry.clone(),
         );
-        new_p2p_consensus.add_client(http_outcalls_rx, client, assembler);
+        new_p2p_consensus.add_client(http_outcalls_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
     };
 
     (

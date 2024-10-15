@@ -57,7 +57,7 @@ fn test_fetch_status() {
     set_fetch_status(
         txid_1,
         FetchTxStatus::Fetched(FetchedTx {
-            tx: tx.clone(),
+            tx: tx.clone().try_into().unwrap(),
             input_addresses: vec![None; 2],
         }),
     );
@@ -77,4 +77,77 @@ fn test_fetch_status() {
     }
     clear_fetch_status(txid_1);
     assert!(get_fetch_status(txid_1).is_none());
+}
+
+#[test]
+fn test_fetch_tx_cache_bounds() {
+    let txid_0 = Txid::from([0u8; 32]);
+    let txid_1 = Txid::from([1u8; 32]);
+    let txid_2 = Txid::from([2u8; 32]);
+    let txid_3 = Txid::from([3u8; 32]);
+    let max_entries = 3;
+    let mut cache = FetchTxCache::new(max_entries);
+    assert_eq!(cache.set_status_with(txid_0, (), 0), None);
+    assert_eq!(cache.set_status_with(txid_1, (), 100), None);
+    assert_eq!(cache.set_status_with(txid_2, (), 200), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_0, 0, &()), (txid_1, 100, &()), (txid_2, 200, &())]
+    );
+
+    assert_eq!(
+        cache.set_status_with(txid_3, (), 300),
+        Some((txid_0, 0, ()))
+    );
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_2, 200, &()), (txid_3, 300, &())]
+    );
+
+    // setting status of an existing entry will not change its creation
+    // time, neither will it purge any existing entry.
+    assert_eq!(cache.set_status_with(txid_2, (), 400), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_2, 200, &()), (txid_3, 300, &())]
+    );
+
+    // clear_status should make room for one more entry
+    cache.clear_status(txid_2);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_3, 300, &())]
+    );
+    assert_eq!(cache.set_status_with(txid_0, (), 500), None);
+    assert_eq!(
+        cache.iter().collect::<Vec<_>>(),
+        vec![(txid_1, 100, &()), (txid_3, 300, &()), (txid_0, 500, &())]
+    );
+}
+
+#[test]
+fn cache_should_have_same_size() {
+    enum Status {
+        Status0,
+        Status1,
+        Status2,
+    }
+
+    let txid_0 = Txid::from([0u8; 32]);
+    let max_entries = 3;
+    let mut cache = FetchTxCache::new(max_entries);
+    assert_eq!(cache.status.len(), 0);
+    assert_eq!(cache.created.len(), 0);
+
+    cache.set_status_with(txid_0, Status::Status0, 0);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
+
+    cache.set_status_with(txid_0, Status::Status1, 1);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
+
+    cache.set_status_with(txid_0, Status::Status2, 2);
+    assert_eq!(cache.status.len(), 1);
+    assert_eq!(cache.created.len(), 1);
 }

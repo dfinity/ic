@@ -68,11 +68,12 @@ use crate::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
-use dfn_core::api::spawn;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-use dfn_protobuf::ToProto;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::println;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
     ONE_YEAR_SECONDS,
@@ -104,7 +105,6 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use maplit::hashmap;
-use mockall::automock;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
@@ -116,6 +116,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
+    future::Future,
     ops::RangeInclusive,
     string::ToString,
 };
@@ -126,6 +127,16 @@ mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
+
+#[macro_use]
+pub mod tla_macros;
+#[cfg(feature = "tla")]
+pub mod tla;
+#[cfg(feature = "tla")]
+pub use tla::{
+    split_neuron_desc, tla_update_method, InstrumentationState, ToTla, TLA_INSTRUMENTATION_STATE,
+    TLA_TRACES,
+};
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
@@ -397,14 +408,20 @@ impl NnsFunction {
     fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
-            NnsFunction::ReviseElectedGuestosVersions | NnsFunction::DeployGuestosToAllSubnetNodes
+            NnsFunction::NnsRootUpgrade
+                | NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
+                | NnsFunction::ReviseElectedGuestosVersions
+                | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 
     fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
-            NnsFunction::NnsCanisterInstall
+            NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsCanisterInstall
+                | NnsFunction::NnsRootUpgrade
                 | NnsFunction::HardResetNnsRootToVersion
                 | NnsFunction::AddSnsWasm
         )
@@ -420,8 +437,6 @@ impl NnsFunction {
                 | NnsFunction::UpdateNodesHostosVersion
                 | NnsFunction::BlessReplicaVersion
                 | NnsFunction::RetireReplicaVersion
-                | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::NnsRootUpgrade
         )
     }
 }
@@ -1188,7 +1203,7 @@ impl ProposalData {
 
         // Every time the tally changes, (possibly) update the wait-for-quiet
         // dynamic deadline.
-        if let Some(old_tally) = self.latest_tally.clone() {
+        if let Some(old_tally) = self.latest_tally {
             if new_tally.yes == old_tally.yes
                 && new_tally.no == old_tally.no
                 && new_tally.total == old_tally.total
@@ -1445,8 +1460,23 @@ impl fmt::Display for RewardEvent {
     }
 }
 
+#[derive(Debug)]
+pub enum RngError {
+    RngNotInitialized,
+}
+
+impl From<RngError> for GovernanceError {
+    fn from(e: RngError) -> Self {
+        match e {
+            RngError::RngNotInitialized => GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Rng not initialized.  Try again later.".to_string(),
+            ),
+        }
+    }
+}
+
 /// A general trait for the environment in which governance is running.
-#[automock]
 #[async_trait]
 pub trait Environment: Send + Sync {
     /// Returns the current time, in seconds since the epoch.
@@ -1459,12 +1489,18 @@ pub trait Environment: Send + Sync {
     /// Returns a random number.
     ///
     /// This number is the same in all replicas.
-    fn random_u64(&mut self) -> u64;
+    fn random_u64(&mut self) -> Result<u64, RngError>;
 
     /// Returns a random byte array with 32 bytes.
     ///
     /// This number is the same in all replicas.
-    fn random_byte_array(&mut self) -> [u8; 32];
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError>;
+
+    // Seed the random number generator.
+    fn seed_rng(&mut self, seed: [u8; 32]);
+
+    // Get the current RNG seed (used in pre-upgrade)
+    fn get_rng_seed(&self) -> Option<[u8; 32]>;
 
     /// Executes a `ExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
@@ -1484,9 +1520,9 @@ pub trait Environment: Send + Sync {
     /// growth becomes limited.
     fn heap_growth_potential(&self) -> HeapGrowthPotential;
 
-    /// Basically, the same as dfn_core::api::call.
+    /// Basically, the same as ic_cdk::api::call_raw.
     async fn call_canister_method(
-        &mut self,
+        &self,
         target: CanisterId,
         method_name: &str,
         request: Vec<u8>,
@@ -1514,6 +1550,13 @@ struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     fn drop(&mut self) {
         if self.retain {
+            return;
+        }
+        // In the case of a panic, the state of the ledger account representing the neuron's stake
+        // may be inconsistent with the internal state of governance.  In that case,
+        // we want to prevent further operations with that neuron until the issue can be
+        // investigated and resolved, which will require code changes.
+        if ic_cdk::api::call::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -1697,6 +1740,24 @@ impl XdrConversionRatePb {
     }
 }
 
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.s
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
 impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
@@ -1739,7 +1800,8 @@ impl Governance {
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
         // the rest live in heap.
 
-        let (neurons, topic_followee_index, heap_governance_proto) =
+        // Note: We do not carry over the RNG seed in new governance, only in restored governance.
+        let (neurons, topic_followee_index, heap_governance_proto, _maybe_rng_seed) =
             split_governance_proto(governance_proto);
 
         assert!(
@@ -1771,12 +1833,18 @@ impl Governance {
     /// Restores Governance after an upgrade from its persisted state.
     pub fn new_restored(
         governance_proto: GovernanceProto,
-        env: Box<dyn Environment>,
+        mut env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        let (heap_neurons, topic_followee_map, heap_governance_proto) =
+        let (heap_neurons, topic_followee_map, heap_governance_proto, maybe_rng_seed) =
             split_governance_proto(governance_proto);
+
+        // Carry over the previous rng seed to avoid race conditions in handling queued ingress
+        // messages that may require a functioning RNG.
+        if let Some(rng_seed) = maybe_rng_seed {
+            env.seed_rng(rng_seed);
+        }
 
         Self {
             heap_data: heap_governance_proto,
@@ -1798,14 +1866,26 @@ impl Governance {
         let neuron_store = std::mem::take(&mut self.neuron_store);
         let (neurons, heap_topic_followee_index) = neuron_store.take();
         let heap_governance_proto = std::mem::take(&mut self.heap_data);
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.get_rng_seed();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
     pub fn clone_proto(&self) -> GovernanceProto {
         let neurons = self.neuron_store.clone_neurons();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
-        reassemble_governance_proto(neurons, heap_topic_followee_index, heap_governance_proto)
+        let rng_seed = self.env.get_rng_seed();
+        reassemble_governance_proto(
+            neurons,
+            heap_topic_followee_index,
+            heap_governance_proto,
+            rng_seed,
+        )
     }
 
     /// Validates that the underlying protobuf is well formed.
@@ -2523,6 +2603,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2586,11 +2667,11 @@ impl Governance {
         }
 
         let created_timestamp_seconds = self.env.now();
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.env.random_byte_array());
+        let to_subaccount = Subaccount(self.env.random_byte_array()?);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -2602,7 +2683,7 @@ impl Governance {
 
         let in_flight_command = NeuronInFlightCommand {
             timestamp: created_timestamp_seconds,
-            command: Some(InFlightCommand::Split(split.clone())),
+            command: Some(InFlightCommand::Split(*split)),
         };
 
         let staked_amount = split.amount_e8s - transaction_fee_e8s;
@@ -2653,6 +2734,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2786,7 +2868,7 @@ impl Governance {
         let now = self.env.now();
         let in_flight_command = NeuronInFlightCommand {
             timestamp: now,
-            command: Some(InFlightCommand::Merge(merge.clone())),
+            command: Some(InFlightCommand::Merge(*merge)),
         };
 
         // Step 1: calculates the effect of the merge.
@@ -2993,11 +3075,11 @@ impl Governance {
             ));
         }
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
 
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
-            None => Subaccount(self.env.random_byte_array()),
+            None => Subaccount(self.env.random_byte_array()?),
             Some(nonce_val) => {
                 ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
             }
@@ -3274,7 +3356,7 @@ impl Governance {
             )
         })?;
 
-        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
         let from_subaccount = parent_neuron.subaccount();
 
         // The account is derived from the new owner's principal so it can be found by
@@ -3681,7 +3763,7 @@ impl Governance {
             let mut ballots = HashMap::new();
             for neuron_id in except_from.iter() {
                 if let Some(v) = all_ballots.get(&neuron_id.id) {
-                    ballots.insert(neuron_id.id, v.clone());
+                    ballots.insert(neuron_id.id, *v);
                 }
             }
             ballots
@@ -3694,7 +3776,7 @@ impl Governance {
             proposal,
             proposal_timestamp_seconds: data.proposal_timestamp_seconds,
             ballots: remove_ballots_not_cast_by(&data.ballots, caller_neurons),
-            latest_tally: data.latest_tally.clone(),
+            latest_tally: data.latest_tally,
             decided_timestamp_seconds: data.decided_timestamp_seconds,
             executed_timestamp_seconds: data.executed_timestamp_seconds,
             failed_timestamp_seconds: data.failed_timestamp_seconds,
@@ -4042,7 +4124,7 @@ impl Governance {
         //
         // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(pid, action.clone()));
+        spawn_in_canister_env(governance.perform_action(pid, action.clone()));
     }
 
     /// Mints node provider rewards to a neuron or to a ledger account.
@@ -4058,7 +4140,7 @@ impl Governance {
                 "Reward node provider proposal must have a reward mode.",
             )),
             Some(RewardMode::RewardToNeuron(reward_to_neuron)) => {
-                let to_subaccount = Subaccount(self.env.random_byte_array());
+                let to_subaccount = Subaccount(self.env.random_byte_array()?);
                 let _block_height = self
                     .ledger
                     .transfer_funds(
@@ -4069,7 +4151,7 @@ impl Governance {
                         now,
                     )
                     .await?;
-                let nid = self.neuron_store.new_neuron_id(&mut *self.env);
+                let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
@@ -4863,13 +4945,6 @@ impl Governance {
                     .to_string(),
             ));
         }
-
-        let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!("Failed to validate ManageNeuron {}", e),
-            )
-        })?;
 
         let managed_id = manage_neuron
             .get_neuron_id_or_subaccount()?
@@ -6088,7 +6163,7 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-        let nid = self.neuron_store.new_neuron_id(&mut *self.env);
+        let nid = self.neuron_store.new_neuron_id(&mut *self.env)?;
         let now = self.env.now();
         let neuron = NeuronBuilder::new(
             nid,
@@ -7792,7 +7867,9 @@ impl Governance {
     /// Picks a value at random in [00:00, 23:45] that is a multiple of 15
     /// minutes past midnight.
     pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
-        let time_of_day_seconds = self.env.random_u64() % ONE_DAY_SECONDS;
+        // It's not critical that we have perfect randomness here, so we can default to a fixed value
+        // for the edge case where the RNG is not initialized (which should never happen in practice).
+        let time_of_day_seconds = self.env.random_u64().unwrap_or(10_000) % ONE_DAY_SECONDS;
 
         // Round down to nearest multiple of 15 min.
         let remainder_seconds = time_of_day_seconds % (15 * 60);

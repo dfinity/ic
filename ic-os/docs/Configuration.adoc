@@ -20,7 +20,7 @@ SetupOS validates, sanitizes, and copies all of its configuration files to the H
   deployment.json                 # Deployment-specific configurations
   nns_public_key.pem              # NNS public key
 
-Refer to link:../components/setupos-scripts/config.sh[config.sh] link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh]
+Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] & link:../components/setupos-scripts/setup-hostos-config.sh[setup-hostos-config.sh]
 
 === HostOS -> GuestOS
 
@@ -71,8 +71,6 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 *Configuration files*: New configuration bits might be added to either existing configuration files that have a suitable structure (e.g. key=value pairs), or new files. If in doubt, opt for adding additional configuration files.
 
 *Interpretation of configuration bits*: Any script or service in the system may pull configuration bits out of /boot/config to customize its behavior. E.g. if adding parameter-driven customization of ic.json5, then augment the generate-replica-config.sh script to pull the configuration values and substitute them into the generated configuration.
-
-*Documentation*: Please keep documentation up-to-date (link:ConfigStore-SetupOSHostOS.adoc[SetupOS/HostOS config store], link:../guestos/docs/ConfigStore.adoc[GuestOS config store])
 
 === Testing
 

@@ -6,6 +6,7 @@ use dfn_core::{
 };
 use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
 use ic_certified_map::{AsHashTree, HashTree};
+use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -143,7 +144,8 @@ fn canister_init() {
             .expect("The init argument for the registry canister must be a Candid-encoded RegistryCanisterInitPayload.");
     println!(
         "{}canister_init: Initializing with: {}",
-        LOG_PREFIX, init_payload
+        LOG_PREFIX,
+        clamp_debug_len(&init_payload, /* max_len = */ 2000)
     );
     let registry = registry_mut();
 
@@ -1105,13 +1107,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("registry.did").to_string())
 }
 
 fn main() {

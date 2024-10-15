@@ -1,13 +1,12 @@
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
-    TransformFunc,
-};
+use ic_cdk::api::management_canister::http_request::http_request;
 
 pub mod blocklist;
+pub mod dashboard;
 mod fetch;
+mod providers;
 mod state;
 mod types;
 
@@ -16,6 +15,7 @@ pub use fetch::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use fetch::{FetchEnv, FetchResult, TryFetchResult};
+pub use state::{get_config, set_config, Config};
 use state::{FetchGuardError, HttpGetTxError};
 pub use types::*;
 
@@ -24,12 +24,12 @@ impl From<(Txid, HttpGetTxError)> for CheckTransactionResponse {
         let txid = txid.as_ref().to_vec();
         match err {
             HttpGetTxError::Rejected { message, .. } => {
-                CheckTransactionPending::TransientInternalError(message).into()
+                CheckTransactionRetriable::TransientInternalError(message).into()
             }
             HttpGetTxError::ResponseTooLarge => {
-                (CheckTransactionError::ResponseTooLarge { txid }).into()
+                (CheckTransactionIrrecoverableError::ResponseTooLarge { txid }).into()
             }
-            _ => CheckTransactionError::InvalidTransaction(format!("{:?}", err)).into(),
+            _ => CheckTransactionRetriable::TransientInternalError(format!("{:?}", err)).into(),
         }
     }
 }
@@ -54,50 +54,26 @@ impl FetchEnv for KytCanisterEnv {
         state::FetchGuard::new(txid)
     }
 
+    fn btc_network(&self) -> BtcNetwork {
+        get_config().btc_network
+    }
+
     async fn http_get_tx(
         &self,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        // TODO(XC-159): Support multiple providers
-        let host = "btcscan.org";
-        let url = format!("https://{}/api/tx/{}/raw", host, txid);
-        let request_headers = vec![
-            HttpHeader {
-                name: "Host".to_string(),
-                value: format!("{host}:443"),
-            },
-            HttpHeader {
-                name: "User-Agent".to_string(),
-                value: "bitcoin_inputs_collector".to_string(),
-            },
-        ];
-        let request = CanisterHttpRequestArgument {
-            url: url.to_string(),
-            method: HttpMethod::GET,
-            body: None,
-            max_response_bytes: Some(max_response_bytes as u64),
-            transform: Some(TransformContext {
-                function: TransformFunc(candid::Func {
-                    principal: ic_cdk::api::id(),
-                    method: "transform".to_string(),
-                }),
-                context: vec![],
-            }),
-            headers: request_headers,
-        };
+        let request = provider.create_request(txid, max_response_bytes);
+        let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
-                    let code = if response.status == 429u32 {
-                        RejectionCode::SysTransient
-                    } else {
-                        RejectionCode::SysFatal
-                    };
+                    // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
-                        code,
+                        code: RejectionCode::SysTransient,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
                 }
@@ -151,16 +127,15 @@ impl FetchEnv for KytCanisterEnv {
 pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     let env = &KytCanisterEnv;
     match env.try_fetch_tx(txid) {
-        TryFetchResult::Pending => CheckTransactionPending::Pending.into(),
-        TryFetchResult::HighLoad => CheckTransactionPending::HighLoad.into(),
-        TryFetchResult::Error(err) => (txid, err).into(),
+        TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
+        TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
         TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
         TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {
             match do_fetch.await {
                 Ok(FetchResult::Fetched(fetched)) => env.check_fetched(txid, &fetched).await,
                 Ok(FetchResult::Error(err)) => (txid, err).into(),
-                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionPending::Pending.into(),
+                Ok(FetchResult::RetryWithBiggerBuffer) => CheckTransactionRetriable::Pending.into(),
                 Err(_) => unreachable!(), // should never happen
             }
         }

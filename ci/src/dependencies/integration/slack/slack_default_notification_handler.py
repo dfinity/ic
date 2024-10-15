@@ -25,12 +25,17 @@ SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't retrieve slack user IDs")
 
+
 class SlackDefaultNotificationHandler(NotificationHandler):
     slack_api: SlackApi
 
     def __init__(
-            self,
-            slack_api: SlackApi = SlackApi(SlackChannelConfig(channel_id=SLACK_CHANNEL_ID, channel=SLACK_CHANNEL), SLACK_LOG_TO_CONSOLE,  SLACK_OAUTH_TOKEN),
+        self,
+        slack_api: SlackApi = SlackApi(
+            SlackChannelConfig(channel_id=SLACK_CHANNEL_ID, channel=SLACK_CHANNEL),
+            SLACK_LOG_TO_CONSOLE,
+            SLACK_OAUTH_TOKEN,
+        ),
     ):
         self.slack_api = slack_api
 
@@ -59,9 +64,7 @@ class SlackDefaultNotificationHandler(NotificationHandler):
         )
 
     def __handle_release_block(self, event: ReleaseBlockedNotificationEvent):
-        self.slack_api.send_message(
-            f"Release Build blocked by CI Pipeline {event.ci_job_url} <!channel>"
-        )
+        self.slack_api.send_message(f"Release Build blocked by CI Pipeline {event.ci_job_url} <!channel>")
 
     def __handle_scan_job_succeeded(self, event: ScanJobSucceededNotificationEvent):
         self.slack_api.send_message(
@@ -100,7 +103,9 @@ class SlackDefaultNotificationHandler(NotificationHandler):
                 msg += "\n- has patch version available"
             self.slack_api.send_message(msg)
         if event.finding_was_resolved:
-            self.slack_api.send_message(f"Finding {NotificationHandler.get_finding_info(event.finding)} was resolved :tada:")
+            self.slack_api.send_message(
+                f"Finding {NotificationHandler.get_finding_info(event.finding)} was resolved :tada:"
+            )
 
     def __handle_app_owner_notification(self, event: AppOwnerNotificationEvent):
         self.slack_api.send_message(event.message + " " + APP_OWNERS)

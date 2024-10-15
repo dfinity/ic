@@ -7,7 +7,8 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult, DEFAULT_MAX_REQUEST_TIME_MS};
+pub use crate::DefaultEffectiveCanisterIdError;
+use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
@@ -18,12 +19,14 @@ use ic_cdk::api::management_canister::main::{
     ChunkHash, ClearChunkStoreArgument, InstallChunkedCodeArgument, InstallCodeArgument,
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
-use reqwest::Url;
+use ic_transport_types::{ReadStateResponse, SubnetMetrics};
+use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
 use std::fs::File;
 use std::future::Future;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, instrument, warn};
@@ -77,49 +80,6 @@ impl PocketIc {
             .await
     }
 
-    /// Creates a new PocketIC instance with the specified subnet config.
-    /// The server is started if it's not already running.
-    pub async fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-        .await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and max request duration in milliseconds
-    /// (`None` means that there is no timeout).
-    /// The server is started if it's not already running.
-    pub async fn from_config_and_max_request_time(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        max_request_time_ms: Option<u64>,
-    ) -> Self {
-        let server_url = crate::start_or_reuse_server();
-        Self::from_components(config, server_url, max_request_time_ms, None, false, None).await
-    }
-
-    /// Creates a new PocketIC instance with the specified subnet config and server url.
-    /// This function is intended for advanced users who start the server manually.
-    pub async fn from_config_and_server_url(
-        config: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
-    ) -> Self {
-        Self::from_components(
-            config,
-            server_url,
-            Some(DEFAULT_MAX_REQUEST_TIME_MS),
-            None,
-            false,
-            None,
-        )
-        .await
-    }
-
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Url,
@@ -127,6 +87,7 @@ impl PocketIc {
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
         log_level: Option<Level>,
+        bitcoind_addr: Option<SocketAddr>,
     ) -> Self {
         let subnet_config_set = subnet_config_set.into();
         if state_dir.is_none()
@@ -139,10 +100,11 @@ impl PocketIc {
             state_dir,
             nonmainnet_features,
             log_level: log_level.map(|l| l.to_string()),
+            bitcoind_addr,
         };
 
-        let parent_pid = std::os::unix::process::parent_id();
-        let log_guard = setup_tracing(parent_pid);
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
         let instance_id = match reqwest_client
@@ -928,10 +890,7 @@ impl PocketIc {
     ) -> Result<(), CallError> {
         let settings = CanisterSettings {
             controllers: Some(new_controllers),
-            compute_allocation: None,
-            memory_allocation: None,
-            freezing_threshold: None,
-            reserved_cycles_limit: None,
+            ..CanisterSettings::default()
         };
         call_candid_as::<(UpdateSettingsArgument,), ()>(
             self,
@@ -1020,6 +979,56 @@ impl PocketIc {
             )
             .await;
         result.map(|RawSubnetId { subnet_id }| SubnetId::from_slice(&subnet_id))
+    }
+
+    /// Returns subnet metrics for a given subnet.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id, subnet_id = %subnet_id.to_string()))]
+    pub async fn get_subnet_metrics(&self, subnet_id: Principal) -> Option<SubnetMetrics> {
+        let path = vec![
+            "subnet".into(),
+            ic_agent::hash_tree::Label::from_bytes(subnet_id.as_slice()),
+            "metrics".into(),
+        ];
+        let paths = vec![path.clone()];
+        let content = ic_agent::agent::EnvelopeContent::ReadState {
+            ingress_expiry: self
+                .get_time()
+                .await
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64
+                + 240_000_000_000,
+            sender: Principal::anonymous(),
+            paths,
+        };
+        let envelope = ic_agent::agent::Envelope {
+            content: std::borrow::Cow::Borrowed(&content),
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        };
+
+        let mut serialized_bytes = Vec::new();
+        let mut serializer = serde_cbor::Serializer::new(&mut serialized_bytes);
+        serializer.self_describe().unwrap();
+        envelope.serialize(&mut serializer).unwrap();
+
+        let endpoint = format!("api/v2/subnet/{}/read_state", subnet_id.to_text());
+        let resp = self
+            .reqwest_client
+            .post(self.instance_url().join(&endpoint).unwrap())
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .body(serialized_bytes)
+            .send()
+            .await
+            .unwrap();
+        let read_state_response: ReadStateResponse =
+            serde_cbor::from_slice(&resp.bytes().await.unwrap()).ok()?;
+        let cert: ic_agent::Certificate =
+            serde_cbor::from_slice(&read_state_response.certificate).unwrap();
+
+        let metrics = ic_agent::lookup_value(&cert, path).ok()?;
+        serde_cbor::from_slice(metrics).unwrap()
     }
 
     /// This (asynchronous) drop function must be called to drop the PocketIc instance.
@@ -1404,4 +1413,38 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+pub async fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let client = reqwest::Client::new();
+    let res = loop {
+        let res = client
+            .get(format!(
+                "{}{}",
+                pocket_ic_url.trim_end_matches('/'),
+                "/_/topology"
+            ))
+            .send()
+            .await?;
+        if res.status() == StatusCode::CONFLICT {
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+        } else {
+            break res.error_for_status()?;
+        }
+    };
+    let topology_bytes = res.bytes().await?;
+    let topology_str = String::from_utf8(topology_bytes.to_vec())?;
+    let topology: Topology = serde_json::from_str(&topology_str)?;
+    let default_effective_canister_id =
+        Principal::from_slice(&topology.default_effective_canister_id.canister_id);
+    Ok(default_effective_canister_id)
 }

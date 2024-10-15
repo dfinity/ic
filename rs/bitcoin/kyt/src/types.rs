@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
+use std::fmt;
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct CheckAddressArgs {
@@ -34,14 +35,14 @@ pub enum CheckTransactionResponse {
 pub enum CheckTransactionStatus {
     /// Caller should call with a minimum of `CHECK_TRANSACTION_CYCLES_REQUIRED` cycles.
     NotEnoughCycles,
-    /// The result is pending, and the caller can call again later.
-    Pending(CheckTransactionPending),
+    /// The result is not available, but calls can be retried.
+    Retriable(CheckTransactionRetriable),
     /// The result is unknown due to an irrecoverable error.
-    Error(CheckTransactionError),
+    Error(CheckTransactionIrrecoverableError),
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
-pub enum CheckTransactionPending {
+pub enum CheckTransactionRetriable {
     /// Work is already in progress, and the result is pending.
     Pending,
     /// The service is experience high load.
@@ -51,22 +52,22 @@ pub enum CheckTransactionPending {
 }
 
 #[derive(CandidType, Debug, Deserialize, Serialize)]
-pub enum CheckTransactionError {
+pub enum CheckTransactionIrrecoverableError {
     /// Response size is too large (> `RETRY_MAX_RESPONSE_BYTES`) when fetching the transaction data of a txid.
     ResponseTooLarge { txid: Vec<u8> },
-    /// Invalid transaction, e.g. error decoding transaction or transaction id mismatch, etc.
-    InvalidTransaction(String),
+    /// Invalid transaction id because it fails to decode.
+    InvalidTransactionId(String),
 }
 
-impl From<CheckTransactionError> for CheckTransactionResponse {
-    fn from(err: CheckTransactionError) -> CheckTransactionResponse {
+impl From<CheckTransactionIrrecoverableError> for CheckTransactionResponse {
+    fn from(err: CheckTransactionIrrecoverableError) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(err))
     }
 }
 
-impl From<CheckTransactionPending> for CheckTransactionResponse {
-    fn from(pending: CheckTransactionPending) -> CheckTransactionResponse {
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Pending(pending))
+impl From<CheckTransactionRetriable> for CheckTransactionResponse {
+    fn from(pending: CheckTransactionRetriable) -> CheckTransactionResponse {
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(pending))
     }
 }
 
@@ -74,4 +75,44 @@ impl From<CheckTransactionStatus> for CheckTransactionResponse {
     fn from(status: CheckTransactionStatus) -> CheckTransactionResponse {
         CheckTransactionResponse::Unknown(status)
     }
+}
+
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+pub struct InitArg {
+    pub btc_network: BtcNetwork,
+}
+
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum BtcNetwork {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+}
+
+impl From<BtcNetwork> for bitcoin::Network {
+    fn from(btc_network: BtcNetwork) -> Self {
+        match btc_network {
+            BtcNetwork::Mainnet => Self::Bitcoin,
+            BtcNetwork::Testnet => Self::Testnet,
+        }
+    }
+}
+
+impl fmt::Display for BtcNetwork {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Mainnet => write!(f, "mainnet"),
+            Self::Testnet => write!(f, "testnet"),
+        }
+    }
+}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct UpgradeArg {}
+
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub enum KytArg {
+    InitArg(InitArg),
+    UpgradeArg(Option<UpgradeArg>),
 }

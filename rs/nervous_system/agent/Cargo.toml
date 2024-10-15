@@ -13,9 +13,14 @@ candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-clients = { path = "../clients" }
+ic-nns-governance-api = { path = "../../nns/governance/api" }
+ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-wasm = { path = "../../nns/sns-wasm" }
 ic-sns-governance = { path = "../../sns/governance" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-sns-root = { path = "../../sns/root" }
+ic-sns-swap = { path = "../../sns/swap" }
 serde = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }

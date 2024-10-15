@@ -35,11 +35,12 @@ use ic_types::{
     CanisterId, NodeId,
 };
 use ic_validator::HttpRequestVerifier;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
+use tokio::sync::OnceCell;
 use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
@@ -48,7 +49,7 @@ pub struct QueryService {
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     validator: Arc<dyn HttpRequestVerifier<Query, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: Arc<Mutex<QueryExecutionService>>,
@@ -60,7 +61,7 @@ pub struct QueryServiceBuilder {
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
@@ -79,7 +80,7 @@ impl QueryServiceBuilder {
         signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
+        delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
         query_execution_service: QueryExecutionService,
     ) -> Self {
         Self {
@@ -158,7 +159,7 @@ pub(crate) async fn query(
         );
         return (status, text).into_response();
     }
-    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+    let delegation_from_nns = delegation_from_nns.get().cloned();
 
     let registry_version = registry_client.get_latest_version();
 

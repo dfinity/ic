@@ -10,7 +10,7 @@ exports_files(["canister/root.did"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**"]),
+    srcs = glob(["proto/**/*.proto"]),
 )
 
 # See rs/nervous_system/feature_test.md
@@ -128,7 +128,7 @@ rust_library(
 
 rust_test(
     name = "root_test",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     deps = [":root--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
@@ -200,20 +200,20 @@ rust_ic_test_suite(
     data = [
         ":root-canister",
         ":upgrade-test-canister",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/gtc:genesis-token-canister",
         "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/registry/canister:registry-canister",
-        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
         "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
