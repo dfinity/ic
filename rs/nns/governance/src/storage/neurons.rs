@@ -364,6 +364,8 @@ where
         // use a range query on each map, and iterate all of the ranges at the same time.  This
         // uses 40% less instructions compared to just iterating on the top level range, and
         // accessing the other maps for each neuron_id.
+        // This is only possible because EVERY range begins with NeuronId, so that their ordering
+        // is the same in respect to the main range's neurons.
 
         let main_range = self.main.range(range.clone());
         let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
@@ -375,28 +377,28 @@ where
         main_range.map(move |(main_neuron_id, abridged_neuron)| {
             // We'll collect data from all relevant maps for this neuron_id
 
-            let hot_keys = collect_values_for_neuron(
+            let hot_keys = collect_values_for_neuron_from_peekable_range(
                 &mut hot_keys_iter,
                 main_neuron_id,
                 |((neuron_id, _), _)| *neuron_id,
                 |((_, _), principal)| PrincipalId::from(principal),
             );
 
-            let ballots = collect_values_for_neuron(
+            let ballots = collect_values_for_neuron_from_peekable_range(
                 &mut recent_ballots_iter,
                 main_neuron_id,
                 |((neuron_id, _), _)| *neuron_id,
                 |((_, _), ballot_info)| ballot_info,
             );
 
-            let followees = collect_values_for_neuron(
+            let followees = collect_values_for_neuron_from_peekable_range(
                 &mut followees_iter,
                 main_neuron_id,
                 |(followees_key, _)| followees_key.follower_id,
                 |x| x,
             );
 
-            let current_known_neuron_data = collect_values_for_neuron(
+            let current_known_neuron_data = collect_values_for_neuron_from_peekable_range(
                 &mut known_neuron_data_iter,
                 main_neuron_id,
                 |(neuron_id, _)| *neuron_id,
@@ -404,7 +406,7 @@ where
             )
             .pop();
 
-            let current_transfer = collect_values_for_neuron(
+            let current_transfer = collect_values_for_neuron_from_peekable_range(
                 &mut transfer_iter,
                 main_neuron_id,
                 |(neuron_id, _)| *neuron_id,
@@ -713,7 +715,7 @@ where
 
 /// Skips until extract_neuron_id(item) == target_neuron_id, then maps corresponding items through
 /// extract_value and returns the result as a vector.
-fn collect_values_for_neuron<Iter, T, R, FNeuronId, FValue>(
+fn collect_values_for_neuron_from_peekable_range<Iter, T, R, FNeuronId, FValue>(
     iter: &mut Peekable<Iter>,
     target_neuron_id: NeuronId,
     extract_neuron_id: FNeuronId,
