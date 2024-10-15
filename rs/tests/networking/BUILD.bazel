@@ -184,6 +184,22 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "p2p_performance",
+    flaky = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
+        "//rs/tests:jaeger_uvm_config_image",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests/networking/utils"],
+)
+
+system_test_nns(
     name = "query_workload_long_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -207,22 +223,6 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test_nns(
-    name = "p2p_performance",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
