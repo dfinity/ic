@@ -1036,6 +1036,7 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
+                    node_reward_type: None,
                 }),
             )
             .expect("Failed to add node record.");
