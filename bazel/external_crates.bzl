@@ -427,7 +427,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.0.0",
+                version = "^1.1.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",

@@ -318,11 +318,26 @@ filegroup(
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
     name = "wasm_spec_testsuite",
-    build_file_content = """filegroup(
-         name = "wast_files",
-         srcs = glob(["**/*.wast"]),
-         visibility = ["//visibility:public"]
-     )""",
+    build_file_content = """
+# Exports the various test suites that we use
+
+filegroup(
+    name = "base_wast_files",
+    srcs = glob(["*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "multi_memory_wast_files",
+    srcs = glob(["proposals/multi-memory/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "memory64_wast_files",
+    srcs = glob(["proposals/memory64/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+
+     """,
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
@@ -473,8 +488,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "5c49768f03f075ffd87f0f20d849897e03db58d05fb0d12f1a340b2a5f1e4f65",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.0.0/evm_rpc.wasm.gz",
+    sha256 = "5f4a871b2369768fb7e69b08d367ac0288b95dcdfda9bd2c37283aa84e6b58b4",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.1.0/evm_rpc.wasm.gz",
 )
 
 http_archive(

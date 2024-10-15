@@ -3857,9 +3857,9 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d393282cc061a25958d3a177fd95e49d94eee54e3e59371f33ef3d4a2dc24431"
+checksum = "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
 dependencies = [
  "candid",
  "hex",
@@ -3868,6 +3868,7 @@ dependencies = [
  "serde",
  "strum 0.26.3",
  "thiserror",
+ "url",
 ]
 
 [[package]]
