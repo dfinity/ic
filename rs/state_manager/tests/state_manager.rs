@@ -466,13 +466,28 @@ fn skipping_flushing_is_invisible_for_state() {
 
 #[test]
 fn lazy_pagemaps() {
-    fn int_metric_by_name(name: &str, env: &StateMachine) -> i64 {
+    fn page_maps_by_status(status: &str, env: &StateMachine) -> i64 {
         env.metrics_registry()
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|x| x.get_name() == name)
-            .map(|x| x.get_metric()[0].get_gauge().get_value())
+            .filter(|x| x.get_name() == "state_manager_num_page_maps_by_load_status")
+            .map(|x| -> f64 {
+                x.get_metric()
+                    .iter()
+                    .filter(|x| {
+                        for l in x.get_label() {
+                            if l.get_name() == "status" && l.get_value() == status {
+                                return true;
+                            }
+                        }
+                        false
+                    })
+                    .next()
+                    .unwrap()
+                    .get_gauge()
+                    .get_value()
+            })
             .next()
             .unwrap() as i64
     }
@@ -485,15 +500,12 @@ fn lazy_pagemaps() {
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
     env.tick();
-    assert_eq!(
-        int_metric_by_name("state_manager_page_maps_loaded", &env),
-        0
-    );
-    assert!(int_metric_by_name("state_manager_page_maps_not_loaded", &env) > 0);
+    assert_eq!(page_maps_by_status("loaded", &env), 0);
+    assert!(page_maps_by_status("not_loaded", &env) > 0);
 
     env.execute_ingress(canister_id, "write_heap_64k", vec![])
         .unwrap();
-    assert!(int_metric_by_name("state_manager_page_maps_loaded", &env) > 0);
+    assert!(page_maps_by_status("loaded", &env) > 0);
 }
 
 #[test]
