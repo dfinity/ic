@@ -1622,7 +1622,7 @@ impl StateManagerImpl {
                             err
                         )
                     });
-                let state = checkpoint::load_checkpoint_parallel_and_validate(
+                let state = checkpoint::load_checkpoint_and_validate_parallel(
                     &cp_layout,
                     own_subnet_type,
                     &metrics.checkpoint_metrics,
@@ -2590,7 +2590,7 @@ impl StateManagerImpl {
                             .checkpoint_op_duration
                             .with_label_values(&["recover"])
                             .start_timer();
-                        let state = checkpoint::load_checkpoint_parallel_and_validate(
+                        let state = checkpoint::load_checkpoint_and_validate_parallel(
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,

@@ -80,7 +80,7 @@ impl StateSync {
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
 
-        let state = match crate::checkpoint::load_checkpoint_parallel_and_validate(
+        let state = match crate::checkpoint::load_checkpoint_and_validate_parallel(
             &ro_layout,
             self.state_manager.own_subnet_type,
             &self.state_manager.metrics.checkpoint_metrics,

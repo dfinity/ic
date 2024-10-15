@@ -158,9 +158,11 @@ pub(crate) fn validate_checkpoint_and_remove_unverified_marker(
     Ok(())
 }
 
-/// Calls [load_checkpoint_parallel] and removes the unverified checkpoint marker.
-/// This combination is useful when marking a checkpoint as verified immediately after a successful loading.
-pub fn load_checkpoint_parallel_and_validate(
+/// Loads checkpoint and validates correctness of the overlays in parallel, if success removes the
+/// unverified checkpoint marker.
+/// This combination is useful when marking a checkpoint as verified immediately after a
+/// successful loading.
+pub fn load_checkpoint_and_validate_parallel(
     checkpoint_layout: &CheckpointLayout<ReadOnly>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,

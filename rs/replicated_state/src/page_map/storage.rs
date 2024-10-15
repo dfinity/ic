@@ -192,12 +192,15 @@ impl Storage {
             imp: OnceLock::default(),
         })
     }
+
     pub fn get_page(&self, page_index: PageIndex) -> &PageBytes {
         self.init_or_die().get_page(page_index)
     }
+
     pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
         self.init_or_die().get_base_memory_instructions()
     }
+
     pub fn get_memory_instructions(
         &self,
         range: Range<PageIndex>,
@@ -205,12 +208,15 @@ impl Storage {
     ) -> MemoryInstructions {
         self.init_or_die().get_memory_instructions(range, filter)
     }
+
     pub fn num_logical_pages(&self) -> usize {
         self.init_or_die().num_logical_pages()
     }
+
     pub fn serialize(&self) -> StorageSerialization {
         self.init_or_die().serialize()
     }
+
     pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {
         let imp = OnceLock::new();
         let _ = imp.set(StorageImpl::deserialize(serialized_storage)?);
