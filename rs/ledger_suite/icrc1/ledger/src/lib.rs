@@ -65,6 +65,11 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
+/// The ledger versions represent backwards incompatible versions of the ledger.
+/// Downgrading to a lower ledger version is never suppported.
+/// Upgrading from version N to version N+1 should always be possible.
+/// We have the following ledger versions:
+///   * 0 - the whole ledger state is stored on the heap.
 #[cfg(not(feature = "next-ledger-version"))]
 pub const LEDGER_VERSION: u64 = 0;
 
