@@ -495,11 +495,7 @@ impl PrivateKey {
     ///
     /// This can theoretically fail, in the case that k/s generated is zero.
     /// This will never occur in practice
-    fn sign_bip340_with_aux_rand(
-        &self,
-        message: &[u8],
-        aux_rand: &[u8; 32],
-    ) -> Option<[u8; 64]> {
+    fn sign_bip340_with_aux_rand(&self, message: &[u8], aux_rand: &[u8; 32]) -> Option<[u8; 64]> {
         let bip340 = k256::schnorr::SigningKey::from(&self.key);
 
         bip340

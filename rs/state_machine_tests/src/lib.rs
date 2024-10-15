@@ -2189,7 +2189,8 @@ impl StateMachine {
                 );
                 let (dk, _cc) = k.derive_subkey(&path);
 
-                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message).to_vec()
+                dk.sign_message_with_bip340_no_rng(&context.schnorr_args().message)
+                    .to_vec()
             }
             Some(SignatureSecretKey::Ed25519(k)) => {
                 let path = ic_crypto_ed25519::DerivationPath::from_canister_id_and_path(

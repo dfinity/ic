@@ -32,9 +32,9 @@ pub fn random_polynomial_commitment<R: Rng + CryptoRng>(
 
 pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
     let signature = match k256::schnorr::Signature::try_from(sig) {
-            Ok(sig) => sig,
-            Err(_) => return false,
-        };
+        Ok(sig) => sig,
+        Err(_) => return false,
+    };
 
     // from_bytes takes just the x coordinate encoding:
     if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
