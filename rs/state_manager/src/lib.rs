@@ -64,7 +64,7 @@ use ic_types::{
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_validate_eq::ValidateEq;
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
@@ -195,8 +195,7 @@ pub struct CheckpointMetrics {
     tip_handler_request_duration: HistogramVec,
     page_map_flushes: IntCounter,
     page_map_flush_skips: IntCounter,
-    page_maps_loaded: IntGauge,
-    page_maps_not_loaded: IntGauge,
+    num_page_maps_by_load_status: IntGaugeVec,
     log: ReplicaLogger,
 }
 
@@ -248,13 +247,10 @@ impl CheckpointMetrics {
             "Amount of FlushPageMap requests that were skipped.",
         );
 
-        let page_maps_loaded = metrics_registry.int_gauge(
-            "state_manager_page_maps_loaded",
-            "Amount of PageMaps loaded at the end of checkpoint interval.",
-        );
-        let page_maps_not_loaded = metrics_registry.int_gauge(
-            "state_manager_page_maps_not_loaded",
-            "Amount of PageMaps not loaded at the end of checkpoint interval.",
+        let num_page_maps_by_load_status = metrics_registry.int_gauge_vec(
+            "state_manager_num_page_maps_by_load_status",
+            "How many PageMaps are loaded or not at the end of checkpoint interval.",
+            &["status"],
         );
         Self {
             make_checkpoint_step_duration,
@@ -265,8 +261,7 @@ impl CheckpointMetrics {
             tip_handler_request_duration,
             page_map_flushes,
             page_map_flush_skips,
-            page_maps_loaded,
-            page_maps_not_loaded,
+            num_page_maps_by_load_status,
             log: replica_logger,
         }
     }
@@ -1777,7 +1772,7 @@ impl StateManagerImpl {
         &self.state_layout
     }
 
-    /// Populate `page_maps_loaded` and `page_maps_not_loaded` in the metrics with their actual
+    /// Populate `num_page_maps_by_load_status` in the metrics with their actual
     /// values in provided state.
     fn observe_num_loaded_pagemaps(&self, state: &ReplicatedState) {
         let mut loaded = 0;
@@ -1791,10 +1786,15 @@ impl StateManagerImpl {
                 }
             }
         }
-        self.metrics.checkpoint_metrics.page_maps_loaded.set(loaded);
         self.metrics
             .checkpoint_metrics
-            .page_maps_not_loaded
+            .num_page_maps_by_load_status
+            .with_label_values(&["loaded"])
+            .set(loaded);
+        self.metrics
+            .checkpoint_metrics
+            .num_page_maps_by_load_status
+            .with_label_values(&["not_loaded"])
             .set(not_loaded);
     }
 

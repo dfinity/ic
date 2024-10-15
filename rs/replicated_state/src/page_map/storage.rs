@@ -164,32 +164,40 @@ pub fn verify(storage_layout: &dyn StorageLayout) -> Result<(), PersistenceError
     Ok(())
 }
 
+/// Lazy loaded representation of StorageImpl (see above).
+/// The `storage_layout` points to the files on disk, which are loaded at the first access.
+/// The loaded `StorageImpl` is never modified or unloaded till `drop`, meaning we don't read
+/// `storage_layout` ever again.
+/// If `storage_layout` is None during load we construct `StorageLayout` with the default
+/// constructor.
 #[derive(Default, Clone)]
 pub(crate) struct Storage {
     storage_layout: Option<Arc<dyn StorageLayout + Send + Sync>>,
-    imp: OnceLock<StorageImpl>,
+    storage_impl: OnceLock<StorageImpl>,
 }
 
 impl Storage {
     fn init_or_die(&self) -> &StorageImpl {
-        self.imp.get_or_init(|| match self.storage_layout.as_ref() {
-            None => Default::default(),
-            Some(storage_layout) => {
-                StorageImpl::load(storage_layout.deref()).expect("Failed to load storage layout")
-            }
-        })
+        self.storage_impl
+            .get_or_init(|| match self.storage_layout.as_ref() {
+                None => Default::default(),
+                Some(storage_layout) => StorageImpl::load(storage_layout.deref())
+                    .expect("Failed to load storage layout"),
+            })
     }
 
+    /// Whether the `storage_impl` is already loaded.
     pub fn is_loaded(&self) -> bool {
-        self.imp.get().is_some()
+        self.storage_impl.get().is_some()
     }
 
+    /// Create Storage.
     pub fn lazy_load(
         storage_layout: Arc<dyn StorageLayout + Send + Sync>,
     ) -> Result<Self, PersistenceError> {
         Ok(Storage {
             storage_layout: Some(storage_layout),
-            imp: OnceLock::default(),
+            storage_impl: OnceLock::default(),
         })
     }
 
@@ -218,11 +226,11 @@ impl Storage {
     }
 
     pub fn deserialize(serialized_storage: StorageSerialization) -> Result<Self, PersistenceError> {
-        let imp = OnceLock::new();
-        let _ = imp.set(StorageImpl::deserialize(serialized_storage)?);
+        let storage_impl = OnceLock::new();
+        let _ = storage_impl.set(StorageImpl::deserialize(serialized_storage)?);
         Ok(Self {
             storage_layout: None,
-            imp,
+            storage_impl,
         })
     }
 }
