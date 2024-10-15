@@ -184,10 +184,10 @@ pub struct AddNodePayload {
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
 
-    // String representation of the node type.  Must be a valid type.
-    // See registry/canister/src/mutations/do_add_node.rs, fn `try_str_to_node_type` for currently
+    // String representation of the node reward type.  Must be a valid type.
+    // See registry/canister/src/mutations/do_add_node.rs, fn `validate_str_as_node_reward_type` for currently
     // accepted types.
-    pub node_type: Option<String>,
+    pub node_reward_type: Option<String>,
 }
 
 /// The payload of a request to update keys of the existing node.

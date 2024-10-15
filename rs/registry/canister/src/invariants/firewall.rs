@@ -340,7 +340,7 @@ mod tests {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
-            node_type: None,
+            node_reward_type: None,
         }
     }
 

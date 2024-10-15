@@ -77,11 +77,11 @@ impl Registry {
         }
 
         // 3. Get valid type if type is in request
-        let node_type = payload
-            .node_type
+        let node_reward_type = payload
+            .node_reward_type
             .as_ref()
             .map(|t| {
-                validate_str_as_node_type(t).map_err(|e| {
+                validate_str_as_node_reward_type(t).map_err(|e| {
                     format!(
                         "{}do_add_node: Error parsing node type from payload: {}",
                         LOG_PREFIX, e
@@ -89,7 +89,7 @@ impl Registry {
                 })
             })
             .transpose()?
-            .map(|node_type| node_type as i32);
+            .map(|node_reward_type| node_reward_type as i32);
 
         // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
@@ -138,7 +138,7 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
-            node_type,
+            node_reward_type,
         };
 
         // 8. Insert node, public keys, and crypto keys
@@ -163,7 +163,7 @@ impl Registry {
 
 // try to convert input string into NodeRewardType enum
 // If a type is no longer supported for newly registered nodes, it should be removed from this function
-fn validate_str_as_node_type<T: AsRef<str> + Display>(
+fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
     type_string: T,
 ) -> Result<NodeRewardType, String> {
     Ok(match type_string.as_ref() {
@@ -334,7 +334,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
-            node_type: None,
+            node_reward_type: None,
         };
 
         (payload, node_public_keys)
@@ -373,7 +373,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
-            node_type: None,
+            node_reward_type: None,
         };
     }
 

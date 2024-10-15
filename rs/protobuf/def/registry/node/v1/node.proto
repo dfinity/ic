@@ -63,7 +63,7 @@ message NodeRecord {
   // If a Node is to be converted into the ApiBoundaryNode, the domain field should be set.
   optional string domain = 19;
 
-  optional NodeRewardType node_type = 20;
+  optional NodeRewardType node_reward_type = 20;
 
   reserved 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14;
   reserved "node_id";

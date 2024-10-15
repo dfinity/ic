@@ -51,7 +51,7 @@ pub struct NodeRecord {
     #[prost(string, optional, tag = "19")]
     pub domain: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(enumeration = "NodeRewardType", optional, tag = "20")]
-    pub node_type: ::core::option::Option<i32>,
+    pub node_reward_type: ::core::option::Option<i32>,
 }
 /// The type of the node.
 #[derive(

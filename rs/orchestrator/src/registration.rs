@@ -222,7 +222,7 @@ impl NodeRegistration {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
-            node_type: None,
+            node_reward_type: None,
         }
     }
 

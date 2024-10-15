@@ -37,7 +37,7 @@ fn node_is_created_on_receiving_the_request() {
         .await;
 
         let (mut payload, node_pks) = prepare_add_node_payload(1);
-        payload.node_type = Some("type3".to_string());
+        payload.node_reward_type = Some("type3".to_string());
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -59,7 +59,10 @@ fn node_is_created_on_receiving_the_request() {
         // Check if some fields are present
         assert!(node_record.is_some());
         let node_record = node_record.unwrap();
-        assert_eq!(node_record.node_type, Some(NodeRewardType::Type3 as i32));
+        assert_eq!(
+            node_record.node_reward_type,
+            Some(NodeRewardType::Type3 as i32)
+        );
 
         // Check that other fields are present
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();
@@ -113,7 +116,7 @@ fn node_is_not_created_with_invalid_type() {
         .await;
 
         let (mut payload, node_pks) = prepare_add_node_payload(1);
-        payload.node_type = Some("type0.11".to_string());
+        payload.node_reward_type = Some("type0.11".to_string());
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node

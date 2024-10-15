@@ -331,7 +331,7 @@ fn make_nodes_registry(
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
-            node_type: None,
+            node_reward_type: None,
         };
         registry_data_provider
             .add(
