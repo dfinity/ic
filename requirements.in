@@ -27,3 +27,4 @@ tqdm
 uuid
 PyGithub>=2.3.0
 # numpy>=1.26.4 # numpy is only required by other packages, but breaks on python3.12 if version is not correctly set
+pillow>=10.1
