@@ -157,7 +157,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 120
+    timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
