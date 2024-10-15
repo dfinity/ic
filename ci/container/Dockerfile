@@ -21,10 +21,8 @@ RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${b
 
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
-    curl -fsSL "https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable/xUbuntu_20.04/Release.key" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/devel_kubic_libcontainers_stable.gpg > /dev/null && \
-    echo 'deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /' | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail
+    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail libtool
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -64,8 +62,8 @@ RUN mkdir libtinfo && \
     rm -rf libtinfo
 
 # Build libunwind from source. The packaged version breaks linking
-RUN apt -yqq install libtool && \
-    git clone --branch v1.8.1 --depth 1 "https://github.com/libunwind/libunwind" && \
+# Depends on libtool above
+RUN git clone --branch v1.8.1 --depth 1 "https://github.com/libunwind/libunwind" && \
     cd libunwind && \
     autoreconf -i && \
     ./configure --libdir=/lib/x86_64-linux-gnu --includedir=/usr/include/x86_64-linux-gnu --disable-tests && \
