@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "execution_system_tests_common",
+    testonly = True,
+    srcs = ["execution_system_tests_common.rs"],
+    crate_name = "execution_system_tests_common",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "//rs:system-tests-pkg",
+    ],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+    ],
+)

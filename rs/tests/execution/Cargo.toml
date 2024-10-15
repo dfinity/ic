@@ -1,0 +1,47 @@
+[package]
+name = "execution-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+futures = { workspace = true }
+ic-agent = { workspace = true }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-utils = { workspace = true }
+slog = { workspace = true }
+ic-types = { path = "../../types/types" }
+ic-config = { path = "../../config" }
+execution-system-tests-common = { path = "./common" }
+ic-cdk = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+reqwest = { workspace = true }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+ic-nns-constants = { path = "../../nns/constants" }
+lazy_static = { workspace = true }
+serde_cbor = { workspace = true }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+tokio = { workspace = true }
+wat = { workspace = true }
+
+[[bin]]
+name = "compute_allocation_test"
+path = "compute_allocation_test.rs"
+
+[[bin]]
+name = "cycles_restrictions_test"
+path = "cycles_restrictions_test.rs"
+
+[[bin]]
+name = "general_execution_test"
+path = "general_execution_test.rs"

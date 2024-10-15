@@ -362,6 +362,8 @@ members = [
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
     "rs/tests/driver",
+    "rs/tests/execution",
+    "rs/tests/execution/common",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",
@@ -662,7 +664,7 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.3", features = [ "derive" ] }
+strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
