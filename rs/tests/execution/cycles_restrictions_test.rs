@@ -1,9 +1,12 @@
 use anyhow::Result;
-use execution_system_tests_common::config_system_verified_application_subnets;
 use ic_agent::{agent::RejectCode, export::Principal, AgentError};
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     assert_http_submit_fails, assert_reject, block_on, set_controller, UniversalCanister,
@@ -14,11 +17,20 @@ use ic_utils::interfaces::ManagementCanister;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config_system_verified_application_subnets)
+        .with_setup(setup)
         .add_test(systest!(controller_and_controllee_on_different_subnets))
         .execute_from_args()?;
 
     Ok(())
+}
+
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// A test to ensure that controller and controllee canisters can exist on

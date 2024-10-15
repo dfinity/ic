@@ -1,10 +1,13 @@
 use anyhow::Result;
 use candid::{Decode, Encode};
-use execution_system_tests_common::config_many_system_subnets;
 use ic_agent::agent::RejectCode;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
 use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
@@ -12,7 +15,7 @@ use ic_types::Cycles;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config_many_system_subnets)
+        .with_setup(setup)
         .add_test(systest!(
             non_nns_canister_attempt_to_create_canister_on_another_subnet_fails
         ))
@@ -21,6 +24,16 @@ fn main() -> Result<()> {
         ))
         .execute_from_args()?;
     Ok(())
+}
+
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
 
 /// Tests whether creating a canister on a subnet other than self fails when not

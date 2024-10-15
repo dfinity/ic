@@ -363,7 +363,6 @@ members = [
     "rs/tests/consensus/utils",
     "rs/tests/driver",
     "rs/tests/execution",
-    "rs/tests/execution/common",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",

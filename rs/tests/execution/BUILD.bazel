@@ -34,8 +34,8 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
+        "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/execution/common:execution_system_tests_common",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
         "@crate_index//:ic-agent",
@@ -60,7 +60,6 @@ system_test(
         "//rs/nns/constants",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/execution/common:execution_system_tests_common",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -94,8 +93,8 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
+        "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/execution/common:execution_system_tests_common",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
@@ -114,8 +113,8 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
+        "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/execution/common:execution_system_tests_common",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
@@ -153,8 +152,8 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
+        "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/execution/common:execution_system_tests_common",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",

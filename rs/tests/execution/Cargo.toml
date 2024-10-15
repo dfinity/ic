@@ -19,7 +19,6 @@ ic-utils = { workspace = true }
 slog = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-config = { path = "../../config" }
-execution-system-tests-common = { path = "./common" }
 ic-cdk = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }

@@ -1,7 +1,6 @@
 mod general_execution_tests;
 
 use anyhow::Result;
-use execution_system_tests_common::config_system_verified_application_subnets;
 use general_execution_tests::api_tests::node_metrics_history_another_subnet_succeeds;
 use general_execution_tests::api_tests::node_metrics_history_ingress_query_fails;
 use general_execution_tests::api_tests::node_metrics_history_ingress_update_fails;
@@ -21,13 +20,18 @@ use general_execution_tests::malicious_input::malicious_input_test;
 use general_execution_tests::nns_shielding::*;
 use general_execution_tests::queries::query_reply_sizes;
 use general_execution_tests::wasm_chunk_store::*;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::group::SystemTestSubGroup;
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+};
 use ic_system_test_driver::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config_system_verified_application_subnets)
+        .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(malicious_input_test))
@@ -109,4 +113,13 @@ fn main() -> Result<()> {
         .execute_from_args()?;
 
     Ok(())
+}
+
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::fast_single_node(SubnetType::System))
+        .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
+        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
 }
