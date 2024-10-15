@@ -24,8 +24,29 @@ rust_library(
 )
 
 rust_test(
-    name = "tla_instrumentation_test",
-    srcs = glob(["tla_instrumentation/tests/**/*.rs"]),
+    name = "structs_test",
+    srcs = ["tla_instrumentation/tests/structs.rs"],
+    data = [
+        ":tla_models",
+        "@bazel_tools//tools/jdk:current_java_runtime",
+        "@tla_apalache//:contents",
+    ],
+    env = {
+        "JAVABASE": "$(JAVABASE)",
+    },
+    proc_macro_deps = [":proc_macros"],
+    toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
+    deps = [
+        ":local_key",
+        ":tla_instrumentation",
+        "@crate_index//:candid",
+        "@crate_index//:tokio-test",
+    ],
+)
+
+rust_test(
+    name = "multiple_calls_test",
+    srcs = ["tla_instrumentation/tests/multiple_calls.rs"],
     data = [
         ":tla_models",
         "@bazel_tools//tools/jdk:current_java_runtime",
