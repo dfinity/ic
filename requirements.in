@@ -20,9 +20,10 @@ paramiko>=2.11.0
 parse>=1.19.0
 pytest
 pytest-cov
-PyYAML>=5.4.1
+PyYAML>=6.0.2
 requests>=2.26.0
 simple-parsing
 tqdm
 uuid
 PyGithub>=2.3.0
+numpy>=1.26.4 # numpy is only required by other packages, but breaks on python3.12 if version is not correctly set
