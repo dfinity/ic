@@ -318,11 +318,26 @@ filegroup(
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
     name = "wasm_spec_testsuite",
-    build_file_content = """filegroup(
-         name = "wast_files",
-         srcs = glob(["**/*.wast"]),
-         visibility = ["//visibility:public"]
-     )""",
+    build_file_content = """
+# Exports the various test suites that we use
+
+filegroup(
+    name = "base_wast_files",
+    srcs = glob(["*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "multi_memory_wast_files",
+    srcs = glob(["proposals/multi-memory/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "memory64_wast_files",
+    srcs = glob(["proposals/memory64/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+
+     """,
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
