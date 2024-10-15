@@ -4029,6 +4029,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-management-canister-types",
  "ic-nns-constants",
+ "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
