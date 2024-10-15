@@ -141,7 +141,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             .unwrap();
 
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        // The State of the Neuron should still be in NOT_DISSOLVING
+
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
             // The neuron now has a new dissolve delay timestamp and is in NOT DISSOLVING which corresponds to a dissolve delay that is greater than 0
             DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {

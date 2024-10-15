@@ -210,9 +210,10 @@ impl RosettaClient {
 
     pub async fn build_set_dissolve_timestamp_operations(
         signer_principal: Principal,
-        // The index of the neuron relative to the signer of the transaction
         neuron_index: u64,
         // The number of seconds since Unix epoch.
+        // The dissolve delay will be set to this value
+        // The timestamp has to be in the future and greater or equal to the currently set timestamp
         timestamp: u64,
     ) -> anyhow::Result<Vec<Operation>> {
         Ok(vec![Operation {
