@@ -24,9 +24,9 @@ jobs:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
-  on-push-to-master:
-    name: On Push To Master
-    uses: ./.github/workflows/on-push-to-master.yml
+  slow-tests:
+    name: Slow Tests
+    uses: ./.github/workflows/slow-tests.yml
     secrets: inherit
   bazel-system-test-nightly:
     name: Bazel System Test Nightly
