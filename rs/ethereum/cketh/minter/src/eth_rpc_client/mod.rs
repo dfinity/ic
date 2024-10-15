@@ -36,6 +36,7 @@ mod tests;
 
 // We expect most of the calls to contain zero events.
 const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
+const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
 
 #[derive(Debug)]
 pub struct EthRpcClient {
@@ -66,9 +67,13 @@ impl EthRpcClient {
                 EthereumNetwork::Mainnet => 3_u8,
                 EthereumNetwork::Sepolia => 2_u8,
             };
+            assert!(
+                min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+                "BUG: min_threshold too high"
+            );
             let threshold_strategy = EvmRpcConfig {
                 response_consensus: Some(ConsensusStrategy::Threshold {
-                    total: Some(4),
+                    total: Some(TOTAL_NUMBER_OF_PROVIDERS),
                     min: min_threshold,
                 }),
                 ..EvmRpcConfig::default()
