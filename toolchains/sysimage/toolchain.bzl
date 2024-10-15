@@ -107,7 +107,6 @@ def _build_container_filesystem_impl(ctx):
     outputs.append(output_tar_file)
 
     inputs += ctx.files.context_files
-
     for context_file in ctx.files.context_files:
         args.extend(["--context-file", context_file.path])
 
