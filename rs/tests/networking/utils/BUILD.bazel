@@ -9,12 +9,20 @@ rust_library(
     crate_root = "src/lib.rs",
     crate_name = "ic_networking_system_test_utils",
     deps = [
+        # Keep sorted.
+        "//rs/nns/governance/api",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/keys",   
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:slog-term",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
+        "@crate_index//:url",
     ],
 )
