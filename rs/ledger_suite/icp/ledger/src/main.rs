@@ -54,7 +54,7 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
+use ledger_canister::{Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -802,6 +802,14 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             ledger_state
         });
     }
+
+    if ledger.ledger_version > LEDGER_VERSION {
+        panic!(
+            "Trying to downgrade from incompatible version {}. Current version is {}.",
+            ledger.ledger_version, LEDGER_VERSION
+        );
+    }
+    ledger.ledger_version = LEDGER_VERSION;
 
     if let Some(args) = args {
         match args {
