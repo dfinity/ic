@@ -3,53 +3,6 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
-
-# Rules used to build Ubuntu systems
-http_archive(
-    name = "rules_distroless",
-    sha256 = "8a3440067453ad211f3b34d4a8f68f65663dc5fd6d7834bf81eecf0526785381",
-    strip_prefix = "rules_distroless-0.3.6",
-    url = "https://github.com/GoogleContainerTools/rules_distroless/releases/download/v0.3.6/rules_distroless-v0.3.6.tar.gz",
-)
-
-load("@rules_distroless//distroless:dependencies.bzl", "distroless_dependencies")
-
-distroless_dependencies()
-
-load("@rules_distroless//distroless:toolchains.bzl", "distroless_register_toolchains")
-
-distroless_register_toolchains()
-
-load("@rules_distroless//apt:index.bzl", "deb_index")
-
-# Packageset based on an Ubuntu focal snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @focal//:lock
-deb_index(
-    name = "focal",
-    lock = "//bazel:focal.lock.json",
-    manifest = "//bazel:focal.yaml",
-)
-
-load("@focal//:packages.bzl", "focal_packages")
-
-focal_packages()
-
-# Packageset based on an Ubuntu noble snapshot, see manifest file
-# for details
-# To update, comment out the `lock` field below and run:
-#   bazel run @noble//:lock
-deb_index(
-    name = "noble",
-    lock = "//bazel:noble.lock.json",
-    manifest = "//bazel:noble.yaml",
-)
-
-load("@noble//:packages.bzl", "noble_packages")
-
-noble_packages()
-
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
@@ -190,16 +143,6 @@ http_archive(
     sha256 = "f7cb0a906c8efe9d2ad8d27f0f6ac11f6409a771d74874f7e47d45959063dfe3",
     strip_prefix = "rules_motoko-0.2.1",
     urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
-)
-
-http_archive(
-    name = "motoko_base",
-    build_file_content = """
-filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
-      """,
-    sha256 = "b143d641b31b13fe2d21832d7372dccb067ea1a740396e9fd50af3fe9e713247",
-    strip_prefix = "motoko-base-moc-0.8.5/src",
-    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.8.5.tar.gz"],
 )
 
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
@@ -375,11 +318,26 @@ filegroup(
 # To be used for testing libraries that handle canister Wasm code.
 http_archive(
     name = "wasm_spec_testsuite",
-    build_file_content = """filegroup(
-         name = "wast_files",
-         srcs = glob(["**/*.wast"]),
-         visibility = ["//visibility:public"]
-     )""",
+    build_file_content = """
+# Exports the various test suites that we use
+
+filegroup(
+    name = "base_wast_files",
+    srcs = glob(["*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "multi_memory_wast_files",
+    srcs = glob(["proposals/multi-memory/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+filegroup(
+    name = "memory64_wast_files",
+    srcs = glob(["proposals/memory64/*.wast"]),
+    visibility = ["//visibility:public"]
+)
+
+     """,
     sha256 = "9afc0e7c250b5f0dcf32e9a95860b99a392ab78a653fcf3705778e8a9357f3c4",
     strip_prefix = "testsuite-4f77306bb63151631d84f58dedf67958eb9911b9",
     url = "https://github.com/WebAssembly/testsuite/archive/4f77306bb63151631d84f58dedf67958eb9911b9.tar.gz",
@@ -530,8 +488,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "5c49768f03f075ffd87f0f20d849897e03db58d05fb0d12f1a340b2a5f1e4f65",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.0.0/evm_rpc.wasm.gz",
+    sha256 = "5f4a871b2369768fb7e69b08d367ac0288b95dcdfda9bd2c37283aa84e6b58b4",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.1.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
