@@ -2343,6 +2343,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-backup-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "ic-backup",
+ "ic-base-types",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "serde_json",
+ "slog",
+ "tempfile",
+]
+
+[[package]]
 name = "consensus-orchestrator-system-tests"
 version = "0.9.0"
 dependencies = [
@@ -13464,9 +13484,7 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
- "hex",
  "ic-agent",
- "ic-backup",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-management-canister-types",
@@ -13483,7 +13501,6 @@ dependencies = [
  "ic_consensus_system_test_catch_up_test_common",
  "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
  "k256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
