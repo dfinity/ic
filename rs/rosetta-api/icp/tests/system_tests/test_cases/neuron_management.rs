@@ -113,14 +113,17 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 k
             ),
         };
-        assert_eq!(
-            dissolve_delay_timestamp,
-            env.pocket_ic
-                .get_time()
-                .await
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
+        
+        // We can't know the exact timestamp of the dissolve delay, but we can assert that it is in the past or now
+        assert!(
+            dissolve_delay_timestamp
+                <= env
+                    .pocket_ic
+                    .get_time()
+                    .await
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
         );
         let additional_dissolve_delay = 1000;
         let new_dissolve_delay_timestamp = SystemTime::now()
@@ -129,6 +132,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             .as_secs()
             + additional_dissolve_delay;
 
+        // To be able to set the dissolve delay timestamp we need to set the state machine to live again
         env.rosetta_client
             .set_neuron_dissolve_delay(
                 env.network_identifier.clone(),
@@ -153,6 +157,9 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             ),
         };
         // The Dissolve Delay Timestamp should be updated
-        assert_eq!(dissolve_delay_timestamp, additional_dissolve_delay);
+        // Since the state machine is live we do not know exactlz how much time will be left at the time of calling the governance canister.
+        // It should be between dissolve_delay_timestamp and dissolve_delay_timestamp - X seconds depending on how long it takes to call the governance canister
+        assert!(dissolve_delay_timestamp <= additional_dissolve_delay);
+        assert!(dissolve_delay_timestamp > 0);
     });
 }

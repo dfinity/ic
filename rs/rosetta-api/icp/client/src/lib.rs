@@ -197,7 +197,9 @@ impl RosettaClient {
             related_operations: None,
             type_: "STAKE".to_string(),
             status: None,
-            account: Some(AccountIdentifier::new(PrincipalId(signer_principal), None).into()),
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
             amount: None,
             coin_change: None,
             metadata: Some(
@@ -224,7 +226,9 @@ impl RosettaClient {
             related_operations: None,
             type_: "SET_DISSOLVE_TIMESTAMP".to_string(),
             status: None,
-            account: Some(AccountIdentifier::new(PrincipalId(signer_principal), None).into()),
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
             amount: None,
             coin_change: None,
             metadata: Some(
@@ -618,7 +622,7 @@ impl RosettaClient {
         let neuron_account_id = self
             .construction_derive(ConstructionDeriveRequest {
                 network_identifier: network_identifier.clone(),
-                public_key: signer_keypair.into(),
+                public_key: PublicKey::from(signer_keypair),
                 metadata: Some(
                     ConstructionDeriveRequestMetadata {
                         account_type: AccountType::Neuron {
