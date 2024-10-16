@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:leb128",
     "@crate_index//:mockall",
     "@crate_index//:opentelemetry_0_20_0",
-    "@crate_index//:opentelemetry_prometheus",
+    "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
