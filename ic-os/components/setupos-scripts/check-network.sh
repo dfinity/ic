@@ -203,8 +203,8 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    read_variables
     if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+        read_variables
         get_network_settings
         print_network_settings
 
