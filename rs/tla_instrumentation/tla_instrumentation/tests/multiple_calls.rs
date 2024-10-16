@@ -120,7 +120,7 @@ static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
 // TODO: why doesn't this work if I make it async?
 #[tla_function]
-fn call_maker() {
+async fn call_maker() {
     tla_log_request!(
         "WaitForResponse",
         Destination::new("othercan"),
@@ -143,12 +143,12 @@ impl StructCanister {
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase1");
-        call_maker();
+        call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase2");
-        call_maker();
+        call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         // Note that this would not be necessary (and would be an error) if
