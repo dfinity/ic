@@ -1085,9 +1085,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "schemars": crate.spec(
                 version = "^0.8.16",
             ),
-            "schnorr_fun": crate.spec(
-                version = "^0.10",
-            ),
             "scoped_threadpool": crate.spec(
                 version = "^0.1.9",
             ),
