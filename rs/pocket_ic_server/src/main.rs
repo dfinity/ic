@@ -28,7 +28,7 @@ use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCani
 use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
 use pocket_ic_server::state_api::{
     routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
-    state::PocketIcApiStateBuilder,
+    state::{ApiState, PocketIcApiStateBuilder},
 };
 use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
@@ -269,7 +269,7 @@ async fn terminate(
 ) {
     debug!("The PocketIC server will terminate");
 
-    app_state.api_state.delete_all_instances().await;
+    ApiState::delete_all_instances(app_state.api_state).await;
 
     if let Some(port_file_path) = port_file_path {
         // Clean up port file.
