@@ -30,8 +30,7 @@ use ic_types::{
     consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
     RegistryVersion, SubnetId,
 };
-use std::net::SocketAddr;
-use std::os::unix::fs::PermissionsExt;
+use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
 const CRYPTO_DIR: &str = "crypto";
 const STATE_DIR: &str = "state";
@@ -426,8 +425,7 @@ impl NodeSecretKeyStore {
 mod node_configuration {
     use super::*;
     use pretty_assertions::assert_eq;
-    use std::net::SocketAddr;
-    use std::str::FromStr;
+    use std::{net::SocketAddr, str::FromStr};
 
     #[test]
     fn into_proto_http() {
@@ -454,6 +452,7 @@ mod node_configuration {
             chip_id: None,
             public_ipv4_config: None,
             domain: None,
+            node_reward_type: None,
         };
 
         assert_eq!(got, want);

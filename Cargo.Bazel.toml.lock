@@ -3002,7 +3002,6 @@ dependencies = [
  "assert-json-diff",
  "assert_cmd",
  "assert_matches",
- "async-channel",
  "async-recursion",
  "async-scoped",
  "async-stream",

@@ -1412,7 +1412,6 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ backup_purging_interval_secs }}", "0")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
         .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
