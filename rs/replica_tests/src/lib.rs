@@ -36,7 +36,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CertificateDelegation, Query, QuerySource, SignedIngress},
+    messages::{Query, QuerySource, SignedIngress},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, ReplicaVersion, Time,
@@ -54,7 +54,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
+use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -151,8 +151,7 @@ where
 /// The code of the replica is the real one, only the interface is changed, with
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
-    pub query_handler:
-        tower::buffer::Buffer<QueryExecutionService, (Query, Option<CertificateDelegation>)>,
+    pub query_handler: QueryExecutionService,
     pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -370,8 +369,7 @@ where
         }
 
         let runtime = LocalTestRuntime {
-            query_handler: tokio::runtime::Handle::current()
-                .block_on(async { TowerBuffer::new(query_handler, 1) }),
+            query_handler,
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader,
