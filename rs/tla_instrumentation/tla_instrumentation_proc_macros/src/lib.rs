@@ -220,23 +220,28 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
             #modified_fn
 
             #(#attrs)* #vis #sig {
-               let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
+               TLA_INSTRUMENTATION_STATE.try_with(|state| {
                     {
                         let mut handler_state = state.handler_state.borrow_mut();
                         handler_state.context.call_function();
                     }
-                    let res = #call;
+               }).unwrap_or_else(|e|
+                   // TODO: fail if there's an error and if we're in some kind of strict mode?
+                   ()
+               );
+
+
+               let res = #call;
+               TLA_INSTRUMENTATION_STATE.try_with(|state| {
                     {
                         let mut handler_state = state.handler_state.borrow_mut();
                         handler_state.context.return_from_function();
                     }
-                    res
-               });
-               match res {
-                    Ok(r) => r,
-                    // TODO: fail if there's an error and if we're in some kind of strict mode
-                    Err(_) => #call,
-               }
+               }).unwrap_or_else(|e|
+                   // TODO: fail if there's an error and if we're in some kind of strict mode?
+                   ()
+               );
+               res
             }
         };
 
