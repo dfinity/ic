@@ -12,6 +12,9 @@ use std::str::FromStr;
 fn redact_unavailable_swap_fields(swap_state: &mut GetStateResponse) {
     // The following fields were added to the swap state later than some of the Swap canisters'
     // last upgrade. These fields will become available after those canisters are upgraded.
+    //
+    // Why is it okay to redact these fields in this test? This test accompanies a data migration
+    // that sets these fields for Swaps that don't yet have it in post_upgrade.
     {
         let swap = swap_state.swap.clone().unwrap();
         swap_state.swap = Some(Swap {
@@ -24,6 +27,11 @@ fn redact_unavailable_swap_fields(swap_state: &mut GetStateResponse) {
 
     // The following fields were added to the derived state later than some of the Swap canisters'
     // last upgrade. These fields will become available after those canisters are upgraded.
+    //
+    // Why is it okay to redact these fields in this test? As the name suggests, these fields are
+    // part of Swap's *derived* state, i.e., they are not stored in canister memory but recomputed
+    // upon request. Therefore, the only reason they might not have reasonable values is when
+    // the Swap canister's *persisted* state (`swap_state.swap`) too incomplete to compute them.
     {
         let derived = swap_state.derived.clone().unwrap();
         swap_state.derived = Some(DerivedState {
@@ -81,12 +89,9 @@ fn run_upgrade_for_swap(
     (swap_pre_state, swap_post_state)
 }
 
-fn run_test_for_swap(swap_canister_id: &str, sns_name: &str) {
+fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_name: &str) {
     let swap_canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from_str(swap_canister_id).unwrap());
-
-    let state_machine =
-        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
     let swap_wasm_1 = ensure_sns_wasm_gzipped(build_swap_sns_wasm());
     let swap_wasm_2 = create_modified_sns_wasm(&swap_wasm_1, Some(42));
@@ -94,11 +99,15 @@ fn run_test_for_swap(swap_canister_id: &str, sns_name: &str) {
 
     // Experiment I: Upgrade from golden version to the tip of this branch.
     {
-        let (swap_pre_state, mut swap_post_state) =
-            run_upgrade_for_swap(&state_machine, swap_canister_id, swap_wasm_1, sns_name);
+        let (mut swap_pre_state, mut swap_post_state) =
+            run_upgrade_for_swap(state_machine, swap_canister_id, swap_wasm_1, sns_name);
 
         // Some fields need to be redacted as they were introduced after some Swaps were created.
         redact_unavailable_swap_fields(&mut swap_post_state);
+
+        // Since some SNSs do have (some of) the new fields, we need to redact the same set of
+        // fields from the pre-state, too.
+        redact_unavailable_swap_fields(&mut swap_pre_state);
 
         // Otherwise, the states before and after the migration should match.
         assert_eq!(
@@ -111,7 +120,7 @@ fn run_test_for_swap(swap_canister_id: &str, sns_name: &str) {
     // Experiment II: Upgrade again to test the pre-upgrade hook.
     {
         let (swap_pre_state, swap_post_state) =
-            run_upgrade_for_swap(&state_machine, swap_canister_id, swap_wasm_2, sns_name);
+            run_upgrade_for_swap(state_machine, swap_canister_id, swap_wasm_2, sns_name);
 
         // Nothing to redact in this case; we've just upgraded a recent version to its modified version.
 
@@ -125,155 +134,44 @@ fn run_test_for_swap(swap_canister_id: &str, sns_name: &str) {
 
 #[test]
 fn upgrade_downgrade_swap_boom_dao() {
-    run_test_for_swap("vuqiy-liaaa-aaaaq-aabiq-cai", "BOOM DAO");
-}
+    let snses_under_test = [
+        ("vuqiy-liaaa-aaaaq-aabiq-cai", "BOOM DAO"),
+        ("iuhw5-siaaa-aaaaq-aadoq-cai", "CYCLES-TRANSFER-STATION"),
+        ("uc3qt-6yaaa-aaaaq-aabnq-cai", "Catalyze"),
+        ("n223b-vqaaa-aaaaq-aadsa-cai", "DOGMI"),
+        ("xhply-dqaaa-aaaaq-aabga-cai", "DecideAI DAO"),
+        ("zcdfx-6iaaa-aaaaq-aaagq-cai", "Dragginz"),
+        ("grlys-pqaaa-aaaaq-aacoa-cai", "ELNA AI"),
+        ("bcl3g-3aaaa-aaaaq-aac5a-cai", "EstateDAO"),
+        ("t7z6p-ryaaa-aaaaq-aab7q-cai", "Gold DAO"),
+        // TODO: Uncomment once ICGhost has enough cycles to make it through two upgrades.
+        // ("4f5dx-pyaaa-aaaaq-aaa3q-cai", "ICGhost"),
+        ("habgn-xyaaa-aaaaq-aaclq-cai", "ICLighthouse DAO"),
+        ("lwslc-cyaaa-aaaaq-aadfq-cai", "ICPCC DAO LLC"),
+        ("ch7an-giaaa-aaaaq-aacwq-cai", "ICPSwap"),
+        ("c424i-4qaaa-aaaaq-aacua-cai", "ICPanda DAO"),
+        ("mzwsh-biaaa-aaaaq-aaduq-cai", "ICVC"),
+        ("mlqf6-nyaaa-aaaaq-aadxq-cai", "Juno Build"),
+        ("7sppf-6aaaa-aaaaq-aaata-cai", "Kinic"),
+        ("khyv5-2qaaa-aaaaq-aadaa-cai", "MORA DAO"),
+        ("kv6ce-waaaa-aaaaq-aadda-cai", "Motoko"),
+        ("f25or-jiaaa-aaaaq-aaceq-cai", "Neutrinite"),
+        ("q2nfe-mqaaa-aaaaq-aabua-cai", "Nuance"),
+        ("jxl73-gqaaa-aaaaq-aadia-cai", "ORIGYN"),
+        ("2hx64-daaaa-aaaaq-aaana-cai", "OpenChat"),
+        ("dkred-jaaaa-aaaaq-aacra-cai", "OpenFPL"),
+        ("qils5-aaaaa-aaaaq-aabxa-cai", "SONIC"),
+        ("rmg5p-zaaaa-aaaaq-aabra-cai", "Seers"),
+        ("hshru-3iaaa-aaaaq-aaciq-cai", "Sneed"),
+        ("ezrhx-5qaaa-aaaaq-aacca-cai", "TRAX"),
+        ("ipcky-iqaaa-aaaaq-aadma-cai", "WaterNeuron"),
+        ("6eexo-lqaaa-aaaaq-aaawa-cai", "YRAL"),
+        ("a2cof-vaaaa-aaaaq-aacza-cai", "Yuku DAO"),
+    ];
 
-#[test]
-fn upgrade_downgrade_swap_cycles_transfer_station() {
-    run_test_for_swap("iuhw5-siaaa-aaaaq-aadoq-cai", "CYCLES-TRANSFER-STATION");
-}
+    let state_machine = ic_nns_test_utils_golden_nns_state::new_state_machine_or_panic();
 
-#[test]
-fn upgrade_downgrade_swap_catalyze() {
-    run_test_for_swap("uc3qt-6yaaa-aaaaq-aabnq-cai", "Catalyze");
-}
-
-#[test]
-fn upgrade_downgrade_swap_dogmi() {
-    run_test_for_swap("n223b-vqaaa-aaaaq-aadsa-cai", "DOGMI");
-}
-
-#[test]
-fn upgrade_downgrade_swap_decideai_dao() {
-    run_test_for_swap("xhply-dqaaa-aaaaq-aabga-cai", "DecideAI DAO");
-}
-
-#[test]
-fn upgrade_downgrade_swap_dragginz() {
-    run_test_for_swap("zcdfx-6iaaa-aaaaq-aaagq-cai", "Dragginz");
-}
-
-#[test]
-fn upgrade_downgrade_swap_elna_ai() {
-    run_test_for_swap("grlys-pqaaa-aaaaq-aacoa-cai", "ELNA AI");
-}
-
-#[test]
-fn upgrade_downgrade_swap_estatedao() {
-    run_test_for_swap("bcl3g-3aaaa-aaaaq-aac5a-cai", "EstateDAO");
-}
-
-#[test]
-fn upgrade_downgrade_swap_gold_dao() {
-    run_test_for_swap("t7z6p-ryaaa-aaaaq-aab7q-cai", "Gold DAO");
-}
-
-#[test]
-fn upgrade_downgrade_swap_icghost() {
-    run_test_for_swap("4f5dx-pyaaa-aaaaq-aaa3q-cai", "ICGhost");
-}
-
-#[test]
-fn upgrade_downgrade_swap_iclighthouse_dao() {
-    run_test_for_swap("habgn-xyaaa-aaaaq-aaclq-cai", "ICLighthouse DAO");
-    
-}
-#[test]
-fn upgrade_downgrade_swap_icpcc_dao_llc() {
-    run_test_for_swap("lwslc-cyaaa-aaaaq-aadfq-cai", "ICPCC DAO LLC");
-}
-
-#[test]
-fn upgrade_downgrade_swap_icpswap() {
-    run_test_for_swap("ch7an-giaaa-aaaaq-aacwq-cai", "ICPSwap");
-}
-
-#[test]
-fn upgrade_downgrade_swap_icpanda_dao() {
-    run_test_for_swap("c424i-4qaaa-aaaaq-aacua-cai", "ICPanda DAO");
-}
-
-#[test]
-fn upgrade_downgrade_swap_icvc() {
-    run_test_for_swap("mzwsh-biaaa-aaaaq-aaduq-cai", "ICVC");
-}
-
-#[test]
-fn upgrade_downgrade_swap_juno_build() {
-    run_test_for_swap("mlqf6-nyaaa-aaaaq-aadxq-cai", "Juno Build");
-}
-
-#[test]
-fn upgrade_downgrade_swap_kinic() {
-    run_test_for_swap("7sppf-6aaaa-aaaaq-aaata-cai", "Kinic");
-}
-
-#[test]
-fn upgrade_downgrade_swap_mora_dao() {
-    run_test_for_swap("khyv5-2qaaa-aaaaq-aadaa-cai", "MORA DAO");
-}
-
-#[test]
-fn upgrade_downgrade_swap_motoko() {
-    run_test_for_swap("kv6ce-waaaa-aaaaq-aadda-cai", "Motoko");
-}
-
-#[test]
-fn upgrade_downgrade_swap_neutrinite() {
-    run_test_for_swap("f25or-jiaaa-aaaaq-aaceq-cai", "Neutrinite");
-}
-
-#[test]
-fn upgrade_downgrade_swap_nuance() {
-    run_test_for_swap("q2nfe-mqaaa-aaaaq-aabua-cai", "Nuance");
-}
-
-#[test]
-fn upgrade_downgrade_swap_origyn() {
-    run_test_for_swap("jxl73-gqaaa-aaaaq-aadia-cai", "ORIGYN");
-}
-
-#[test]
-fn upgrade_downgrade_swap_openchat() {
-    run_test_for_swap("2hx64-daaaa-aaaaq-aaana-cai", "OpenChat");
-}
-
-#[test]
-fn upgrade_downgrade_swap_openfpl() {
-    run_test_for_swap("dkred-jaaaa-aaaaq-aacra-cai", "OpenFPL");
-}
-
-#[test]
-fn upgrade_downgrade_swap_sonic() {
-    run_test_for_swap("qils5-aaaaa-aaaaq-aabxa-cai", "SONIC");
-}
-
-#[test]
-fn upgrade_downgrade_swap_seers() {
-    run_test_for_swap("rmg5p-zaaaa-aaaaq-aabra-cai", "Seers");
-}
-
-#[test]
-fn upgrade_downgrade_swap_sneed() {
-    run_test_for_swap("hshru-3iaaa-aaaaq-aaciq-cai", "Sneed");
-}
-
-#[test]
-fn upgrade_downgrade_swap_trax() {
-    run_test_for_swap("ezrhx-5qaaa-aaaaq-aacca-cai", "TRAX");
-}
-
-#[test]
-fn upgrade_downgrade_swap_waterneuron() {
-    run_test_for_swap("ipcky-iqaaa-aaaaq-aadma-cai", "WaterNeuron");
-}
-
-#[test]
-fn upgrade_downgrade_swap_yral() {
-    run_test_for_swap("6eexo-lqaaa-aaaaq-aaawa-cai", "YRAL");
-}
-
-#[test]
-fn upgrade_downgrade_swap_yuku_dao() {
-    run_test_for_swap("a2cof-vaaaa-aaaaq-aacza-cai", "Yuku DAO");
+    for (swap_canister_id, sns_name) in snses_under_test {
+        run_test_for_swap(&state_machine, swap_canister_id, sns_name);
+    }
 }
