@@ -8,21 +8,12 @@ documentation.workspace = true
 
 [dependencies]
 canister-test = { path = "../../../rust_canisters/canister_test" }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
-ic-system-test-driver = { path = "../../driver" }
-itertools = { workspace = true }
-slog = { workspace = true }
-tokio = { workspace = true }
-xnet-test = { path = "../../../rust_canisters/xnet_test" }
-candid = { workspace = true }
-ic-agent = { workspace = true }
-ic-base-types = { path = "../../../types/base_types" }
-ic-utils = { workspace = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
-dfn_json = { path = "../../../rust_canisters/dfn_json" }
 chrono = { workspace = true }
 futures = { workspace = true }
+ic-system-test-driver = { path = "../../driver" }
+slog = { workspace = true }
+tokio = { workspace = true }
+dfn_json = { path = "../../../rust_canisters/dfn_json" }
 
 [lib]
 name = "rejoin_test_lib"
