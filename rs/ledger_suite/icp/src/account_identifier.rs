@@ -2,8 +2,11 @@ use candid::{CandidType, Principal};
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
+use ic_stable_structures::{storable::Bound, Storable};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
+use std::borrow::Cow;
+use std::io::{Cursor, Read};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::{Display, Formatter},
@@ -49,6 +52,27 @@ impl From<Account> for AccountIdentifier {
     fn from(account: Account) -> Self {
         Self::new(account.owner.into(), account.subaccount.map(Subaccount))
     }
+}
+
+impl Storable for AccountIdentifier {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(self.hash.as_slice())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        let mut cursor = Cursor::new(bytes);
+
+        let mut ai = AccountIdentifier { hash: [7; 28] };
+        cursor
+            .read_exact(&mut ai.hash)
+            .expect("Unable to read the account identifier");
+        ai
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 28,
+        is_fixed_size: true,
+    };
 }
 
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
@@ -491,4 +515,12 @@ fn test_account_id_from_hex() {
         AccountIdentifier::from_hex(length_64),
         Ok(AccountIdentifier { hash: [0; 28] })
     );
+}
+
+#[test]
+fn test_account_id_serialization() {
+    let length_56 = "00000000000000000000000000000000000000000000000000000000";
+    let id = 
+        AccountIdentifier::from_hex(length_56);
+    assert_eq!(AccountIdentifier::from_bytes(id.to_bytes()), id);
 }

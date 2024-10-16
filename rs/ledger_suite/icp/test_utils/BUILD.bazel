@@ -24,6 +24,7 @@ rust_library(
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
         "@crate_index//:hex",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:maplit",
         "@crate_index//:serde",
     ],
