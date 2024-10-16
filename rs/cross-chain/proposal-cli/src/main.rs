@@ -12,6 +12,7 @@ use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -106,35 +107,43 @@ async fn main() {
             submit,
         } => {
             check_dir_has_required_permissions(&output_dir).expect("invalid output directory");
+            let canister_per_git_repo = canisters_per_git_repo(canisters);
+            for git_repo_url in canister_per_git_repo.keys() {
+                let canisters: Vec<_> = canister_per_git_repo
+                    .get(git_repo_url)
+                    .unwrap()
+                    .iter()
+                    .cloned()
+                    .collect();
+                let mut git_repo = GitRepository::clone(git_repo_url);
+                let dashboard = DashboardClient::new();
+                let release_notes = git_repo.release_notes_batch(&canisters, &from, &to);
+                git_repo.checkout(&to);
+                let upgrade_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
+                let canister_ids = git_repo.parse_canister_id_batch(&canisters);
+                let last_upgrade_proposal_ids: Vec<_> = dashboard
+                    .list_canister_upgrade_proposals_batch(&canister_ids)
+                    .await
+                    .into_iter()
+                    .map(|set| set.last().cloned())
+                    .collect();
+                let compressed_wasm_hashes = git_repo.build_canister_artifact_batch(&canisters);
 
-            let mut ic_repo = GitRepository::clone_ic();
-            let dashboard = DashboardClient::new();
-            let release_notes = ic_repo.release_notes_batch(&canisters, &from, &to);
-            ic_repo.checkout(&to);
-            let upgrade_args: Vec<_> = ic_repo.encode_args_batch(&canisters, args);
-            let canister_ids = ic_repo.parse_canister_id_batch(&canisters);
-            let last_upgrade_proposal_ids: Vec<_> = dashboard
-                .list_canister_upgrade_proposals_batch(&canister_ids)
-                .await
-                .into_iter()
-                .map(|set| set.last().cloned())
-                .collect();
-            let compressed_wasm_hashes = ic_repo.build_canister_artifact_batch(&canisters);
+                for (index, canister) in canisters.into_iter().enumerate() {
+                    let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
 
-            for (index, canister) in canisters.into_iter().enumerate() {
-                let output_dir = output_dir.join(canister.to_string()).join(to.to_string());
+                    let proposal = UpgradeProposalTemplate {
+                        canister: canister.clone(),
+                        to: to.clone(),
+                        compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
+                        canister_id: canister_ids[index],
+                        last_upgrade_proposal_id: last_upgrade_proposal_ids[index],
+                        upgrade_args: upgrade_args[index].clone(),
+                        release_notes: release_notes[index].clone(),
+                    };
 
-                let proposal = UpgradeProposalTemplate {
-                    canister: canister.clone(),
-                    to: to.clone(),
-                    compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
-                    canister_id: canister_ids[index],
-                    last_upgrade_proposal_id: last_upgrade_proposal_ids[index],
-                    upgrade_args: upgrade_args[index].clone(),
-                    release_notes: release_notes[index].clone(),
-                };
-
-                write_to_disk(output_dir, proposal, submit.clone(), &ic_repo);
+                    write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
+                }
             }
         }
         Commands::Install {
@@ -144,25 +153,35 @@ async fn main() {
             output_dir,
             submit,
         } => {
-            let mut ic_repo = GitRepository::clone_ic();
+            let canister_per_git_repo = canisters_per_git_repo(canisters);
 
-            ic_repo.checkout(&at);
-            let install_args: Vec<_> = ic_repo.encode_args_batch(&canisters, args);
-            let canister_ids = ic_repo.parse_canister_id_batch(&canisters);
-            let compressed_wasm_hashes = ic_repo.build_canister_artifact_batch(&canisters);
+            for git_repo_url in canister_per_git_repo.keys() {
+                let canisters: Vec<_> = canister_per_git_repo
+                    .get(git_repo_url)
+                    .unwrap()
+                    .iter()
+                    .cloned()
+                    .collect();
 
-            for (index, canister) in canisters.into_iter().enumerate() {
-                let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
+                let mut git_repo = GitRepository::clone(git_repo_url);
+                git_repo.checkout(&at);
+                let install_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
+                let canister_ids = git_repo.parse_canister_id_batch(&canisters);
+                let compressed_wasm_hashes = git_repo.build_canister_artifact_batch(&canisters);
 
-                let proposal = InstallProposalTemplate {
-                    canister,
-                    at: at.clone(),
-                    compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
-                    canister_id: canister_ids[index],
-                    install_args: install_args[index].clone(),
-                };
+                for (index, canister) in canisters.into_iter().enumerate() {
+                    let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
 
-                write_to_disk(output_dir, proposal, submit.clone(), &ic_repo);
+                    let proposal = InstallProposalTemplate {
+                        canister,
+                        at: at.clone(),
+                        compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
+                        canister_id: canister_ids[index],
+                        install_args: install_args[index].clone(),
+                    };
+
+                    write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
+                }
             }
         }
     }
@@ -282,4 +301,16 @@ fn check_dir_has_required_permissions(output_dir: &Path) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn canisters_per_git_repo(
+    canisters: Vec<TargetCanister>,
+) -> BTreeMap<String, BTreeSet<TargetCanister>> {
+    canisters
+        .into_iter()
+        .fold(BTreeMap::new(), |mut acc, canister| {
+            let git_repo = canister.git_repository_url().to_string();
+            acc.entry(git_repo).or_default().insert(canister);
+            acc
+        })
 }

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
-#[derive(Clone, Eq, PartialEq, Debug, EnumIter)]
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
     CkBtcArchive,
@@ -40,6 +40,26 @@ impl TargetCanister {
             TargetCanister::IcpIndex => "icp-index",
             TargetCanister::IcpLedger => "icp-ledger",
             TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
+        }
+    }
+
+    pub fn git_repository_url(&self) -> &str {
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => "https://github.com/dfinity/ic.git",
         }
     }
 

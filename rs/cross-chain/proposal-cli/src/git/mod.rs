@@ -57,17 +57,17 @@ pub struct GitRepository {
 }
 
 impl GitRepository {
-    pub fn clone_ic() -> Self {
+    pub fn clone(url: &str) -> Self {
         let repo = TempDir::new().expect("failed to create a temporary directory");
         // Blobless clone
         // see https://github.blog/2020-12-21-get-up-to-speed-with-partial-clone-and-shallow-clone/
         let git_clone = Command::new("git")
             .arg("clone")
             .arg("--filter=blob:none")
-            .arg("https://github.com/dfinity/ic.git")
+            .arg(url)
             .arg(repo.path())
             .status()
-            .expect("failed to clone the IC repository");
+            .expect("failed to clone the repository");
         assert!(git_clone.success());
 
         GitRepository { dir: repo }
