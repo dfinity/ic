@@ -1,18 +1,19 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
     ptr::addr_of_mut,
 };
 
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
-    checker::{check_tla_code_link, PredicateDescription},
     tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
 use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
+
+mod common;
+use common::check_tla_trace;
 
 // Example of how to separate as much of the instrumentation code as possible from the main code
 #[macro_use]
@@ -155,15 +156,8 @@ impl StructCanister {
     }
 }
 
-// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
-fn set_java_path() {
-    let current_path = std::env::var("PATH").unwrap();
-    let bazel_java = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
-}
-
 #[test]
-fn struct_test() {
+fn multiple_calls_test() {
     unsafe {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
@@ -286,27 +280,5 @@ fn struct_test() {
         )
     );
 
-    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
-
-    set_java_path();
-    // Construct paths to the data files
-    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/tla_instrumentation/tla");
-    let update = trace.update.clone();
-    for pair in &trace.state_pairs {
-        let constants = trace.constants.clone();
-        println!("Constants: {:?}", constants);
-        let tla_module = tla_models_path.join(format!("{}_Apalache.tla", update.process_id));
-        check_tla_code_link(
-            &apalache,
-            PredicateDescription {
-                tla_module,
-                transition_predicate: "Next".to_string(),
-                predicate_parameters: Vec::new(),
-            },
-            pair.clone(),
-            constants,
-        )
-        .expect("TLA link check failed");
-    }
+    check_tla_trace(trace);
 }
