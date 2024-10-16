@@ -37,6 +37,7 @@ rust_library(
         "//rs/rust_canisters/dfn_core",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-stable-structures",
         "@crate_index//:intmap",
         "@crate_index//:lazy_static",

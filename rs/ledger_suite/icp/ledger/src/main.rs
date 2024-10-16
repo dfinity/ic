@@ -10,6 +10,7 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
+use ic_cdk::api::instruction_counter;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
@@ -21,6 +22,7 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
+    approvals::AllowancesData,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
@@ -55,7 +57,9 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
-use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY};
+use ledger_canister::{
+    Ledger, LedgerField, LedgerState, LEDGER, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+};
 use num_traits::cast::ToPrimitive;
 #[allow(unused_imports)]
 use on_wire::IntoWire;
@@ -753,6 +757,16 @@ fn main() {
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
 
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
+#[cfg(not(feature = "low-upgrade-instruction-limits"))]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
+
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 0;
+#[cfg(feature = "low-upgrade-instruction-limits")]
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
+
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     let start = dfn_core::api::performance_counter(0);
 
@@ -823,10 +837,75 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     );
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
+    ledger.state = LedgerState::Migrating(LedgerField::Allowances);
+    ledger.approvals.allowances_data.clear_arrivals();
+
+    migrate_next_part(
+        MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
+    );
+
     let end = dfn_core::api::performance_counter(0);
     let post_upgrade_instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED
         .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
+}
+
+fn migrate_next_part(instruction_limit: u64) {
+    // STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
+    let mut migrated_allowances = 0;
+    let mut migrated_expirations = 0;
+
+    print!("Migration started.");
+
+    Access::with_ledger_mut(|ledger| {
+        while instruction_counter() < instruction_limit {
+            let field = match ledger.state.clone() {
+                LedgerState::Migrating(ledger_field) => ledger_field,
+                LedgerState::Ready => break,
+            };
+            match field {
+                LedgerField::Allowances => {
+                    match ledger.approvals.allowances_data.pop_first_allowance() {
+                        Some((account_spender, allowance)) => {
+                            ledger
+                                .stable_approvals
+                                .allowances_data
+                                .set_allowance(account_spender, allowance);
+                            migrated_allowances += 1;
+                        }
+                        None => {
+                            ledger.state =
+                                LedgerState::Migrating(LedgerField::AllowancesExpirations);
+                        }
+                    };
+                }
+                LedgerField::AllowancesExpirations => {
+                    match ledger.approvals.allowances_data.pop_first_expiry() {
+                        Some((timestamp, account_spender)) => {
+                            ledger
+                                .stable_approvals
+                                .allowances_data
+                                .insert_expiry(timestamp, account_spender);
+                            migrated_expirations += 1;
+                        }
+                        None => {
+                            ledger.state = LedgerState::Ready;
+                        }
+                    };
+                }
+            }
+        }
+        let msg = format!("Number of elements migrated: allowances:{migrated_allowances} expirations:{migrated_expirations}. Instructions used {}.",
+            instruction_counter());
+        if !ledger.is_ready() {
+            print!("Migration partially done. Scheduling the next part. {msg}");
+            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+                migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
+            });
+        } else {
+            print!("Migration completed! {msg}");
+        }
+    });
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -846,6 +925,12 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !ledger.is_ready() {
+        // This means that migration did not complete and the correct state
+        // of the ledger is still in UPGRADES_MEMORY.
+        print!("Ledger not ready, skipping write to UPGRADES_MEMORY.");
+        return;
+    }
     let mut stable_writer = dfn_core::stable::StableWriter::new();
     ciborium::ser::into_writer(&*ledger, &mut stable_writer)
         .expect("failed to write ledger state to stable memory");

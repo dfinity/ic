@@ -90,6 +90,24 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(ALLOWANCES_EXPIRATIONS_MEMORY_ID))));
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerField {
+    Allowances,
+    AllowancesExpirations,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+pub enum LedgerState {
+    Migrating(LedgerField),
+    Ready,
+}
+
+impl Default for LedgerState {
+    fn default() -> Self {
+        Self::Ready
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Ledger {
     pub balances: LedgerBalances,
@@ -137,6 +155,9 @@ pub struct Ledger {
 
     #[serde(default)]
     pub feature_flags: FeatureFlags,
+
+    #[serde(default)]
+    pub state: LedgerState,
 }
 
 impl LedgerContext for Ledger {
@@ -256,6 +277,7 @@ impl Default for Ledger {
             token_symbol: unknown_token(),
             token_name: unknown_token(),
             feature_flags: FeatureFlags::default(),
+            state: LedgerState::Ready,
         }
     }
 }
@@ -475,6 +497,10 @@ impl Ledger {
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
         }
+    }
+
+    pub fn is_ready(&self) -> bool {
+        matches!(self.state, LedgerState::Ready)
     }
 }
 
