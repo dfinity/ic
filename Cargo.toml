@@ -74,8 +74,8 @@ members = [
     "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-    "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
-    "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
+    "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
+    "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "rs/crypto/internal/crypto_lib/tls",
     "rs/crypto/internal/crypto_lib/types",
     "rs/crypto/internal/crypto_service_provider",
@@ -561,7 +561,7 @@ ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 itertools = "0.12.0"
-k256 = { version = "0.13.3", default-features = false, features = [
+k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
     "pem",
