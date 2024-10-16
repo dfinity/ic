@@ -1,6 +1,5 @@
 pub mod api_test;
 pub mod btc_integration;
-pub mod canister_sig_verification_cache_test;
 pub mod ckbtc;
 pub mod custom_domains_integration;
 pub mod execution;

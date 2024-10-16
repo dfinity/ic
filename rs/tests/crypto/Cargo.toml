@@ -24,6 +24,14 @@ slog = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
+name = "canister_sig_verification_cache_test"
+path = "canister_sig_verification_cache_test.rs"
+
+[[bin]]
+name = "ic_crypto_csp_metrics_test"
+path = "ic_crypto_csp_metrics_test.rs"
+
+[[bin]]
 name = "ic_crypto_csp_socket_test"
 path = "ic_crypto_csp_socket_test.rs"
 
