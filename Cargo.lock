@@ -13556,6 +13556,7 @@ dependencies = [
  "anyhow",
  "ic-agent",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-fstrim-tool",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
