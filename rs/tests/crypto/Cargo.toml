@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 ic-agent = { workspace = true }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-fstrim-tool = { path = "../../ic_os/fstrim_tool" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
