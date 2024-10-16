@@ -140,6 +140,7 @@ async fn main() {
                         last_upgrade_proposal_id: last_upgrade_proposal_ids[index],
                         upgrade_args: upgrade_args[index].clone(),
                         release_notes: release_notes[index].clone(),
+                        build_artifact_command: canister.build_artifact_as_str(),
                     };
 
                     write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
@@ -173,11 +174,12 @@ async fn main() {
                     let output_dir = output_dir.join(canister.to_string()).join(at.to_string());
 
                     let proposal = InstallProposalTemplate {
-                        canister,
+                        canister: canister.clone(),
                         at: at.clone(),
                         compressed_wasm_hash: compressed_wasm_hashes[index].clone(),
                         canister_id: canister_ids[index],
                         install_args: install_args[index].clone(),
+                        build_artifact_command: canister.build_artifact_as_str(),
                     };
 
                     write_to_disk(output_dir, proposal, submit.clone(), &git_repo);

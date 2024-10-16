@@ -40,6 +40,6 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 ```
 git fetch
 git checkout {{to}}
-./ci/container/build-ic.sh -c
+{{build_artifact_command}}
 sha256sum ./{{canister.artifact().as_path().display()}}
 ```

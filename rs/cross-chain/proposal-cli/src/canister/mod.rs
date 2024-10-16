@@ -242,6 +242,10 @@ impl TargetCanister {
         }
     }
 
+    pub fn build_artifact_as_str(&self) -> String {
+        format!("{:?}", self.build_artifact())
+    }
+
     pub fn canister_ids_json_file(&self) -> PathBuf {
         match self {
             TargetCanister::CkBtcArchive
