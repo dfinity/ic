@@ -41,35 +41,31 @@ impl PartialOrd for EvictionCandidate {
 ///      evicts the most candidates with `last_used < last_used_threshold`.
 /// 4. Return the evicted candidates.
 pub(crate) fn evict(
-    mut candidates: Vec<EvictionCandidate>,
+    candidates: Vec<EvictionCandidate>,
     min_count_threshold: usize,
     max_count_threshold: usize,
     last_used_threshold: Instant,
 ) -> Vec<EvictionCandidate> {
-    candidates.sort();
+    let (evicted, mut candidates): (_, Vec<_>) = candidates
+        .into_iter()
+        .partition(|candidate| candidate.last_used < last_used_threshold);
 
-    let evict_at_least = candidates.len().saturating_sub(max_count_threshold);
     let evict_at_most = candidates.len().saturating_sub(min_count_threshold);
 
-    // candidates = candidates [0.. evict_at_least), remaining_candidates = candidates [evict_at_least.. candidates.len())
-    let remaining_candidates = candidates.split_off(evict_at_least);
-    let mut evicted = candidates;
-
-    for candidate in remaining_candidates.into_iter() {
-        if evicted.len() >= evict_at_most {
-            // Cannot evict anymore because at least `min_count_threshold`
-            // should remain not evicted.
-            break;
-        }
-        if candidate.last_used < last_used_threshold {
-            // We have already evicted the minimum required number of candidates
-            // and we are adding the new candidate that were idle the recent
-            // `last_used_threshold` time window.
-            evicted.push(candidate)
-        }
+    if evict_at_most >= evicted.len() {
+        return evicted;
     }
 
+    let remain_to_evict = candidates
+        .len()
+        .saturating_sub(max_count_threshold + evicted.len());
+
+    candidates.sort();
+
     evicted
+        .into_iter()
+        .chain(candidates.into_iter().take(remain_to_evict))
+        .collect()
 }
 
 #[cfg(test)]
