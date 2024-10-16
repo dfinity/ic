@@ -273,10 +273,6 @@ name = "ic-systest-rejoin-test-large-state"
 path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
-name = "ic-systest-memory-safety-test"
-path = "message_routing/memory_safety_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 

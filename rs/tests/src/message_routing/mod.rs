@@ -1,6 +1,5 @@
 pub mod compatibility;
 pub mod malicious_slices;
-pub mod memory_safety_test;
 pub mod rejoin_test;
 pub mod rejoin_test_large_state;
 pub mod state_sync_malicious_chunk;

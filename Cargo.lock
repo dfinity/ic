@@ -15128,11 +15128,18 @@ name = "message-routing-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "candid",
  "canister-test",
  "dfn_candid",
+ "ic-agent",
+ "ic-base-types",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-types",
+ "ic-utils 0.37.0",
  "itertools 0.12.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "slog",
  "tokio",
  "xnet-test",

@@ -16,7 +16,18 @@ itertools = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 xnet-test = { path = "../../rust_canisters/xnet_test" }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
+ic-utils = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 
 [[bin]]
 name = "global_reboot_test"
 path = "global_reboot_test.rs"
+
+[[bin]]
+name = "memory_safety_test"
+path = "memory_safety_test.rs"
