@@ -228,6 +228,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_app_large_with_tecdsa_test",
+    extra_head_nns_tags = ["manual"],  # Let's not run this expensive test against the HEAD NNS canisters to save resources.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
