@@ -52,6 +52,8 @@ pub(crate) fn evict(
         evicted.push(candidate)
     }
 
+    println!("Evicted {} canisters", evicted.len());
+
     evicted
 }
 

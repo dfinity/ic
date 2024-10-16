@@ -57,7 +57,7 @@ use ic_replicated_state::{
 };
 use ic_types::ExecutionRound;
 
-const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
@@ -74,6 +74,9 @@ const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilati
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
+
+// The max amount of memory to use for sandboxes in KiB. This is equivalent to 50 GiB.
+const SANDBOX_PROCESSES_MAX_ANON_KIB: u64 = 70 * 1024 * 1024;
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -459,7 +462,9 @@ enum Backend {
 
 #[derive(Clone)]
 struct SandboxProcessStats {
-    last_used: std::time::Instant,
+    pub last_used: std::time::Instant,
+    pub anon_rss: u64,
+    pub memfd_rss: u64,
 }
 
 enum SandboxProcessStatus {
@@ -1193,6 +1198,20 @@ impl SandboxedExecutionController {
                 metrics
                     .sandboxed_execution_subprocess_memfd_rss_total
                     .set(total_memfd_rss.try_into().unwrap());
+
+                println!("anon rss: {}", total_anon_rss);
+
+                // This is memory-usage based eviction. When the usage is over
+                // the limit, we evict half of the sandboxes between the min and max.
+                if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
+                    let mut guard = backends.lock().unwrap();
+                    evict_sandbox_processes(
+                        &mut guard,
+                        min_sandbox_count,
+                        (max_sandbox_count - min_sandbox_count) / 2,
+                        max_sandbox_idle_time,
+                    );
+                }
             }
 
             // We don't need to record memory metrics on non-linux systems.  And
@@ -1222,16 +1241,6 @@ impl SandboxedExecutionController {
                 }
             }
 
-            {
-                let mut guard = backends.lock().unwrap();
-                evict_sandbox_processes(
-                    &mut guard,
-                    min_sandbox_count,
-                    max_sandbox_count,
-                    max_sandbox_idle_time,
-                );
-            }
-
             // Collect metrics sufficiently infrequently that it does not use
             // excessive compute resources. It might be sensible to scale this
             // based on the time measured to perform the collection and e.g.
@@ -1259,17 +1268,27 @@ impl SandboxedExecutionController {
                 } => sandbox_process.upgrade().map(|p| (p, stats)),
                 Backend::Empty => None,
             };
-            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
+            if let Some((sandbox_process, stats)) = sandbox_process_and_stats {
                 let now = std::time::Instant::now();
                 if self.max_sandbox_count > 0 {
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            // Use the old memory usage.
+                            anon_rss: stats.anon_rss,
+                            memfd_rss: stats.memfd_rss,
+                        },
                     };
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
+                        stats: SandboxProcessStats {
+                            last_used: now,
+                            // Use the old memory usage.
+                            anon_rss: stats.anon_rss,
+                            memfd_rss: stats.memfd_rss,
+                        },
                     };
                 }
                 return sandbox_process;
@@ -1310,7 +1329,13 @@ impl SandboxedExecutionController {
         let now = std::time::Instant::now();
         let backend = Backend::Active {
             sandbox_process: Arc::clone(&sandbox_process),
-            stats: SandboxProcessStats { last_used: now },
+            stats: SandboxProcessStats {
+                last_used: now,
+                // New process, we can use 0 because there shouldn't be much memory usage
+                // yet and it will be update later in the monitoring thread.
+                anon_rss: 0,
+                memfd_rss: 0,
+            },
         };
         (*guard).insert(canister_id, backend);
 
@@ -1655,7 +1680,7 @@ fn evict_sandbox_processes(
             sandbox_process, ..
         } => {
             // Once `strong_count` reaches zero, then `upgrade()` will always
-            // return `None`. This means that such entries never be used again,
+            // return `None`. This means that such entries will never be used again,
             // so it is safe to remove them from the hash map.
             sandbox_process.strong_count() > 0
         }
