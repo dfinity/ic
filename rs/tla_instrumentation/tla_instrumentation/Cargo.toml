@@ -7,7 +7,6 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
-# serde = { workspace = true }
 sha2 = { workspace = true }
 uuid = { workspace = true }
 

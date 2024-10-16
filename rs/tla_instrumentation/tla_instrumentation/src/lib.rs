@@ -259,11 +259,6 @@ pub fn log_fn_return(state: &mut MessageHandlerState) {
     state.context.return_from_function()
 }
 
-// // TODO: Does this work for modeling arguments as non-deterministically chosen locals?
-// pub fn log_method_call(function: Update, global: GlobalState, s) -> MessageHandlerState {
-//     MessageHandlerState::new(function, global)
-// }
-
 pub fn log_method_return(
     state: &mut MessageHandlerState,
     global: GlobalState,
