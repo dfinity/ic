@@ -339,6 +339,12 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
+
+  ReplicaVersion replica_version = 22;
+}
+
+message ReplicaVersion {
+  string version_id = 1;
 }
 
 message StableMemory {

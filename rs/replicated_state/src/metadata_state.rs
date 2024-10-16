@@ -174,6 +174,9 @@ pub struct SystemMetadata {
     /// by aggregating them and storing a running total over multiple days by node id and
     /// timestamp. Observations of blockmaker stats are performed each time a batch is processed.
     pub blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries,
+
+    /// The version of the replica binary as agreed on by consensus.
+    pub replica_version: ReplicaVersion,
 }
 
 /// Full description of the IC network toplogy.
