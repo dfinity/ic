@@ -1322,6 +1322,18 @@ fn test_upgrade_serialization_fixed_tx() {
 }
 
 #[test]
+fn test_downgrade_from_incompatible_version() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    ic_icrc1_ledger_sm_tests::test_downgrade_from_incompatible_version(
+        ledger_wasm_mainnet,
+        ledger_wasm_next_version(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_approve_smoke() {
     ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
