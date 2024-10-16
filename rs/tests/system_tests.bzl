@@ -170,10 +170,11 @@ def system_test(
 
     if test_driver_target == None:
         bin_name = name + "_bin"
+        original_srcs = kwargs.pop("srcs", [])
         rust_binary(
             name = bin_name,
             testonly = True,
-            srcs = [name + ".rs"],
+            srcs = original_srcs + [name + ".rs"],
             **kwargs
         )
         test_driver_target = bin_name
