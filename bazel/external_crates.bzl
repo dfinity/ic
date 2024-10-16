@@ -168,9 +168,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "assert_matches": crate.spec(
                 version = "^1.5.0",
             ),
-            "async-channel": crate.spec(
-                version = "2.3.1",
-            ),
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
@@ -257,7 +254,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "=0.10.0",
+                version = "0.10.0",
                 features = [
                     "alloc",
                     "experimental",
@@ -1423,7 +1420,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^212.0.0",
             ),
             "wat": crate.spec(
-                version = "=1.212.0",
+                version = "1.212.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

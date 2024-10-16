@@ -552,7 +552,7 @@ ic-response-verification = "2.6.0"
 ic-stable-structures = "0.6.5"
 ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
-ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
+ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -596,7 +596,7 @@ p256 = { version = "0.13.2", default-features = false, features = [
     "pem",
     "pkcs8",
 ] }
-pairing = "=0.23"
+pairing = "0.23"
 parking_lot = "0.12.3"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
@@ -667,7 +667,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
-tar = "=0.4.39"
+tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
@@ -701,13 +701,13 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
-walkdir = "=2.3.3"
+walkdir = "2.3.3"
 walrus = "0.21.1"
 wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
 wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
-wat = "=1.212.0"
+wat = "1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
