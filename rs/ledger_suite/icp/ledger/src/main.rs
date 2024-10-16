@@ -12,6 +12,7 @@ use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::instruction_counter;
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
+use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
@@ -303,7 +304,7 @@ async fn icrc1_send(
             });
         }
         let ledger = LEDGER.read().unwrap();
-        let balance = ledger.balances.account_balance(&from);
+        let balance = ledger.balances().account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
             return Err(CoreTransferError::BadBurn { min_burn_amount });
@@ -591,7 +592,7 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
 /// Get an account balance.
 /// If the account does not exist it will return 0 Tokens
 fn account_balance(account: AccountIdentifier) -> Tokens {
-    LEDGER.read().unwrap().balances.account_balance(&account)
+    LEDGER.read().unwrap().balances().account_balance(&account)
 }
 
 #[candid_method(query, rename = "icrc1_balance_of")]
@@ -651,12 +652,12 @@ fn icrc1_fee() -> Nat {
 
 /// The total number of Tokens not inside the minting canister
 fn total_supply() -> Tokens {
-    LEDGER.read().unwrap().balances.total_supply()
+    LEDGER.read().unwrap().balances().total_supply()
 }
 
 #[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
-    Nat::from(LEDGER.read().unwrap().balances.total_supply().get_e8s())
+    Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
 
 #[candid_method(query, rename = "symbol")]
@@ -1645,7 +1646,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 let current_allowance = LEDGER
                     .read()
                     .unwrap()
-                    .approvals
+                    .approvals()
                     .allowance(&from, &spender, now)
                     .amount;
                 return Err(ApproveError::AllowanceChanged {
@@ -1716,7 +1717,7 @@ fn icrc2_approve_candid() {
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let ledger = LEDGER.read().unwrap();
-    let allowance = ledger.approvals.allowance(&from, &spender, now);
+    let allowance = ledger.approvals().allowance(&from, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
