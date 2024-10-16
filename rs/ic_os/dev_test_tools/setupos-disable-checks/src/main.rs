@@ -33,7 +33,7 @@ async fn main() -> Result<(), Error> {
     let mut bootfs = ExtPartition::open(cli.image_path, Some(5)).await?;
 
     // Overwrite age checks
-    println!("Clearing age, hardware and network checks in SetupOS");
+    eprintln!("Clearing age, hardware and network checks in SetupOS");
     let new_args =
         match extra_boot_args_re.captures(bootfs.read_file(extra_boot_args_path).await?.as_str()) {
             Some(captures) => {
@@ -63,6 +63,7 @@ EXTRA_BOOT_ARGS=\"{}\"
         .write_file(temp_extra_boot_args.path(), extra_boot_args_path)
         .await?;
 
+    eprintln!("Closing boot file system");
     bootfs.close().await?;
 
     Ok(())
