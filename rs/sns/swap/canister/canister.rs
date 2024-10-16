@@ -455,7 +455,7 @@ fn canister_post_upgrade() {
 
     init_timers();
 
-    // TODO[NNS1-3386]: Remove this line.
+    // TODO[NNS1-3386]: Remove once all Swaps are migrated to have these fields populated.
     swap_mut().migrate_state();
 }
 

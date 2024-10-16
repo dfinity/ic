@@ -6,6 +6,7 @@ use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap}
 use ic_sns_wasm::pb::v1::SnsWasm;
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
+use pretty_assertions::assert_eq;
 use std::str::FromStr;
 
 // TODO[NNS1-3386]: Remove this function once all existing Swaps are upgraded.
@@ -135,7 +136,7 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
 }
 
 #[test]
-fn upgrade_downgrade_swap_boom_dao() {
+fn golden_state_swap_upgrade_twice() {
     let snses_under_test = [
         ("vuqiy-liaaa-aaaaq-aabiq-cai", "BOOM DAO"),
         ("iuhw5-siaaa-aaaaq-aadoq-cai", "CYCLES-TRANSFER-STATION"),
@@ -146,8 +147,7 @@ fn upgrade_downgrade_swap_boom_dao() {
         ("grlys-pqaaa-aaaaq-aacoa-cai", "ELNA AI"),
         ("bcl3g-3aaaa-aaaaq-aac5a-cai", "EstateDAO"),
         ("t7z6p-ryaaa-aaaaq-aab7q-cai", "Gold DAO"),
-        // TODO: Uncomment once ICGhost has enough cycles to make it through two upgrades.
-        // ("4f5dx-pyaaa-aaaaq-aaa3q-cai", "ICGhost"),
+        ("4f5dx-pyaaa-aaaaq-aaa3q-cai", "ICGhost"),
         ("habgn-xyaaa-aaaaq-aaclq-cai", "ICLighthouse DAO"),
         ("lwslc-cyaaa-aaaaq-aadfq-cai", "ICPCC DAO LLC"),
         ("ch7an-giaaa-aaaaq-aacwq-cai", "ICPSwap"),

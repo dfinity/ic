@@ -427,8 +427,8 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
+            direct_participation_icp_e8s: Some(0),
+            neurons_fund_participation_icp_e8s: Some(0),
             timers: None,
         };
         if init.validate_swap_init_for_one_proposal_flow().is_ok() {
