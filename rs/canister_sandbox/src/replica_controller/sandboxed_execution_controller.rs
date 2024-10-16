@@ -57,7 +57,7 @@ use ic_replicated_state::{
 };
 use ic_types::ExecutionRound;
 
-const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
@@ -74,6 +74,9 @@ const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilati
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
+
+// The max amount of memory to use for sandboxes in KiB. This is equivalent to 50 GiB.
+const SANDBOX_PROCESSES_MAX_ANON_KIB: u64 = 70 * 1024 * 1024;
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -1193,6 +1196,21 @@ impl SandboxedExecutionController {
                 metrics
                     .sandboxed_execution_subprocess_memfd_rss_total
                     .set(total_memfd_rss.try_into().unwrap());
+
+                println!("anon rss: {}", total_anon_rss);
+
+                // This is memory-usage based eviction. When the usage is over
+                // the limit, we evict half of the sandboxes between the min and max.
+                if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
+                    let current_no_sandboxes = max_sandbox_count.min(sandbox_processes.len());
+                    let mut guard = backends.lock().unwrap();
+                    evict_sandbox_processes(
+                        &mut guard,
+                        min_sandbox_count,
+                        (current_no_sandboxes - min_sandbox_count) / 2,
+                        max_sandbox_idle_time,
+                    );
+                }
             }
 
             // We don't need to record memory metrics on non-linux systems.  And
@@ -1220,16 +1238,6 @@ impl SandboxedExecutionController {
                         }
                     }
                 }
-            }
-
-            {
-                let mut guard = backends.lock().unwrap();
-                evict_sandbox_processes(
-                    &mut guard,
-                    min_sandbox_count,
-                    max_sandbox_count,
-                    max_sandbox_idle_time,
-                );
             }
 
             // Collect metrics sufficiently infrequently that it does not use
@@ -1655,7 +1663,7 @@ fn evict_sandbox_processes(
             sandbox_process, ..
         } => {
             // Once `strong_count` reaches zero, then `upgrade()` will always
-            // return `None`. This means that such entries never be used again,
+            // return `None`. This means that such entries will never be used again,
             // so it is safe to remove them from the hash map.
             sandbox_process.strong_count() > 0
         }
