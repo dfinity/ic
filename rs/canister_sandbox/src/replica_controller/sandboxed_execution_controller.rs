@@ -462,9 +462,7 @@ enum Backend {
 
 #[derive(Clone)]
 struct SandboxProcessStats {
-    pub last_used: std::time::Instant,
-    pub anon_rss: u64,
-    pub memfd_rss: u64,
+    last_used: std::time::Instant,
 }
 
 enum SandboxProcessStatus {
@@ -1204,11 +1202,12 @@ impl SandboxedExecutionController {
                 // This is memory-usage based eviction. When the usage is over
                 // the limit, we evict half of the sandboxes between the min and max.
                 if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
+                    let current_no_sandboxes = max_sandbox_count.min(sandbox_processes.len());
                     let mut guard = backends.lock().unwrap();
                     evict_sandbox_processes(
                         &mut guard,
                         min_sandbox_count,
-                        (max_sandbox_count - min_sandbox_count) / 2,
+                        (current_no_sandboxes - min_sandbox_count) / 2,
                         max_sandbox_idle_time,
                     );
                 }
@@ -1268,27 +1267,17 @@ impl SandboxedExecutionController {
                 } => sandbox_process.upgrade().map(|p| (p, stats)),
                 Backend::Empty => None,
             };
-            if let Some((sandbox_process, stats)) = sandbox_process_and_stats {
+            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
                 let now = std::time::Instant::now();
                 if self.max_sandbox_count > 0 {
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
-                        stats: SandboxProcessStats {
-                            last_used: now,
-                            // Use the old memory usage.
-                            anon_rss: stats.anon_rss,
-                            memfd_rss: stats.memfd_rss,
-                        },
+                        stats: SandboxProcessStats { last_used: now },
                     };
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
-                        stats: SandboxProcessStats {
-                            last_used: now,
-                            // Use the old memory usage.
-                            anon_rss: stats.anon_rss,
-                            memfd_rss: stats.memfd_rss,
-                        },
+                        stats: SandboxProcessStats { last_used: now },
                     };
                 }
                 return sandbox_process;
@@ -1329,13 +1318,7 @@ impl SandboxedExecutionController {
         let now = std::time::Instant::now();
         let backend = Backend::Active {
             sandbox_process: Arc::clone(&sandbox_process),
-            stats: SandboxProcessStats {
-                last_used: now,
-                // New process, we can use 0 because there shouldn't be much memory usage
-                // yet and it will be update later in the monitoring thread.
-                anon_rss: 0,
-                memfd_rss: 0,
-            },
+            stats: SandboxProcessStats { last_used: now },
         };
         (*guard).insert(canister_id, backend);
 
