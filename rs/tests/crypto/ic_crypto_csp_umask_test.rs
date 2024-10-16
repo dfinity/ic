@@ -29,19 +29,19 @@ Coverage::
 end::catalog[] */
 
 use anyhow::bail;
+use anyhow::Result;
 use ic_consensus_system_test_utils::node::await_node_certified_height;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
+use ic_system_test_driver::systest;
 use ic_types::Height;
 use slog::{info, Logger};
-use anyhow::Result;
-use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 
 const SHORT_DKG_INTERVAL: u64 = 3;
 
