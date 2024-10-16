@@ -46,18 +46,18 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn ledger_wasm_allowance_getter() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger-canister-allowance-getter",
-        &[],
-    )
-}
-
 fn ledger_wasm_next_version() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         "ledger-canister-next-version",
+        &[],
+    )
+}
+
+fn ledger_wasm_allowance_getter() -> Vec<u8> {
+    ic_test_utilities_load_wasm::load_wasm(
+        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
+        "ledger-canister-allowance-getter",
         &[],
     )
 }
