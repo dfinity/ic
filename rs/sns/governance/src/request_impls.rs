@@ -77,3 +77,9 @@ impl Request for crate::pb::v1::GetUpgradeJournalRequest {
     const METHOD: &'static str = "get_upgrade_journal";
     const UPDATE: bool = false;
 }
+
+impl Request for crate::pb::v1::AdvanceTargetVersionRequest {
+    type Response = crate::pb::v1::AdvanceTargetVersionResponse;
+    const METHOD: &'static str = "advance_target_version";
+    const UPDATE: bool = true;
+}
