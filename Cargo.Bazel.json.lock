@@ -1,5 +1,5 @@
 {
-  "checksum": "fcfc7483f4ef5a4eb3d3e4a1bf41b2bbd98900457e20005b4237861833d08664",
+  "checksum": "bc1696a4b20a7a85bdfcf625d38696ad41ae822c5d9f6fa9b9f97a9c705088eb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3821,14 +3821,14 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
-    "async-stream 0.3.5": {
+    "async-stream 0.3.6": {
       "name": "async-stream",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "package_url": "https://github.com/tokio-rs/async-stream",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/async-stream/0.3.5/download",
-          "sha256": "cd56dd203fef61ac097dd65721a419ddccb106b2d2b70ba60a6b529f03961a51"
+          "url": "https://static.crates.io/crates/async-stream/0.3.6/download",
+          "sha256": "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
         }
       },
       "targets": [
@@ -3863,17 +3863,17 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-stream-impl 0.3.5",
+              "id": "async-stream-impl 0.3.6",
               "target": "async_stream_impl"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.5"
+        "version": "0.3.6"
       },
       "license": "MIT",
       "license_ids": [
@@ -3881,14 +3881,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "async-stream-impl 0.3.5": {
+    "async-stream-impl 0.3.6": {
       "name": "async-stream-impl",
-      "version": "0.3.5",
+      "version": "0.3.6",
       "package_url": "https://github.com/tokio-rs/async-stream",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/async-stream-impl/0.3.5/download",
-          "sha256": "16e62a023e7c117e27523144c5d2459f4397fcc3cab0085af8e2224f643a0193"
+          "url": "https://static.crates.io/crates/async-stream-impl/0.3.6/download",
+          "sha256": "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
         }
       },
       "targets": [
@@ -3927,8 +3927,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.3.5"
+        "edition": "2021",
+        "version": "0.3.6"
       },
       "license": "MIT",
       "license_ids": [
@@ -3982,14 +3982,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "async-trait 0.1.81": {
+    "async-trait 0.1.83": {
       "name": "async-trait",
-      "version": "0.1.81",
+      "version": "0.1.83",
       "package_url": "https://github.com/dtolnay/async-trait",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/async-trait/0.1.81/download",
-          "sha256": "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
+          "url": "https://static.crates.io/crates/async-trait/0.1.83/download",
+          "sha256": "721cae7de5c34fbb2acd27e21e6d2cf7b886dce0c27388d46c4e6c47ea4318dd"
         }
       },
       "targets": [
@@ -4029,7 +4029,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.81"
+        "version": "0.1.83"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -4502,7 +4502,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -4680,7 +4680,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -4784,7 +4784,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -4900,7 +4900,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -17506,7 +17506,7 @@
               "target": "async_scoped"
             },
             {
-              "id": "async-stream 0.3.5",
+              "id": "async-stream 0.3.6",
               "target": "async_stream"
             },
             {
@@ -18776,7 +18776,7 @@
               "target": "async_recursion"
             },
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -26045,7 +26045,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -28578,7 +28578,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -30466,7 +30466,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -31124,7 +31124,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -33151,7 +33151,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -40003,7 +40003,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -42952,7 +42952,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -43470,7 +43470,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -43579,7 +43579,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -43699,7 +43699,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -43816,7 +43816,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -56046,7 +56046,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -60402,7 +60402,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -66935,7 +66935,7 @@
         "deps": {
           "common": [
             {
-              "id": "async-stream 0.3.5",
+              "id": "async-stream 0.3.6",
               "target": "async_stream"
             },
             {
@@ -67333,7 +67333,7 @@
         "deps": {
           "common": [
             {
-              "id": "async-stream 0.3.5",
+              "id": "async-stream 0.3.6",
               "target": "async_stream"
             },
             {
@@ -67423,7 +67423,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             }
           ],
@@ -69123,7 +69123,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.81",
+              "id": "async-trait 0.1.83",
               "target": "async_trait"
             },
             {
@@ -79354,8 +79354,8 @@
     "async-channel 2.3.1",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
-    "async-stream 0.3.5",
-    "async-trait 0.1.81",
+    "async-stream 0.3.6",
+    "async-trait 0.1.83",
     "axum 0.7.7",
     "axum-extra 0.9.1",
     "axum-server 0.6.0",
