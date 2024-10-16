@@ -1,6 +1,7 @@
 // use ic_state_machine_tests::StateMachine;
 // use ic_test_utilities_load_wasm::load_wasm;
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -13,17 +14,40 @@ pub trait HasTlaRepr {
     fn to_tla_state(&self) -> HashMap<String, String>;
 }
 
-#[derive(Debug)]
 pub enum ApalacheError {
     CheckFailed(String),
     SetupError(String),
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for ApalacheError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApalacheError::SetupError(e) =>
+                f.write_str(&format!("Apalache setup error: {}", e)),
+            ApalacheError::CheckFailed(e) =>
+                f.write_str(&format!("Apalache encountered an error while checking: {}", e))
+        }
+    }
+}
+
 pub struct TlaCheckError {
     pub apalache_error: ApalacheError,
     pub pair: ResolvedStatePair,
     pub constants: TlaConstantAssignment,
+}
+
+impl std::fmt::Debug for TlaCheckError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(
+            &format!(
+                "Apalache returned the error: {:?}\n.The error occured while checking the transition between:\n{:?}\nand\n{:?}\n.The assigned constants are: {:?}",
+                self.apalache_error,
+                self.pair.start.0.0,
+                self.pair.end.0.0,
+                self.constants.constants,
+            )
+        )
+    }
 }
 
 const INIT_PREDICATE_NAME: &str = "Check_Code_Link_Init";
