@@ -15,7 +15,7 @@ pub trait HasTlaRepr {
 }
 
 pub enum ApalacheError {
-    CheckFailed(String),
+    CheckFailed(Option<i32>, String),
     SetupError(String),
 }
 
@@ -24,8 +24,19 @@ impl std::fmt::Debug for ApalacheError {
         match self {
             ApalacheError::SetupError(e) =>
                 f.write_str(&format!("Apalache setup error: {}", e)),
-            ApalacheError::CheckFailed(e) =>
-                f.write_str(&format!("{}", e))
+            ApalacheError::CheckFailed(Some(code), s) => {
+                f.write_str(&format!("{}\n", s))?;
+                match *code {
+                    12 =>
+                        // code used to signal deadlocks
+                        f.write_str("This is most likely a mismatch between the code and the model"),
+                    _ => f.write_str("This is most likely a problem with the model itself."),
+                }
+            },
+            ApalacheError::CheckFailed(None, s) => {
+                f.write_str(&format!("{}", s))?;
+                f.write_str("The error code was not available - this is not expected, please report.")
+            }
         }
     }
 }
@@ -147,6 +158,7 @@ fn run_apalache(
                 Ok(())
             } else {
                 Err(ApalacheError::CheckFailed(
+                    e.code(),
                     format!(
                         "When checking file\n{:?}\nApalache returned the error: {}",
                         tla_module, e
