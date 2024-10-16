@@ -33,7 +33,7 @@ fn redact_unavailable_swap_fields(swap_state: &mut GetStateResponse) {
     // upon request. Therefore, the only reason they might not have reasonable values is when
     // the Swap canister's *persisted* state (`swap_state.swap`) too incomplete to compute them.
     {
-        let derived = swap_state.derived.clone().unwrap();
+        let derived = swap_state.derived.unwrap();
         swap_state.derived = Some(DerivedState {
             direct_participant_count: None,
             cf_participant_count: None,
@@ -53,10 +53,12 @@ fn get_state(
     let args = Encode!(&GetStateRequest {}).unwrap();
     let state_before_upgrade = state_machine
         .execute_ingress(swap_canister_id, "get_state", args)
-        .expect(&format!(
-            "Unable to get state of {}'s Swap canister",
-            sns_name
-        ));
+        .unwrap_or_else(|err| {
+            panic!(
+                "Unable to get state of {}'s Swap canister: {}",
+                sns_name, err,
+            )
+        });
     Decode!(&state_before_upgrade.bytes(), GetStateResponse).unwrap()
 }
 
@@ -70,7 +72,7 @@ fn upgrade_swap_to_tip_of_master(
 
     state_machine
         .upgrade_canister(swap_canister_id, swap_wasm.wasm, swap_upgrade_arg)
-        .expect(&format!("Cannot upgrade {}'s Swap canister", sns_name));
+        .unwrap_or_else(|err| panic!("Cannot upgrade {}'s Swap canister: {}", sns_name, err));
 }
 
 /// Returns the pre-upgrade and post-upgrade states of the Swap.
@@ -80,11 +82,11 @@ fn run_upgrade_for_swap(
     swap_wasm: SnsWasm,
     sns_name: &str,
 ) -> (GetStateResponse, GetStateResponse) {
-    let swap_pre_state = get_state(&state_machine, swap_canister_id, sns_name);
+    let swap_pre_state = get_state(state_machine, swap_canister_id, sns_name);
 
-    upgrade_swap_to_tip_of_master(&state_machine, swap_canister_id, swap_wasm, sns_name);
+    upgrade_swap_to_tip_of_master(state_machine, swap_canister_id, swap_wasm, sns_name);
 
-    let swap_post_state = get_state(&state_machine, swap_canister_id, sns_name);
+    let swap_post_state = get_state(state_machine, swap_canister_id, sns_name);
 
     (swap_pre_state, swap_post_state)
 }
