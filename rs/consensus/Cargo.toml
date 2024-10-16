@@ -18,7 +18,6 @@ ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }

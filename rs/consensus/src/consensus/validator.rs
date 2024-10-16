@@ -2588,7 +2588,8 @@ pub mod test {
                     pool_reader.registry_version(test_block.height()).unwrap(),
                     rank,
                     /*metrics=*/ None,
-                );
+                )
+                .unwrap();
 
             time_source.set_time(parent.context.time + delay).unwrap();
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
@@ -3290,7 +3291,8 @@ pub mod test {
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
                 /*metrics=*/ None,
-            );
+            )
+            .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
             test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
@@ -3342,7 +3344,8 @@ pub mod test {
                 pool_reader.registry_version(test_block.height()).unwrap(),
                 rank,
                 /*metrics=*/ None,
-            );
+            )
+            .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
             test_block.signature.signer = pool.get_block_maker_by_rank(test_block.height(), rank);
@@ -3853,7 +3856,7 @@ pub mod test {
             third_block.update_content();
             time_source
                 .set_time(third_block.content.as_ref().context.time)
-                .unwrap();
+                .ok();
 
             pool.insert_validated(block.clone());
             pool.insert_unvalidated(second_block.clone());
@@ -3875,7 +3878,7 @@ pub mod test {
             pool.insert_unvalidated(block.clone());
             time_source
                 .set_time(block.content.as_ref().context.time)
-                .unwrap();
+                .ok();
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_matches!(

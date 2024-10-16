@@ -44,7 +44,6 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-limits = { path = "../../limits" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }

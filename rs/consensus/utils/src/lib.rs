@@ -106,7 +106,7 @@ pub fn get_adjusted_notary_delay(
             &*membership.registry_client,
             membership.subnet_id,
             pool.registry_version(height)?,
-        ),
+        )?,
         pool,
         state_manager,
         rank,
@@ -266,25 +266,22 @@ pub fn get_notarization_delay_settings(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-) -> NotarizationDelaySettings {
+) -> Option<NotarizationDelaySettings> {
     match registry_client.get_notarization_delay_settings(subnet_id, registry_version) {
         Ok(None) => {
-            error!(
-                log,
+            panic!(
                 "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version,
-                subnet_id,
+                registry_version, subnet_id,
             );
-            NotarizationDelaySettings::default()
         }
         Err(err) => {
             error!(
                 log,
                 "Could not retrieve notarization delay settings from the registry: {:?}", err
             );
-            NotarizationDelaySettings::default()
+            None
         }
-        Ok(Some(result)) => result,
+        Ok(result) => result,
     }
 }
 

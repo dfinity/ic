@@ -504,37 +504,38 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         let changeset = self.schedule.call_next(&calls);
 
-        let settings = get_notarization_delay_settings(
+        if let Some(settings) = get_notarization_delay_settings(
             &self.log,
             &*self.registry_client,
             self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
-        );
-        let unit_delay = settings.unit_delay;
-        let current_time = self.time_source.get_relative_time();
-        for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-            let time_since_last_invoked =
-                current_time.saturating_duration_since(*last_invoked_time);
-            let component_name = component.as_ref();
-            self.metrics
-                .time_since_last_invoked
-                .with_label_values(&[component_name])
-                .set(time_since_last_invoked.as_secs_f64());
-
-            // Log starvation
-            if time_since_last_invoked > unit_delay {
+        ) {
+            let unit_delay = settings.unit_delay;
+            let current_time = self.time_source.get_relative_time();
+            for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
+                let time_since_last_invoked =
+                    current_time.saturating_duration_since(*last_invoked_time);
+                let component_name = component.as_ref();
                 self.metrics
-                    .starvation_counter
+                    .time_since_last_invoked
                     .with_label_values(&[component_name])
-                    .inc();
+                    .set(time_since_last_invoked.as_secs_f64());
 
-                warn!(
-                    every_n_seconds => 5,
-                    self.log,
-                    "starvation detected: {:?} has not been invoked for {:?}",
-                    component,
-                    time_since_last_invoked
-                );
+                // Log starvation
+                if time_since_last_invoked > unit_delay {
+                    self.metrics
+                        .starvation_counter
+                        .with_label_values(&[component_name])
+                        .inc();
+
+                    warn!(
+                        every_n_seconds => 5,
+                        self.log,
+                        "starvation detected: {:?} has not been invoked for {:?}",
+                        component,
+                        time_since_last_invoked
+                    );
+                }
             }
         }
 
