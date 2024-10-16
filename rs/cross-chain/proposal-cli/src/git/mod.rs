@@ -183,16 +183,21 @@ impl GitRepository {
         &mut self,
         canister: &[TargetCanister],
     ) -> Vec<CompressedWasmHash> {
-        self.build_canisters();
-        canister.iter().map(|c| self.sha256_artifact(c)).collect()
+        canister
+            .iter()
+            .map(|c| {
+                self.build_canister_artifact(c);
+                self.sha256_artifact(c)
+            })
+            .collect()
     }
 
-    fn build_canisters(&mut self) {
-        let build = Command::new("./ci/container/build-ic.sh")
-            .arg("--canisters")
+    fn build_canister_artifact(&mut self, canister: &TargetCanister) {
+        let build = canister
+            .build_artifact()
             .current_dir(self.dir.path())
             .status()
-            .expect("failed to build canister artifacts");
+            .expect("failed to build canister artifact");
         assert!(build.success());
     }
 

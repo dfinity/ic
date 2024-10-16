@@ -3,6 +3,7 @@ mod tests;
 
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::process::Command;
 use std::str::FromStr;
 use strum_macros::EnumIter;
 
@@ -186,6 +187,31 @@ impl TargetCanister {
                 "ic-ledger-suite-orchestrator-canister.wasm.gz"
             }
             TargetCanister::EvmRpc => "evm_rpc.wasm.gz",
+        }
+    }
+
+    pub fn build_artifact(&self) -> Command {
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => {
+                let mut cmd = Command::new("./ci/container/build-ic.sh");
+                cmd.arg("--canisters");
+                cmd
+            }
+            TargetCanister::EvmRpc => Command::new("./scripts/docker-build"),
         }
     }
 
