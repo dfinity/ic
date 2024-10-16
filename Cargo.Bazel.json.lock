@@ -1,5 +1,5 @@
 {
-  "checksum": "f1d446e2f51f5523ef34b14dc52d390645bd8bf6796eb37472bd66e892f0a910",
+  "checksum": "657b493a28003363dd3c7199f5baa6cd69f8b1e9e8e66c9a301eeaac928fe5c3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1080,7 +1080,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -2714,7 +2714,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -2953,7 +2953,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -3013,7 +3013,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -3690,7 +3690,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -3921,7 +3921,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -4022,7 +4022,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -5070,7 +5070,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -6422,7 +6422,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -6553,7 +6553,7 @@
               "target": "shlex"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -10557,7 +10557,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -12175,7 +12175,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -15516,7 +15516,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -15825,7 +15825,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -16355,7 +16355,7 @@
               "target": "strsim"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -16520,7 +16520,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -16933,7 +16933,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -17056,7 +17056,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -17111,7 +17111,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -18527,7 +18527,7 @@
               "target": "subtle"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -19108,7 +19108,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -20353,7 +20353,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -20417,7 +20417,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -23539,7 +23539,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -29487,7 +29487,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -29554,7 +29554,7 @@
               "target": "serde_tokenstream"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -31885,7 +31885,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -37554,7 +37554,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -39752,7 +39752,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -39828,7 +39828,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -41862,7 +41862,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -45536,7 +45536,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -46034,7 +46034,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -46282,7 +46282,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -47942,7 +47942,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -49134,7 +49134,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -49364,7 +49364,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -49470,7 +49470,7 @@
               "target": "regex"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -49537,7 +49537,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -49600,7 +49600,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -54688,7 +54688,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -59253,7 +59253,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -59626,7 +59626,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -59741,7 +59741,7 @@
               "target": "serde"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -60056,7 +60056,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -63007,7 +63007,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -63072,7 +63072,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -63244,7 +63244,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -63312,7 +63312,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -63787,14 +63787,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "syn 2.0.66": {
+    "syn 2.0.79": {
       "name": "syn",
-      "version": "2.0.66",
+      "version": "2.0.79",
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/syn/2.0.66/download",
-          "sha256": "c42f3f41a2de00b01c0aaad383c5a45241efc8b2d1eda5661812fda5f3cdcff5"
+          "url": "https://static.crates.io/crates/syn/2.0.79/download",
+          "sha256": "89132cd0bf050864e1d38dc3bbc07a0eb8e7530af26344d3d2bbbef83499f590"
         }
       },
       "targets": [
@@ -63850,7 +63850,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.66"
+        "version": "2.0.79"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63998,7 +63998,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -65075,7 +65075,7 @@
               "target": "structmeta"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -65350,7 +65350,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -66298,7 +66298,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -66539,7 +66539,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -67756,7 +67756,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -68590,7 +68590,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -71892,7 +71892,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -72079,7 +72079,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -73025,7 +73025,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -73557,7 +73557,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -77698,7 +77698,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -77812,7 +77812,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -77921,7 +77921,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             },
             {
@@ -78035,7 +78035,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -78156,7 +78156,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.66",
+              "id": "syn 2.0.79",
               "target": "syn"
             }
           ],
@@ -79876,7 +79876,7 @@
     "stubborn-io 0.3.2",
     "substring 1.4.5",
     "subtle 2.5.0",
-    "syn 1.0.109",
+    "syn 2.0.79",
     "sync_wrapper 1.0.1",
     "tar 0.4.39",
     "tarpc 0.34.0",

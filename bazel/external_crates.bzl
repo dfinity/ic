@@ -1209,7 +1209,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^2.4",
             ),
             "syn": crate.spec(
-                version = "^1.0.109",
+                version = "^2.0.79",
                 features = [
                     "fold",
                     "full",
