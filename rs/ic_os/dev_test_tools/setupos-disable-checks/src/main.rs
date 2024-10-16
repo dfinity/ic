@@ -11,7 +11,7 @@ use tokio::fs;
 use partition_tools::{ext::ExtPartition, Partition};
 
 const CHECK_DISABLER_CMDLINE_ARGS: &str =
-    "ic.setupos.check_hardware=0 ic_setupos.check_network=0 ic.setupos.check_age=0";
+    "ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0";
 const SERVICE_NAME: &str = "setupos-disable-checks";
 
 #[derive(Parser)]
