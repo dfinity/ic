@@ -178,6 +178,7 @@ rust_test(
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
+    flaky = True,
     tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
 )

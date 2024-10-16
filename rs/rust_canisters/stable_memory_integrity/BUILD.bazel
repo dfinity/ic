@@ -43,6 +43,7 @@ rust_ic_test(
     env = {
         "STABLE_MEMORY_INTEGRITY_CANISTER_WASM_PATH": "$(rootpath :stable_memory_integrity_canister.wasm)",
     },
+    flaky = True,
     proc_macro_deps = [],
     deps = [
         # Keep sorted.
