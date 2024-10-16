@@ -35,9 +35,9 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, TryRecvError};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc::channel;
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
 use tower_http::trace::TraceLayer;
@@ -227,27 +227,19 @@ async fn start(runtime: Arc<Runtime>) {
         terminate(app_state, shutdown_handle, port_file_path_clone).await;
     });
     // Register a signal handler.
-    let (tx, rx) = channel();
+    let (tx, mut rx) = channel(1);
     let shutdown_handle = handle.clone();
     let port_file_path_clone = port_file_path.clone();
     tokio::spawn(async move {
-        loop {
-            match rx.try_recv() {
-                Ok(()) => {
-                    terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
-                    break;
-                }
-                Err(TryRecvError::Empty) => {
-                    tokio::time::sleep(Duration::from_secs(1)).await;
-                }
-                Err(TryRecvError::Disconnected) => {
-                    break;
-                }
-            }
+        if let Some(()) = rx.recv().await {
+            terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
         }
     });
-    ctrlc::set_handler(move || tx.send(()).expect("Could not send signal on channel."))
-        .expect("Error setting Ctrl-C handler");
+    ctrlc::set_handler(move || {
+        tx.blocking_send(())
+            .expect("Could not send signal on channel.")
+    })
+    .expect("Error setting Ctrl-C handler");
 
     let main_task = tokio::spawn(async move {
         axum_server::from_tcp(listener)
