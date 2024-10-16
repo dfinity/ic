@@ -102,7 +102,26 @@ impl TargetCanister {
     }
 
     pub fn repo_dir(&self) -> PathBuf {
-        self.candid_file().parent().unwrap().to_path_buf()
+        match &self {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger
+            | TargetCanister::LedgerSuiteOrchestrator => {
+                self.candid_file().parent().unwrap().to_path_buf()
+            }
+            TargetCanister::EvmRpc => PathBuf::new(),
+        }
     }
 
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
