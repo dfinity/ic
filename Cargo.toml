@@ -364,6 +364,7 @@ members = [
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/message_routing",
+    "rs/tests/message_routing/rejoin_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",

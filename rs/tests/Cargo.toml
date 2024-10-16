@@ -265,14 +265,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-rejoin-test"
-path = "message_routing/rejoin_test.rs"
-
-[[bin]]
-name = "ic-systest-rejoin-test-large-state"
-path = "message_routing/rejoin_test_large_state.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
@@ -331,10 +323,6 @@ path = "crypto/rpc_csp_vault_reconnection_test.rs"
 [[bin]]
 name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
-
-[[bin]]
-name = "ic-systest-state-sync-malicious-chunk-test"
-path = "message_routing/state_sync_malicious_chunk_test.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"
