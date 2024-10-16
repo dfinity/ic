@@ -208,7 +208,7 @@ fn test_why_list_neurons_expensive() {
 
         // Print data that can be copied into a spreadsheet for further analysis.
         println!(
-            "{}\t{}\t{}\t{}",
+            "{},{},{},{}",
             caller, heap_neuron_count, stable_memory_neuron_count, unwrap_cost(cost),
         );
     }
