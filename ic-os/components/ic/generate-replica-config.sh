@@ -19,43 +19,6 @@ Usage:
 EOF
 }
 
-# Get address of interface
-#
-# Arguments:
-# - $1: address family (4 or 6 for IPv4 or IPv6)
-# - $2: interface name
-function get_if_address() {
-    local FAMILY=-"$1"
-    local INTERFACE="$2"
-    ip -o "${FAMILY}" addr show up primary scope global "${INTERFACE}" | while read -r num dev family addr options; do
-        echo ${addr%/*}
-        break
-    done
-}
-
-# Get address of interface, retrying for a while
-#
-# Arguments:
-# - $1: address family (4 or 6 for IPv4 or IPv6)
-# - $2: interface name
-# - $3: number of retries, trying every second
-function get_if_address_retries() {
-    local FAMILY=-"$1"
-    local INTERFACE="$2"
-    local RETRIES="$3"
-    local ADDR=""
-    while [ "${RETRIES}" != 0 -a "$ADDR" == "" ]; do
-        ADDR=$(get_if_address "${FAMILY}" "${INTERFACE}")
-        if [ "${ADDR}" != "" ]; then
-            echo "${ADDR}"
-            break
-        fi
-        RETRIES=$(("${RETRIES}" - 1))
-        echo "Retrying ${RETRIES} ..." 1>&2
-        sleep 10
-    done
-}
-
 function read_config_variables() {
     NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
     NODE_INDEX=$(get_config_value '.icos_settings.hostname')
@@ -106,6 +69,43 @@ function configure_ipv4() {
     fi
 }
 
+# Get address of interface
+#
+# Arguments:
+# - $1: address family (4 or 6 for IPv4 or IPv6)
+# - $2: interface name
+function get_if_address() {
+    local FAMILY=-"$1"
+    local INTERFACE="$2"
+    ip -o "${FAMILY}" addr show up primary scope global "${INTERFACE}" | while read -r num dev family addr options; do
+        echo ${addr%/*}
+        break
+    done
+}
+
+# Get address of interface, retrying for a while
+#
+# Arguments:
+# - $1: address family (4 or 6 for IPv4 or IPv6)
+# - $2: interface name
+# - $3: number of retries, trying every second
+function get_if_address_retries() {
+    local FAMILY=-"$1"
+    local INTERFACE="$2"
+    local RETRIES="$3"
+    local ADDR=""
+    while [ "${RETRIES}" != 0 -a "$ADDR" == "" ]; do
+        ADDR=$(get_if_address "${FAMILY}" "${INTERFACE}")
+        if [ "${ADDR}" != "" ]; then
+            echo "${ADDR}"
+            break
+        fi
+        RETRIES=$(("${RETRIES}" - 1))
+        echo "Retrying ${RETRIES} ..." 1>&2
+        sleep 10
+    done
+}
+
 # Read malicious behavior config variables from file. The file must be of the
 # form "key=value" for each line with a specific set of keys permissible (see
 # code below).
@@ -153,6 +153,7 @@ if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFI
 fi
 
 read_config_variables
+
 
 [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
 [ "${NODE_INDEX}" = "null" ] && NODE_INDEX="0"
