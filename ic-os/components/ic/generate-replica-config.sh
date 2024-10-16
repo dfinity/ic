@@ -57,12 +57,12 @@ function get_if_address_retries() {
 }
 
 function read_config_variables() {
-    nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
-    hostname=$(get_config_value '.icos_settings.hostname')
-    backup_retention_time_secs=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
-    backup_purging_interval_secs=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
-    jaeger_addr=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
-    query_stats_epoch_length=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
+    NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
+    NODE_INDEX=$(get_config_value '.icos_settings.hostname')
+    BACKUP_RETENTION_TIME_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
+    BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
+    QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
+    JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
 
     # todo:
     # "malicious_behavior") malicious_behavior="${value}" ;;
@@ -154,22 +154,16 @@ fi
 
 read_config_variables
 
-NNS_URLS="${nns_urls:-http://[::1]:8080}"
-NODE_INDEX="${node_index:-0}"
+[ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
+[ "${NODE_INDEX}" = "null" ] && NODE_INDEX="0"
 # Default value is 24h
-BACKUP_RETENTION_TIME_SECS="${backup_retention_time_secs:-86400}"
-[ "${backup_retention_time_secs}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"
+[ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"
 # Default value is 1h
-BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
-[ "${backup_purging_interval_secs}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"
-# Default is null (None)
-MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
+[ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"
 # Default is 600 blocks i.e. around 10min
-QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
-[ "${query_stats_epoch_length}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"
+[ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"
 # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
-JAEGER_ADDR="${jaeger_addr:-}"
-[ "${jaeger_addr}" = "null" ] && JAEGER_ADDR=""
+[ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
