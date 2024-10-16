@@ -521,8 +521,7 @@ fn test_account_id_from_hex() {
 
 #[test]
 fn test_account_id_serialization() {
-    let length_56 = "00000000000000000000000000000000000000000000000000000000";
-    let id = 
-        AccountIdentifier::from_hex(length_56);
+    let length_56 = "00000000000000000000000000000000000000000000000000000012";
+    let id = AccountIdentifier::from_hex(length_56).expect("failed to generate account");
     assert_eq!(AccountIdentifier::from_bytes(id.to_bytes()), id);
 }
