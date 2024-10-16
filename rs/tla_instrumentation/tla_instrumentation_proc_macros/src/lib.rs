@@ -94,6 +94,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         block: _,
     } = input_fn;
 
+    let original_name = sig.ident.to_string();
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
     modified_fn.sig.ident = mangled_name.clone();
 
@@ -125,14 +126,16 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let raw_ptr = self as *const _;
                 let snapshotter = Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
                 let update = #attr2;
+                let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
+                let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
                 let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
-                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter),
+                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
                     async move {
                         let res = self.#mangled_name(#(#args),*).await;
                         let globals = tla_get_globals!(self);
                         let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
                         let mut handler_state = state.handler_state.borrow_mut();
-                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals);
+                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
                         let mut state_pairs = state.state_pairs.borrow_mut();
                         state_pairs.push(state_pair);
                         res

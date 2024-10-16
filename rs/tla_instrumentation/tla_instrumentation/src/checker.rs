@@ -58,6 +58,7 @@ impl std::fmt::Debug for TlaCheckError {
         f.debug_map().entries(self.pair.start.0.0.iter()).finish()?;
         f.write_str("\nand\n")?;
         f.debug_map().entries(self.pair.end.0.0.iter()).finish()?;
+        f.write_str(&format!("\nThe start and end locations in the code are:\n{}\nand\n{}", self.pair.start_source_location, self.pair.end_source_location))?;
         f.write_str("\nThe constants are:\n")?;
         f.debug_map().entries(self.constants.constants.iter()).finish()
     }
