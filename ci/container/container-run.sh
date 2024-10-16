@@ -185,7 +185,7 @@ other_args="--pids-limit=-1 -i $tty --log-driver=none --rm --privileged --networ
 # additionally, we need to use hosts's cgroups and network.
 if [ $# -eq 0 ]; then
     set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL}"
+    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
 else
     set -x
     exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
