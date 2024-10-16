@@ -386,6 +386,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         time: time::current_time(),
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 /// Block till the given ingress message has finished executing and

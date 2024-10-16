@@ -26,6 +26,7 @@ impl Default for BatchBuilder {
                 time: UNIX_EPOCH,
                 consensus_responses: vec![],
                 blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+                replica_version: ReplicaVersion::default(),
             },
         }
     }
