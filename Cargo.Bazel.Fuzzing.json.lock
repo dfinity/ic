@@ -1,5 +1,5 @@
 {
-  "checksum": "6c07d6d0c6bcec4f44e912fd54827d11dea967d5b19686f6f150b1d64f85ec7a",
+  "checksum": "991dafd2a9cbbc9fc71d1f2e44f13900f1ae964200e080d797ba6d957d0aa4c3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3640,6 +3640,62 @@
         "version": "2.0.0"
       },
       "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "async-recursion 1.1.1": {
+      "name": "async-recursion",
+      "version": "1.1.1",
+      "package_url": "https://github.com/dcchut/async-recursion",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/async-recursion/1.1.1/download",
+          "sha256": "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "async_recursion",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_recursion",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.79",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.1.1"
+      },
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -18919,6 +18975,10 @@
         "edition": "2018",
         "proc_macro_deps": {
           "common": [
+            {
+              "id": "async-recursion 1.1.1",
+              "target": "async_recursion"
+            },
             {
               "id": "async-trait 0.1.83",
               "target": "async_trait"
@@ -79374,6 +79434,7 @@
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
     "async-channel 2.3.1",
+    "async-recursion 1.1.1",
     "async-scoped 0.8.0",
     "async-stream 0.3.6",
     "async-trait 0.1.83",

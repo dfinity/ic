@@ -28,6 +28,7 @@ use ic_system_test_driver::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
 use slog::info;
 
+use async_recursion::async_recursion;
 use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
@@ -106,7 +107,8 @@ pub fn test(env: TestEnv) {
             app_node.effective_canister_id(),
             &plan,
             &mut rng,
-        );
+        )
+        .await;
         info!(logger, "populated plan is {:?}", plan);
 
         // convert the test plan to actions
@@ -363,7 +365,8 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
 /// numerical canister identifications into principal ids, also resolving
 /// them in transfers. A populated plan won't contain numerical ids (i.e
 /// `Err`) any more.
-fn populate_plan(
+#[async_recursion(?Send)]
+async fn populate_plan(
     app_rt: &Runtime,
     agent: &Agent,
     effective_canister_id: PrincipalId,
@@ -373,17 +376,19 @@ fn populate_plan(
     match plan {
         Plan::Empty => Plan::Empty,
         Plan::IdentityAccount(Err(_), tail) => {
-            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng);
+            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng).await;
             let keypair = Ed25519KeyPair::generate(rng);
             Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
         }
         Plan::CanisterAccount(Err(_), tail) => {
-            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng);
-            let can = holder::new(app_rt, agent, effective_canister_id);
+            let (tail, can) = tokio::join!(
+                populate_plan(app_rt, agent, effective_canister_id, tail, rng),
+                holder::new(app_rt, agent, effective_canister_id)
+            );
             Plan::CanisterAccount(Ok(can.canister_id().get()), Box::new(tail))
         }
         Plan::Transfer((Err(from), amount, to), itail) => {
-            let otail = populate_plan(app_rt, agent, effective_canister_id, itail, rng);
+            let otail = populate_plan(app_rt, agent, effective_canister_id, itail, rng).await;
             let from0 = link0(&Err(*from), itail, &otail);
             let to = link(to, itail, &otail);
             Plan::Transfer((Ok(from0), *amount, to), Box::new(otail))

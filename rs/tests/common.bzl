@@ -175,6 +175,7 @@ DEPENDENCIES = [
 ]
 
 MACRO_DEPENDENCIES = [
+    "@crate_index//:async-recursion",
     "@crate_index//:async-trait",
     "@crate_index//:indoc",
     "@crate_index//:strum_macros",
