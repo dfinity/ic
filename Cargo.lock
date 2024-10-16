@@ -11759,6 +11759,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
+ "ic-nns-test-utils-golden-nns-state",
  "ic-protobuf",
  "ic-registry-subnet-type",
  "ic-sns-governance",

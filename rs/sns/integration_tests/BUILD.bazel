@@ -252,10 +252,9 @@ rust_ic_test_suite_with_extra_srcs(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:8",
+        "manual",  # TODO: Enable on CI
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
-        "manual", # TODO: Enable on CI
     ],
-    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + ["//rs/nns/test_utils/golden_nns_state",],
-
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + ["//rs/nns/test_utils/golden_nns_state"],
 )

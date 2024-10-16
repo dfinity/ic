@@ -169,7 +169,8 @@ fn upgrade_downgrade_swap_boom_dao() {
         ("a2cof-vaaaa-aaaaq-aacza-cai", "Yuku DAO"),
     ];
 
-    let state_machine = ic_nns_test_utils_golden_nns_state::new_state_machine_or_panic();
+    let state_machine =
+        ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_sns_state_or_panic();
 
     for (swap_canister_id, sns_name) in snses_under_test {
         run_test_for_swap(&state_machine, swap_canister_id, sns_name);
