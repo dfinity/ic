@@ -341,10 +341,6 @@ name = "ic-systest-state-sync-malicious-chunk-test"
 path = "message_routing/state_sync_malicious_chunk_test.rs"
 
 [[bin]]
-name = "ic-systest-canister-global-reboot-test"
-path = "message_routing/global_reboot_test.rs"
-
-[[bin]]
 name = "ic-xc-ledger-suite-orchestrator"
 path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
 

@@ -1,0 +1,22 @@
+[package]
+name = "message-routing-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
+dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+itertools = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+xnet-test = { path = "../../rust_canisters/xnet_test" }
+
+[[bin]]
+name = "global_reboot_test"
+path = "global_reboot_test.rs"
