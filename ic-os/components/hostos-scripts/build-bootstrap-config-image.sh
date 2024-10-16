@@ -185,7 +185,7 @@ EOF
     # Create guestos config.json
     echo "* Generating 'config-guestos.json'..."
     if [[ -n "$IPV6_ADDRESS" ]]; then
-        /opt/ic/bin/config generate-guestos-config --guestos_ipv6_address "$IPV6_ADDRESS"
+        /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$IPV6_ADDRESS"
     else
         /opt/ic/bin/config generate-guestos-config
     fi
