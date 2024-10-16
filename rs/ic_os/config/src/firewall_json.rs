@@ -4,8 +4,7 @@ use anyhow::Result;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs::File;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum FirewallRulesError {
@@ -44,22 +43,11 @@ impl Error for FirewallRulesError {
 ///
 /// The firewall configuration file format is described in document Network-Configuration.adoc.
 fn get_firewall_rules_json(firewall_file: &Path) -> Result<Vec<FirewallRule>, FirewallRulesError> {
-    let file = match File::open(firewall_file) {
-        Ok(file) => file,
-        Err(e) => {
-            return Err(FirewallRulesError::IOError((
-                firewall_file.to_path_buf(),
-                e,
-            )))
-        }
-    };
-    match serde_json::from_reader(&file) {
-        Ok(val) => Ok(val),
-        Err(e) => Err(FirewallRulesError::ParseError((
-            firewall_file.to_path_buf(),
-            e,
-        ))),
-    }
+    let file = File::open(firewall_file)
+        .map_err(|e| FirewallRulesError::IOError((firewall_file.to_path_buf(), e)))?;
+
+    serde_json::from_reader(&file)
+        .map_err(|e| FirewallRulesError::ParseError((firewall_file.to_path_buf(), e)))
 }
 
 /// Parse an optionally explicitly specified firewall configuration file
@@ -106,13 +94,11 @@ mod tests {
         Ok(temp_file)
     }
 
-    macro_rules! bad_rules_must_be_bad {
-        ($text:literal) => {
-            let temp_file = temp_fixture($text)?;
-            let outp = get_firewall_rules_json(temp_file.path());
-            assert!(outp.is_err());
-            Ok(())
-        };
+    fn check_invalid_firewall_rule(text: &str) -> Result<()> {
+        let temp_file = temp_fixture(text)?;
+        let outp = get_firewall_rules_json(temp_file.path());
+        assert!(outp.is_err());
+        Ok(())
     }
 
     #[test]
@@ -152,46 +138,54 @@ mod tests {
 
     #[test]
     fn test_get_firewall_rules_json_port_out_of_range() -> Result<()> {
-        bad_rules_must_be_bad! {"[
+        check_invalid_firewall_rule(
+            "[
   {
     \"from\": \"2001:db8:abcd:0012::0/64\",
     \"to\": \"GuestOS\"
     \"to_ports\": 65537,
   }
-]"}
+]",
+        )
     }
 
     #[test]
     fn test_get_firewall_rules_json_port_empty() -> Result<()> {
-        bad_rules_must_be_bad! {"[
+        check_invalid_firewall_rule(
+            "[
   {
     \"from\": \"2001:db8:abcd:0012::0/64\",
     \"to_ports\": \"\",
   }
-]"}
+]",
+        )
     }
 
     #[test]
     fn test_get_firewall_rules_json_port_incomplete() -> Result<()> {
-        bad_rules_must_be_bad! {"[
+        check_invalid_firewall_rule(
+            "[
   {
     \"from\": \"2001:db8:abcd:0012::0/64\",
     \"to_ports\": \"-24\",
   }
-]"}
+]",
+        )
     }
 
     #[test]
     fn test_get_firewall_rules_json_empty_ip() -> Result<()> {
-        bad_rules_must_be_bad! {"[
+        check_invalid_firewall_rule(
+            "[
   {
     \"from\": \"\",
   }
-]"}
+]",
+        )
     }
 
     #[test]
     fn test_get_firewall_rules_json_empty_file() -> Result<()> {
-        bad_rules_must_be_bad! {""}
+        check_invalid_firewall_rule("")
     }
 }

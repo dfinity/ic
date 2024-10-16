@@ -139,7 +139,7 @@ pub fn main() -> Result<()> {
             Ok(())
         }
         Some(Commands::CheckFirewallConfig { firewall_file }) => {
-            let _config_ = firewall_json::get_firewall_rules_json_or_default(
+            firewall_json::get_firewall_rules_json_or_default(
                 firewall_file.as_ref().map(Path::new),
                 Path::new(DEFAULT_SETUPOS_FIREWALL_JSON_FILE_PATH),
             )?;
