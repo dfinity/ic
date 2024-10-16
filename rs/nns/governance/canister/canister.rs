@@ -673,10 +673,10 @@ fn principal_id_to_neuron_count() // DO NOT MERGE
                 .next()
                 .unwrap()
                 .id() == neuron_id;
-            let count = &mut if is_in_heap {
-                counts.0
+            let count = if is_in_heap {
+                &mut counts.0
             } else {
-                counts.1
+                &mut counts.1
             };
 
             *count += 1;
