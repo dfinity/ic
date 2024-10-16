@@ -1,5 +1,5 @@
 {
-  "checksum": "09a4fb58757dbbd3b9749ca08186b723d8a3b502558bfa8ca16d2f07a3499cbf",
+  "checksum": "6a68dd75feac4548ebc87bb967c0ed3281e45eccc10507dcaea75c36f489f60d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6247,6 +6247,122 @@
       ],
       "license_file": "LICENSE.md"
     },
+    "bincode 2.0.0-rc.3": {
+      "name": "bincode",
+      "version": "2.0.0-rc.3",
+      "package_url": "https://github.com/bincode-org/bincode",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bincode/2.0.0-rc.3/download",
+          "sha256": "f11ea1a0346b94ef188834a65c068a03aec181c94896d481d7a0a40d85b0ce95"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bincode",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bincode",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "bincode_derive 2.0.0-rc.3",
+              "target": "bincode_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "rustc_flags": {
+          "common": [
+            "-Cpasses=sancov-module",
+            "-Cllvm-args=-sanitizer-coverage-level=4",
+            "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+            "-Cllvm-args=-sanitizer-coverage-pc-table",
+            "-Cllvm-args=-sanitizer-coverage-trace-compares",
+            "-Cllvm-args=-sanitizer-coverage-stack-depth",
+            "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+            "-Ctarget-cpu=native",
+            "-Coverflow_checks",
+            "-Copt-level=3",
+            "-Clink-dead-code",
+            "-Cinstrument-coverage",
+            "-Cdebug-assertions",
+            "-Ccodegen-units=1",
+            "-Zextra-const-ub-checks",
+            "-Zstrict-init-checks",
+            "-Zsanitizer=address"
+          ],
+          "selects": {}
+        },
+        "version": "2.0.0-rc.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
+    "bincode_derive 2.0.0-rc.3": {
+      "name": "bincode_derive",
+      "version": "2.0.0-rc.3",
+      "package_url": "https://github.com/bincode-org/bincode",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bincode_derive/2.0.0-rc.3/download",
+          "sha256": "7e30759b3b99a1b802a7a3aa21c85c3ded5c28e1c83170d82d70f08bbf7f3e4c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "bincode_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bincode_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "virtue 0.0.13",
+              "target": "virtue"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.0.0-rc.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
     "bindgen 0.65.1": {
       "name": "bindgen",
       "version": "0.65.1",
@@ -11221,6 +11337,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "cfg_aliases 0.2.1": {
+      "name": "cfg_aliases",
+      "version": "0.2.1",
+      "package_url": "https://github.com/katharostech/cfg_aliases",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cfg_aliases/0.2.1/download",
+          "sha256": "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cfg_aliases",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "cfg_aliases",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.2.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "chacha20 0.9.1": {
       "name": "chacha20",
       "version": "0.9.1",
@@ -15728,6 +15882,68 @@
       ],
       "license_file": "LICENSE-MIT"
     },
+    "ctrlc 3.4.5": {
+      "name": "ctrlc",
+      "version": "3.4.5",
+      "package_url": "https://github.com/Detegr/rust-ctrlc.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ctrlc/3.4.5/download",
+          "sha256": "90eeab0aa92f3f9b4e87f258c72b139c207d251f9cbc1080a0086b86a8870dd3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ctrlc",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ctrlc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "termination"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "nix 0.29.0",
+                "target": "nix"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.59.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "3.4.5"
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "curve25519-dalek 4.1.3": {
       "name": "curve25519-dalek",
       "version": "4.1.3",
@@ -17787,6 +18003,10 @@
               "target": "csv"
             },
             {
+              "id": "ctrlc 3.4.5",
+              "target": "ctrlc"
+            },
+            {
               "id": "curve25519-dalek 4.1.3",
               "target": "curve25519_dalek"
             },
@@ -18476,6 +18696,10 @@
             {
               "id": "schemars 0.8.16",
               "target": "schemars"
+            },
+            {
+              "id": "schnorr_fun 0.10.0",
+              "target": "schnorr_fun"
             },
             {
               "id": "scoped_threadpool 0.1.9",
@@ -40675,6 +40899,99 @@
       ],
       "license_file": "LICENSE"
     },
+    "nix 0.29.0": {
+      "name": "nix",
+      "version": "0.29.0",
+      "package_url": "https://github.com/nix-rust/nix",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/nix/0.29.0/download",
+          "sha256": "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "nix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "nix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "fs",
+            "process",
+            "signal"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.4.1",
+              "target": "bitflags"
+            },
+            {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
+              "id": "libc 0.2.158",
+              "target": "libc"
+            },
+            {
+              "id": "nix 0.29.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.29.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cfg_aliases 0.2.1",
+              "target": "cfg_aliases"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "no-std-compat 0.4.1": {
       "name": "no-std-compat",
       "version": "0.4.1",
@@ -57109,6 +57426,61 @@
       ],
       "license_file": "LICENSE"
     },
+    "schnorr_fun 0.10.0": {
+      "name": "schnorr_fun",
+      "version": "0.10.0",
+      "package_url": "https://github.com/LLFourn/secp256kfun",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/schnorr_fun/0.10.0/download",
+          "sha256": "56f8fbe78e3698a49208f5dd1a1d602908493ec800dd49147b1570b4eae84a1e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "schnorr_fun",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "schnorr_fun",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "secp256kfun 0.10.0",
+              "target": "secp256kfun"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.10.0"
+      },
+      "license": "0BSD",
+      "license_ids": [
+        "0BSD"
+      ],
+      "license_file": "LICENSE"
+    },
     "scoped-tls 1.0.1": {
       "name": "scoped-tls",
       "version": "1.0.1",
@@ -57629,6 +58001,53 @@
       ],
       "license_file": "LICENSE"
     },
+    "secp256k1 0.28.2": {
+      "name": "secp256k1",
+      "version": "0.28.2",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1/0.28.2/download",
+          "sha256": "d24b59d129cdadea20aea4fb2352fa053712e5d713eee47d700cd4b2bc002f10"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.9.2",
+              "target": "secp256k1_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.28.2"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "secp256k1 0.29.0": {
       "name": "secp256k1",
       "version": "0.29.0",
@@ -57851,6 +58270,80 @@
       ],
       "license_file": "LICENSE"
     },
+    "secp256k1-sys 0.9.2": {
+      "name": "secp256k1-sys",
+      "version": "0.9.2",
+      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256k1-sys/0.9.2/download",
+          "sha256": "e5d1746aae42c19d583c3c1a8c646bfad910498e2051c551a7f2e3c0c9fbb7eb"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256k1_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256k1_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "secp256k1-sys 0.9.2",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.9.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "rustsecp256k1_v0_9_2"
+      },
+      "license": "CC0-1.0",
+      "license_ids": [
+        "CC0-1.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "secp256k1-sys 0.10.0": {
       "name": "secp256k1-sys",
       "version": "0.10.0",
@@ -57936,6 +58429,129 @@
         "CC0-1.0"
       ],
       "license_file": "LICENSE"
+    },
+    "secp256kfun 0.10.0": {
+      "name": "secp256kfun",
+      "version": "0.10.0",
+      "package_url": "https://github.com/LLFourn/secp256kfun",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256kfun/0.10.0/download",
+          "sha256": "9ecc2adce3ef929c5dc7dacdd612d65ab98002ee18119215ce25d8054ed53c1a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "secp256kfun",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256kfun",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "digest 0.10.7",
+              "target": "digest"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
+            },
+            {
+              "id": "subtle-ng 2.5.0",
+              "target": "subtle_ng",
+              "alias": "subtle"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "secp256kfun_arithmetic_macros 0.1.0",
+              "target": "secp256kfun_arithmetic_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.10.0"
+      },
+      "license": "0BSD",
+      "license_ids": [
+        "0BSD"
+      ],
+      "license_file": null
+    },
+    "secp256kfun_arithmetic_macros 0.1.0": {
+      "name": "secp256kfun_arithmetic_macros",
+      "version": "0.1.0",
+      "package_url": "https://github.com/LLFourn/secp256kfun",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/secp256kfun_arithmetic_macros/0.1.0/download",
+          "sha256": "91b7c385a72530ebfe6010ff476ad9e235743fb33408a360052bb706f1481e1e"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "secp256kfun_arithmetic_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "secp256kfun_arithmetic_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.85",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "0BSD",
+      "license_ids": [
+        "0BSD"
+      ],
+      "license_file": null
     },
     "secrecy 0.8.0": {
       "name": "secrecy",
@@ -63014,6 +63630,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "std"
+          ],
+          "selects": {}
+        },
         "edition": "2015",
         "version": "2.5.0"
       },
@@ -70601,6 +71223,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "virtue 0.0.13": {
+      "name": "virtue",
+      "version": "0.0.13",
+      "package_url": "https://github.com/bincode-org/virtue",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/virtue/0.0.13/download",
+          "sha256": "9dcc60c0624df774c82a0ef104151231d37da4962957d691c011c852b2473314"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "virtue",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "virtue",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.0.13"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
     "vsock 0.4.0": {
       "name": "vsock",
       "version": "0.4.0",
@@ -74472,6 +75132,7 @@
             "Win32_Storage",
             "Win32_Storage_FileSystem",
             "Win32_System",
+            "Win32_System_Console",
             "Win32_System_IO",
             "Win32_System_LibraryLoader",
             "Win32_System_Threading",
@@ -79019,6 +79680,7 @@
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.13",
     "csv 1.3.0",
+    "ctrlc 3.4.5",
     "curve25519-dalek 4.1.3",
     "cvt 0.1.2",
     "dashmap 5.5.3",
@@ -79199,6 +79861,7 @@
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
     "schemars 0.8.16",
+    "schnorr_fun 0.10.0",
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
