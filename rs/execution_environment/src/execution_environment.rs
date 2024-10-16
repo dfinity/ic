@@ -54,7 +54,7 @@ use ic_replicated_state::{
         ThresholdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
@@ -72,7 +72,7 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, Cycles, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -82,7 +82,7 @@ use rand::RngCore;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::{Into, TryFrom},
-    fmt, mem,
+    fmt,
     str::FromStr,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -330,6 +330,8 @@ pub struct ExecutionEnvironment {
     cycles_account_manager: Arc<CyclesAccountManager>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
+    // Global registry of all the paused executions and install code executions
+    // on the current subnet.
     paused_execution_registry: Arc<Mutex<PausedExecutionRegistry>>,
     // This scaling factor accounts for the execution threads running in
     // parallel and potentially reserving resources. It should be initialized to
@@ -1066,174 +1068,160 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ComputeInitialIDkgDealings) => {
-                match self.config.ic00_compute_initial_i_dkg_dealings {
-                    FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                    FlagStatus::Enabled => {
-                        let cycles = msg.take_cycles();
-                        match &msg {
-                            CanisterCall::Request(request) => {
-                                match ComputeInitialIDkgDealingsArgs::decode(
-                                    request.method_payload(),
-                                ) {
-                                    Ok(args) => match get_master_public_key(
-                                        idkg_subnet_public_keys,
-                                        self.own_subnet_id,
-                                        &args.key_id,
-                                    ) {
-                                        Ok(_) => self
-                                            .compute_initial_idkg_dealings(
-                                                &mut state, args, request,
-                                            )
-                                            .map_or_else(
-                                                |err| ExecuteSubnetMessageResult::Finished {
-                                                    response: Err(err),
-                                                    refund: cycles,
-                                                },
-                                                |()| ExecuteSubnetMessageResult::Processing,
-                                            ),
-                                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        match ComputeInitialIDkgDealingsArgs::decode(request.method_payload()) {
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &args.key_id,
+                            ) {
+                                Ok(_) => self
+                                    .compute_initial_idkg_dealings(&mut state, args, request)
+                                    .map_or_else(
+                                        |err| ExecuteSubnetMessageResult::Finished {
                                             response: Err(err),
                                             refund: cycles,
                                         },
-                                    },
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err),
-                                        refund: cycles,
-                                    },
-                                }
-                            }
-                            CanisterCall::Ingress(_) => self
-                                .reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings),
+                                        |()| ExecuteSubnetMessageResult::Processing,
+                                    ),
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: cycles,
+                                },
+                            },
+                            Err(err) => ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: cycles,
+                            },
                         }
+                    }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::ComputeInitialIDkgDealings)
                     }
                 }
             }
 
-            Ok(Ic00Method::SchnorrPublicKey) => match self.config.ic00_schnorr_public_key {
-                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                FlagStatus::Enabled => {
-                    let cycles = msg.take_cycles();
-                    match &msg {
-                        CanisterCall::Request(request) => {
-                            let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
+            Ok(Ic00Method::SchnorrPublicKey) => {
+                let cycles = msg.take_cycles();
+                match &msg {
+                    CanisterCall::Request(request) => {
+                        let res = match SchnorrPublicKeyArgs::decode(request.method_payload()) {
+                            Err(err) => Err(err),
+                            Ok(args) => match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &MasterPublicKeyId::Schnorr(args.key_id.clone()),
+                            ) {
                                 Err(err) => Err(err),
-                                Ok(args) => match get_master_public_key(
-                                    idkg_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &MasterPublicKeyId::Schnorr(args.key_id.clone()),
-                                ) {
-                                    Err(err) => Err(err),
-                                    Ok(pubkey) => {
-                                        let canister_id = match args.canister_id {
-                                            Some(id) => id.into(),
-                                            None => *msg.sender(),
-                                        };
-                                        self.get_threshold_public_key(
-                                            pubkey,
-                                            canister_id,
-                                            args.derivation_path.into_inner(),
-                                        )
-                                        .map(|res| {
-                                            SchnorrPublicKeyResponse {
-                                                public_key: res.public_key,
-                                                chain_code: res.chain_key,
-                                            }
-                                            .encode()
-                                        })
-                                    }
-                                },
-                            };
-                            ExecuteSubnetMessageResult::Finished {
-                                response: res,
-                                refund: cycles,
-                            }
-                        }
-                        CanisterCall::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::SchnorrPublicKey)
+                                Ok(pubkey) => {
+                                    let canister_id = match args.canister_id {
+                                        Some(id) => id.into(),
+                                        None => *msg.sender(),
+                                    };
+                                    self.get_threshold_public_key(
+                                        pubkey,
+                                        canister_id,
+                                        args.derivation_path.into_inner(),
+                                    )
+                                    .map(|res| {
+                                        SchnorrPublicKeyResponse {
+                                            public_key: res.public_key,
+                                            chain_code: res.chain_key,
+                                        }
+                                        .encode()
+                                    })
+                                }
+                            },
+                        };
+                        ExecuteSubnetMessageResult::Finished {
+                            response: res,
+                            refund: cycles,
                         }
                     }
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::SchnorrPublicKey)
+                    }
                 }
-            },
+            }
 
-            Ok(Ic00Method::SignWithSchnorr) => match self.config.ic00_sign_with_schnorr {
-                FlagStatus::Disabled => Self::reject_due_to_api_not_implemented(&mut msg),
-                FlagStatus::Enabled => match &msg {
-                    CanisterCall::Request(request) => {
-                        if payload.is_empty() {
-                            use ic_types::messages;
-                            state.push_subnet_output_response(
-                                Response {
-                                    originator: request.sender,
-                                    respondent: CanisterId::from(self.own_subnet_id),
-                                    originator_reply_callback: request.sender_reply_callback,
-                                    refund: request.payment,
-                                    response_payload: messages::Payload::Reject(
-                                        messages::RejectContext::new(
-                                            ic_error_types::RejectCode::CanisterReject,
-                                            "An empty message cannot be signed",
-                                        ),
+            Ok(Ic00Method::SignWithSchnorr) => match &msg {
+                CanisterCall::Request(request) => {
+                    if payload.is_empty() {
+                        use ic_types::messages;
+                        state.push_subnet_output_response(
+                            Response {
+                                originator: request.sender,
+                                respondent: CanisterId::from(self.own_subnet_id),
+                                originator_reply_callback: request.sender_reply_callback,
+                                refund: request.payment,
+                                response_payload: messages::Payload::Reject(
+                                    messages::RejectContext::new(
+                                        ic_error_types::RejectCode::CanisterReject,
+                                        "An empty message cannot be signed",
                                     ),
-                                    deadline: request.deadline,
-                                }
-                                .into(),
-                            );
-                            return (state, Some(NumInstructions::from(0)));
-                        }
+                                ),
+                                deadline: request.deadline,
+                            }
+                            .into(),
+                        );
+                        return (state, Some(NumInstructions::from(0)));
+                    }
 
-                        match SignWithSchnorrArgs::decode(payload) {
-                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                response: Err(err),
-                                refund: msg.take_cycles(),
-                            },
-                            Ok(args) => {
-                                let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
-                                match get_master_public_key(
-                                    idkg_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &key_id,
+                    match SignWithSchnorrArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
+                            refund: msg.take_cycles(),
+                        },
+                        Ok(args) => {
+                            let key_id = MasterPublicKeyId::Schnorr(args.key_id.clone());
+                            match get_master_public_key(
+                                idkg_subnet_public_keys,
+                                self.own_subnet_id,
+                                &key_id,
+                            ) {
+                                Err(err) => ExecuteSubnetMessageResult::Finished {
+                                    response: Err(err),
+                                    refund: msg.take_cycles(),
+                                },
+                                Ok(_) => match self.sign_with_threshold(
+                                    (**request).clone(),
+                                    ThresholdArguments::Schnorr(SchnorrArguments {
+                                        key_id: args.key_id,
+                                        message: Arc::new(args.message),
+                                    }),
+                                    args.derivation_path.into_inner(),
+                                    registry_settings
+                                        .chain_key_settings
+                                        .get(&key_id)
+                                        .map(|setting| setting.max_queue_size)
+                                        .unwrap_or_default(),
+                                    &mut state,
+                                    rng,
+                                    registry_settings.subnet_size,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {
                                         response: Err(err),
                                         refund: msg.take_cycles(),
                                     },
-                                    Ok(_) => match self.sign_with_threshold(
-                                        (**request).clone(),
-                                        ThresholdArguments::Schnorr(SchnorrArguments {
-                                            key_id: args.key_id,
-                                            message: Arc::new(args.message),
-                                        }),
-                                        args.derivation_path.into_inner(),
-                                        registry_settings
-                                            .chain_key_settings
-                                            .get(&key_id)
-                                            .map(|setting| setting.max_queue_size)
-                                            .unwrap_or_default(),
-                                        &mut state,
-                                        rng,
-                                        registry_settings.subnet_size,
-                                    ) {
-                                        Err(err) => ExecuteSubnetMessageResult::Finished {
-                                            response: Err(err),
-                                            refund: msg.take_cycles(),
-                                        },
-                                        Ok(()) => {
-                                            self.metrics.observe_message_with_label(
-                                                &request.method_name,
-                                                since.elapsed().as_secs_f64(),
-                                                SUBMITTED_OUTCOME_LABEL.into(),
-                                                SUCCESS_STATUS_LABEL.into(),
-                                            );
-                                            ExecuteSubnetMessageResult::Processing
-                                        }
-                                    },
-                                }
+                                    Ok(()) => {
+                                        self.metrics.observe_message_with_label(
+                                            &request.method_name,
+                                            since.elapsed().as_secs_f64(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
+                                        );
+                                        ExecuteSubnetMessageResult::Processing
+                                    }
+                                },
                             }
                         }
                     }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
-                    }
-                },
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::SignWithSchnorr)
+                }
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
@@ -1541,17 +1529,6 @@ impl ExecutionEnvironment {
         // these cases.
         let state = self.finish_subnet_message_execution(state, msg, result, since);
         (state, Some(NumInstructions::from(0)))
-    }
-
-    // Rejects message because API is not implemented.
-    fn reject_due_to_api_not_implemented(msg: &mut CanisterCall) -> ExecuteSubnetMessageResult {
-        ExecuteSubnetMessageResult::Finished {
-            response: Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                format!("{} API is not yet implemented.", msg.method_name()),
-            )),
-            refund: msg.take_cycles(),
-        }
     }
 
     /// Observes a subnet message metrics and outputs the given subnet response.
@@ -3060,7 +3037,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedInstallCode(id));
+                    .enqueue(ExecutionTask::PausedInstallCode(id));
 
                 match (dts_status, ingress_status) {
                     (DtsInstallCodeStatus::StartingFirstExecution, Some((message_id, status))) => {
@@ -3175,6 +3152,43 @@ impl ExecutionEnvironment {
         guard.paused_install_code.remove(&id)
     }
 
+    fn abort_paused_execution_and_return_task(
+        &self,
+        paused_task: &ExecutionTask,
+        log: &ReplicaLogger,
+    ) -> ExecutionTask {
+        match *paused_task {
+            ExecutionTask::PausedExecution { id, .. } => {
+                let paused = self.take_paused_execution(id).unwrap();
+                let (input, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedExecution {
+                    input,
+                    prepaid_execution_cycles,
+                }
+            }
+            ExecutionTask::PausedInstallCode(id) => {
+                let paused = self.take_paused_install_code(id).unwrap();
+                let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
+
+                ExecutionTask::AbortedInstallCode {
+                    message,
+                    call_id,
+                    prepaid_execution_cycles,
+                }
+            }
+            ExecutionTask::AbortedExecution { .. }
+            | ExecutionTask::AbortedInstallCode { .. }
+            | ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::OnLowWasmMemory => {
+                unreachable!("Function abort_paused_execution_and_return_task is only called after 
+                the paused task is returned from TaskQueue, hence no task other than PausedExecution 
+                and PausedInstallCode should appear in paused_task except if there is a bug.")
+            }
+        }
+    }
+
     /// Registers the given paused execution and returns its id.
     fn register_paused_execution(&self, paused: Box<dyn PausedExecution>) -> PausedExecutionId {
         let mut guard = self.paused_execution_registry.lock().unwrap();
@@ -3199,41 +3213,18 @@ impl ExecutionEnvironment {
     /// Aborts paused execution in the given state.
     pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
-            let task_queue = std::mem::take(&mut canister.system_state.task_queue);
-            canister.system_state.task_queue = task_queue
-                .into_iter()
-                .map(|task| match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. }
-                    | ExecutionTask::Heartbeat
-                    | ExecutionTask::GlobalTimer
-                    | ExecutionTask::OnLowWasmMemory => task,
-                    ExecutionTask::PausedExecution { id, .. } => {
-                        let paused = self.take_paused_execution(id).unwrap();
-                        let (input, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedExecution {
-                            input,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                    ExecutionTask::PausedInstallCode(id) => {
-                        let paused = self.take_paused_install_code(id).unwrap();
-                        let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
-                        self.metrics.executions_aborted.inc();
-                        ExecutionTask::AbortedInstallCode {
-                            message,
-                            call_id,
-                            prepaid_execution_cycles,
-                        }
-                    }
-                })
-                .collect();
+            if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
+                self.metrics.executions_aborted.inc();
+                // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
+                // paused execution on the canister without requesting ID from TaskQueue.
+                let aborted_task = self.abort_paused_execution_and_return_task(paused_task, log);
+
+                canister
+                    .system_state
+                    .task_queue
+                    .replace_paused_with_aborted_task(aborted_task);
+            }
             canister.apply_priority_credit();
-            // Aborting a long-running execution moves the canister to the
-            // default execution mode because the canister does not have a
-            // pending execution anymore.
-            canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
             let canister_id = canister.canister_id();
             canister.system_state.apply_ingress_induction_cycles_debit(
                 canister_id,
@@ -3320,7 +3311,7 @@ impl ExecutionEnvironment {
                 canister
                     .system_state
                     .task_queue
-                    .push_front(ExecutionTask::PausedExecution { id, input });
+                    .enqueue(ExecutionTask::PausedExecution { id, input });
                 (canister, None, NumBytes::from(0), ingress_status)
             }
         }
@@ -3442,88 +3433,45 @@ impl ExecutionEnvironment {
         let time = state.time();
 
         for canister in canister_states.values_mut() {
-            let canister_id = canister.canister_id();
-            match canister.system_state.status {
-                // Canister is not stopping so we can skip it.
-                CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
-
-                // Canister is ready to stop.
-                CanisterStatus::Stopping { .. } if canister.system_state.ready_to_stop() => {
-                    // Transition the canister to "stopped".
-                    let stopping_status =
-                        mem::replace(&mut canister.system_state.status, CanisterStatus::Stopped);
-                    canister.system_state.canister_version += 1;
-
-                    // Reply to all pending stop_canister requests.
-                    if let CanisterStatus::Stopping { stop_contexts, .. } = stopping_status {
-                        for stop_context in stop_contexts {
-                            self.reply_to_stop_context(
-                                &stop_context,
-                                &mut state,
-                                canister_id,
-                                time,
-                                StopCanisterReply::Completed,
-                            );
+            let (stopped, stop_contexts) =
+                canister.system_state.try_stop_canister(|stop_context| {
+                    match stop_context.call_id() {
+                        Some(call_id) => {
+                            let sc_time = state
+                                .metadata
+                                .subnet_call_context_manager
+                                .get_time_for_stop_canister_call(call_id);
+                            match sc_time {
+                                Some(t) => time >= t + self.config.stop_canister_timeout_duration,
+                                // Should never hit this case unless there's a
+                                // bug but handle it for robustness.
+                                None => false,
+                            }
                         }
+                        // Should only happen for old stop requests that existed
+                        // before call ids were added.
+                        None => false,
                     }
-                }
-
-                // Canister is stopping, but not yet ready to stop.
-                CanisterStatus::Stopping {
-                    ref mut stop_contexts,
-                    ..
-                } => {
-                    // Respond to any stop contexts that have timed out.
-                    self.timeout_expired_requests(time, canister_id, stop_contexts, &mut state);
-                }
+                });
+            if stopped {
+                canister.system_state.canister_version += 1;
+            }
+            for stop_context in stop_contexts.iter() {
+                self.reply_to_stop_context(
+                    stop_context,
+                    &mut state,
+                    canister.canister_id(),
+                    time,
+                    if stopped {
+                        StopCanisterReply::Completed
+                    } else {
+                        StopCanisterReply::Timeout
+                    },
+                );
             }
         }
         state.put_canister_states(canister_states);
         state
-    }
-
-    fn timeout_expired_requests(
-        &self,
-        time: Time,
-        canister_id: CanisterId,
-        stop_contexts: &mut Vec<StopCanisterContext>,
-        state: &mut ReplicatedState,
-    ) {
-        // Identify if any of the stop contexts have expired.
-        let (expired_stop_contexts, remaining_stop_contexts) = std::mem::take(stop_contexts)
-            .into_iter()
-            .partition(|stop_context| {
-                match stop_context.call_id() {
-                    Some(call_id) => {
-                        let sc_time = state
-                            .metadata
-                            .subnet_call_context_manager
-                            .get_time_for_stop_canister_call(call_id);
-                        match sc_time {
-                            Some(t) => time >= t + self.config.stop_canister_timeout_duration,
-                            // Should never hit this case unless there's a
-                            // bug but handle it for robustness.
-                            None => false,
-                        }
-                    }
-                    // Should only happen for old stop requests that existed
-                    // before call ids were added.
-                    None => false,
-                }
-            });
-
-        for stop_context in expired_stop_contexts {
-            // Respond to expired requests that they timed out.
-            self.reply_to_stop_context(
-                &stop_context,
-                state,
-                canister_id,
-                time,
-                StopCanisterReply::Timeout,
-            );
-        }
-
-        *stop_contexts = remaining_stop_contexts;
     }
 
     fn reject_unexpected_ingress(&self, method: Ic00Method) -> ExecuteSubnetMessageResult {

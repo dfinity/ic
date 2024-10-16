@@ -1299,7 +1299,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             .map(|signal| {
                 Ok(RejectSignal {
                     reason: pb_queues::RejectReason::try_from(signal.reason)
-                        .map_err(ProxyDecodeError::DecodeError)?
+                        .map_err(|err| ProxyDecodeError::Other(err.to_string()))?
                         .try_into()?,
                     index: signal.index.into(),
                 })

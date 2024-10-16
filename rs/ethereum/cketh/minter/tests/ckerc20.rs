@@ -160,12 +160,11 @@ mod withdraw_erc20 {
         increment_max_priority_fee_per_gas, DepositParams, FeeHistoryProcessWithdrawal,
         ProcessWithdrawalParams,
     };
-    use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
         decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
     };
     use ic_cketh_test_utils::{
-        CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+        JsonRpcProvider, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_FEE,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE,
     };
@@ -1173,19 +1172,19 @@ mod withdraw_erc20 {
             .start_processing_withdrawals()
             .retrieve_fee_history(move |mock| {
                 mock.modify_response(
-                    JsonRpcProvider::Ankr,
+                    JsonRpcProvider::Provider1,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740742_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::PublicNode,
+                    JsonRpcProvider::Provider2,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740743_u64.into()
                     },
                 )
                 .modify_response(
-                    JsonRpcProvider::LlamaNodes,
+                    JsonRpcProvider::Provider3,
                     &mut |response: &mut ethers_core::types::FeeHistory| {
                         response.oldest_block = 0x17740744_u64.into()
                     },

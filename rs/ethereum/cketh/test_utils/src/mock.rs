@@ -1,4 +1,4 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
+use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
@@ -44,24 +44,6 @@ pub enum JsonRpcMethod {
 
     #[strum(serialize = "eth_sendRawTransaction")]
     EthSendRawTransaction,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
-pub enum JsonRpcProvider {
-    //order is top-to-bottom and must match order used in production
-    Ankr,
-    PublicNode,
-    LlamaNodes,
-}
-
-impl JsonRpcProvider {
-    fn url(&self) -> &str {
-        match self {
-            JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
-            JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
-            JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -366,9 +348,19 @@ impl MockJsonRpcProvidersBuilder {
         self
     }
 
-    pub fn respond_with<T: Serialize>(mut self, provider: JsonRpcProvider, response: T) -> Self {
-        self.responses
-            .insert(provider, serde_json::to_value(response).unwrap());
+    pub fn respond_with<T: Serialize>(self, provider: JsonRpcProvider, response: T) -> Self {
+        self.respond_for_providers_with(std::iter::once(provider), response)
+    }
+
+    pub fn respond_for_providers_with<T: Serialize, I: IntoIterator<Item = JsonRpcProvider>>(
+        mut self,
+        providers: I,
+        response: T,
+    ) -> Self {
+        let response = serde_json::to_value(response).unwrap();
+        for provider in providers {
+            self.responses.insert(provider, response.clone());
+        }
         self
     }
 
@@ -387,11 +379,8 @@ impl MockJsonRpcProvidersBuilder {
         self.respond_with(provider, previous_response)
     }
 
-    pub fn respond_for_all_with<T: Serialize + Clone>(mut self, response: T) -> Self {
-        for provider in JsonRpcProvider::iter() {
-            self = self.respond_with(provider, response.clone());
-        }
-        self
+    pub fn respond_for_all_with<T: Serialize>(self, response: T) -> Self {
+        self.respond_for_providers_with(JsonRpcProvider::iter(), response)
     }
 
     pub fn modify_response_for_all<T: Serialize + DeserializeOwned, F: FnMut(&mut T)>(

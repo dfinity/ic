@@ -1,8 +1,6 @@
 use crate::tests::mock::{MockLogger, MockRuntime};
-use crate::types::candid::{
-    Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices,
-};
 use crate::EvmRpcClient;
+use crate::{Block, BlockTag, MultiRpcResult, ProviderError, RpcConfig, RpcError, RpcServices};
 use mockall::Sequence;
 
 #[tokio::test]
@@ -111,7 +109,7 @@ async fn should_not_retry_when_max_num_retries_reached() {
 mod max_expected_too_few_cycles_error {
     use super::*;
     use crate::max_expected_too_few_cycles_error;
-    use crate::types::candid::{RpcApi, RpcService};
+    use crate::{RpcApi, RpcService};
 
     #[test]
     fn should_get_max_expected_too_few_cycles_for_custom_rpc_service() {
@@ -138,7 +136,7 @@ mod max_expected_too_few_cycles_error {
             ),
             (
                 RpcService::Custom(RpcApi {
-                    url: "https://rpc.ankr.com/eth".to_string(),
+                    url: "https://ethereum.blockpi.network/v1/rpc/public".to_string(),
                     headers: None,
                 }),
                 Err(RpcError::ProviderError(ProviderError::TooFewCycles {
@@ -156,24 +154,24 @@ mod max_expected_too_few_cycles_error {
 
 fn a_block() -> Block {
     Block {
-        base_fee_per_gas: 8_876_901_983_u64.into(),
+        base_fee_per_gas: Some(8_876_901_983_u64.into()),
         number: 20_061_336_u32.into(),
-        difficulty: 0_u8.into(),
-        extra_data: "0xd883010d0e846765746888676f312e32312e36856c696e7578".to_string(),
+        difficulty: Some(0_u8.into()),
+        extra_data: "0xd883010d0e846765746888676f312e32312e36856c696e7578".parse().unwrap(),
         gas_limit: 30_000_000_u32.into(),
         gas_used: 2_858_256_u32.into(),
-        hash: "0x3a68e81a96d436f421b7cae6a66f78f6aef075340edaec5c7c1db0919c0f909b".to_string(),
-        logs_bloom: "0x006000060010410010180000940006000000200040006108008801008022000900a005820000001100000300000d058962202900084080a0000031080022800000480c08100000006800000a20002028841080209044003041000940802448100002002a820085000000008400200d40204c10110810040403000210020004000a20208028104110a48429100033080e000040050501004800850042405230204230800000a0202282019080040040090a858000014014800440000208000008081804124002800030002040080610c000050002502000100005000a08002000001020500100804612440042300c0080040812000a1208420108200000000045".to_string(),
-        miner: "0xd2732e3e4c264ab330af53f661f6da91cbbb594a".to_string(),
-        mix_hash: "0x472d18a0b90d7007028dded03d7ef9923c2a7fc60f7e276bc6928fa9aeb6cbe8".to_string(),
+        hash: "0x3a68e81a96d436f421b7cae6a66f78f6aef075340edaec5c7c1db0919c0f909b".parse().unwrap(),
+        logs_bloom: "0x006000060010410010180000940006000000200040006108008801008022000900a005820000001100000300000d058962202900084080a0000031080022800000480c08100000006800000a20002028841080209044003041000940802448100002002a820085000000008400200d40204c10110810040403000210020004000a20208028104110a48429100033080e000040050501004800850042405230204230800000a0202282019080040040090a858000014014800440000208000008081804124002800030002040080610c000050002502000100005000a08002000001020500100804612440042300c0080040812000a1208420108200000000045".parse().unwrap(),
+        miner: "0xd2732e3e4c264ab330af53f661f6da91cbbb594a".parse().unwrap(),
+        mix_hash: "0x472d18a0b90d7007028dded03d7ef9923c2a7fc60f7e276bc6928fa9aeb6cbe8".parse().unwrap(),
         nonce: 0_u8.into(),
-        parent_hash: "0xc0debe594704702ec9c2e5a56595ccbc285305108286a6a19aa33f8b3755da65".to_string(),
-        receipts_root: "0x54179d043f2fe97f122a01366cd6ad18868501253282575fb00cada3fecf8fe1".to_string(),
-        sha3_uncles: "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".to_string(),
+        parent_hash: "0xc0debe594704702ec9c2e5a56595ccbc285305108286a6a19aa33f8b3755da65".parse().unwrap(),
+        receipts_root: "0x54179d043f2fe97f122a01366cd6ad18868501253282575fb00cada3fecf8fe1".parse().unwrap(),
+        sha3_uncles: "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347".parse().unwrap(),
         size: 17_484_u32.into(),
-        state_root: "0x1e25cbd8eb25aadda3da160fd9b3fd46dfae61d7df1097d7990ca420e5c7c608".to_string(),
+        state_root: "0x1e25cbd8eb25aadda3da160fd9b3fd46dfae61d7df1097d7990ca420e5c7c608".parse().unwrap(),
         timestamp: 1_718_021_363_u32.into(),
-        total_difficulty: 58_750_003_716_598_352_816_469_u128.into(),
+        total_difficulty: Some(58_750_003_716_598_352_816_469_u128.into()),
         transactions: vec![
             "0x5f17526ee5ab415ed44aa3788f0e8154230faa50f8b6d547a95858a8a90f259e",
             "0x1d0d559a2e113a4a4b738c97536c48e4a047a491614ddefe77c6e0f25b9e3a42",
@@ -243,8 +241,8 @@ fn a_block() -> Block {
             "0x25525be1316671638e2b6146f3e3259be8dee11cf8a24cb64b0feb2ad7f1ebf9",
             "0x0518268fb4b06a1285997efb841615a74d113571332ac7c935d2a303ca1d6f23",
             "0x1510c9bf4678ec3e67d05c908ba6d2762c4a815476638cc1d281d65a7dab6745"
-        ].into_iter().map(|s| s.to_string()).collect(),
-        transactions_root: Some("0xdee0b25a965ff236e4d2e89f56de233759d71ad3e3e150ceb4cf5bb1f0ecf5c0".to_string()),
+        ].into_iter().map(|s| s.parse().unwrap()).collect(),
+        transactions_root: Some("0xdee0b25a965ff236e4d2e89f56de233759d71ad3e3e150ceb4cf5bb1f0ecf5c0".parse().unwrap()),
         uncles: vec![],
     }
 }

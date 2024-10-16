@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::IpAddr,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -9,14 +9,10 @@ use std::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{
-    body::Body,
-    extract::{ConnectInfo, State},
-    middleware::Next,
-    response::IntoResponse,
-};
+use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse};
 use dashmap::DashMap;
 use http::Request;
+use ic_bn_lib::http::ConnInfo;
 use moka::sync::{Cache, CacheBuilder};
 use prometheus::{
     register_histogram_with_registry, register_int_gauge_vec_with_registry, Histogram, IntGaugeVec,
@@ -28,7 +24,6 @@ use tracing::{debug, error, info, warn};
 use crate::{
     cli::BouncerConfig,
     routes::{ErrorCause, RateLimitCause},
-    socket::TcpConnectInfo,
 };
 
 // Common firewall backend operations required by the bouncer
@@ -306,18 +301,13 @@ pub fn setup(cli: &BouncerConfig, registry: &Registry) -> Result<Arc<Bouncer>, E
 pub async fn middleware(
     State(bouncer): State<Arc<Bouncer>>,
     request: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> Result<impl IntoResponse, ErrorCause> {
     // Attempt to extract client's IP from the request
     let ip = request
         .extensions()
-        .get::<ConnectInfo<TcpConnectInfo>>()
-        .map(|x| (x.0).0)
-        .or(request
-            .extensions()
-            .get::<ConnectInfo<SocketAddr>>()
-            .map(|x| x.0))
-        .map(|x| x.ip());
+        .get::<Arc<ConnInfo>>()
+        .map(|x| x.remote_addr.ip());
 
     if let Some(v) = ip {
         if !bouncer.acquire_token(v) {

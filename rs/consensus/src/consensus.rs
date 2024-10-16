@@ -23,12 +23,15 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-use crate::consensus::{
-    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
-    dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
-    notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
-    random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator, validator::Validator,
+use crate::{
+    bouncer_metrics::BouncerMetrics,
+    consensus::{
+        block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
+        dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
+        notary::Notary, payload_builder::PayloadBuilderImpl, priority::new_bouncer, purger::Purger,
+        random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+        share_aggregator::ShareAggregator, validator::Validator,
+    },
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_notarization_delay_settings, membership::Membership,
@@ -37,13 +40,13 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache, ValidatedConsensusArtifact,
+        ChangeAction, ConsensusPool, ConsensusPoolCache, Mutations, ValidatedConsensusArtifact,
     },
     dkg::DkgPool,
     idkg::IDkgPool,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
-    p2p::consensus::{Bouncer, BouncerFactory, ChangeSetProducer},
+    p2p::consensus::{Bouncer, BouncerFactory, PoolMutationsProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
@@ -286,14 +289,14 @@ impl ConsensusImpl {
 
     /// Call the given sub-component's `on_state_change` function, mark the
     /// time it takes to complete, increment its invocation counter, and mark
-    /// the size of the [`ChangeSet`] result.
+    /// the size of the [`Mutations`] result.
     fn call_with_metrics<F>(
         &self,
         sub_component: ConsensusSubcomponent,
         on_state_change: F,
-    ) -> ChangeSet
+    ) -> Mutations
     where
-        F: FnOnce() -> ChangeSet,
+        F: FnOnce() -> Mutations,
     {
         self.last_invoked
             .borrow_mut()
@@ -371,17 +374,17 @@ impl ConsensusImpl {
     }
 }
 
-impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
-    type ChangeSet = ChangeSet;
+impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
+    type Mutations = Mutations;
     /// Invoke `on_state_change` on each subcomponent in order.
-    /// Return the first non-empty [ChangeSet] as returned by a subcomponent.
-    /// Otherwise return an empty [ChangeSet] if all subcomponents return
+    /// Return the first non-empty [Mutations] as returned by a subcomponent.
+    /// Otherwise return an empty [Mutations] if all subcomponents return
     /// empty.
     ///
     /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
-    ///    non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
+    ///    non-empty [Mutations]. It is important that a [Mutations] is fully
     ///    applied to the pool or timer before another subcomponent uses
     ///    them, because each subcomponent expects to see full state in order to
     ///    make correct decisions on what to do next.
@@ -398,7 +401,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     ///    on the memory consumption of our advertised validated pool.
     ///    The order of the rest subcomponents decides whom is given
     ///    a priority, but it should not affect liveness or correctness.
-    fn on_state_change(&self, pool: &T) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> Mutations {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
 
@@ -415,7 +418,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 self.log,
                 "consensus is halted by instructions of the subnet record in the registry"
             );
-            return ChangeSet::new();
+            return Mutations::new();
         }
 
         // Log some information about the state of consensus
@@ -486,7 +489,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             })
         };
 
-        let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
+        let calls: [&'_ dyn Fn() -> Mutations; 10] = [
             &finalize,
             &make_catch_up_package,
             &aggregate,
@@ -501,38 +504,37 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
 
         let changeset = self.schedule.call_next(&calls);
 
-        if let Some(settings) = get_notarization_delay_settings(
+        let settings = get_notarization_delay_settings(
             &self.log,
             &*self.registry_client,
             self.replica_config.subnet_id,
             self.registry_client.get_latest_version(),
-        ) {
-            let unit_delay = settings.unit_delay;
-            let current_time = self.time_source.get_relative_time();
-            for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-                let time_since_last_invoked =
-                    current_time.saturating_duration_since(*last_invoked_time);
-                let component_name = component.as_ref();
+        );
+        let unit_delay = settings.unit_delay;
+        let current_time = self.time_source.get_relative_time();
+        for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
+            let time_since_last_invoked =
+                current_time.saturating_duration_since(*last_invoked_time);
+            let component_name = component.as_ref();
+            self.metrics
+                .time_since_last_invoked
+                .with_label_values(&[component_name])
+                .set(time_since_last_invoked.as_secs_f64());
+
+            // Log starvation
+            if time_since_last_invoked > unit_delay {
                 self.metrics
-                    .time_since_last_invoked
+                    .starvation_counter
                     .with_label_values(&[component_name])
-                    .set(time_since_last_invoked.as_secs_f64());
+                    .inc();
 
-                // Log starvation
-                if time_since_last_invoked > unit_delay {
-                    self.metrics
-                        .starvation_counter
-                        .with_label_values(&[component_name])
-                        .inc();
-
-                    warn!(
-                        every_n_seconds => 5,
-                        self.log,
-                        "starvation detected: {:?} has not been invoked for {:?}",
-                        component,
-                        time_since_last_invoked
-                    );
-                }
+                warn!(
+                    every_n_seconds => 5,
+                    self.log,
+                    "starvation detected: {:?} has not been invoked for {:?}",
+                    component,
+                    time_since_last_invoked
+                );
             }
         }
 
@@ -560,7 +562,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
 pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
     timestamp: Time,
     messages: Vec<T>,
-) -> ChangeSet {
+) -> Mutations {
     messages
         .into_iter()
         .map(|msg| {
@@ -572,7 +574,7 @@ pub(crate) fn add_all_to_validated<T: ConsensusMessageHashable>(
         .collect()
 }
 
-fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> ChangeSet {
+fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>) -> Mutations {
     msg.map(|msg| {
         ChangeAction::AddToValidated(ValidatedConsensusArtifact {
             msg: msg.into_message(),
@@ -586,18 +588,27 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
+    metrics: BouncerMetrics,
 }
 
 impl ConsensusBouncer {
     /// Create a new [ConsensusBouncer].
-    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
-        ConsensusBouncer { message_routing }
+    pub fn new(
+        metrics_registry: &MetricsRegistry,
+        message_routing: Arc<dyn MessageRouting>,
+    ) -> Self {
+        ConsensusBouncer {
+            metrics: BouncerMetrics::new(metrics_registry, "consensus_pool"),
+            message_routing,
+        }
     }
 }
 
 impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for ConsensusBouncer {
     /// Return a bouncer function that matches the given consensus pool.
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 

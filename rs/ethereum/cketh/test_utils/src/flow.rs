@@ -1,13 +1,11 @@
 use crate::events::MinterEventAssert;
-use crate::mock::{
-    JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
-};
+use crate::mock::{JsonRpcMethod, MockJsonRpcProviders, MockJsonRpcProvidersBuilder};
 use crate::response::{
     block_response, encode_transaction, fee_history, send_raw_transaction_response,
     transaction_count_response, transaction_receipt, EthLogEntry,
 };
 use crate::{
-    assert_reply, CkEthSetup, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
+    assert_reply, CkEthSetup, JsonRpcProvider, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_PRINCIPAL_ID, EFFECTIVE_GAS_PRICE, EXPECTED_BALANCE, GAS_USED, MAX_TICKS,
     MINTER_ADDRESS,
@@ -365,13 +363,19 @@ impl ProcessWithdrawalParams {
     pub fn with_inconsistent_transaction_receipt(self) -> Self {
         self.with_mock_eth_get_transaction_receipt(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::Ankr,
+                JsonRpcProvider::Provider1,
                 &mut |response: &mut ethers_core::types::TransactionReceipt| {
                     response.status = Some(0.into())
                 },
             )
             .modify_response(
-                JsonRpcProvider::PublicNode,
+                JsonRpcProvider::Provider4,
+                &mut |response: &mut ethers_core::types::TransactionReceipt| {
+                    response.status = Some(0.into())
+                },
+            )
+            .modify_response(
+                JsonRpcProvider::Provider2,
                 &mut |response: &mut ethers_core::types::TransactionReceipt| {
                     response.status = Some(1.into())
                 },
@@ -684,7 +688,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
     ) -> Self {
         let default_eth_send_raw_transaction = if self.setup.as_ref().evm_rpc_id.is_none() {
             MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
-                .respond_with(JsonRpcProvider::Ankr, send_raw_transaction_response())
+                .respond_with(JsonRpcProvider::Provider1, send_raw_transaction_response())
         } else {
             MockJsonRpcProviders::when(JsonRpcMethod::EthSendRawTransaction)
                 .respond_for_all_with(send_raw_transaction_response())
@@ -708,7 +712,7 @@ impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdr
         let tx_hash = hash_transaction(tx, sig);
         self.send_raw_transaction(|mock| {
             mock.with_request_params(json!([expected_sent_tx]))
-                .respond_with(JsonRpcProvider::Ankr, tx_hash)
+                .respond_with(JsonRpcProvider::Provider1, tx_hash)
         })
     }
 

@@ -10,7 +10,7 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::{
+use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };
@@ -613,7 +613,8 @@ impl HttpOutcallError {
 }
 
 pub fn is_response_too_large(code: &RejectionCode, message: &str) -> bool {
-    code == &RejectionCode::SysFatal && message.contains("size limit")
+    code == &RejectionCode::SysFatal
+        && (message.contains("size limit") || message.contains("length limit"))
 }
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
@@ -805,7 +806,7 @@ fn is_successful_http_code(status: &u16) -> bool {
 }
 
 fn sort_by_hash<T: Serialize + DeserializeOwned>(to_sort: &mut [T]) {
-    use ic_crypto_sha3::Keccak256;
+    use ic_sha3::Keccak256;
     to_sort.sort_by(|a, b| {
         let a_hash = Keccak256::hash(serde_json::to_vec(a).expect("BUG: failed to serialize"));
         let b_hash = Keccak256::hash(serde_json::to_vec(b).expect("BUG: failed to serialize"));

@@ -1,3 +1,37 @@
+// HTTP gateway interface
+
+type HeaderField = record {
+  text;
+  text;
+};
+type HttpGatewayRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+  certificate_version: opt nat16;
+};
+type HttpGatewayResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+  upgrade : opt bool;
+  streaming_strategy: opt StreamingStrategy;
+};
+type StreamingCallbackHttpResponse = record {
+  body: blob;
+  token: opt Token;
+};
+type Token = record {};
+type StreamingStrategy = variant {
+  Callback: record {
+    callback: func (Token) -> (StreamingCallbackHttpResponse) query;
+    token: Token;
+  };
+};
+
+// Schnorr interface
+
 type SchnorrAlgorithm = variant {
   bip340secp256k1;
   ed25519;
@@ -18,6 +52,9 @@ type SignWithSchnorrResult = variant {
   Ok : blob;
   Err : text;
 };
+
+// ECDSA interface
+
 type EcdsaPublicKeyResponse = record {
   public_key : blob;
   chain_code : blob;
@@ -30,6 +67,9 @@ type SignWithEcdsaResult = variant {
   Ok : blob;
   Err : text;
 };
+
+// canister HTTP outcalls
+
 type HttpHeader = record {
   name : text;
   value : text;
@@ -39,16 +79,36 @@ type HttpResponse = record {
   headers : vec HttpHeader;
   body : blob;
 };
+type RejectionCode = variant {
+  NoError;
+  SysFatal;
+  SysTransient;
+  DestinationInvalid;
+  CanisterReject;
+  CanisterError;
+  Unknown;
+};
+type HttpResponseResult = variant {
+  Ok : HttpResponse;
+  Err : record {RejectionCode; text};
+};
+
 type TransformArgs = record {
   response : HttpResponse;
   context : blob;
 };
+
 service : {
+  http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
   schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
   sign_with_schnorr : (blob, vec blob, SchnorrKeyId) -> (SignWithSchnorrResult);
   ecdsa_public_key : (opt principal, vec blob, text) -> (EcdsaPublicKeyResult);
   sign_with_ecdsa : (blob, vec blob, text) -> (SignWithEcdsaResult);
-  canister_http : () -> (HttpResponse);
+  canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
+  whoami : () -> (text);
+  whois : (principal) -> (text);
+  blob_len : (blob) -> (nat64);
+  call_with_large_blob : (principal, nat64) -> (nat64);
 }

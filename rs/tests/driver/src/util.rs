@@ -1412,7 +1412,6 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ backup_purging_interval_secs }}", "0")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
         .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
@@ -1477,7 +1476,9 @@ impl LogStream {
 
         // Use plaintext instead of json, because some messages are too large for the journal json serializer
         stream
-            .write_all(b"GET /entries?follow HTTP/1.1\n\r\n\r")
+            .write_all(
+                format!("GET /entries?follow HTTP/1.1\r\nHost:{ip_addr}:19531\r\n\r\n").as_bytes(),
+            )
             .await?;
 
         let bf = BufReader::new(stream);

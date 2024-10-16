@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-neuron-hotkey";
+const VM_NAME: &str = "neuron-hotkey";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
@@ -254,5 +254,5 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
     )
     .unwrap();
     let err = ros.construction_submit(signed).await.unwrap().unwrap_err();
-    assert_ic_error(&err, 740, 403, "does not match the public key");
+    assert_ic_error(&err, 740, 400, "does not match the public key");
 }

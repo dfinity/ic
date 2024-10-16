@@ -1,9 +1,12 @@
+use std::fmt;
+use std::process::Command;
+
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::node_type::NodeType;
-use utils::{get_command_stdout, intersperse};
+use utils::intersperse;
 
 /// Wrapper types for MAC addresses
 /// - ensure clients cannot modify or construct incorrectly.
@@ -27,6 +30,18 @@ impl UnformattedMacAddress {
 impl FormattedMacAddress {
     pub fn get(&self) -> String {
         self.0.clone()
+    }
+}
+
+impl fmt::Display for UnformattedMacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.get())
+    }
+}
+
+impl fmt::Display for FormattedMacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.get())
     }
 }
 
@@ -93,47 +108,35 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
 
 /// Generate a deterministic unformatted MAC address
 /// E.g. "6a01eb49a2b0"
-fn generate_mac_address_internal(
-    bmc_mac: &FormattedMacAddress,
+pub fn generate_mac_address(
+    mgmt_mac: &FormattedMacAddress,
     deployment_name: &str,
     node_type: &NodeType,
-    version: char,
 ) -> Result<UnformattedMacAddress> {
-    if version != '4' && version != '6' {
-        bail!("Invalid version used to generate MAC address: {}", version);
-    }
-
     // Newline added to match behavior
-    let seed = format!("{}{}\n", bmc_mac.get(), deployment_name);
+    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_name);
     let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
-    // When IPv4 and IPv6 were split, a different MAC for each bond was desired.
-    // Leave for compatibility until later
-    let version_octet = match version {
-        '4' => "4a",
-        _ => "6a",
-    };
     let node_index = node_type.to_char();
-    let mac = format!("{}0{}{}", version_octet, node_index, vendor_part);
+    let mac = format!("6a0{}{}", node_index, vendor_part);
     UnformattedMacAddress::try_from(mac.as_str())
 }
 
-/// Query the BMC MAC address and return deterministically generated MAC
-pub fn generate_mac_address(
-    deployment_name: &str,
-    node_type: &NodeType,
-    bmc_mac: &Option<FormattedMacAddress>,
-) -> Result<UnformattedMacAddress> {
-    let bmc_mac = match bmc_mac {
-        Some(bmc_mac) => {
-            eprintln!("Using bmc_mac address found in config: {}", bmc_mac.get());
-            bmc_mac.clone()
-        }
-        None => {
-            let ipmitool_output = get_command_stdout("ipmitool", ["lan", "print"])?;
-            get_mac_address_from_ipmitool_output(&ipmitool_output)?
-        }
-    };
-    generate_mac_address_internal(&bmc_mac, deployment_name, node_type, '6')
+/// Retrieves the MAC address from the IPMI LAN interface
+pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
+    let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+
+    // A bug in our version of ipmitool causes it to exit with an error
+    // status, but we have enough output to work with anyway.
+    // https://github.com/ipmitool/ipmitool/issues/388
+    if !output.status.success() {
+        eprintln!(
+            "Error running ipmitool: {}",
+            std::str::from_utf8(&output.stderr)?
+        );
+    }
+    let ipmitool_output = String::from_utf8(output.stdout)?;
+
+    get_mac_address_from_ipmitool_output(&ipmitool_output)
 }
 
 #[cfg(test)]
@@ -170,44 +173,20 @@ pub mod tests {
     #[test]
     fn test_generate_mac_address() {
         assert_eq!(
-            generate_mac_address_internal(
-                &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
-                "mainnet",
-                &NodeType::SetupOS,
-                '4'
-            )
-            .unwrap()
-            .get(),
-            "4a0ff7e0c684"
-        );
-        assert_eq!(
-            generate_mac_address_internal(
+            generate_mac_address(
                 &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
                 "mainnet",
                 &NodeType::GuestOS,
-                '4'
-            )
-            .unwrap()
-            .get(),
-            "4a01f7e0c684"
-        );
-        assert_eq!(
-            generate_mac_address_internal(
-                &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
-                "mainnet",
-                &NodeType::GuestOS,
-                '6'
             )
             .unwrap()
             .get(),
             "6a01f7e0c684"
         );
         assert_eq!(
-            generate_mac_address_internal(
+            generate_mac_address(
                 &FormattedMacAddress::try_from("00:aa:bb:cc:dd:ee").unwrap(),
                 "mainnet",
                 &NodeType::GuestOS,
-                '6'
             )
             .unwrap()
             .get(),

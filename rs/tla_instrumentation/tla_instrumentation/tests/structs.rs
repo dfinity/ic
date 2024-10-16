@@ -41,6 +41,7 @@ mod tla_stuff {
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
         state.add("counter", c.counter.to_tla_value());
+        state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
     }
 
@@ -271,7 +272,7 @@ fn struct_test() {
     set_java_path();
     // Construct paths to the data files
     let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("ic/rs/tla_instrumentation/tla");
+    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/tla_instrumentation/tla");
     let update = trace.update.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();

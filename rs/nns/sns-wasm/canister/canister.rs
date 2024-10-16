@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{caller, Funds},
     over, over_async, over_init,
@@ -15,7 +15,7 @@ use ic_nervous_system_clients::{
     canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
 };
 use ic_nervous_system_runtime::DfnRuntime;
-use ic_nns_constants::{DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT, GOVERNANCE_CANISTER_ID};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -69,18 +69,17 @@ impl CanisterApi for CanisterApiImpl {
         target_subnet: SubnetId,
         controller_id: PrincipalId,
         cycles: Cycles,
+        wasm_memory_limit: u64,
     ) -> Result<CanisterId, String> {
+        let settings = CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![controller_id])
+            .with_wasm_memory_limit(wasm_memory_limit);
         let result: Result<CanisterIdRecord, _> = dfn_core::api::call_with_funds_and_cleanup(
             target_subnet.into(),
             &Method::CreateCanister.to_string(),
             candid_one,
             CreateCanisterArgs {
-                settings: Some(
-                    CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![controller_id])
-                        .with_wasm_memory_limit(DEFAULT_SNS_FRAMEWORK_CANISTER_WASM_MEMORY_LIMIT)
-                        .build(),
-                ),
+                settings: Some(settings.build()),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             Funds::new(cycles.get().try_into().unwrap()),
@@ -233,7 +232,7 @@ fn handle_call_error(prefix: String) -> impl FnOnce((Option<i32>, String)) -> St
 
 impl CanisterApiImpl {
     async fn stop_canister(&self, canister: CanisterId) -> Result<(), String> {
-        dfn_core::call(
+        () = dfn_core::call(
             CanisterId::ic_00(),
             "stop_canister",
             candid_one,
@@ -582,13 +581,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("sns-wasm.did").to_string())
 }
 
 fn main() {

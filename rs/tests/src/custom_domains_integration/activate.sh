@@ -1,20 +1,12 @@
-#!/run/current-system/sw/bin/bash
+#!/usr/bin/env bash
 
-function load() {
-    NAME=$1
+# Load docker images for various services. Services are started by the test driver.
 
-    # Load image
-    docker load -i "/config/${NAME}.tar"
+set -euo pipefail
 
-    # Rename image
-    docker tag \
-        bazel/image:image "${NAME}"
+# load all necessary images
 
-    # Remove temporary image
-    docker rmi bazel/image:image
-}
-
-load coredns
-load pebble
-load python3
-load openssl
+docker load -i "/config/coredns.tar"
+docker load -i "/config/pebble.tar"
+docker load -i "/config/python3.tar"
+docker load -i "/config/openssl.tar"

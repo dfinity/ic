@@ -11,7 +11,7 @@ BTC_RUNTIME_DEPS = [
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
 system_test_nns(
@@ -32,7 +32,7 @@ system_test_nns(
 system_test(
     name = "icrc1_agent_test",
     env = {
-        "LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
+        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -52,7 +52,6 @@ system_test_nns(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,

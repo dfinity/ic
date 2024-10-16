@@ -3,14 +3,13 @@ use crate::{
     environment::{CanisterClients, CanisterEnvironment},
     logs::{ERROR, INFO},
     pb::v1::{
-        claim_swap_neurons_request::{NeuronRecipe, NeuronRecipes},
-        error_refund_icp_response, set_dapp_controllers_call_result,
-        set_mode_call_result::{self, SetModeResult},
+        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
         settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
-        NeuronIds as SwapNeuronIds, Params, SetDappControllersCallResult, SetModeCallResult,
+        Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
@@ -20,6 +19,7 @@ use ic_canister_log::log;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, ONE_DAY_SECONDS};
 use ic_nervous_system_proto::pb::v1::Principals;
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -140,8 +140,8 @@ impl Init {
     }
 
     pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
-        use ic_nervous_system_common::ledger::IcpLedgerCanister;
 
         let sns_root = {
             let sns_root_canister_id = self
@@ -162,7 +162,7 @@ impl Init {
             let icp_ledger_canister_id = self
                 .icp_ledger()
                 .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
-            IcpLedgerCanister::new(icp_ledger_canister_id)
+            IcpLedgerCanister::<DfnRuntime>::new(icp_ledger_canister_id)
         };
 
         let sns_ledger = {
@@ -522,9 +522,7 @@ impl TryFrom<&Init> for Params {
         let params = Params {
             min_direct_participation_icp_e8s: init.min_direct_participation_icp_e8s,
             max_direct_participation_icp_e8s: init.max_direct_participation_icp_e8s,
-            neuron_basket_construction_parameters: init
-                .neuron_basket_construction_parameters
-                .clone(),
+            neuron_basket_construction_parameters: init.neuron_basket_construction_parameters,
             sale_delay_seconds: None,
             min_participants,
             min_participant_icp_e8s,
@@ -1084,43 +1082,6 @@ impl From<SwapNeuronId> for NeuronId {
     }
 }
 
-// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
-impl From<Vec<SwapNeuronId>> for SwapNeuronIds {
-    fn from(neuron_ids: Vec<SwapNeuronId>) -> Self {
-        SwapNeuronIds { neuron_ids }
-    }
-}
-
-// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
-impl From<Vec<NeuronId>> for SwapNeuronIds {
-    fn from(neuron_ids: Vec<NeuronId>) -> Self {
-        SwapNeuronIds {
-            neuron_ids: neuron_ids.into_iter().map(SwapNeuronId::from).collect(),
-        }
-    }
-}
-
-// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
-impl From<SwapNeuronIds> for Vec<SwapNeuronId> {
-    fn from(neuron_ids: SwapNeuronIds) -> Self {
-        neuron_ids.neuron_ids
-    }
-}
-
-// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
-impl From<Vec<NeuronRecipe>> for NeuronRecipes {
-    fn from(neuron_recipes: Vec<NeuronRecipe>) -> Self {
-        NeuronRecipes { neuron_recipes }
-    }
-}
-
-// TODO(NNS1-3306): This From implementation will no longer be necessary and should be removed
-impl From<NeuronRecipes> for Vec<NeuronRecipe> {
-    fn from(neuron_recipes: NeuronRecipes) -> Self {
-        neuron_recipes.neuron_recipes
-    }
-}
-
 /// Internal definition of a NeuronsFundNeuron. This is the simplified version with
 /// all options removed.
 ///
@@ -1343,7 +1304,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
@@ -1351,7 +1312,7 @@ mod tests {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
                 + Params::MAX_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(
             params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
@@ -1362,7 +1323,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params.is_valid_if_initiated_at(0).is_err());
 
@@ -1371,7 +1332,7 @@ mod tests {
                 + Params::MAX_SALE_DURATION_SECONDS
                 + 1,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params
             .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
@@ -1385,7 +1346,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
@@ -1394,7 +1355,7 @@ mod tests {
                 + Params::MAX_SALE_DURATION_SECONDS
                 + 1,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(
             params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
@@ -1408,7 +1369,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
@@ -1416,7 +1377,7 @@ mod tests {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
                 + Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(
             params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
@@ -1427,7 +1388,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS - 1,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params.is_valid_if_initiated_at(0).is_err());
 
@@ -1436,7 +1397,7 @@ mod tests {
                 + Params::MIN_SALE_DURATION_SECONDS
                 - 1,
             sale_delay_seconds: Some(0),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params
             .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
@@ -1450,7 +1411,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(params.is_valid_if_initiated_at(0), Ok(()));
 
@@ -1459,7 +1420,7 @@ mod tests {
                 + Params::MIN_SALE_DURATION_SECONDS
                 + 1,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert_eq!(
             params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS),
@@ -1471,7 +1432,7 @@ mod tests {
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params.is_valid_if_initiated_at(0).is_err());
 
@@ -1479,7 +1440,7 @@ mod tests {
             swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
                 + Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(1),
-            ..PARAMS.clone()
+            ..PARAMS
         };
         assert!(params
             .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)

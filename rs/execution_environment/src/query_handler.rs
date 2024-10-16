@@ -44,6 +44,7 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    time::Instant,
 };
 use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
@@ -198,11 +199,19 @@ impl InternalHttpQueryHandler {
         if query.receiver == CanisterId::ic_00() {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return fetch_canister_logs(
+                    let since = Instant::now(); // Start logging execution time.
+                    let result = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
+                        self.config.allowed_viewers_feature,
                     );
+                    self.metrics.observe_subnet_query_message(
+                        QueryMethod::FetchCanisterLogs,
+                        since.elapsed().as_secs_f64(),
+                        &result,
+                    );
+                    return result;
                 }
                 Err(_) => {
                     return Err(UserError::new(
@@ -282,14 +291,11 @@ impl InternalHttpQueryHandler {
     }
 }
 
-// TODO(EXC-1678): remove after release.
-/// Feature flag to enable/disable allowed viewers for canister log visibility.
-const ALLOWED_VIEWERS_ENABLED: bool = false;
-
 fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
+    allowed_viewers_feature: FlagStatus,
 ) -> Result<WasmResult, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -301,7 +307,7 @@ fn fetch_canister_logs(
 
     let log_visibility = match canister.log_visibility() {
         // If the feature is disabled override `AllowedViewers` with default value.
-        LogVisibilityV2::AllowedViewers(_) if !ALLOWED_VIEWERS_ENABLED => {
+        LogVisibilityV2::AllowedViewers(_) if allowed_viewers_feature == FlagStatus::Disabled => {
             &LogVisibilityV2::default()
         }
         other => other,

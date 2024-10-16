@@ -83,6 +83,7 @@ const PHASE_COMMIT: &str = "commit";
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
+const METRIC_TIMED_OUT_CALLBACKS_TOTAL: &str = "mr_timed_out_callbacks_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
@@ -102,6 +103,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_API_BOUNDARY_NODES: &str =
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 pub const CRITICAL_ERROR_NON_INCREASING_BATCH_TIME: &str = "mr_non_increasing_batch_time";
+pub const CRITICAL_ERROR_INDUCT_RESPONSE_FAILED: &str = "mr_induct_response_failed";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -272,6 +274,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
     pub(crate) timed_out_messages_total: IntCounter,
+    /// Number of timed out callbacks.
+    pub(crate) timed_out_callbacks_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -313,6 +317,9 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: the batch times of successive batches were not strictly
     /// monotonically increasing.
     critical_error_non_increasing_batch_time: IntCounter,
+    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
+    /// failures to induct responses.
+    pub critical_error_induct_response_failed: IntCounter,
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
@@ -363,6 +370,10 @@ impl MessageRoutingMetrics {
                 METRIC_TIMED_OUT_MESSAGES_TOTAL,
                 "Count of timed out messages.",
             ),
+            timed_out_callbacks_total: metrics_registry.int_counter(
+                METRIC_TIMED_OUT_CALLBACKS_TOTAL,
+                "Count of expired best-effort callbacks.",
+            ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
                 "Height at which the subnet last split (if during the lifetime of this replica process).",
@@ -407,6 +418,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             critical_error_non_increasing_batch_time: metrics_registry
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
+            critical_error_induct_response_failed: metrics_registry
+                .error_counter(CRITICAL_ERROR_INDUCT_RESPONSE_FAILED),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
 
@@ -550,6 +563,7 @@ impl BatchProcessorImpl {
             subnet_id,
             hypervisor_config.clone(),
             metrics_registry,
+            &metrics,
             Arc::clone(&time_in_stream_metrics),
             log.clone(),
         ));
@@ -570,6 +584,7 @@ impl BatchProcessorImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &metrics,
             time_in_stream_metrics,
             log.clone(),
         ));
@@ -1380,6 +1395,7 @@ impl MessageRoutingImpl {
         let stream_builder = Box::new(routing::stream_builder::StreamBuilderImpl::new(
             subnet_id,
             metrics_registry,
+            &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),

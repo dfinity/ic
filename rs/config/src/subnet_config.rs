@@ -60,13 +60,7 @@ const MAX_INSTRUCTIONS_PER_ROUND: NumInstructions = NumInstructions::new(7 * B);
 
 // Limit per `install_code` message. It's bigger than the limit for a regular
 // update call to allow for canisters with bigger state to be upgraded.
-// This is a temporary measure until a longer term solution that alleviates the
-// limitations with the current upgrade process is implemented.
-//
-// The value is picked to allow roughly for 4GB of state to be stored to stable
-// memory during upgrade. We know that we hit `MAX_INSTRUCTIONS_PER_MESSAGE`
-// with roughly 100MB of state, so we set the limit to 40x.
-const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(40 * 5 * B);
+const MAX_INSTRUCTIONS_PER_INSTALL_CODE: NumInstructions = NumInstructions::new(300 * B);
 
 // The limit on the number of instructions a slice of an `install_code` message
 // is allowed to executed.
@@ -303,7 +297,7 @@ impl SchedulerConfig {
         let max_instructions_per_message_without_dts = NumInstructions::from(50 * B);
         let max_instructions_per_install_code = NumInstructions::from(1_000 * B);
         let max_instructions_per_slice = NumInstructions::from(2 * B);
-        let max_instructions_per_install_code_slice = NumInstructions::from(10 * B);
+        let max_instructions_per_install_code_slice = NumInstructions::from(5 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -343,35 +337,7 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
-        // When the `install_code` instruction limit on application subnets is
-        // also increased to 300B, then this line can be removed.
-        let max_instructions_per_install_code = NumInstructions::from(300 * B);
-        Self {
-            scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
-            max_paused_executions: MAX_PAUSED_EXECUTIONS,
-            subnet_heap_delta_capacity: SUBNET_HEAP_DELTA_CAPACITY,
-            heap_delta_initial_reserve: HEAP_DELTA_INITIAL_RESERVE,
-            max_instructions_per_round: MAX_INSTRUCTIONS_PER_ROUND,
-            max_instructions_per_message: MAX_INSTRUCTIONS_PER_MESSAGE,
-            max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
-            max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
-            instruction_overhead_per_execution: INSTRUCTION_OVERHEAD_PER_EXECUTION,
-            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
-            instruction_overhead_per_canister_for_finalization:
-                INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code,
-            max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
-            max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
-            max_message_duration_before_warn_in_seconds:
-                MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
-            heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
-            install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
-            dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
-            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
-            upload_wasm_chunk_instructions: DEFAULT_UPLOAD_CHUNK_INSTRUCTIONS,
-            canister_snapshot_baseline_instructions:
-                DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
-        }
+        Self::application_subnet()
     }
 
     pub fn default_for_subnet_type(subnet_type: SubnetType) -> Self {
@@ -456,13 +422,6 @@ pub struct CyclesAccountManagerConfig {
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
         Self {
-            max_storage_reservation_period: Duration::from_secs(300_000_000),
-            ..Self::verified_application_subnet()
-        }
-    }
-
-    pub fn verified_application_subnet() -> Self {
-        Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
@@ -485,11 +444,13 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            // This effectively disables the storage reservation mechanism on
-            // verified application subnets.
-            max_storage_reservation_period: Duration::from_secs(0),
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
+    }
+
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets

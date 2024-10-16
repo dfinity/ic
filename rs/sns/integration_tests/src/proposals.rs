@@ -435,8 +435,14 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
+            let expected_error = "failed to decode";
             match res {
-                Err(e) => assert!(e.contains("Deserialization Failed")),
+                Err(e) => assert!(
+                    e.contains(expected_error),
+                    "Expected error string \"{}\" not present in actual error. Error was: {:?}",
+                    expected_error,
+                    e
+                ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
             Ok(())
@@ -1758,7 +1764,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()
@@ -1792,7 +1798,7 @@ fn test_change_voting_rewards_round_duration() {
             let action = NervousSystemParameters {
                 voting_rewards_parameters: Some(VotingRewardsParameters {
                     round_duration_seconds: Some(current_voting_rewards_round_duration_seconds),
-                    ..VOTING_REWARDS_PARAMETERS.clone()
+                    ..VOTING_REWARDS_PARAMETERS
                 }),
                 // Don't change anything else.
                 ..Default::default()

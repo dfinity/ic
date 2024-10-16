@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:pocket-ic-tests.bzl", "pocket_ic_mainnet_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -71,4 +72,9 @@ rust_ic_test(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
     ],
+)
+
+pocket_ic_mainnet_test(
+    name = "kyt_integration_test_mainnet",
+    test = ":kyt_integration_test",
 )

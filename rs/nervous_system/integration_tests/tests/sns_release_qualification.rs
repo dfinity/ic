@@ -14,7 +14,7 @@ use ic_nns_test_utils::sns_wasm::{
     ensure_sns_wasm_gzipped,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
-use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
+use ic_sns_wasm::pb::v1::SnsCanisterType;
 
 /// In order to ensure that creating an SNS still works, we need to test the following:
 /// We test new SNS canisters with mainnet NNS canisters
@@ -31,8 +31,8 @@ use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
 /// Note: FI canisters are considered fully tested elsewhere, and have stable APIs.
 
 /// Deployment tests
-#[test]
-fn test_deployment_all_upgrades() {
+#[tokio::test]
+async fn test_deployment_all_upgrades() {
     test_sns_deployment(
         vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID],
         vec![
@@ -42,16 +42,17 @@ fn test_deployment_all_upgrades() {
             SnsCanisterType::Swap,
             SnsCanisterType::Index,
         ],
-    );
+    )
+    .await;
 }
 
-#[test]
-fn test_deployment_with_only_nns_upgrades() {
-    test_sns_deployment(vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID], vec![]);
+#[tokio::test]
+async fn test_deployment_with_only_nns_upgrades() {
+    test_sns_deployment(vec![GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID], vec![]).await;
 }
 
-#[test]
-fn test_deployment_with_only_sns_upgrades() {
+#[tokio::test]
+async fn test_deployment_with_only_sns_upgrades() {
     test_sns_deployment(
         vec![],
         vec![
@@ -61,35 +62,37 @@ fn test_deployment_with_only_sns_upgrades() {
             SnsCanisterType::Swap,
             SnsCanisterType::Index,
         ],
-    );
+    )
+    .await;
 }
 
-#[test]
-fn test_deployment_with_sns_root_and_governance_upgrade() {
+#[tokio::test]
+async fn test_deployment_with_sns_root_and_governance_upgrade() {
     test_sns_deployment(
         vec![],
         vec![SnsCanisterType::Root, SnsCanisterType::Governance],
-    );
+    )
+    .await;
 }
 
-#[test]
-fn test_deployment_swap_upgrade() {
-    test_sns_deployment(vec![], vec![SnsCanisterType::Swap]);
+#[tokio::test]
+async fn test_deployment_swap_upgrade() {
+    test_sns_deployment(vec![], vec![SnsCanisterType::Swap]).await;
 }
 
 /// Upgrade Tests
-#[test]
-fn test_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]);
+#[tokio::test]
+async fn test_upgrade_sns_gov_root() {
+    test_sns_upgrade(vec![SnsCanisterType::Root, SnsCanisterType::Governance]).await;
 }
 
-#[test]
-fn test_upgrade_upgrade_sns_gov_root() {
-    test_sns_upgrade(vec![SnsCanisterType::Governance, SnsCanisterType::Root]);
+#[tokio::test]
+async fn test_upgrade_upgrade_sns_gov_root() {
+    test_sns_upgrade(vec![SnsCanisterType::Governance, SnsCanisterType::Root]).await;
 }
 
-#[test]
-fn test_upgrade_everything() {
+#[tokio::test]
+async fn test_upgrade_everything() {
     test_sns_upgrade(vec![
         SnsCanisterType::Root,
         SnsCanisterType::Governance,
@@ -97,17 +100,18 @@ fn test_upgrade_everything() {
         SnsCanisterType::Index,
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,
-    ]);
+    ])
+    .await;
 }
 
 /// Tests a deployment of the SNS.
 /// Usually nns_canisters do not need to be upgraded, but sometimes they have to be due to dependencies
 /// or API changes to init arguments
-pub fn test_sns_deployment(
+pub async fn test_sns_deployment(
     nns_canisters_to_upgrade: Vec<CanisterId>, // should use constants from nns/constants to make this easy to track
     sns_canisters_to_upgrade: Vec<SnsCanisterType>,
 ) {
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions();
+    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
 
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
@@ -124,7 +128,7 @@ pub fn test_sns_deployment(
         .unwrap();
 
     for canister_id in nns_canisters_to_upgrade {
-        upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, canister_id);
+        upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, canister_id).await;
     }
 
     for canister_type in sns_canisters_to_upgrade {
@@ -143,31 +147,32 @@ pub fn test_sns_deployment(
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
-    );
-    let DeployedSns {
-        swap_canister_id: Some(swap_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
-    };
+    )
+    .await;
 
-    sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
-    sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .unwrap();
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    )
+    .await;
 }
 
-fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
-    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions();
+async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
+    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
 
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
@@ -185,20 +190,12 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
 
     // Deploy an SNS instance via proposal.
     let sns_instance_label = "1";
-    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
         create_service_nervous_system,
         sns_instance_label,
-    );
-    let DeployedSns {
-        governance_canister_id: Some(sns_governance_canister_id),
-        ledger_canister_id: Some(sns_ledger_canister_id),
-        swap_canister_id: Some(swap_canister_id),
-        ..
-    } = deployed_sns
-    else {
-        panic!("Cannot find some SNS canister IDs in {:#?}", deployed_sns);
-    };
+    )
+    .await;
 
     for canister_type in &sns_canisters_to_upgrade {
         let wasm = match canister_type {
@@ -214,7 +211,7 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 
@@ -239,7 +236,7 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         };
 
         let wasm = ensure_sns_wasm_gzipped(wasm);
-        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
 
@@ -248,23 +245,37 @@ fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         // Testing the Archive canister requires that it can be spawned.
         sns::ensure_archive_canister_is_spawned_or_panic(
             &pocket_ic,
-            sns_governance_canister_id,
-            sns_ledger_canister_id,
-        );
+            sns.governance.canister_id,
+            sns.ledger.canister_id,
+        )
+        .await;
     }
 
-    sns::swap::await_swap_lifecycle(&pocket_ic, swap_canister_id, Lifecycle::Open).unwrap();
-    sns::swap::smoke_test_participate_and_finalize(&pocket_ic, swap_canister_id, swap_parameters);
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .unwrap();
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    )
+    .await;
 
     // Every canister we are testing has two upgrades.  We are just making sure the counts match
-    for _ in sns_canisters_to_upgrade {
-        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
+    for canister_type in &sns_canisters_to_upgrade {
+        sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_governance_canister_id,
-        );
-        sns::governance::propose_to_upgrade_sns_to_next_version_and_wait(
+            sns.root.canister_id,
+            *canister_type,
+        )
+        .await;
+    }
+    for canister_type in sns_canisters_to_upgrade {
+        sns::upgrade_sns_to_next_version_and_assert_change(
             &pocket_ic,
-            sns_governance_canister_id,
-        );
+            sns.root.canister_id,
+            canister_type,
+        )
+        .await;
     }
 }

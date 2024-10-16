@@ -1,6 +1,4 @@
-#![allow(dead_code)]
-
-use super::queue::CanisterQueue;
+use super::queue::InputQueue;
 use super::CanisterQueues;
 use crate::{InputQueueType, InputSource};
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -176,7 +174,7 @@ impl InputSchedule {
     /// Time complexity: `O(n * log(n))`.
     pub(super) fn test_invariants<'a>(
         &self,
-        input_queues: impl Iterator<Item = (&'a CanisterId, &'a CanisterQueue)>,
+        input_queues: impl Iterator<Item = (&'a CanisterId, &'a InputQueue)>,
         input_queue_type_fn: &dyn Fn(&CanisterId) -> InputQueueType,
     ) -> Result<(), String> {
         let mut local_schedule: BTreeSet<_> = self.local_sender_schedule.iter().collect();
@@ -305,11 +303,11 @@ pub struct CanisterQueuesLoopDetector {
 impl CanisterQueuesLoopDetector {
     /// Detects a loop in `CanisterQueues`.
     pub fn detected_loop(&self, canister_queues: &CanisterQueues) -> bool {
-        let skipped_all_remote =
-            self.remote_queue_skip_count >= canister_queues.remote_subnet_input_schedule.len();
+        let skipped_all_remote = self.remote_queue_skip_count
+            >= canister_queues.input_schedule.remote_sender_schedule.len();
 
-        let skipped_all_local =
-            self.local_queue_skip_count >= canister_queues.local_subnet_input_schedule.len();
+        let skipped_all_local = self.local_queue_skip_count
+            >= canister_queues.input_schedule.local_sender_schedule.len();
 
         let skipped_all_ingress =
             self.ingress_queue_skip_count >= canister_queues.ingress_queue.ingress_schedule_size();

@@ -1,14 +1,80 @@
-use candid::{CandidType, Principal};
+use candid::{define_function, CandidType, Principal};
+use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::ecdsa::{
     ecdsa_public_key as ic_cdk_ecdsa_public_key, sign_with_ecdsa as ic_cdk_sign_with_ecdsa,
     EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, EcdsaPublicKeyResponse, SignWithEcdsaArgument,
 };
 use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpMethod, HttpResponse, TransformArgs,
-    TransformContext, TransformFunc,
+    http_request as canister_http_outcall, CanisterHttpRequestArgument, HttpMethod, HttpResponse,
+    TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{query, update};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
+
+// HTTP gateway interface
+
+pub type HeaderField = (String, String);
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct Token {}
+
+define_function!(pub StreamingCallbackFunction : (Token) -> (StreamingCallbackHttpResponse) query);
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum StreamingStrategy {
+    Callback {
+        callback: StreamingCallbackFunction,
+        token: Token,
+    },
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct StreamingCallbackHttpResponse {
+    pub body: ByteBuf,
+    pub token: Option<Token>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpGatewayRequest {
+    pub method: String,
+    pub url: String,
+    pub headers: Vec<HeaderField>,
+    pub body: ByteBuf,
+    pub certificate_version: Option<u16>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpGatewayResponse {
+    pub status_code: u16,
+    pub headers: Vec<HeaderField>,
+    pub body: ByteBuf,
+    pub upgrade: Option<bool>,
+    pub streaming_strategy: Option<StreamingStrategy>,
+}
+
+#[query]
+fn http_request(request: HttpGatewayRequest) -> HttpGatewayResponse {
+    if request.method == "GET" && request.url == "/asset.txt" {
+        HttpGatewayResponse {
+            status_code: 200,
+            headers: vec![],
+            body: ByteBuf::from(b"My sample asset."),
+            upgrade: None,
+            streaming_strategy: None,
+        }
+    } else {
+        HttpGatewayResponse {
+            status_code: 404,
+            headers: vec![],
+            body: ByteBuf::from(b"Not Found."),
+            upgrade: None,
+            streaming_strategy: None,
+        }
+    }
+}
+
+// Schnorr interface
 
 #[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum SchnorrAlgorithm {
@@ -96,6 +162,8 @@ async fn sign_with_schnorr(
     Ok(internal_reply.signature)
 }
 
+// ECDSA interface
+
 #[update]
 async fn ecdsa_public_key(
     canister_id: Option<Principal>,
@@ -137,8 +205,10 @@ async fn sign_with_ecdsa(
         .signature)
 }
 
+// canister HTTP outcalls
+
 #[update]
-async fn canister_http() -> HttpResponse {
+async fn canister_http() -> Result<HttpResponse, (RejectionCode, String)> {
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
         url: "https://example.com".to_string(),
         max_response_bytes: None,
@@ -148,7 +218,7 @@ async fn canister_http() -> HttpResponse {
         transform: None,
     };
     let cycles = 20_849_238_800; // magic number derived from the error message when setting this to zero
-    http_request(arg, cycles).await.unwrap().0
+    canister_http_outcall(arg, cycles).await.map(|resp| resp.0)
 }
 
 #[query]
@@ -177,55 +247,35 @@ async fn canister_http_with_transform() -> HttpResponse {
         }),
     };
     let cycles = 20_849_431_200; // magic number derived from the error message when setting this to zero
-    http_request(arg, cycles).await.unwrap().0
+    canister_http_outcall(arg, cycles).await.unwrap().0
+}
+
+// inter-canister calls
+
+#[update]
+async fn whoami() -> String {
+    ic_cdk::id().to_string()
+}
+
+#[update]
+async fn whois(canister: Principal) -> String {
+    ic_cdk::call::<_, (String,)>(canister, "whoami", ((),))
+        .await
+        .unwrap()
+        .0
+}
+
+#[update]
+async fn blob_len(blob: Vec<u8>) -> usize {
+    blob.len()
+}
+
+#[update]
+async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
+    ic_cdk::call::<_, (usize,)>(canister, "blob_len", (vec![42_u8; blob_len],))
+        .await
+        .unwrap()
+        .0
 }
 
 fn main() {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
-    use lazy_static::lazy_static;
-    use std::{env::var_os, path::PathBuf};
-
-    lazy_static! {
-        static ref DECLARED_INTERFACE: String = {
-            let cargo_manifest_dir =
-                var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined");
-
-            let path = PathBuf::from(cargo_manifest_dir).join("tests/test_canister.did");
-
-            let contents = std::fs::read(path).unwrap();
-            String::from_utf8(contents).unwrap()
-        };
-        static ref IMPLEMENTED_INTERFACE: String = {
-            candid::export_service!();
-            __export_service()
-        };
-    }
-
-    #[test]
-    fn test_candid_interface() {
-        let result = service_equal(
-            CandidSource::Text(&IMPLEMENTED_INTERFACE),
-            CandidSource::Text(&DECLARED_INTERFACE),
-        );
-
-        if let Err(err) = result {
-            panic!(
-                "Implemented interface:\n\
-                 {}\n\
-                 \n\
-                 Declared interface:\n\
-                 {}\n\
-                 \n\
-                 Error:\n\
-                 {}n\
-                 \n\
-                 The Candid service implementation is not equal to the declared interface.",
-                *IMPLEMENTED_INTERFACE, *DECLARED_INTERFACE, err,
-            );
-        }
-    }
-}
