@@ -44,9 +44,6 @@ tracing-subscriber = { workspace = true }
 candid_parser = { workspace = true }
 ed25519-dalek = "2.1"
 flate2 = { workspace = true }
-ic-base-types = { path = "../../rs/types/base_types" }
-ic-universal-canister = { path = "../../rs/universal_canister/lib" }
-icp-ledger = { path = "../../rs/ledger_suite/icp" }
 k256 = "^0.13.3"
 lazy_static = "1.4.0"
 wat = { workspace = true }

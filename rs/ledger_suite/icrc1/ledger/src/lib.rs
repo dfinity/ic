@@ -65,6 +65,17 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
+/// The ledger versions represent backwards incompatible versions of the ledger.
+/// Downgrading to a lower ledger version is never suppported.
+/// Upgrading from version N to version N+1 should always be possible.
+/// We have the following ledger versions:
+///   * 0 - the whole ledger state is stored on the heap.
+#[cfg(not(feature = "next-ledger-version"))]
+pub const LEDGER_VERSION: u64 = 0;
+
+#[cfg(feature = "next-ledger-version")]
+pub const LEDGER_VERSION: u64 = 1;
+
 #[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
 
@@ -372,6 +383,9 @@ pub struct Ledger<Tokens: TokensType> {
     maximum_number_of_accounts: usize,
     #[serde(default = "default_accounts_overflow_trim_quantity")]
     accounts_overflow_trim_quantity: usize,
+
+    #[serde(default = "default_ledger_version")]
+    pub ledger_version: u64,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -380,6 +394,10 @@ fn default_maximum_number_of_accounts() -> usize {
 
 fn default_accounts_overflow_trim_quantity() -> usize {
     ACCOUNTS_OVERFLOW_TRIM_QUANTITY
+}
+
+fn default_ledger_version() -> u64 {
+    LEDGER_VERSION
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -464,6 +482,7 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
                 .try_into()
                 .unwrap(),
+            ledger_version: LEDGER_VERSION,
         };
 
         for (account, balance) in initial_balances.into_iter() {

@@ -2343,6 +2343,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "consensus-backup-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "ic-backup",
+ "ic-base-types",
+ "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "serde_json",
+ "slog",
+ "tempfile",
+]
+
+[[package]]
 name = "consensus-orchestrator-system-tests"
 version = "0.9.0"
 dependencies = [
@@ -3939,9 +3959,9 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_types"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d393282cc061a25958d3a177fd95e49d94eee54e3e59371f33ef3d4a2dc24431"
+checksum = "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
 dependencies = [
  "candid",
  "hex",
@@ -3950,6 +3970,7 @@ dependencies = [
  "serde",
  "strum",
  "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -6718,8 +6739,8 @@ dependencies = [
  "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-ecdsa",
- "ic-crypto-internal-threshold-sig-ecdsa-test-utils",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils",
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-generation",
@@ -7068,8 +7089,8 @@ dependencies = [
  "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-ecdsa",
- "ic-crypto-internal-threshold-sig-ecdsa-test-utils",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils",
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-generation",
@@ -7272,7 +7293,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-internal-threshold-sig-ecdsa"
+name = "ic-crypto-internal-threshold-sig-canister-threshold-sig"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
@@ -7286,7 +7307,7 @@ dependencies = [
  "hex-literal",
  "ic-crypto-internal-hmac",
  "ic-crypto-internal-seed",
- "ic-crypto-internal-threshold-sig-ecdsa-test-utils",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
@@ -7308,12 +7329,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-crypto-internal-threshold-sig-ecdsa-test-utils"
+name = "ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
  "ed25519-dalek",
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-sha2",
  "ic-types",
  "k256",
@@ -7373,7 +7394,7 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-logmon",
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-validation",
  "ic-crypto-temp-crypto",
@@ -7406,7 +7427,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-internal-types",
  "ic-crypto-test-utils-keys",
  "ic-crypto-tls-cert-validation",
@@ -7569,7 +7590,7 @@ dependencies = [
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-temp-crypto",
  "ic-interfaces",
  "ic-logger",
@@ -7592,7 +7613,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
@@ -7632,7 +7653,7 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-validation",
  "ic-crypto-tls-interfaces",
@@ -7824,7 +7845,7 @@ dependencies = [
 name = "ic-crypto-utils-canister-threshold-sig"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-threshold-sig-canister-threshold-sig",
  "ic-types",
 ]
 
@@ -13464,9 +13485,7 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
- "hex",
  "ic-agent",
- "ic-backup",
  "ic-base-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-management-canister-types",
@@ -13483,7 +13502,6 @@ dependencies = [
  "ic_consensus_system_test_catch_up_test_common",
  "ic_consensus_system_test_liveness_test_common",
  "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
  "k256",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -16588,11 +16606,8 @@ dependencies = [
  "flate2",
  "hex",
  "ic-agent",
- "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-transport-types",
- "ic-universal-canister",
- "icp-ledger",
  "k256",
  "lazy_static",
  "reqwest 0.12.8",

@@ -11,15 +11,16 @@ from pathlib import Path
 from typing import List, Optional
 
 import invoke
-from container_utils import (
+from loguru import logger as log
+from simple_parsing import ArgumentParser, field, flag
+
+from toolchains.sysimage.container_utils import (
     generate_container_command,
     path_owned_by_root,
     process_temp_sys_dir_args,
     remove_image,
     take_ownership_of_file,
 )
-from loguru import logger as log
-from simple_parsing import ArgumentParser, field, flag
 
 
 @dataclass

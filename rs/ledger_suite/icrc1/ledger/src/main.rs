@@ -14,8 +14,8 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::UPGRADES_MEMORY;
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -201,6 +201,16 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         ic_cdk::println!("Successfully read state from memory manager managed stable structures");
         LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
     }
+
+    Access::with_ledger_mut(|ledger| {
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
+            );
+        }
+        ledger.ledger_version = LEDGER_VERSION;
+    });
 
     if let Some(args) = args {
         match args {
