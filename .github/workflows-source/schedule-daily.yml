@@ -198,6 +198,7 @@ jobs:
         id: setup-environment-deps
         shell: bash
         run: |
+          # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
           cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
           source "${NVM_DIR}/nvm.sh"

@@ -207,6 +207,7 @@ jobs:
         id: setup-python-deps
         shell: bash
         run: |
+          # Ignore externally-managed-environment pip error, install packages system-wide.
           PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
       - name: Dependency Scan for Release
         id: dependency-scan-release-cut
