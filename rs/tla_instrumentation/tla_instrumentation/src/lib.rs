@@ -231,7 +231,7 @@ pub fn log_response(
     from: Destination,
     message: TlaValue,
     global: GlobalState,
-    source_location: SourceLocation
+    source_location: SourceLocation,
 ) {
     let local = state.context.get_state();
     let stage = &mut state.stage;
@@ -292,10 +292,13 @@ pub fn log_method_return(
 }
 
 pub fn log_label(state: &mut MessageHandlerState, label: &str) {
-    *state.context.location.0.last_mut().unwrap_or_else(|| panic!(
-        "Asked to log label {}, but the location stack empty",
-        label
-    )) = LocationStackElem::Label(Label::new(label));
+    *state
+        .context
+        .location
+        .0
+        .last_mut()
+        .unwrap_or_else(|| panic!("Asked to log label {}, but the location stack empty", label)) =
+        LocationStackElem::Label(Label::new(label));
 }
 
 /// Logs the value of local variables at the end of the current message handler.
@@ -435,7 +438,10 @@ macro_rules! tla_log_label {
         match res {
             Ok(_) => (),
             Err(_) => {
-                println!("Asked to log label {}, but instrumentation not initialized", $label);
+                println!(
+                    "Asked to log label {}, but instrumentation not initialized",
+                    $label
+                );
             }
         };
     }};

@@ -1,12 +1,12 @@
 use crate::tla_value::{TlaValue, ToTla};
 use candid::CandidType;
 // use serde::Deserialize;
+use crate::SourceLocation;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
     fmt::{Display, Formatter},
 };
-use crate::SourceLocation;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]
 pub struct VarAssignment(pub BTreeMap<String, TlaValue>);
