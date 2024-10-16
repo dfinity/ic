@@ -47,7 +47,7 @@ read_config_variables
 ELASTICSEARCH_HOSTS="${elasticsearch_hosts}"
 ELASTICSEARCH_TAGS="${elasticsearch_tags}"
 
-if [ "${ELASTICSEARCH_HOSTS}" != "" ] && ["${ELASTICSEARCH_HOSTS}" != "null"]; then
+if [ "${ELASTICSEARCH_HOSTS}" != "" ] && [ "${ELASTICSEARCH_HOSTS}" != "null"]; then
     # Covert string into comma separated array
     if [ "$(echo ${ELASTICSEARCH_HOSTS} | grep ':')" ]; then
         elasticsearch_hosts_array=$(for host in ${ELASTICSEARCH_HOSTS}; do echo -n "\"${host}\", "; done | sed -E "s@, \$@@g")
@@ -57,7 +57,7 @@ if [ "${ELASTICSEARCH_HOSTS}" != "" ] && ["${ELASTICSEARCH_HOSTS}" != "null"]; t
     sed -e "s@{{ elasticsearch_hosts }}@${elasticsearch_hosts_array}@" "${IN_FILE}" >"${OUT_FILE}"
 fi
 
-if [ "${ELASTICSEARCH_TAGS}" != "" ] && ["${ELASTICSEARCH_TAGS}" != "null"]; then
+if [ "${ELASTICSEARCH_TAGS}" != "" ] && [ "${ELASTICSEARCH_TAGS}" != "null"]; then
     # Covert string into comma separated array
     elasticsearch_tags_array=$(for tag in ${ELASTICSEARCH_TAGS}; do echo -n "\"${tag}\", "; done | sed -E "s@, \$@@g")
     sed -e "s@#{{ elasticsearch_tags }}@tags: [${elasticsearch_tags_array}]@" -i "${OUT_FILE}"
