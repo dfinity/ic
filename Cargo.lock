@@ -13560,6 +13560,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-universal-canister",
+ "k256",
  "rand 0.8.5",
  "reqwest 0.12.8",
  "serde_cbor",
