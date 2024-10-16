@@ -273,16 +273,8 @@ name = "ic-systest-rejoin-test-large-state"
 path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
-name = "ic-systest-system-subnets-test"
-path = "execution/system_subnets_test.rs"
-
-[[bin]]
 name = "ic-systest-memory-safety-test"
 path = "message_routing/memory_safety_test.rs"
-
-[[bin]]
-name = "ic-systest-system-api-security-test"
-path = "execution/system_api_security_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"
@@ -295,10 +287,6 @@ path = "boundary_nodes/bn_update_workload_test.rs"
 [[bin]]
 name = "ic-systest-custom-domains-integration"
 path = "boundary_nodes/custom_domains_integration_test.rs"
-
-[[bin]]
-name = "ic-systest-general-execution"
-path = "execution/general_execution_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
