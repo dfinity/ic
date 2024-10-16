@@ -367,6 +367,7 @@ fn test_query_trap_recovery() {
     );
 }
 
+#[allow(clippy::arc_with_non_send_sync)]
 #[test]
 /// Tests that a canister correctly initializes itself
 fn test_memory_persistence() {
