@@ -149,6 +149,8 @@ impl StructCanister {
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase2");
         call_maker();
+        self.counter += 1;
+        my_local = self.counter;
         // Note that this would not be necessary (and would be an error) if
         // we defined my_local in default_end_locals in my_f_desc
         tla_log_locals! {my_local: my_local};
@@ -171,7 +173,7 @@ fn struct_test() {
     let trace = &TLA_TRACES.read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
-        Some(&2_u64.to_string())
+        Some(&3_u64.to_string())
     );
     let pairs = &trace.state_pairs;
     println!("----------------");

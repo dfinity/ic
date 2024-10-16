@@ -12,7 +12,7 @@ target(value) == Variant("Target_Method", value)
 
 variables 
     counter = 0;
-    empty_fun = [x \in {} |-> {}];
+    empty_fun = [x \in {} |-> CHOOSE y \in {}: TRUE];
     mycan_to_othercan = <<>>;
     othercan_to_mycan = {};
 
@@ -39,7 +39,7 @@ process ( My_Method \in My_Method_Process_Ids )
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "95b1663f" /\ chksum(tla) = "2960e14d")
+\* BEGIN TRANSLATION (chksum(pcal) = "348f0bcb" /\ chksum(tla) = "b5d92e54")
 VARIABLES pc, counter, empty_fun, mycan_to_othercan, othercan_to_mycan, 
           my_local
 
@@ -50,7 +50,7 @@ ProcSet == (My_Method_Process_Ids)
 
 Init == (* Global variables *)
         /\ counter = 0
-        /\ empty_fun = [x \in {} |-> {}]
+        /\ empty_fun = [x \in {} |-> CHOOSE y \in {}: TRUE]
         /\ mycan_to_othercan = <<>>
         /\ othercan_to_mycan = {}
         (* Process My_Method *)
