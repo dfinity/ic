@@ -54,6 +54,10 @@ fn ledger_wasm_next_version() -> Vec<u8> {
     )
 }
 
+fn ledger_wasm_mainnet() -> Vec<u8> {
+    std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap()
+}
+
 fn ledger_wasm_allowance_getter() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -1127,8 +1131,7 @@ fn check_archive_block_endpoint_limits() {
 
 #[test]
 fn test_block_transformation() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let p1 = PrincipalId::new_user_test_id(1);
@@ -1216,8 +1219,7 @@ fn test_block_transformation() {
 
 #[test]
 fn test_upgrade_serialization() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let minter = Arc::new(minter_identity());
@@ -1244,8 +1246,7 @@ fn test_upgrade_serialization() {
 
 #[test]
 fn test_upgrade_serialization_fixed_tx() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_mainnet = ledger_wasm_mainnet();
     let ledger_wasm_current = ledger_wasm();
 
     let p1 = PrincipalId::new_user_test_id(1);
@@ -1323,10 +1324,8 @@ fn test_upgrade_serialization_fixed_tx() {
 
 #[test]
 fn test_downgrade_from_incompatible_version() {
-    let ledger_wasm_mainnet =
-        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
     ic_icrc1_ledger_sm_tests::test_downgrade_from_incompatible_version(
-        ledger_wasm_mainnet,
+        ledger_wasm_mainnet(),
         ledger_wasm_next_version(),
         ledger_wasm(),
         encode_init_args,
