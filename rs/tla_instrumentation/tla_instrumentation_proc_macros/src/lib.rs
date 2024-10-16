@@ -218,35 +218,34 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         (false, false) => quote! { #mangled_name(#(#args),*) },
     };
 
-    let output =
-        quote! {
-            #modified_fn
+    let output = quote! {
+        #modified_fn
 
-            #(#attrs)* #vis #sig {
-               TLA_INSTRUMENTATION_STATE.try_with(|state| {
-                    {
-                        let mut handler_state = state.handler_state.borrow_mut();
-                        handler_state.context.call_function();
-                    }
-               }).unwrap_or_else(|e|
-                   // TODO: fail if there's an error and if we're in some kind of strict mode?
-                   ()
-               );
+        #(#attrs)* #vis #sig {
+           TLA_INSTRUMENTATION_STATE.try_with(|state| {
+                {
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    handler_state.context.call_function();
+                }
+           }).unwrap_or_else(|e|
+               // TODO: fail if there's an error and if we're in some kind of strict mode?
+               ()
+           );
 
 
-               let res = #call;
-               TLA_INSTRUMENTATION_STATE.try_with(|state| {
-                    {
-                        let mut handler_state = state.handler_state.borrow_mut();
-                        handler_state.context.return_from_function();
-                    }
-               }).unwrap_or_else(|e|
-                   // TODO: fail if there's an error and if we're in some kind of strict mode?
-                   ()
-               );
-               res
-            }
-        };
+           let res = #call;
+           TLA_INSTRUMENTATION_STATE.try_with(|state| {
+                {
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    handler_state.context.return_from_function();
+                }
+           }).unwrap_or_else(|e|
+               // TODO: fail if there's an error and if we're in some kind of strict mode?
+               ()
+           );
+           res
+        }
+    };
 
     output.into()
 }
