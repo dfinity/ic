@@ -205,6 +205,10 @@ impl RosettaClient {
         }])
     }
 
+    pub async fn call(&self, req: CallRequest) -> anyhow::Result<CallResponse> {
+        self.call_endpoint("/call", &req).await
+    }
+
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await

@@ -214,6 +214,12 @@ impl RosettaRequestHandler {
                         )
                         .saturating_sub(1),
                     );
+                    println!(
+                        "Max blocks per query: {}",
+                        MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
+                    );
+                    println!("highest_index: {}", query_block_range.highest_block_index);
+                    println!("lowest_index: {}", lowest_index);
                     if storage.contains_block(&lowest_index).map_err(|err| {
                         ApiError::InvalidBlockId(false, format!("{:?}", err).into())
                     })? {
