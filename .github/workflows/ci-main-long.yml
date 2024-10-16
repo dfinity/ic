@@ -3,10 +3,10 @@
 #
 # The following chart shows the 90th percentile of the duration per bazel test in ci-main/bazel-test-all:
 # https://superset.idx.dfinity.network/explore/?slice_id=48
-# If a test takes longer than 5 minutes it has to be tagged with "slow_test"
+# If a test takes longer than 5 minutes it has to be tagged with "long_test"
 # to skip running it in ci-main/bazel-test-all and run it here instead.
 
-name: Slow Tests
+name: CI Main Long
 on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -31,8 +31,8 @@ env:
   BUILDEVENT_DATASET: "github-ci-dfinity"
 
 jobs:
-  bazel-test-slow-tests:
-    name: Bazel Test Slow Tests
+  bazel-test-long-tests:
+    name: Bazel Test Long Tests
     container:
       image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
       options: >-
@@ -55,7 +55,7 @@ jobs:
         env:
           DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run Bazel Test Slow Tests
+      - name: Run Bazel Test Long Tests
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
         env:
@@ -64,7 +64,7 @@ jobs:
           BAZEL_COMMAND: "test"
           BAZEL_TARGETS: "//..."
           BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going  --test_tag_filters=slow_test"
+          BAZEL_EXTRA_ARGS: "--keep_going  --test_tag_filters=long_test"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
       - name: Upload bazel-bep
         # runs only if previous step succeeded or failed;

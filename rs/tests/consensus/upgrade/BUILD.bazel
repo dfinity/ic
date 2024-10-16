@@ -84,11 +84,11 @@ system_test_nns(
 
 system_test_nns(
     name = "upgrade_app_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,
@@ -111,11 +111,11 @@ system_test_nns(
 
 system_test_nns(
     name = "downgrade_app_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev_test = True,

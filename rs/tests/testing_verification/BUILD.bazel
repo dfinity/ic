@@ -31,11 +31,11 @@ rust_binary(
 
 system_test_nns(
     name = "spec_compliance_application_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
         "cpu:4",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
@@ -52,11 +52,11 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_system_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
         "cpu:4",
-        "slow_test",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
@@ -73,11 +73,11 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_group_01_application_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
         "cpu:4",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
@@ -94,11 +94,11 @@ system_test_nns(
 
 system_test_nns(
     name = "spec_compliance_group_01_system_subnet_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     tags = [
         "cpu:4",
-        "slow_test",
+        "long_test",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [

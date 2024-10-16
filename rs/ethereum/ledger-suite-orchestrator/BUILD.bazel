@@ -162,7 +162,7 @@ rust_ic_test(
     },
     proc_macro_deps = [],
     tags = [
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     deps = [
         # Keep sorted.

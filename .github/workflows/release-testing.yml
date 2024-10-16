@@ -24,9 +24,9 @@ jobs:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
-  slow-tests:
-    name: Slow Tests
-    uses: ./.github/workflows/slow-tests.yml
+  ci-main-long:
+    name: CI Main Long
+    uses: ./.github/workflows/ci-main-long.yml
     secrets: inherit
   bazel-system-test-nightly:
     name: Bazel System Test Nightly

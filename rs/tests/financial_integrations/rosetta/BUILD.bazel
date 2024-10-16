@@ -40,12 +40,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_make_transactions_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -80,12 +80,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_disburse_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -105,7 +105,7 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -121,12 +121,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_follow_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -142,12 +142,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_hotkey_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -163,12 +163,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_info_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -184,12 +184,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_maturity_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -205,12 +205,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_spawn_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -226,12 +226,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_staking_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -247,12 +247,12 @@ system_test_nns(
 
 system_test_nns(
     name = "rosetta_neuron_voting_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
-        "slow_test",  # since it takes longer than 5 minutes.
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
