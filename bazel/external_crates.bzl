@@ -819,7 +819,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "opentelemetry": crate.spec(
-                version = "^0.23.0",
+                version = "^0.26.0",
                 features = [
                     "metrics",
                     "trace",
@@ -834,23 +834,19 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "opentelemetry-otlp": crate.spec(
-                version = "^0.16.0",
+                version = "^0.26.0",
                 features = [
                     "grpc-tonic",
                 ],
             ),
             "opentelemetry_sdk": crate.spec(
-                version = "^0.23.0",
+                version = "^0.26.0",
                 features = [
                     "trace",
                     "rt-tokio",
                 ],
             ),
             "opentelemetry-prometheus": crate.spec(
-                version = "^0.16.0",
-            ),
-            "opentelemetry-prometheus_0_13_0": crate.spec(
-                package = "opentelemetry-prometheus",
                 version = "^0.13.0",
             ),
             "p256": crate.spec(
@@ -1339,7 +1335,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "tracing-opentelemetry": crate.spec(
-                version = "^0.24.0",
+                version = "^0.27.0",
             ),
             "tracing-serde": crate.spec(
                 version = "^0.1.3",
