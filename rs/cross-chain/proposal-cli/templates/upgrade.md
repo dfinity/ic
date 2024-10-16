@@ -1,5 +1,7 @@
 # Proposal to upgrade the {{canister}} canister
 
+Repository: `{{canister.git_repository_url()}}`
+
 Git hash: `{{to}}`
 
 New compressed Wasm hash: `{{compressed_wasm_hash}}`
