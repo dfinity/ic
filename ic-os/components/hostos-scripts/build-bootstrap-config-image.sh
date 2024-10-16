@@ -184,7 +184,11 @@ EOF
 
     # Create guestos config.json
     echo "* Generating 'config-guestos.json'..."
-    /opt/ic/bin/config generate-guestos-config
+    if [[ -n "$IPV6_ADDRESS" ]]; then
+        /opt/ic/bin/config generate-guestos-config --guestos_ipv6_address "$IPV6_ADDRESS"
+    else
+        /opt/ic/bin/config generate-guestos-config
+    fi
     echo "* Copying 'config-guestos.json' to GuestOS config partition..."
     cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
 

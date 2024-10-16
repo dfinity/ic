@@ -12,7 +12,6 @@ Usage:
 
   Generate replica config from template file.
 
-  -n network.conf: Optional, network configuration description file
   -m malicious_behavior.conf: Optional, malicious behavior parameters
 
   -i infile: input ic.json5.template file
@@ -58,11 +57,6 @@ function get_if_address_retries() {
 }
 
 function read_config_variables() {
-    ipv6_gateway=$(get_config_value '.network_settings.ipv6_config.Deterministic.gateway')
-    ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
-    ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
-    ipv4_gateway=$(get_config_value '.network_settings.ipv4_config.gateway')
-    domain=$(get_config_value '.network_settings.ipv4_config.domain')
     nns_urls=$(get_config_value '.icos_settings.nns_urls | join(",")')
     hostname=$(get_config_value '.icos_settings.hostname')
     backup_retention_time_secs=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
@@ -71,27 +65,45 @@ function read_config_variables() {
     query_stats_epoch_length=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
 
     # todo:
-    # "ipv6_address") ipv6_address="${value}" ;;
     # "malicious_behavior") malicious_behavior="${value}" ;;
 }
 
-# XXX: the following function is duplicate with generate-network-config.sh
-# -- consolidate
-#
-# Read the network config variables from file. The file must be of the form
-# "key=value" for each line with a specific set of keys permissible (see
-# code below).
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_network_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "ipv6_address") ipv6_address="${value}" ;;
-        esac
-    done <"$1"
+function configure_ipv6() {
+    ipv6_config_type=$(get_config_value '.ipv6_config | keys[]')
+    case "$ipv6_config_type" in
+        "Deterministic")
+            echo "GuestOS IPv6 configuration should not be 'Deterministic'."
+            exit 1
+            ;;
+        "Fixed")
+            IPV6_ADDRESS=$(get_config_value '.network_settings.ipv6_config.Fixed.address')
+            ;;
+        "RouterAdvertisement")
+            interface=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
+            IPV6_ADDRESS="$(get_if_address_retries 6 ${interface} 12)"
+            ;;
+        *)
+            echo "ERROR: Unknown IPv6 configuration type."
+            exit 1
+            ;;
+    esac
+
+    if [ "${IPV6_ADDRESS}" == "" ]; then
+        echo "Cannot determine an IPv6 address, aborting"
+        exit 1
+    fi
+}
+
+function configure_ipv4() {
+    IPV4_ADDRESS="" IPV4_GATEWAY="" DOMAIN=""
+    ipv4_config_present=$(get_config_value '.network_settings.ipv4_config != null')
+    if [ "$ipv4_config_present" = "true" ]; then
+        ipv4_address=$(get_config_value '.network_settings.ipv4_config.address')
+        ipv4_prefix_length=$(get_config_value '.network_settings.ipv4_config.prefix_length')
+        IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
+        IPV4_GATEWAY=$(get_config_value '.network_settings.ipv4_config.gateway')
+        DOMAIN=$(get_config_value '.network_settings.ipv4_config.domain')
+    fi
 }
 
 # Read malicious behavior config variables from file. The file must be of the
@@ -110,11 +122,8 @@ function read_malicious_behavior_variables() {
     done <"$1"
 }
 
-while getopts "m:n:c:i:o:" OPT; do
+while getopts "m:i:o:" OPT; do
     case "${OPT}" in
-        n)
-            NETWORK_CONFIG_FILE="${OPTARG}"
-            ;;
         m)
             MALICIOUS_BEHAVIOR_CONFIG_FILE="${OPTARG}"
             ;;
@@ -136,25 +145,15 @@ if [ "${IN_FILE}" == "" -o "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-if [ "${NETWORK_CONFIG_FILE}" != "" -a -e "${NETWORK_CONFIG_FILE}" ]; then
-    read_network_variables "${NETWORK_CONFIG_FILE}"
-fi
+configure_ipv6
+configure_ipv4
+
 if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" ]; then
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
 
 read_config_variables
 
-INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
-IPV6_ADDRESS="${ipv6_address%/*}"
-IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
-if [[ -n "$ipv4_address" && "$ipv4_address" != "null" && -n "$ipv4_prefix_length" && "$ipv4_prefix_length" != "null" ]]; then
-    IPV4_ADDRESS="${ipv4_address}/${ipv4_prefix_length}"
-else
-    IPV4_ADDRESS=""
-fi
-IPV4_GATEWAY="${ipv4_gateway:-}"
-DOMAIN="${domain:-}"
 NNS_URLS="${nns_urls:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
@@ -171,11 +170,6 @@ QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
 JAEGER_ADDR="${jaeger_addr:-}"
 [ "${jaeger_addr}" = "null" ] && JAEGER_ADDR=""
-
-if [ "${IPV6_ADDRESS}" == "" ]; then
-    echo "Cannot determine an IPv6 address, aborting"
-    exit 1
-fi
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
