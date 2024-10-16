@@ -106,6 +106,17 @@ function get_if_address_retries() {
     done
 }
 
+function set_default_config_values() {
+    [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
+    [ "${NODE_INDEX}" = "null" ] && NODE_INDEX="0"
+    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"  # Default value is 24h
+    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"  # Default value is 1h
+    [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"  # Default is 600 blocks (around 10min)
+
+    # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
+    [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
+}
+
 # Read malicious behavior config variables from file. The file must be of the
 # form "key=value" for each line with a specific set of keys permissible (see
 # code below).
@@ -153,18 +164,7 @@ if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFI
 fi
 
 read_config_variables
-
-
-[ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
-[ "${NODE_INDEX}" = "null" ] && NODE_INDEX="0"
-# Default value is 24h
-[ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"
-# Default value is 1h
-[ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"
-# Default is 600 blocks i.e. around 10min
-[ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"
-# TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
-[ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
+set_default_config_values
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
