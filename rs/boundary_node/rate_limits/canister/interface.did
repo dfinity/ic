@@ -54,7 +54,7 @@ type GetConfigResponse = variant {
   Err: text;
 };
 
-type OverwriteConfigResponse = variant {
+type AddConfigResponse = variant {
   Ok;
   Err: text;
 };
@@ -86,8 +86,8 @@ type InitArg = record {
 };
 
 service : (InitArg) -> {
-  // Replaces the current rate-limit configuration with a new set of rules
-  overwrite_config: (InputConfig) -> (OverwriteConfigResponse);
+  // Adds a configuration containing a set of rate-limit rules and increments the current version by one
+  add_config: (InputConfig) -> (AddConfigResponse);
 
   // Make the viewing of the specified rules publicly accessible
   disclose_rules: (DiscloseRulesArg) -> (DiscloseRulesResponse);
