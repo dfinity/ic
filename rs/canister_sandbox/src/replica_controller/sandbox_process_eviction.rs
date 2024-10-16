@@ -52,7 +52,7 @@ pub(crate) fn evict(
 
     let evict_at_most = candidates.len().saturating_sub(min_count_threshold);
 
-    if evict_at_most >= evicted.len() {
+    if evicted.len() >= evict_at_most {
         return evicted;
     }
 
