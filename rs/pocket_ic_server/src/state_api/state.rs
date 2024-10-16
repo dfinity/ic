@@ -56,7 +56,7 @@ use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
-    task::{spawn, spawn_blocking, JoinHandle},
+    task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
 use tonic::Request as TonicRequest;
@@ -738,6 +738,16 @@ impl ApiState {
             drop(instance_state);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
+    }
+
+    pub async fn delete_all_instances(arc_self: Arc<ApiState>) {
+        let mut tasks = JoinSet::new();
+        let num_instances = arc_self.instances.read().await.len();
+        for instance_id in 0..num_instances {
+            let arc_self_clone = arc_self.clone();
+            tasks.spawn(async move { arc_self_clone.delete_instance(instance_id).await });
+        }
+        tasks.join_all().await;
     }
 
     pub async fn create_http_gateway(
