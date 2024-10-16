@@ -663,7 +663,7 @@ socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = [ "derive" ] }
 strum_macros = "0.26.4"
-syn = { version = "2.0.79", features = ["fold", "full"] }
+syn = { version = "2.0.79", features = ["fold", "full", "parsing"] }
 sync_wrapper = "1.0.1"
 tar = "=0.4.39"
 tempfile = "3.12.0"

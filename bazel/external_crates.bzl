@@ -1213,6 +1213,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "fold",
                     "full",
+                    "parsing",
                 ],
             ),
             "sync_wrapper": crate.spec(
