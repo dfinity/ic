@@ -475,7 +475,7 @@ fn lazy_pagemaps() {
             .map(|x| -> f64 {
                 x.get_metric()
                     .iter()
-                    .filter(|x| {
+                    .find(|x| {
                         for l in x.get_label() {
                             if l.get_name() == "status" && l.get_value() == status {
                                 return true;
@@ -483,7 +483,6 @@ fn lazy_pagemaps() {
                         }
                         false
                     })
-                    .next()
                     .unwrap()
                     .get_gauge()
                     .get_value()
