@@ -429,6 +429,7 @@ impl Swap {
             auto_finalize_swap_response: None,
             direct_participation_icp_e8s: None,
             neurons_fund_participation_icp_e8s: None,
+            timers: None,
         };
         if init.validate_swap_init_for_one_proposal_flow().is_ok() {
             // Automatically fill out the fields that the (legacy) open request
@@ -1412,7 +1413,10 @@ impl Swap {
         let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(INFO, "Successfully restored dapp controllers, {:?}", result);
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1430,7 +1434,14 @@ impl Swap {
             .await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(
+                    INFO,
+                    "Successfully took sole control of dapp controllers, {:?}",
+                    result
+                );
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -3771,6 +3782,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             purge_old_tickets_next_principal,
             already_tried_to_auto_finalize,
             auto_finalize_swap_response,
+            timers,
 
             // These are (potentially large) collections. To avoid an
             // overwhelmingly large log message, we need summarize and/or
@@ -3829,6 +3841,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
                 "neurons_fund_participation_icp_e8s",
                 neurons_fund_participation_icp_e8s,
             )
+            .field("timers", timers)
             .finish()
     }
 }

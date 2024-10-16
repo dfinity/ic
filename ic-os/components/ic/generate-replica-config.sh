@@ -186,7 +186,6 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
     -e "s@{{ malicious_behavior }}@${MALICIOUS_BEHAVIOR}@" \
-    -e "s@{{ query_stats_aggregation }}@\"Enabled\"@" \
     -e "s@{{ query_stats_epoch_length }}@${QUERY_STATS_EPOCH_LENGTH}@" \
     -e "s@{{ jaeger_addr }}@${JAEGER_ADDR}@" \
     "${IN_FILE}" >"${OUT_FILE}"
