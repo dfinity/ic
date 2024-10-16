@@ -1,6 +1,5 @@
 use crate::tla_value::{TlaValue, ToTla};
 use candid::CandidType;
-// use serde::Deserialize;
 use crate::SourceLocation;
 use std::{
     collections::{BTreeMap, BTreeSet},

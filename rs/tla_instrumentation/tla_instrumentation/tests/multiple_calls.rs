@@ -286,6 +286,50 @@ fn struct_test() {
         )
     );
 
+    let third = &pairs[2];
+
+    assert_eq!(third.start.get("counter"), Some(&2_u64.to_tla_value()));
+    assert_eq!(third.end.get("counter"), Some(&3_u64.to_tla_value()));
+
+    assert_eq!(
+        third.start.get("my_local"),
+        Some(BTreeMap::from([(PID, 2_u64)]).to_tla_value()).as_ref()
+    );
+    assert_eq!(
+        third.end.get("my_local"),
+        Some(BTreeMap::from([(PID, 3_u64)]).to_tla_value()).as_ref()
+    );
+
+    assert_eq!(
+        third.start.get(incoming),
+        Some(
+            &BTreeSet::from([TlaValue::Record(BTreeMap::from([
+                ("caller".to_string(), PID.to_tla_value()),
+                (
+                    "response".to_string(),
+                    TlaValue::Variant {
+                        tag: "Ok".to_string(),
+                        value: Box::new(3_u64.to_tla_value())
+                    }
+                )
+            ]))])
+            .to_tla_value()
+        )
+    );
+    assert_eq!(
+        third.end.get(incoming),
+        Some(&BTreeSet::<TlaValue>::new().to_tla_value())
+    );
+
+    assert_eq!(
+        third.start.get(outgoing),
+        Some(&Vec::<TlaValue>::new().to_tla_value())
+    );
+    assert_eq!(
+        third.end.get(outgoing),
+        Some(&Vec::<TlaValue>::new().to_tla_value())
+    );
+
     let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
     set_java_path();
