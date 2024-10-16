@@ -130,6 +130,11 @@ impl SandboxService for SandboxServer {
         );
         rpc::Call::new_resolved(Ok(CreateExecutionStateSerializedReply(result)))
     }
+
+    fn memory_usage(&self, _: MemoryUsageRequest) -> rpc::Call<MemoryUsageReply> {
+        let bytes = crate::alloc_metrics::CURRENT.load(std::sync::atomic::Ordering::Relaxed);
+        rpc::Call::new_resolved(Ok(MemoryUsageReply { bytes }))
+    }
 }
 
 #[cfg(test)]
