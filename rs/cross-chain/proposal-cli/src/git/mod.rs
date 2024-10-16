@@ -159,7 +159,7 @@ impl GitRepository {
             git_log.arg(repo_dir);
         }
         let log = git_log.output().expect("failed to run git log");
-        assert!(log.status.success());
+        assert!(log.status.success(), "failed to run git log: {:?}", log);
 
         let executed_command = iter::once(git_log.get_program())
             .chain(git_log.get_args())
