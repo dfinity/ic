@@ -25,7 +25,7 @@ impl std::fmt::Debug for ApalacheError {
             ApalacheError::SetupError(e) =>
                 f.write_str(&format!("Apalache setup error: {}", e)),
             ApalacheError::CheckFailed(e) =>
-                f.write_str(&format!("Apalache encountered an error while checking: {}", e))
+                f.write_str(&format!("{}", e))
         }
     }
 }
@@ -40,13 +40,15 @@ impl std::fmt::Debug for TlaCheckError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(
             &format!(
-                "Apalache returned the error: {:?}\n.The error occured while checking the transition between:\n{:?}\nand\n{:?}\n.The assigned constants are: {:?}",
+                "Apalache returned the error: {:?}\nThe error occured while checking the transition between:\n",
                 self.apalache_error,
-                self.pair.start.0.0,
-                self.pair.end.0.0,
-                self.constants.constants,
             )
-        )
+        )?;
+        f.debug_map().entries(self.pair.start.0.0.iter()).finish()?;
+        f.write_str("\nand\n")?;
+        f.debug_map().entries(self.pair.end.0.0.iter()).finish()?;
+        f.write_str("\nThe constants are:\n")?;
+        f.debug_map().entries(self.constants.constants.iter()).finish()
     }
 }
 
