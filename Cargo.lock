@@ -13556,6 +13556,9 @@ dependencies = [
  "anyhow",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
+ "ic-types",
+ "reqwest 0.12.8",
+ "serde_cbor",
  "slog",
  "tokio",
 ]

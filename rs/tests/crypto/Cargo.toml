@@ -10,8 +10,15 @@ documentation.workspace = true
 anyhow = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
+reqwest = { workspace = true }
+serde_cbor = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
+
+[[bin]]
+name = "request_signature_test"
+path = "request_signature_test.rs"
 
 [[bin]]
 name = "rpc_csp_vault_reconnection_test"

@@ -2,7 +2,6 @@ pub mod ic_crypto_csp_metrics_test;
 pub mod ic_crypto_csp_socket_test;
 pub mod ic_crypto_csp_umask_test;
 pub mod ic_crypto_fstrim_tool_test;
-pub mod request_signature_test;
 
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
