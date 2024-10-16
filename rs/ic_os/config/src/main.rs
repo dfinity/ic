@@ -4,7 +4,6 @@ use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
 use std::fs::File;
-use std::net::Ipv6Addr;
 use std::path::{Path, PathBuf};
 
 use config::types::*;
@@ -45,7 +44,7 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
         #[arg(long, value_name = "ipv6_address")]
-        guestos_ipv6_address: Option<Ipv6Addr>,
+        guestos_ipv6_address: String,
     },
 }
 
@@ -224,19 +223,17 @@ pub fn main() -> Result<()> {
 
             let mut guestos_network_settings = hostos_config.network_settings;
             // Update the GuestOS networking if `guestos_ipv6_address` is provided
-            if let Some(guestos_ipv6_address) = guestos_ipv6_address {
-                match &guestos_network_settings.ipv6_config {
-                    Ipv6Config::Deterministic(deterministic_ipv6_config) => {
-                        guestos_network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
-                            address: guestos_ipv6_address,
-                            gateway: deterministic_ipv6_config.gateway,
-                        });
-                    }
-                    _ => {
-                        anyhow::bail!(
-                            "HostOSConfig Ipv6Config should always be of type Deterministic. Cannot reassign GuestOS networking."
-                        );
-                    }
+            match &guestos_network_settings.ipv6_config {
+                Ipv6Config::Deterministic(deterministic_ipv6_config) => {
+                    guestos_network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+                        address: guestos_ipv6_address,
+                        gateway: deterministic_ipv6_config.gateway,
+                    });
+                }
+                _ => {
+                    anyhow::bail!(
+                        "HostOSConfig Ipv6Config should always be of type Deterministic. Cannot reassign GuestOS networking."
+                    );
                 }
             }
 

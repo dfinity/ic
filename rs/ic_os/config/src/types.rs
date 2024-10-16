@@ -145,6 +145,7 @@ pub struct DeterministicIpv6Config {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct FixedIpv6Config {
-    pub address: Ipv6Addr,
+    // fixed ipv6 address includes subnet mask /64
+    pub address: String,
     pub gateway: Ipv6Addr,
 }
