@@ -1430,6 +1430,7 @@ message Governance {
 
   // Version SNS is in process of upgrading to.
   UpgradeInProgress pending_version = 24;
+  Version target_version = 30;
 
   // True if the heartbeat function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
@@ -2129,11 +2130,21 @@ message AddMaturityResponse {
   optional uint64 new_maturity_e8s = 1;
 }
 
+message AdvanceTargetVersionRequest {
+  optional Governance.Version target_version = 1;
+}
+
+// The response to a request to add maturity to a neuron. The associated endpoint is only
+// available when governance is compiled with the `test` feature enabled.
+message AdvanceTargetVersionResponse {
+}
+
 message GetUpgradeJournalRequest {}
 
 message GetUpgradeJournalResponse {
   Governance.Versions upgrade_steps = 1;
   optional uint64 response_timestamp_seconds = 2;
+  Governance.Version target_version = 3;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint

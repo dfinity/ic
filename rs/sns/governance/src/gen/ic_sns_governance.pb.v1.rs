@@ -1638,6 +1638,8 @@ pub struct Governance {
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    #[prost(message, optional, tag = "30")]
+    pub target_version: ::core::option::Option<governance::Version>,
     /// True if the heartbeat function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
@@ -3311,6 +3313,30 @@ pub struct AddMaturityResponse {
     candid::Deserialize,
     comparable::Comparable,
     Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub target_version: ::core::option::Option<governance::Version>,
+}
+/// The response to a request to add maturity to a neuron. The associated endpoint is only
+/// available when governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionResponse {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
     Copy,
     PartialEq,
     ::prost::Message,
@@ -3329,6 +3355,8 @@ pub struct GetUpgradeJournalResponse {
     pub upgrade_steps: ::core::option::Option<governance::Versions>,
     #[prost(uint64, optional, tag = "2")]
     pub response_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "3")]
+    pub target_version: ::core::option::Option<governance::Version>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
