@@ -101,7 +101,7 @@ impl TargetCanister {
         }
     }
 
-    pub fn repo_dir(&self) -> PathBuf {
+    pub fn repo_dir(&self) -> Option<PathBuf> {
         match &self {
             TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
@@ -118,9 +118,9 @@ impl TargetCanister {
             | TargetCanister::IcpIndex
             | TargetCanister::IcpLedger
             | TargetCanister::LedgerSuiteOrchestrator => {
-                self.candid_file().parent().unwrap().to_path_buf()
+                Some(self.candid_file().parent().unwrap().to_path_buf())
             }
-            TargetCanister::EvmRpc => PathBuf::new(),
+            TargetCanister::EvmRpc => None,
         }
     }
 
@@ -166,12 +166,8 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
-            | TargetCanister::LedgerSuiteOrchestrator => {
-                vec![self.repo_dir()]
-            }
-            TargetCanister::EvmRpc => {
-                vec![]
-            }
+            | TargetCanister::LedgerSuiteOrchestrator
+            | TargetCanister::EvmRpc => self.repo_dir().into_iter().collect(),
         }
     }
 

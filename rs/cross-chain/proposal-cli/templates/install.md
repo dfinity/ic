@@ -17,7 +17,9 @@ TODO: THIS MUST BE FILLED OUT
 ```
 git fetch
 git checkout {{at}}
-cd {{canister.repo_dir().as_path().display()}}
+{% if let Some(dir) = canister.repo_dir() -%}
+cd {{dir.as_path().display()}} \
+{% endif -%}
 {{install_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 
