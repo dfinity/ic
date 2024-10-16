@@ -1,5 +1,5 @@
 {
-  "checksum": "851d45a5ad3487b9c4c1a93ac6eeca9b5d493e2fee468a6a1b38fd3aaba3274f",
+  "checksum": "f1d446e2f51f5523ef34b14dc52d390645bd8bf6796eb37472bd66e892f0a910",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6770,7 +6770,7 @@
               "target": "hmac"
             },
             {
-              "id": "k256 0.13.3",
+              "id": "k256 0.13.4",
               "target": "k256"
             },
             {
@@ -17744,7 +17744,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.0.0",
+              "id": "evm_rpc_types 1.1.0",
               "target": "evm_rpc_types"
             },
             {
@@ -18020,7 +18020,7 @@
               "target": "json5"
             },
             {
-              "id": "k256 0.13.3",
+              "id": "k256 0.13.4",
               "target": "k256"
             },
             {
@@ -21302,7 +21302,7 @@
               "target": "hex"
             },
             {
-              "id": "k256 0.13.3",
+              "id": "k256 0.13.4",
               "target": "k256"
             },
             {
@@ -21668,14 +21668,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.0.0": {
+    "evm_rpc_types 1.1.0": {
       "name": "evm_rpc_types",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.0.0/download",
-          "sha256": "d393282cc061a25958d3a177fd95e49d94eee54e3e59371f33ef3d4a2dc24431"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.1.0/download",
+          "sha256": "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
         }
       },
       "targets": [
@@ -21726,12 +21726,16 @@
             {
               "id": "thiserror 1.0.64",
               "target": "thiserror"
+            },
+            {
+              "id": "url 2.5.2",
+              "target": "url"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.0"
+        "version": "1.1.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -28300,7 +28304,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "k256 0.13.3",
+              "id": "k256 0.13.4",
               "target": "k256"
             },
             {
@@ -34355,14 +34359,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "k256 0.13.3": {
+    "k256 0.13.4": {
       "name": "k256",
-      "version": "0.13.3",
+      "version": "0.13.4",
       "package_url": "https://github.com/RustCrypto/elliptic-curves/tree/master/k256",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/k256/0.13.3/download",
-          "sha256": "956ff9b67e26e1a6a866cb758f12c6f8746208489e3e4a4b5580802f2f0a587b"
+          "url": "https://static.crates.io/crates/k256/0.13.4/download",
+          "sha256": "f6e3919bbaa2945715f0bb6d3934a173d1e9a59ac23767fbaaef277265a7411b"
         }
       },
       "targets": [
@@ -34442,7 +34446,7 @@
           ],
           "selects": {}
         },
-        "version": "0.13.3"
+        "version": "0.13.4"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -79669,7 +79673,7 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_types 1.0.0",
+    "evm_rpc_types 1.1.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -79740,7 +79744,7 @@
     "itertools 0.12.0",
     "json-patch 0.2.7",
     "json5 0.4.1",
-    "k256 0.13.3",
+    "k256 0.13.4",
     "k8s-openapi 0.22.0",
     "kube 0.93.1",
     "lazy_static 1.4.0",

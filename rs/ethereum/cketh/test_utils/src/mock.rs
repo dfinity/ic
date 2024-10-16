@@ -1,4 +1,4 @@
-use crate::{assert_reply, CkEthSetup, MAX_TICKS};
+use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
@@ -44,26 +44,6 @@ pub enum JsonRpcMethod {
 
     #[strum(serialize = "eth_sendRawTransaction")]
     EthSendRawTransaction,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
-pub enum JsonRpcProvider {
-    //order is top-to-bottom and must match order used in production
-    BlockPi,
-    PublicNode,
-    LlamaNodes,
-    Alchemy,
-}
-
-impl JsonRpcProvider {
-    fn url(&self) -> &str {
-        match self {
-            JsonRpcProvider::BlockPi => "https://ethereum.blockpi.network/v1/rpc/public",
-            JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
-            JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
-            JsonRpcProvider::Alchemy => "https://eth-mainnet.g.alchemy.com/v2",
-        }
-    }
 }
 
 #[derive(Debug)]
