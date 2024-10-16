@@ -22,7 +22,7 @@ RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${b
 RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail libtool
+    apt -yqq install --no-install-recommends docker-ce-cli podman containernetworking-plugins buildah zip fuse-overlayfs xtail
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
@@ -60,17 +60,6 @@ RUN mkdir libtinfo && \
     apt -yqq install ./libtinfo5_6.4-2ubuntu0.1_amd64.deb && \
     cd .. && \
     rm -rf libtinfo
-
-# Build libunwind from source. The packaged version breaks linking
-# Depends on libtool above
-RUN git clone --branch v1.8.1 --depth 1 "https://github.com/libunwind/libunwind" && \
-    cd libunwind && \
-    autoreconf -i && \
-    ./configure --libdir=/lib/x86_64-linux-gnu --includedir=/usr/include/x86_64-linux-gnu --disable-tests && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf libunwind
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
