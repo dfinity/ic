@@ -41,7 +41,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     boundary_node::BoundaryNode,
     group::SystemTestGroup,
-    ic::{InternetComputer, Subnet},
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCustomizations},
@@ -60,8 +60,13 @@ pub fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(64)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(480 << 20)),
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(2000)),
+    };
+    let ic = InternetComputer::new().with_default_vm_resources(vm_resources);
+    ic.add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
