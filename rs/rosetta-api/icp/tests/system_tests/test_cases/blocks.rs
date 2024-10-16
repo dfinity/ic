@@ -202,7 +202,7 @@ fn test_fetching_block_ranges() {
 
                     // Lets fetch all blocks
                     let mut query_blocks_request = QueryBlockRangeRequest {
-                        highest_block_index: highest_block_index,
+                        highest_block_index,
                         number_of_blocks: MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
                     };
                     let query_blocks_response: QueryBlockRangeResponse = env
@@ -228,7 +228,7 @@ fn test_fetching_block_ranges() {
 
                     // From this point on, we will only test the case where the number of blocks created is greater than 0
                     if args_with_caller.is_empty() {
-                        return ();
+                        return;
                     }
                     // Lets try to fetch blocks which are out of scope
                     query_blocks_request.highest_block_index = highest_block_index * 10;
