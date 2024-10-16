@@ -113,7 +113,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 k
             ),
         };
-        
+
         // We can't know the exact timestamp of the dissolve delay, but we can assert that it is in the past or now
         assert!(
             dissolve_delay_timestamp
