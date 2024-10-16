@@ -5,7 +5,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "tecdsa_complaint_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -61,6 +60,7 @@ system_test_nns(
 
 system_test_nns(
     name = "tschnorr_message_sizes_test",
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on slow_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
