@@ -8,12 +8,11 @@ use std::{
 // done when certain crate features are enabled
 use tla_instrumentation::{
     checker::{check_tla_code_link, PredicateDescription},
-    tla_log_locals, tla_log_request, tla_log_response,
-    tla_log_label,
+    tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
-use tla_instrumentation_proc_macros::{tla_update_method, tla_function};
+use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
 // Example of how to separate as much of the instrumentation code as possible from the main code
 #[macro_use]
