@@ -1,5 +1,5 @@
 {
-  "checksum": "f1d446e2f51f5523ef34b14dc52d390645bd8bf6796eb37472bd66e892f0a910",
+  "checksum": "9ab5779ad70c5b45a9834dcfe75c463fc6eda77068374293ca0cade10a91d9c1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17496,10 +17496,6 @@
             {
               "id": "assert_matches 1.5.0",
               "target": "assert_matches"
-            },
-            {
-              "id": "async-channel 2.3.1",
-              "target": "async_channel"
             },
             {
               "id": "async-scoped 0.8.0",
@@ -79609,7 +79605,6 @@
     "assert-json-diff 2.0.2",
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
-    "async-channel 2.3.1",
     "async-recursion 1.0.5",
     "async-scoped 0.8.0",
     "async-stream 0.3.5",
