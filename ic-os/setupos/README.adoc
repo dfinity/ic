@@ -20,7 +20,7 @@ For more information on the onboarding and installation process, as well as the 
 
 To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
-=== Running SetupOS locally
+=== Running SetupOS interactively via Bazel
 
 This requires QEMU with qemu-system and qemu-kvm installed on the machine.
 
@@ -31,6 +31,8 @@ Bazel can be used to boot a local VM with a GuestOS like this:
 In a VM or container without KVM support, use:
 
     bazel run //ic-os/setupos/envs/dev:launch-local-vm-no-kvm
+
+Both these targets will allocate a (sparse) 'vda' attached to the virtual machine as the first disk, while the SetupOS gets attached as the second disk ('vdb').  The system initially boots from the second disk, because the first disk is effectively zeroed out.  Installation then proceeds, with an interactive console available for debugging.  Once SetupOS installation finishes successfully, the system will reboot to the installed operating system.
 
 == Under the hood: Installation
 
