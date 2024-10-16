@@ -157,8 +157,20 @@ impl TargetCanister {
                     PathBuf::from("rs/ledger_suite/common/ledger_core/src"),
                 ]
             }
-            _ => {
+            TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcKyt
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::LedgerSuiteOrchestrator => {
                 vec![self.repo_dir()]
+            }
+            TargetCanister::EvmRpc => {
+                vec![]
             }
         }
     }
