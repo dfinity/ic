@@ -378,10 +378,8 @@ fn populate_plan(
             Plan::IdentityAccount(Ok((keypair.secret_key, keypair.public_key)), Box::new(tail))
         }
         Plan::CanisterAccount(Err(_), tail) => {
-            let (tail, can) = tokio::join!(
-                populate_plan(app_rt, agent, effective_canister_id, tail, rng),
-                holder::new(app_rt, agent, effective_canister_id)
-            );
+            let tail = populate_plan(app_rt, agent, effective_canister_id, tail, rng);
+            let can = holder::new(app_rt, agent, effective_canister_id);
             Plan::CanisterAccount(Ok(can.canister_id().get()), Box::new(tail))
         }
         Plan::Transfer((Err(from), amount, to), itail) => {
