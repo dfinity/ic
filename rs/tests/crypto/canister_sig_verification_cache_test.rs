@@ -39,7 +39,6 @@ use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
     agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher,
 };
-use ic_tests::canister_sig_verification_cache_test::{config, test};
 use ic_types::messages::Blob;
 use rand::Rng;
 use serde_bytes::ByteBuf;

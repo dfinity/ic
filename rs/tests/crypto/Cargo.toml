@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+candid = { workspace = true }
 ic-agent = { workspace = true }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
@@ -19,6 +20,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 k256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
