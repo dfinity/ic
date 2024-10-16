@@ -2,23 +2,11 @@
 
 set -e
 
-if [ -f /boot/config/REDEPLOY ]; then
-    echo "WARNING! Redeploying node."
-
-    # Backup keys
-    cryptsetup luksOpen /dev/vda10 vda10-crypt --key-file /boot/config/store.keyfile
-    sleep 5
-    mkdir /tmp/preserve
-    dd if=/dev/mapper/store-shared--crypto of=/tmp/preserve/crypto.part bs=100M
-    vgchange -an store
-    cryptsetup luksClose vda10-crypt
-
-    # Trigger "redeployment"
-    rm -rf /boot/config/CONFIGURED
-    rm -rf /boot/config/store.keyfile
-elif [ -e /dev/vda10 ]; then
+if [ -e /boot/config/store.keyfile ]; then
     exit 0
-else
+fi
+
+if [ ! -e /dev/vda10 ]; then
     echo "- - L" | sfdisk --force --no-reread -a /dev/vda
 fi
 
