@@ -32,7 +32,7 @@ function read_config_variables() {
 }
 
 function configure_ipv6() {
-    ipv6_config_type=$(get_config_value '.ipv6_config | keys[]')
+    ipv6_config_type=$(get_config_value '.network_settings.ipv6_config | keys[]')
     case "$ipv6_config_type" in
         "Deterministic")
             echo "GuestOS IPv6 configuration should not be 'Deterministic'."
