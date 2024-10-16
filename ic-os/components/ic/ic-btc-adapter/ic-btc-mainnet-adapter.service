@@ -11,7 +11,7 @@ StartLimitIntervalSec=0
 
 [Service]
 User=ic-replica
-ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -o /run/ic-node/config/ic-btc-mainnet-adapter.json5
+ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -m -o /run/ic-node/config/ic-btc-mainnet-adapter.json5
 ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-btc-mainnet-adapter.json5
 NotifyAccess=main
 Restart=always
