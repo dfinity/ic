@@ -35,7 +35,7 @@ impl std::fmt::Debug for ApalacheError {
                 }
             }
             ApalacheError::CheckFailed(None, s) => {
-                f.write_str(&format!("{}", s))?;
+                f.write_str(s)?;
                 f.write_str(
                     "The error code was not available - this is not expected, please report.",
                 )
