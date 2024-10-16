@@ -1,6 +1,8 @@
+// HTTP gateway interface
+
 type HeaderField = record {
-    text;
-    text;
+  text;
+  text;
 };
 type HttpGatewayRequest = record {
   method: text;
@@ -27,6 +29,9 @@ type StreamingStrategy = variant {
     token: Token;
   };
 };
+
+// Schnorr interface
+
 type SchnorrAlgorithm = variant {
   bip340secp256k1;
   ed25519;
@@ -47,6 +52,9 @@ type SignWithSchnorrResult = variant {
   Ok : blob;
   Err : text;
 };
+
+// ECDSA interface
+
 type EcdsaPublicKeyResponse = record {
   public_key : blob;
   chain_code : blob;
@@ -59,6 +67,9 @@ type SignWithEcdsaResult = variant {
   Ok : blob;
   Err : text;
 };
+
+// canister HTTP outcalls
+
 type HttpHeader = record {
   name : text;
   value : text;
@@ -81,10 +92,12 @@ type HttpResponseResult = variant {
   Ok : HttpResponse;
   Err : record {RejectionCode; text};
 };
+
 type TransformArgs = record {
   response : HttpResponse;
   context : blob;
 };
+
 service : {
   http_request: (request: HttpGatewayRequest) -> (HttpGatewayResponse) query;
   schnorr_public_key : (opt principal, vec blob, SchnorrKeyId) -> (SchnorrPublicKeyResult);
@@ -94,4 +107,8 @@ service : {
   canister_http : () -> (HttpResponseResult);
   canister_http_with_transform : () -> (HttpResponse);
   transform : (TransformArgs) -> (HttpResponse) query;
+  whoami : () -> (text);
+  whois : (principal) -> (text);
+  blob_len : (blob) -> (nat64);
+  call_with_large_blob : (principal, nat64) -> (nat64);
 }

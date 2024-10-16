@@ -4,14 +4,10 @@ set -e
 
 function usage() {
     cat >&2 <<EOF
-build-bootstrap-config-image.sh [-t] out_file [parameters]
+build-bootstrap-config-image.sh out_file [parameters]
 
-Build the configuration image injected into the guest OS
+Build the configuration image injected into the guestOS
 during bootstrap.
-
-The first argument may optionally be "-t" to instruct the script to just build
-the tar file that contains the config information. Otherwise, it will build the
-disk image that will be injected as removable media into the bootstrap process.
 
 The output file needs to be given next. The script will either write a
 disk image or tar file as output file (see above).
@@ -307,19 +303,9 @@ function build_ic_bootstrap_diskimage() {
     rm -rf "${TMPDIR}"
 }
 
-BUILD_TAR_ONLY=0
-if [ "$1" == "-t" -o "$1" == "--tar" ]; then
-    BUILD_TAR_ONLY=1
-    shift
-fi
-
 if [ "$#" -lt 2 ]; then
     usage
     exit 1
 fi
 
-if [ "${BUILD_TAR_ONLY}" == 0 ]; then
-    build_ic_bootstrap_diskimage "$@"
-else
-    build_ic_bootstrap_tar "$@"
-fi
+build_ic_bootstrap_diskimage "$@"

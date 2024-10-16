@@ -15,14 +15,16 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, InitialNiDkgTranscriptRecord};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,
-    subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
+    subnet::v1::{
+        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetListRecord,
+        SubnetRecord,
+    },
 };
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::{
@@ -42,9 +44,11 @@ use ic_registry_transport::{
     serialize_get_value_request, Error,
 };
 use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types::{
-    crypto::{CurrentNodePublicKeys, KeyPurpose},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
+        CurrentNodePublicKeys, KeyPurpose,
+    },
     NodeId, ReplicaVersion,
 };
 use maplit::btreemap;
@@ -54,8 +58,10 @@ use rand::RngCore;
 use registry_canister::mutations::node_management::{
     common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::TryFrom;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    convert::TryFrom,
+};
 
 /// ID used in multiple tests.
 pub const TEST_ID: u64 = 999;
@@ -827,6 +833,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         // Unused section follows
         p2p_flow_endpoints: Default::default(),
         prometheus_metrics_endpoint: Default::default(),
+        node_reward_type: None,
     };
 
     (payload, node_public_keys)
