@@ -1240,7 +1240,10 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
-        false,
+        // With the ICP mainnet canister being at V1, and the tip-of-master also being V1,
+        // downgrading the ledger canister to the mainnet version from the tip-of-master version
+        // should succeed.
+        true,
     );
 }
 

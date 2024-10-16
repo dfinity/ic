@@ -34,9 +34,19 @@ use std::time::Duration;
 
 pub mod ckerc20;
 pub mod events;
+#[cfg(feature = "evm-rpc")]
+mod evm_rpc_provider;
 pub mod flow;
 pub mod mock;
+#[cfg(not(feature = "evm-rpc"))]
+mod provider;
 pub mod response;
+
+#[cfg(feature = "evm-rpc")]
+pub use evm_rpc_provider::JsonRpcProvider;
+#[cfg(not(feature = "evm-rpc"))]
+pub use provider::JsonRpcProvider;
+
 #[cfg(test)]
 mod tests;
 
@@ -162,9 +172,10 @@ impl CkEthSetup {
     }
 
     pub fn maybe_evm_rpc(env: Arc<StateMachine>) -> Self {
-        match std::env::var("EVM_RPC_CANISTER_WASM_PATH") {
-            Ok(_) => CkEthSetup::new_with_evm_rpc(env),
-            Err(_) => CkEthSetup::new(env),
+        if use_evm_rpc_canister() {
+            CkEthSetup::new_with_evm_rpc(env)
+        } else {
+            CkEthSetup::new(env)
         }
     }
 
@@ -720,4 +731,8 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
             panic!("Expected a successful reply, got a reject: {}", reject)
         }
     }
+}
+
+pub fn use_evm_rpc_canister() -> bool {
+    std::env::var("EVM_RPC_CANISTER_WASM_PATH").is_ok()
 }

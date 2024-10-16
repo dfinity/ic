@@ -15,8 +15,9 @@ on:
   workflow_call:
 
 # runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 permissions: read-all
@@ -73,7 +74,7 @@ anchors:
     name: Set up Python
     uses: actions/setup-python@v5
     with:
-      python-version: '3.10'
+      python-version: '3.12'
   bazel-upload: &bazel-upload
     name: Upload bazel-targets
     uses: actions/upload-artifact@v4
@@ -156,7 +157,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 120
+    timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
@@ -388,3 +389,21 @@ jobs:
           set -eExuo pipefail
           buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
               cargo build --release --locked
+
+  # CI job is also executed in Schedule Hourly
+  bazel-test-coverage:
+    name: Bazel Test Coverage
+    <<: *dind-large-setup
+    if: |
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'CI_COVERAGE')
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - name: Run Bazel Test Coverage
+        shell: bash
+        run: |
+          ./ci/scripts/bazel-coverage.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
