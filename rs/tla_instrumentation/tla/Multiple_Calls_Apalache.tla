@@ -33,7 +33,7 @@ VARIABLES
     \* @type: $proc -> Str;
     pc
 
-MOD == INSTANCE Counter
+MOD == INSTANCE Multiple_Calls
 
 Next == [MOD!Next]_MOD!vars
 
