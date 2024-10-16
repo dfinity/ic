@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+eprintln() {
+    echo "$@" >&2
+}
+
 if [ -n "${IN_NIX_SHELL:-}" ]; then
     eprintln "Please do not run $0 inside of nix-shell."
     exit 1
@@ -25,10 +29,6 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
 Script uses dfinity/ic-build image by default.
 EOF
-}
-
-eprintln() {
-    echo "$@" >&2
 }
 
 if findmnt /hoststorage >/dev/null; then
@@ -176,11 +176,11 @@ fi
 # I witnessed journald and syslog peg 2 cores of my devenv
 # when running a simple cat /path/to/file.
 if tty >/dev/null 2>&1; then
-    tty=-t
+    tty_arg=-t
 else
-    tty=
+    tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty --log-driver=none --rm --privileged --network=host --cgroupns=host"
+other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
 if [ $# -eq 0 ]; then
