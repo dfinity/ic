@@ -117,7 +117,6 @@ struct StructCanister {
 
 static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
-// TODO: why doesn't this work if I make it async?
 #[tla_function]
 async fn call_maker() {
     tla_log_request!(
