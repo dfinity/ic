@@ -25,14 +25,17 @@ rust_library(
 
 rust_test(
     name = "structs_test",
-    srcs = ["tla_instrumentation/tests/structs.rs"],
+    srcs = ["tla_instrumentation/tests/structs.rs", "tla_instrumentation/tests/common.rs"],
+    crate_root = "tla_instrumentation/tests/structs.rs",
     data = [
         ":tla_models",
         "@bazel_tools//tools/jdk:current_java_runtime",
-        "@tla_apalache//:contents",
+        "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
         "JAVABASE": "$(JAVABASE)",
+        "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
+        "TLA_MODULES": "$(locations :tla_models)",
     },
     proc_macro_deps = [":proc_macros"],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
@@ -46,7 +49,8 @@ rust_test(
 
 rust_test(
     name = "multiple_calls_test",
-    srcs = ["tla_instrumentation/tests/multiple_calls.rs"],
+    srcs = ["tla_instrumentation/tests/multiple_calls.rs", "tla_instrumentation/tests/common.rs"],
+    crate_root = "tla_instrumentation/tests/multiple_calls.rs",
     data = [
         ":tla_models",
         "@bazel_tools//tools/jdk:current_java_runtime",
