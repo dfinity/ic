@@ -13550,6 +13550,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_crypto_system_tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

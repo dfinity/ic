@@ -1,0 +1,18 @@
+[package]
+name = "ic_crypto_system_tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+slog = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "rpc_csp_vault_reconnection_test"
+path = "rpc_csp_vault_reconnection_test.rs"
