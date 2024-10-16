@@ -171,9 +171,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-channel": crate.spec(
                 version = "2.3.1",
             ),
-            "async-recursion": crate.spec(
-                version = "^1.0.5",
-            ),
             "async-scoped": crate.spec(
                 version = "^0.8.0",
                 features = [
@@ -181,10 +178,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "async-stream": crate.spec(
-                version = "^0.3.5",
+                version = "^0.3.6",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.81",
+                version = "^0.1.83",
             ),
             "axum": crate.spec(
                 version = "^0.7.7",

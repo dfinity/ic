@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 assert-json-diff = "2.0.1"
 assert_matches = { workspace = true }
-async-recursion = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 backon = "0.4.1"

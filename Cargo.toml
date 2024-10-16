@@ -468,10 +468,8 @@ actix-web = "4.9.0"
 actix-rt = "2.10.0"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
-async-recursion = "1.0.5"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-stream = "0.3.5"
-async-trait = "0.1.81"
+async-stream = "0.3.6"
+async-trait = "0.1.83"
 axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
