@@ -44,10 +44,13 @@ file_share_image_filename: <name of image file to appear over NFS>
 file_share_username: <SSH username to log into file share> # NOTE SSH KEYS ARE ASSUMED TO BE FUNCTIONAL
 inject_image_ipv6_prefix: <config.ini: ipv6_prefix>
 inject_image_ipv6_gateway: <config.ini: ipv6_gateway>
+inject_firewall_json: <textual contents of a firewall.json formatted configuration file -- not a path to a file!>
 ```
 
 These are CLI args submitted in yaml form. See [why](#why-two-config-files) or `./deploy.py --help` for detailed docs on the arguments.
 See ./example_config.yaml for a functional example. 
+
+For information on the firewall configuration format, please consult link:../../docs/Network-Configuration.adoc[Network Configuration].
 
 #### What's in the csv secrets file? 
 

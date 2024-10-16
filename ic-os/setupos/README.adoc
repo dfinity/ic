@@ -20,6 +20,18 @@ For more information on the onboarding and installation process, as well as the 
 
 To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
+=== Running SetupOS locally
+
+This requires QEMU with qemu-system and qemu-kvm installed on the machine.
+
+Bazel can be used to boot a local VM with a GuestOS like this:
+
+    bazel run //ic-os/setupos/envs/dev:launch-local-vm
+
+In a VM or container without KVM support, use:
+
+    bazel run //ic-os/setupos/envs/dev:launch-local-vm-no-kvm
+
 == Under the hood: Installation
 
 The SetupOS installation is initiated by the systemd service unit file `setupos.service`. This service is of type idle, which means the installation is triggered only after every other unit has either completed or started.

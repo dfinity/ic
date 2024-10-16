@@ -114,6 +114,7 @@ def _custom_partitions(mode):
 
     config_dict = {
         Label("//ic-os/setupos:config/config.ini"): "config.ini",
+        Label("//ic-os/setupos:config/firewall.json"): "firewall.json",
         Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
     }
 
