@@ -1,5 +1,5 @@
 {
-  "checksum": "fc0074542ba7e9a75d76ca98d090840a102fbfb449449da0737ee585c28482bb",
+  "checksum": "23b8c4c80ca99d2cb874403f59f756788b97b830a3dd2f48826f239b0028a3c3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17975,10 +17975,6 @@
               "target": "getrandom"
             },
             {
-              "id": "glob 0.3.1",
-              "target": "glob"
-            },
-            {
               "id": "group 0.13.0",
               "target": "group"
             },
@@ -18364,10 +18360,6 @@
               "target": "parking_lot"
             },
             {
-              "id": "pathdiff 0.2.1",
-              "target": "pathdiff"
-            },
-            {
               "id": "pcre2 0.2.6",
               "target": "pcre2"
             },
@@ -18483,10 +18475,6 @@
             {
               "id": "rand_pcg 0.3.1",
               "target": "rand_pcg"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "randomkit"
             },
             {
               "id": "ratelimit 0.9.1",
@@ -18691,10 +18679,6 @@
             {
               "id": "stubborn-io 0.3.2",
               "target": "stubborn_io"
-            },
-            {
-              "id": "substring 1.4.5",
-              "target": "substring"
             },
             {
               "id": "subtle 2.5.0",
@@ -44895,45 +44879,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pathdiff 0.2.1": {
-      "name": "pathdiff",
-      "version": "0.2.1",
-      "package_url": "https://github.com/Manishearth/pathdiff",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pathdiff/0.2.1/download",
-          "sha256": "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pathdiff",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pathdiff",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.2.1"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "pbkdf2 0.12.2": {
       "name": "pbkdf2",
       "version": "0.12.2",
@@ -51807,75 +51752,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "randomkit 0.1.1": {
-      "name": "randomkit",
-      "version": "0.1.1",
-      "package_url": "https://github.com/stygstra/rust-randomkit",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/randomkit/0.1.1/download",
-          "sha256": "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "randomkit",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "randomkit",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.158",
-              "target": "libc"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT/BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "rangemap 1.4.0": {
       "name": "rangemap",
@@ -62936,80 +62812,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "substring 1.4.5": {
-      "name": "substring",
-      "version": "1.4.5",
-      "package_url": "https://github.com/Anders429/substring",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/substring/1.4.5/download",
-          "sha256": "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "substring",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "substring",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "substring 1.4.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "1.4.5"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "subtle 2.5.0": {
       "name": "subtle",
@@ -78982,7 +78784,6 @@
     "futures-util 0.3.30",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
-    "glob 0.3.1",
     "group 0.13.0",
     "hashlink 0.8.4",
     "hex 0.4.3",
@@ -79083,7 +78884,6 @@
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.14",
-    "pathdiff 0.2.1",
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
@@ -79114,7 +78914,6 @@
     "rand_chacha 0.3.1",
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
-    "randomkit 0.1.1",
     "ratelimit 0.9.1",
     "rayon 1.10.0",
     "rcgen 0.13.1",
@@ -79169,7 +78968,6 @@
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
-    "substring 1.4.5",
     "subtle 2.5.0",
     "syn 1.0.109",
     "sync_wrapper 1.0.1",
