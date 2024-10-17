@@ -89,9 +89,9 @@ permissionless and decentralized Internet.
                     name = "DFINITY Foundation" ;
                     description = "The DFINITY Foundation is a major driving force behind the development of the Internet Computer. To realize the vision of a decentralized, permissionless, and secure world computer, the foundation employs world-class scientists and engineers with expertise in cryptography and distributed systems. As a Swiss non-profit, the foundation'"'"'s mission is to empower developers and users by creating a scalable platform that efficiently hosts the next generation of applications.
 
-This neuron exercises its voting power by following key members of the DFINITY team. Notably, this neuron cannot vote directly through its controller principal, as its private key was irretrievably destroyed at the neuron'"'"'s inception during a special ceremony involving multiple early core members of the DFINITY team. This structure ensures that the voting power behind this neuron remains decentralized.
+This neuron exercises its voting power by following key members of the DFINITY team. Notably, this neuron cannot vote directly through its controller principal, as its private key was irretrievably destroyed at the neuron'"'"'s inception during a special ceremony. This structure ensures that the voting power behind this neuron remains decentralized.
 
-The DFINITY Foundation is highly engaged in all proposals, and proposal discussions. We are deeply invested in nurturing a vibrant ecosystem, supporting developers, and engaging with the broader community. Our commitment to transparency and accountability ensures that the interests of all stakeholders are represented as we work together to unlock the full potential of a truly permissionless and decentralized internet.
+The DFINITY Foundation is highly engaged in all proposals and proposal discussions. We are deeply invested in nurturing a vibrant ecosystem, supporting developers, and engaging with the broader community. Our commitment to transparency and accountability ensures that the interests of all stakeholders are represented as we work together to unlock the full potential of a truly permissionless and decentralized Internet.
 " ;
                 } ;
             } };
