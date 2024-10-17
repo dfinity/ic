@@ -160,7 +160,7 @@ pub fn check_traces() {
             let apalache = apalache.clone();
             let constants = constants.clone();
             let pair = pair.clone();
-            // NOTE: the 'process_id" is actually the tla module name
+            // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
             let tla_module = format!("{}_Apalache.tla", update.process_id);
             let tla_module = get_tla_module_path(&tla_module);
             let handle = thread::spawn(move || {
