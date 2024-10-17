@@ -16,7 +16,7 @@ bincode = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 chrono = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 deterministic_ips = { path = "../../ic_os/dev_test_tools/deterministic_ips" }

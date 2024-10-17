@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }

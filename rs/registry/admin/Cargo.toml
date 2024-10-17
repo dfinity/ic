@@ -12,7 +12,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 hex = { workspace = true }

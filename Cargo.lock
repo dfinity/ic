@@ -5155,7 +5155,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "cycles-minting-canister",
  "futures",
  "hex",
@@ -5391,7 +5391,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-logger",
@@ -5676,7 +5676,7 @@ dependencies = [
  "bitcoin 0.28.2",
  "bitcoincore-rpc",
  "bitcoind",
- "clap 3.2.25",
+ "clap 4.5.19",
  "criterion",
  "futures",
  "hashlink",
@@ -8372,7 +8372,7 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "byte-unit",
- "clap 3.2.25",
+ "clap 4.5.19",
  "futures",
  "http 1.1.0",
  "http-body-util",
@@ -9103,7 +9103,6 @@ dependencies = [
  "candid",
  "chrono",
  "ciborium",
- "clap 3.2.25",
  "dfn_protobuf",
  "ic-agent",
  "ic-certification 0.9.0",
@@ -10218,7 +10217,7 @@ dependencies = [
 name = "ic-nns-inspector"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "csv",
  "hex",
  "ic-base-types",
@@ -10497,7 +10496,7 @@ dependencies = [
  "anyhow",
  "assert_matches",
  "base64 0.13.1",
- "clap 3.2.25",
+ "clap 4.5.19",
  "fs_extra",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -10629,7 +10628,7 @@ name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
  "base64 0.13.1",
- "clap 3.2.25",
+ "clap 4.5.19",
  "futures",
  "hex",
  "ic-artifact-pool",
@@ -10679,7 +10678,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
@@ -10894,7 +10893,7 @@ dependencies = [
 name = "ic-registry-replicator"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-http-endpoints-metrics",
@@ -10979,7 +10978,7 @@ name = "ic-replay"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-artifact-pool",
  "ic-canister-client",
@@ -11032,7 +11031,7 @@ version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "canister-test",
- "clap 3.2.25",
+ "clap 4.5.19",
  "criterion",
  "hex",
  "ic-artifact-pool",
@@ -11290,7 +11289,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "dfn_candid",
  "dfn_protobuf",
  "futures",
@@ -11534,7 +11533,7 @@ dependencies = [
  "build-info-build",
  "candid",
  "candid_parser",
- "clap 3.2.25",
+ "clap 4.5.19",
  "comparable",
  "futures",
  "hex",
@@ -11995,7 +11994,7 @@ name = "ic-starter"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-config",
  "ic-logger",
  "ic-management-canister-types",
@@ -12047,7 +12046,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-artifact-pool",
  "ic-base-types",
@@ -12219,7 +12218,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.9.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-config",
  "ic-logger",
@@ -12243,7 +12242,7 @@ dependencies = [
 name = "ic-subnet-splitting"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "hex",
  "ic-agent",
  "ic-base-types",
@@ -12339,7 +12338,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 3.2.25",
+ "clap 4.5.19",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
@@ -14416,7 +14415,7 @@ checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -16012,7 +16011,7 @@ dependencies = [
  "async-trait",
  "backoff",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "exec",
  "get_if_addrs",
  "hex",
@@ -16651,7 +16650,7 @@ dependencies = [
  "bitcoincore-rpc",
  "bytes",
  "candid",
- "clap 3.2.25",
+ "clap 4.5.19",
  "ctrlc",
  "flate2",
  "form_urlencoded",
@@ -19921,7 +19920,6 @@ dependencies = [
  "certificate_orchestrator_interface",
  "chacha20poly1305",
  "chrono",
- "clap 3.2.25",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
@@ -21123,7 +21121,7 @@ dependencies = [
 name = "vsock_guest"
 version = "1.0.0"
 dependencies = [
- "clap 3.2.25",
+ "clap 4.5.19",
  "vsock_lib",
 ]
 
