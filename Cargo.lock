@@ -15114,6 +15114,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "message-routing-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-agent",
+ "ic-base-types",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-utils 0.37.0",
+ "itertools 0.12.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "rejoin-test-lib",
+ "slog",
+ "tokio",
+ "xnet-test",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17801,6 +17824,19 @@ version = "0.9.0"
 dependencies = [
  "ic-utils-rustfmt",
  "prost-build 0.13.3",
+]
+
+[[package]]
+name = "rejoin-test-lib"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+ "chrono",
+ "dfn_json",
+ "futures",
+ "ic-system-test-driver",
+ "slog",
+ "tokio",
 ]
 
 [[package]]
