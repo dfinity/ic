@@ -5,8 +5,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-permissions: read-all
-
 concurrency:
   # only triggered on PR, so head_ref will always be set
   group: ${{ github.workflow }}-${{ github.head_ref }}
