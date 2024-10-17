@@ -11,7 +11,7 @@ name = "pocket-ic-test-canister"
 path = "src/canister.rs"
 
 [dependencies]
-candid = "^0.10.2"
+candid = { workspace = true }
 ic-cdk = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -15,15 +15,10 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
-      - name: 'Setup Rust and Cargo'
-        uses: moonrepo/setup-rust@v1.2.1
-        with:
-          components: clippy
       - name: 'cargo clippy'
         run: |
           cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
       - name: 'cargo build'
-        shell: pwsh
         run: |
           cargo build --release --locked -p pocket-ic
           cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
