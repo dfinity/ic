@@ -1,11 +1,11 @@
 use std::{
     collections::{HashSet, VecDeque},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use ic_metrics::MetricsRegistry;
-use tokio::sync::{mpsc::Sender, Mutex};
+use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
@@ -97,7 +97,7 @@ impl GetSuccessorsHandler {
             .observe(request.processed_block_hashes.len() as f64);
 
         let response = {
-            let state = self.state.lock().await;
+            let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
                 .map_or(0, |cached| cached.height);
@@ -247,11 +247,11 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
 mod test {
     use super::*;
 
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use bitcoin::Network;
     use ic_metrics::MetricsRegistry;
-    use tokio::sync::{mpsc::channel, Mutex};
+    use tokio::sync::mpsc::channel;
 
     use crate::config::test::ConfigBuilder;
     use ic_btc_adapter_test_utils::{
@@ -313,7 +313,7 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain.add_headers(&side_chain);
             blockchain.add_headers(&side_chain_2);
@@ -396,7 +396,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain
                 .add_block(main_block_1.clone())
@@ -457,7 +457,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain.add_headers(&side_chain);
             blockchain
@@ -506,7 +506,7 @@ mod test {
         );
         let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             for header in main_chain {
                 let block = Block {
@@ -562,7 +562,7 @@ mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (_, maybe_err) = blockchain.add_headers(&main_chain);
             assert!(
                 maybe_err.is_none(),
@@ -653,7 +653,7 @@ mod test {
         };
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (added_headers, _) = blockchain.add_headers(&headers);
             assert_eq!(added_headers.len(), 1);
             let (added_headers, _) = blockchain.add_headers(&additional_headers);
@@ -703,7 +703,7 @@ mod test {
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
         {
-            let mut blockchain = handler.state.lock().await;
+            let mut blockchain = handler.state.lock().unwrap();
             let (added_headers, _) = blockchain.add_headers(&main_chain);
             assert_eq!(added_headers.len(), 5);
             let main_blocks = main_chain

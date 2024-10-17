@@ -8,8 +8,12 @@ use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
-use std::{net::SocketAddr, sync::Arc, time::Instant};
-use tokio::sync::{mpsc::channel, Mutex};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
+use tokio::sync::mpsc::channel;
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
