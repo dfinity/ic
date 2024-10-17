@@ -1,4 +1,5 @@
 use assert_matches::assert_matches;
+use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
@@ -7,6 +8,7 @@ use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID};
+use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
@@ -21,12 +23,13 @@ use ic_nns_governance_api::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    state_test_helpers::nns_start_dissolving,
 };
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
     LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
 // tests that the neuron can be staked from a ledger account. That the neuron
@@ -35,6 +38,10 @@ use std::collections::HashMap;
 fn test_stake_and_disburse_neuron_with_notification() {
     state_machine_test_on_nns_subnet(|runtime| {
         async move {
+            let state_machine = match runtime {
+                Runtime::StateMachine(ref state_machine) => state_machine,
+                _ => panic!("This test must run on a state machine."),
+            };
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
 
@@ -145,6 +152,12 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 alloc
             );
 
+            nns_start_dissolving(state_machine, user.get_principal_id(), neuron_id)
+                .expect("Failed to start dissolving neuron");
+
+            state_machine.advance_time(Duration::from_secs(INITIAL_NEURON_DISSOLVE_DELAY + 1));
+            state_machine.tick();
+
             // Disburse the neuron.
             let result: ManageNeuronResponse = nns_canisters
                 .governance
@@ -202,6 +215,10 @@ fn test_stake_and_disburse_neuron_with_notification() {
 fn test_stake_and_disburse_neuron_with_account() {
     state_machine_test_on_nns_subnet(|runtime| {
         async move {
+            let state_machine = match runtime {
+                Runtime::StateMachine(ref state_machine) => state_machine,
+                _ => panic!("This test must run on a state machine."),
+            };
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
 
@@ -336,7 +353,11 @@ fn test_stake_and_disburse_neuron_with_account() {
                 "Neuron: {:?}",
                 full_neuron
             );
+            nns_start_dissolving(state_machine, user.get_principal_id(), neuron_id)
+                .expect("Failed to start dissolving neuron");
 
+            state_machine.advance_time(Duration::from_secs(INITIAL_NEURON_DISSOLVE_DELAY + 1));
+            state_machine.tick();
             // Disburse the neuron.
             let result: ManageNeuronResponse = nns_canisters
                 .governance

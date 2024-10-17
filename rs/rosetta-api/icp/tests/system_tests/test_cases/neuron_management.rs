@@ -1,16 +1,17 @@
-use crate::common::system_test_environment::RosettaTestingEnvironment;
-use crate::common::utils::{get_test_agent, list_neurons, test_identity};
-use ic_agent::identity::BasicIdentity;
-use ic_agent::Identity;
-use ic_icp_rosetta_client::RosettaCreateNeuronArgs;
-use ic_icp_rosetta_client::RosettaSetNeuronDissolveDelayArgs;
+use crate::common::{
+    system_test_environment::RosettaTestingEnvironment,
+    utils::{get_test_agent, list_neurons, test_identity},
+};
+use ic_agent::{identity::BasicIdentity, Identity};
+use ic_icp_rosetta_client::{RosettaCreateNeuronArgs, RosettaSetNeuronDissolveDelayArgs};
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_types::PrincipalId;
 use icp_ledger::AccountIdentifier;
 use lazy_static::lazy_static;
-use std::sync::Arc;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::runtime::Runtime;
 
 lazy_static! {
@@ -104,8 +105,8 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
 
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
-            // When a neuron is created its dissolve delay timestamp is set to now which corresponds to the state DISSOLVED
-            DissolveState::WhenDissolvedTimestampSeconds(dissolve_delay_timestamp) => {
+            // When a neuron is created it has a one week dissolve delay
+            DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
             k => panic!(
@@ -114,23 +115,15 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             ),
         };
 
-        // We can't know the exact timestamp of the dissolve delay, but we can assert that it is in the past or now
-        assert!(
-            dissolve_delay_timestamp
-                <= env
-                    .pocket_ic
-                    .get_time()
-                    .await
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-        );
-        let additional_dissolve_delay = 1000;
+        let one_week = 24 * 60 * 60 * 7;
+        assert_eq!(dissolve_delay_timestamp, one_week);
+
+        let new_dissolve_delay = dissolve_delay_timestamp + 1000;
         let new_dissolve_delay_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
-            + additional_dissolve_delay;
+            + new_dissolve_delay;
 
         // To be able to set the dissolve delay timestamp we need to set the state machine to live again
         env.rosetta_client
@@ -159,7 +152,9 @@ fn test_set_neuron_dissolve_delay_timestamp() {
         // The Dissolve Delay Timestamp should be updated
         // Since the state machine is live we do not know exactly how much time will be left at the time of calling the governance canister.
         // It should be between dissolve_delay_timestamp and dissolve_delay_timestamp - X seconds depending on how long it takes to call the governance canister
-        assert!(dissolve_delay_timestamp <= additional_dissolve_delay);
+        assert!(dissolve_delay_timestamp <= new_dissolve_delay);
+        assert!(dissolve_delay_timestamp > new_dissolve_delay - 10);
+
         assert!(dissolve_delay_timestamp > 0);
     });
 }
