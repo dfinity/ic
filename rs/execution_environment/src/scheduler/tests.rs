@@ -884,11 +884,8 @@ fn test_message_limit_from_message_overhead() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let number_of_messages = test
-        .scheduler()
-        .metrics
-        .msg_execution_duration
-        .get_sample_count();
+    // All messages are zero instruction messages so use  this metric to get their count.
+    let number_of_messages = test.scheduler().metrics.zero_instruction_messages.get();
     assert_eq!(number_of_messages, expected_number_of_messages);
     assert_eq!(
         test.state()
