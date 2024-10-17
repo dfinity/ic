@@ -27,14 +27,14 @@ rust_test(
     name = "tla_instrumentation_test",
     srcs = glob(["tla_instrumentation/tests/**/*.rs"]),
     data = [
-        ":tla_modules",
+        ":tla_models",
         "@bazel_tools//tools/jdk:current_java_runtime",
         "@tla_apalache//:bin/apalache-mc",
     ],
     env = {
         "JAVABASE": "$(JAVABASE)",
         "TLA_APALACHE_BIN": "$(rootpath @tla_apalache//:bin/apalache-mc)",
-        "TLA_MODULES": "$(locations :tla_modules)",
+        "TLA_MODULES": "$(locations :tla_models)",
     },
     proc_macro_deps = [":proc_macros"],
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
@@ -46,10 +46,10 @@ rust_test(
     ],
 )
 
-# all TLA modules
+# all TLA mdels
 # NOTE: the test runner assumes unique basenames
 filegroup(
-    name = "tla_modules",
+    name = "tla_models",
     srcs = glob(["tla/*.tla"]),
 )
 
