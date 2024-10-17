@@ -894,22 +894,27 @@ fn test_specified_id_call_v3() {
         let bytes = candid::Encode!(&arg).unwrap();
 
         // Submit a call to the `/api/v3/.../call` endpoint.
-        // Note that this might be flaky if it takes more than 10 seconds to process the update call
-        // (then `CallResponse::Poll` would be returned and this test would panic).
-        agent
-            .update(
-                &Principal::management_canister(),
-                "provisional_create_canister_with_cycles",
-            )
-            .with_arg(bytes)
-            .with_effective_canister_id(effective_canister_id)
-            .call()
-            .await
-            .map(|response| match response {
-                CallResponse::Poll(_) => panic!("Expected a reply"),
-                CallResponse::Response(..) => {}
-            })
-            .unwrap();
+        // This endpoint returns `CallResponse::Response` if the update call can be processed in less than 10 seconds.
+        // Otherwise, this endpoint returns `CallResponse::Poll`.
+        // In this test, we want to ensure that PocketIC can produce `CallResponse::Response`.
+        loop {
+            let response = agent
+                .update(
+                    &Principal::management_canister(),
+                    "provisional_create_canister_with_cycles",
+                )
+                .with_arg(bytes.clone())
+                .with_effective_canister_id(effective_canister_id)
+                .call()
+                .await
+                .unwrap();
+            match response {
+                CallResponse::Poll(_) => {}
+                CallResponse::Response(..) => {
+                    break;
+                }
+            };
+        }
     })
 }
 

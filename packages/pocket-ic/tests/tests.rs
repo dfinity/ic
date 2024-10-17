@@ -601,11 +601,12 @@ fn test_too_large_call() {
     let counter_wasm = counter_wasm();
     pic.install_canister(canister_id, counter_wasm, vec![], None);
 
+    const MAX_INGRESS_MESSAGE_ARG_SIZE: usize = 2097152;
     pic.update_call(
         canister_id,
         Principal::anonymous(),
         "inc",
-        vec![42; 16_000_000],
+        vec![42; MAX_INGRESS_MESSAGE_ARG_SIZE + 1],
     )
     .unwrap_err();
 }
