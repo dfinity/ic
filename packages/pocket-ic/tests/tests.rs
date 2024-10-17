@@ -4,14 +4,16 @@ use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::main::{CanisterId, CanisterIdRecord, CanisterSettings};
 use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
+#[cfg(unix)]
+use pocket_ic::DefaultEffectiveCanisterIdError;
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
         RawEffectivePrincipal, SubnetKind,
     },
-    update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc, PocketIcBuilder,
-    WasmResult,
+    update_candid, ErrorCode, PocketIc, PocketIcBuilder, WasmResult,
 };
+#[cfg(unix)]
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -1354,6 +1356,7 @@ fn subnet_metrics() {
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_raw_gateway() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
@@ -1582,6 +1585,7 @@ fn test_get_default_effective_canister_id_specified_id() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn test_get_default_effective_canister_id_invalid_url() {
     let _pic = PocketIcBuilder::new()
