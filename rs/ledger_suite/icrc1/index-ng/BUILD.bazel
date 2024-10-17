@@ -186,3 +186,41 @@ rust_test(
         },
     ]
 ]
+
+rust_ic_test_suite_with_extra_srcs(
+    name = "incompatible_token_type",
+    srcs = [
+        "tests/incompatible_token_type.rs",
+    ],
+    data = [
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister.wasm",
+    ],
+    env = {
+        "IC_ICRC1_INDEX_WASM_U256_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "IC_ICRC1_INDEX_WASM_U64_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister.wasm.gz)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister.wasm)",
+    },
+    extra_srcs = [
+        "tests/common/mod.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        ":index-ng",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/rust_canisters/http_types",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+    ],
+)

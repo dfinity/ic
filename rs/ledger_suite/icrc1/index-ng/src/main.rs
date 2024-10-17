@@ -371,6 +371,16 @@ fn post_upgrade(index_arg: Option<IndexArg>) {
         _ => (),
     };
 
+    with_account_data(|account_data| {
+        // Try to read the first key-value from the account data map. This will fail (and the
+        // canister will trap, i.e., the upgrade will fail) if:
+        // - the map is non-empty, i.e., there is at least one balance
+        // - the token type of the account data map does not match the one of this wasm, e.g.,
+        //   if the balances are stored using `u256` tokens and this wasm uses `u64` tokens, or
+        //   vice versa.
+        let _maybe_first_key_value = account_data.first_key_value();
+    });
+
     // set the first build_index to be called after init
     set_build_index_timer(with_state(|state| {
         state.retrieve_blocks_from_ledger_interval()
