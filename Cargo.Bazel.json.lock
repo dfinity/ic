@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "checksum": "cbe94cee6ad5b46f1425574a4a17685de7f9d6897fd67ea41f077da290c0fabf",
+=======
+  "checksum": "c9bc3e509f30589e67fba9a2ead972a72a8bfa503afedd11da725d8a1e931269",
+>>>>>>> origin/master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -79069,7 +79073,11 @@
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
+<<<<<<< HEAD
     "paste 1.0.15",
+=======
+    "paste 1.0.14",
+>>>>>>> origin/master
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",

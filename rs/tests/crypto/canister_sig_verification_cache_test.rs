@@ -43,6 +43,7 @@ use ic_types::messages::Blob;
 use rand::Rng;
 use serde_bytes::ByteBuf;
 use slog::info;
+use std::env;
 use std::time::Duration;
 
 const HITS_STR: &str = "crypto_bls12_381_sig_cache_hits";
@@ -141,7 +142,10 @@ pub fn test(env: TestEnv) {
 }
 
 fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
-    let ii_canister_id = ii_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+    let ii_canister_id = ii_node.create_and_install_canister_with_arg(
+        &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
+        None,
+    );
     info!(
         env.logger(),
         "II canister with id={ii_canister_id} installed on subnet with id={}",
