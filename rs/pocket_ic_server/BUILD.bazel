@@ -176,9 +176,9 @@ rust_test(
         "@ii_dev_canister//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "REGISTRY_WASM": "$(rootpath //rs/registry/canister:registry-canister)",
-        "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
+        "II_WASM": "$(rootpath @ii_dev_canister//file)",
     },
     tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
@@ -198,7 +198,7 @@ rust_test(
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },
     tags = ["cpu:8"],
@@ -219,7 +219,7 @@ rust_test(
         "@btc_canister//file",
     ],
     env = {
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
         "BASIC_BITCOIN_WASM": "$(rootpath @bitcoin_example_canister//file)",
         "BITCOIND_BIN": "$(rootpath @bitcoin_core//:bitcoind)",
         "BTC_WASM": "$(rootpath @btc_canister//file)",
