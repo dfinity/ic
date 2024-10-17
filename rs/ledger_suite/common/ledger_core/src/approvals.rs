@@ -79,8 +79,6 @@ pub trait AllowancesData {
         &mut self,
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)>;
 
-    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
-
     fn len_allowances(&self) -> usize;
 
     fn len_expirations(&self) -> usize;
@@ -184,17 +182,6 @@ where
         &mut self,
     ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
         self.allowances.pop_first()
-    }
-
-    fn oldest_arrivals(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
-        let mut result = vec![];
-        for (_t, key) in &self.arrival_queue {
-            if result.len() >= n {
-                break;
-            }
-            result.push(key.clone());
-        }
-        result
     }
 
     fn len_allowances(&self) -> usize {
@@ -439,12 +426,6 @@ where
                 }
             }
         })
-    }
-
-    /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
-    /// that represent approvals selected for trimming.
-    pub fn select_approvals_to_trim(&self, n: usize) -> Vec<(AD::AccountId, AD::AccountId)> {
-        self.allowances_data.oldest_arrivals(n)
     }
 
     /// Prunes allowances that are expired, removes at most `limit` allowances.
