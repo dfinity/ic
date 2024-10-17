@@ -1,5 +1,5 @@
 {
-  "checksum": "a08079ea6aaa6a0d254b0be86086cdd80def2fdf40540d0e16c267f67bbff84a",
+  "checksum": "57de8d576f7cdd3ae771b5a508038e567c284557846f4bd8523cea6c36756b6a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -6721,7 +6721,7 @@
               "target": "sha2"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -15449,7 +15449,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -15904,7 +15904,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -17590,7 +17590,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -18681,7 +18681,7 @@
               "target": "stubborn_io"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -18761,7 +18761,7 @@
               "target": "tokio_socks"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -19921,7 +19921,7 @@
               "target": "signature"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -20192,7 +20192,7 @@
               "target": "sec1"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -22316,7 +22316,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -22374,7 +22374,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -24787,7 +24787,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -31124,7 +31124,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -53496,7 +53496,7 @@
               "target": "hmac"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -54354,7 +54354,7 @@
               "target": "spki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -55609,7 +55609,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -55732,7 +55732,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -57409,7 +57409,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -62801,14 +62801,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "subtle 2.5.0": {
+    "subtle 2.6.1": {
       "name": "subtle",
-      "version": "2.5.0",
+      "version": "2.6.1",
       "package_url": "https://github.com/dalek-cryptography/subtle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/subtle/2.5.0/download",
-          "sha256": "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+          "url": "https://static.crates.io/crates/subtle/2.6.1/download",
+          "sha256": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
         }
       },
       "targets": [
@@ -62839,7 +62839,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.5.0"
+        "version": "2.6.1"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -66358,14 +66358,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-test 0.4.3": {
+    "tokio-test 0.4.4": {
       "name": "tokio-test",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-test/0.4.3/download",
-          "sha256": "e89b3cbabd3ae862100094ae433e1def582cf86451b4e9bf83aa7ac1d8a7d719"
+          "url": "https://static.crates.io/crates/tokio-test/0.4.4/download",
+          "sha256": "2468baabc3311435b55dd935f702f42cd1b8abb7e754fb7dfb16bd36aa88f9f7"
         }
       },
       "targets": [
@@ -66413,7 +66413,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.3"
+        "version": "0.4.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -67508,7 +67508,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -68910,7 +68910,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -69633,7 +69633,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -78956,7 +78956,7 @@
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
-    "subtle 2.5.0",
+    "subtle 2.6.1",
     "syn 1.0.109",
     "sync_wrapper 1.0.1",
     "tar 0.4.39",
@@ -78977,7 +78977,7 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
-    "tokio-test 0.4.3",
+    "tokio-test 0.4.4",
     "tokio-util 0.7.12",
     "toml 0.5.11",
     "tonic 0.12.3",
