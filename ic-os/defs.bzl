@@ -9,7 +9,7 @@ load("//ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:boundary-guestos.bzl", boundary_component_files = "component_files")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "inject_files", "sha256sum", "tar_extract", "tree_hash", "upgrade_image")
 
 def icos_build(
         name,
@@ -22,6 +22,7 @@ def icos_build(
         visibility = None,
         tags = None,
         build_local_base_image = False,
+        installable = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -37,6 +38,7 @@ def icos_build(
       visibility: See Bazel documentation
       tags: See Bazel documentation
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
+      installable: if True, create install and debug targets, else create launch ones.
       ic_version: the label pointing to the target that returns IC version
     """
 
@@ -330,6 +332,23 @@ def icos_build(
         ],
     )
 
+    # Disk images just for testing.
+    disk_image_no_tar(
+        name = "disk.img",
+        layout = image_deps["partition_table"],
+        partitions = [
+            "//ic-os/bootloader:partition-esp.tzst",
+            ":partition-grub.tzst",
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
+        ] + custom_partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
+        tags = ["manual"],
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
@@ -547,58 +566,90 @@ EOF
     )
 
     native.genrule(
-        name = "launch-local-vm",
-        srcs = [
-            ":disk-img.tar",
-        ],
+        name = "launch-local-vm-script",
         outs = ["launch_local_vm_script"],
         cmd = """
-        IMAGE="$$PWD/$(location :disk-img.tar)"
-        cat <<EOF > $@
+        cat <<"EOF" > $@
 #!/usr/bin/env bash
-set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d --suffix=.qemu-launch-remote-vm)
+set -eo pipefail
+IMG=$$1
+VIRT=$$2
+PREPROC=$$3
+PREPROC_FLAGS=$$4
+set -u
+TEMP=$$(mktemp -d --suffix=.qemu-launch-remote-vm)
 # Clean up after ourselves when exiting.
-trap 'rm -rf \\$$TEMP' EXIT
-CID=\\$$((\\$$RANDOM + 3))
-cd \\$$TEMP
-tar xSf $$IMAGE
+trap 'rm -rf "$$TEMP"' EXIT
+CID=$$(($$RANDOM + 3))
+cd "$$TEMP"
+cp --reflink=auto --sparse=always --no-preserve=mode,ownership "$$IMG" disk.img
+if [ "$$PREPROC" != "" ] ; then
+    "$$PREPROC" $$PREPROC_FLAGS --image-path disk.img
+fi
 truncate -s 128G target.img
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+if [ "$$VIRT" == "kvm" ]; then
+    qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=$$CID -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    exit $$?
+else
+    qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+    exit $$?
+fi
 EOF
         """,
         executable = True,
         tags = ["manual"],
     )
 
-    # Same as above but without KVM support to run inside VMs and containers
-    # VHOST for nested VMs is not configured at the moment (should be possible)
-    native.genrule(
-        name = "launch-local-vm-no-kvm",
-        srcs = [
-            ":disk-img.tar",
-        ],
-        outs = ["launch_local_vm_script_no_kvm"],
-        cmd = """
-        IMAGE="$$PWD/$(location :disk-img.tar)"
-        cat <<EOF > $@
+    for accel, variant in (("kvm", ""), ("qemu", " no kvm")):
+        if installable:
+            # Installable produces interactive-install{,-no-kvm} variants that
+            # cause the install to proceed fearlessly and reboot to HostOS.
+            # It also produces interactive-debug{,-no-kvm} variants that cause
+            # the installer to halt so SetupOS can be interactively debugged without
+            # worrying that the installation routine will install then reboot.
+            preproc_checks = ["//rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks"]
+            for action, action_flags in (("install", ""), ("debug", "--defeat-installer")):
+                native.genrule(
+                    name = "interactive-" + action + variant.replace(" ", "-"),
+                    srcs = [
+                        ":disk.img",
+                    ],
+                    tools = [
+                        ":launch-local-vm-script",
+                    ] + preproc_checks,
+                    outs = ["interactive_" + action + variant.replace(" ", "_")],
+                    cmd = """
+            cat <<"EOF" > $@
 #!/usr/bin/env bash
 set -euo pipefail
-cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d --suffix=.qemu-launch-remote-vm)
-# Clean up after ourselves when exiting.
-trap 'rm -rf \\$$TEMP' EXIT
-CID=\\$$((\\$$RANDOM + 3))
-cd \\$$TEMP
-tar xSf $$IMAGE
-truncate -s 128G target.img
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" """ + accel + """ "$$PWD/$(location //rs/ic_os/dev_test_tools/setupos-disable-checks:setupos-disable-checks)" """ + action_flags + """>&2
 EOF
-        """,
-        executable = True,
-        tags = ["manual"],
-    )
+                    """,
+                    executable = True,
+                    tags = ["manual"],
+                )
+        else:
+            # Variants provide KVM / non-KVM support to run inside VMs and containers.
+            # VHOST for nested VMs is not configured at the moment (should be possible).
+            native.genrule(
+                name = "launch-local-vm" + variant.replace(" ", "-"),
+                srcs = [
+                    ":disk.img",
+                ],
+                tools = [
+                    ":launch-local-vm-script",
+                ],
+                outs = ["launch_local_vm" + variant.replace(" ", "_")],
+                cmd = """
+                cat <<"EOF" > $@
+#!/usr/bin/env bash
+set -euo pipefail
+exec $(location :launch-local-vm-script) "$$PWD/$(location :disk.img)" """ + accel + """ >&2
+EOF
+                """,
+                executable = True,
+                tags = ["manual"],
+            )
 
     # -------------------- final "return" target --------------------
     # The good practice is to have the last target in the macro with `name = name`.

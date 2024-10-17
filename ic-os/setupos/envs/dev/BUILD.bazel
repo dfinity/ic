@@ -11,6 +11,7 @@ icos_build(
     name = "dev",
     ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
+    installable = True,
     upgrades = False,
     upload_prefix = "setup-os",
     visibility = [

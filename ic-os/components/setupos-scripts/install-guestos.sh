@@ -20,7 +20,7 @@ function install_guestos() {
     # Release RAM.  Cannot be run concurrently with install-hostos.sh.
     rm -f disk.img
     # Extract the disk image to RAM.
-    echo "* Temporarily extracting the GuestOS image to RAM; please stand by for a few seconds"
+    echo "* Temporarily extracting the GuestOS image to memory; please stand by for a few seconds"
     tar xafS /data/guest-os.img.tar.zst -C "${TMPDIR}" disk.img
     log_and_halt_installation_on_error "${?}" "Unable to extract GuestOS disk-image."
     # Duplicate the image to the disk.
