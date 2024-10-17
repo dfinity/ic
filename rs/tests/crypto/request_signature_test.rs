@@ -26,13 +26,13 @@ use slog::{debug, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(request_signature_test))
         .execute_from_args()?;
     Ok(())
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))

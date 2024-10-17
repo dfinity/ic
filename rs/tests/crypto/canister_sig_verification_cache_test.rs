@@ -63,14 +63,14 @@ const NUM_CALLS_PER_USER_RANGE: RangeInclusive<usize> = 5..=15;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
 
     Ok(())
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     // one system subnet for NNS
     // another system subnet for II
     // and the application subnet for the counter canister
