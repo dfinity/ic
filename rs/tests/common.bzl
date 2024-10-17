@@ -147,7 +147,6 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde_bytes",

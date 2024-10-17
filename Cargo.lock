@@ -8652,7 +8652,6 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "reqwest 0.12.8",
- "ring 0.16.20",
  "rolling-file",
  "rosetta-core",
  "rusqlite",
@@ -8798,7 +8797,6 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "ring 0.16.20",
  "serde",
  "serde_bytes",
 ]
@@ -8828,7 +8826,6 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "ring 0.16.20",
  "serde",
  "serde_bytes",
 ]
@@ -8968,7 +8965,6 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "ring 0.17.8",
  "rosetta-core",
  "serde_bytes",
  "serde_json",
@@ -17024,9 +17020,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.86"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
+checksum = "7c3a7fc5db1e57d5a779a352c8cdb57b29aa4c40cc69c3a68a7fedc815fbf2f9"
 dependencies = [
  "unicode-ident",
 ]
@@ -20083,7 +20079,6 @@ dependencies = [
  "regex",
  "registry-canister",
  "reqwest 0.12.8",
- "ring 0.17.8",
  "rosetta-core",
  "rsa",
  "rust_decimal",
