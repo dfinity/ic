@@ -50,7 +50,6 @@ use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunn
 use std::sync::Arc;
 use std::time::{Instant, UNIX_EPOCH};
 use std::{
-    cmp,
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
 };
@@ -3765,108 +3764,6 @@ where
         );
     }
     assert_eq!(total_supply(&env, canister_id), credited - 1 - 2);
-}
-
-pub fn test_approval_trimming<T>(
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-    trimming_enabled: bool,
-) where
-    T: CandidType,
-{
-    let env = StateMachine::new();
-
-    let args = encode_init_args(InitArgs {
-        feature_flags: Some(FeatureFlags { icrc2: true }),
-        maximum_number_of_accounts: Some(9),
-        accounts_overflow_trim_quantity: Some(2),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
-
-    let minter = minting_account(&env, canister_id).unwrap();
-
-    for i in 0..4 {
-        transfer(
-            &env,
-            canister_id,
-            minter,
-            PrincipalId::new_user_test_id(i).0,
-            1_000_000,
-        )
-        .expect("failed to mint tokens");
-    }
-
-    let num_approvals = 3;
-    for i in 0..num_approvals {
-        let mut approve_args = default_approve_args(PrincipalId::new_user_test_id(i).0, 10_000);
-        if i < 2 {
-            approve_args.expires_at = Some(
-                system_time_to_nanos(env.time())
-                    + Duration::from_secs((i + 1) * 3600).as_nanos() as u64,
-            );
-        }
-        send_approval(
-            &env,
-            canister_id,
-            PrincipalId::new_user_test_id(3).0,
-            &approve_args,
-        )
-        .expect("approval failed");
-    }
-
-    for i in 0..4 {
-        assert_ne!(
-            balance_of(&env, canister_id, PrincipalId::new_user_test_id(i).0),
-            0
-        );
-    }
-
-    fn total_allowance(env: &StateMachine, canister_id: CanisterId, num_approvals: u64) -> Nat {
-        let mut allowance = Nat::from(0_u8);
-        for i in 0..num_approvals {
-            allowance += get_allowance(
-                env,
-                canister_id,
-                PrincipalId::new_user_test_id(3).0,
-                PrincipalId::new_user_test_id(i).0,
-            )
-            .allowance;
-        }
-        allowance
-    }
-
-    assert_eq!(
-        total_allowance(&env, canister_id, num_approvals),
-        Nat::from(30_000u32)
-    );
-
-    let mut new_accounts = 0;
-    for i in 4..11 {
-        transfer(
-            &env,
-            canister_id,
-            minter,
-            PrincipalId::new_user_test_id(i).0,
-            1_000_000,
-        )
-        .expect("failed to mint tokens");
-        new_accounts += 1;
-
-        let remaining_approvals = if trimming_enabled {
-            cmp::max(num_approvals as i64 - (new_accounts + 1) / 2, 0) as u64
-        } else {
-            // The ICRC ledger does not trim approvals. We still want to run
-            // this test to make sure the trimming code does not cause panic, etc.
-            // Once ICP ledger approvals are not trimmed, this test will be removed entirely.
-            num_approvals
-        };
-        assert_eq!(
-            total_allowance(&env, canister_id, num_approvals),
-            Nat::from(10_000 * remaining_approvals)
-        );
-    }
 }
 
 pub fn test_icrc1_test_suite<T: candid::CandidType>(

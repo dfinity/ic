@@ -595,10 +595,6 @@ impl AllowancesData for StableAllowancesData {
             .with_borrow(|expirations| expirations.first_key_value().map(|kv| kv.0))
     }
 
-    fn oldest_arrivals(&self, _n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
-        vec![]
-    }
-
     fn pop_first_expiry(&mut self) -> Option<(TimeStamp, (Self::AccountId, Self::AccountId))> {
         ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0))
