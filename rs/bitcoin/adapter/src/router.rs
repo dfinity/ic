@@ -107,8 +107,7 @@ pub fn start_main_event_loop(
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
                     connection_manager.tick(blockchain_manager.get_height(), handle_stream);
-                    blockchain_manager
-                        .tick(&mut connection_manager).await;
+                    blockchain_manager.tick(&mut connection_manager);
                     transaction_manager.advertise_txids(&mut connection_manager);
                 }
             };

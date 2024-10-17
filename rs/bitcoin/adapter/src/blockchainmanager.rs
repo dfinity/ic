@@ -513,7 +513,7 @@ impl BlockchainManager {
         }
     }
 
-    async fn sync_blocks(&mut self, channel: &mut impl Channel) {
+    fn sync_blocks(&mut self, channel: &mut impl Channel) {
         // Timeout requests so they may be retried again.
         let mut retry_queue: LinkedHashSet<BlockHash> = LinkedHashSet::new();
         for (block_hash, request) in self.getdata_request_info.iter_mut() {
@@ -657,7 +657,7 @@ impl BlockchainManager {
 
     /// This heartbeat method is called periodically by the adapter.
     /// This method is used to send messages to Bitcoin peers.
-    pub async fn tick(&mut self, channel: &mut impl Channel) {
+    pub fn tick(&mut self, channel: &mut impl Channel) {
         // Update the list of peers.
         let active_connections = channel.available_connections();
         // Removing inactive peers.
@@ -687,7 +687,7 @@ impl BlockchainManager {
             }
         }
 
-        self.sync_blocks(channel).await;
+        self.sync_blocks(channel);
         self.handle_getheaders_timeouts(channel);
     }
 
@@ -1081,7 +1081,7 @@ pub mod test {
         }
 
         // Sync block information.
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
         // Ensure there are now 2 outbound requests for the blocks.
         {
             let available_requests_for_peer = blockchain_manager
@@ -1106,7 +1106,7 @@ pub mod test {
 
         let result = blockchain_manager.received_block_message(&peer_addr, &block_2);
         assert!(result.is_ok());
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
         // Ensure there is now zero requests.
         {
             let available_requests_for_peer = blockchain_manager
@@ -1149,7 +1149,7 @@ pub mod test {
         blockchain_manager
             .block_sync_queue
             .insert(test_state.block_2.block_hash());
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
 
         // The `getdata_request_info` should be empty as the block cache is at the size threshold.
         assert!(blockchain_manager.getdata_request_info.is_empty());
@@ -1177,7 +1177,7 @@ pub mod test {
             },
         );
 
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
 
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // The request is considered retried if its timeout is less than the the timeout seconds.
@@ -1236,7 +1236,7 @@ pub mod test {
         blockchain_manager.remove_peer(&addr);
         blockchain_manager.add_peer(&mut channel, &addr2);
 
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
 
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // The request is considered retried if its timeout is less than the the timeout seconds.
@@ -1318,7 +1318,7 @@ pub mod test {
             },
         );
 
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
 
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // The request is considered retried if its timeout is less than the the timeout seconds.
@@ -1518,7 +1518,7 @@ pub mod test {
         // The block sync queue should contain 10 block hashes. Missing block 3 as it is in the cache already.
         assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
 
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
         assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
 
         blockchain_manager
@@ -1582,7 +1582,7 @@ pub mod test {
         blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
         assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
 
-        blockchain_manager.sync_blocks(&mut channel).await;
+        blockchain_manager.sync_blocks(&mut channel);
         assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
 
         blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
