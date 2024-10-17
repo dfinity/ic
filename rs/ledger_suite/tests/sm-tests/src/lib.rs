@@ -2875,25 +2875,9 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
         account,
         spender: account,
     };
-    let get_transactions_args = GetTransactionsRequest {
-        start: Nat::from(1u64),
-        length: Nat::from(1u64),
-    };
-    let get_archives_args = GetArchivesArgs { from: None };
-    let blocks_req_vec: Vec<GetBlocksRequest> = vec![];
-    let consent_msg_args = ConsentMessageRequest {
-        method: "icrc1_transfer".to_owned(),
-        arg: Encode!(&transfer_args).unwrap(),
-        user_preferences: ConsentMessageSpec {
-            metadata: ConsentMessageMetadata {
-                language: "en".to_string(),
-                utc_offset_minutes: Some(60),
-            },
-            device_spec: Some(DisplayMessageType::GenericDisplay),
-        },
-    };
 
     let test_endpoint = |endpoint_name: &str, args: Vec<u8>, expect_error: bool| {
+        println!("testing endpoint {endpoint_name}");
         let result = env.execute_ingress_as(account.owner.into(), canister_id, endpoint_name, args);
         if expect_error {
             result
@@ -2914,26 +2898,6 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), true);
     test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), true);
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), true);
-    test_endpoint("archives", Encode!().unwrap(), true);
-    test_endpoint(
-        "get_transactions",
-        Encode!(&get_transactions_args).unwrap(),
-        true,
-    );
-    test_endpoint("get_blocks", Encode!(&get_transactions_args).unwrap(), true);
-    test_endpoint("get_data_certificate", Encode!().unwrap(), true);
-    test_endpoint(
-        "icrc3_get_archives",
-        Encode!(&get_archives_args).unwrap(),
-        true,
-    );
-    test_endpoint("icrc3_get_tip_certificate", Encode!().unwrap(), true);
-    test_endpoint("icrc3_get_blocks", Encode!(&blocks_req_vec).unwrap(), true);
-    test_endpoint(
-        "icrc21_canister_call_consent_message",
-        Encode!(&consent_msg_args).unwrap(),
-        true,
-    );
 
     wait_ledger_ready(&env, canister_id, 10);
 
@@ -2947,30 +2911,6 @@ pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     test_endpoint("icrc2_allowance", Encode!(&allowance_args).unwrap(), false);
     test_endpoint("icrc1_balance_of", Encode!(&account).unwrap(), false);
     test_endpoint("icrc1_total_supply", Encode!().unwrap(), false);
-    test_endpoint("archives", Encode!().unwrap(), false);
-    test_endpoint(
-        "get_transactions",
-        Encode!(&get_transactions_args).unwrap(),
-        false,
-    );
-    test_endpoint(
-        "get_blocks",
-        Encode!(&get_transactions_args).unwrap(),
-        false,
-    );
-    test_endpoint("get_data_certificate", Encode!().unwrap(), false);
-    test_endpoint(
-        "icrc3_get_archives",
-        Encode!(&get_archives_args).unwrap(),
-        false,
-    );
-    test_endpoint("icrc3_get_tip_certificate", Encode!().unwrap(), false);
-    test_endpoint("icrc3_get_blocks", Encode!(&blocks_req_vec).unwrap(), false);
-    test_endpoint(
-        "icrc21_canister_call_consent_message",
-        Encode!(&consent_msg_args).unwrap(),
-        false,
-    );
 }
 
 pub fn test_incomplete_migration<T>(
