@@ -102,7 +102,7 @@ system_test_nns(
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "manual", # disabled until test has been fixed
+        "manual",  # disabled until test has been fixed
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
