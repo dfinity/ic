@@ -292,38 +292,6 @@ impl RosettaClient {
         }])
     }
 
-    pub async fn build_set_dissolve_timestamp_operations(
-        signer_principal: Principal,
-        neuron_index: u64,
-        // The number of seconds since Unix epoch.
-        // The dissolve delay will be set to this value
-        // The timestamp has to be in the future and greater or equal to the currently set timestamp
-        timestamp: u64,
-    ) -> anyhow::Result<Vec<Operation>> {
-        Ok(vec![Operation {
-            operation_identifier: OperationIdentifier {
-                index: 0,
-                network_index: None,
-            },
-            related_operations: None,
-            type_: "SET_DISSOLVE_TIMESTAMP".to_string(),
-            status: None,
-            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
-                AccountIdentifier::new(PrincipalId(signer_principal), None),
-            )),
-            amount: None,
-            coin_change: None,
-            metadata: Some(
-                SetDissolveTimestampMetadata {
-                    neuron_index,
-                    timestamp: Seconds(timestamp),
-                }
-                .try_into()
-                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
-            ),
-        }])
-    }
-
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
