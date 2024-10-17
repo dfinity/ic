@@ -31,9 +31,10 @@ use super::{
     },
 };
 
-const MAX_INGRESS_MESSAGES_COUNT: usize = 4_000;
-const MAX_INGRESS_MESSAGE_SIZE_BYTES: usize = 4 * 1024 * 1024;
-const MAX_INGRESS_PAYLOAD_SIZE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_INGRESS_MESSAGES_COUNT: usize = 2 * ic_limits::MAX_INGRESS_MESSAGES_PER_BLOCK as usize;
+const MAX_INGRESS_MESSAGE_SIZE_BYTES: usize =
+    2 * ic_limits::MAX_INGRESS_BYTES_PER_MESSAGE_NNS_SUBNET as usize;
+const MAX_INGRESS_PAYLOAD_SIZE_BYTES: usize = 2 * ic_limits::MAX_BLOCK_PAYLOAD_SIZE as usize;
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
