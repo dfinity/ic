@@ -143,11 +143,9 @@ rcgen = { workspace = true }
 regex = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
-ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../rosetta-api/common/rosetta_core" }
-rsa = { version = "0.9.2", features = ["sha2"] }
+rsa = { workspace = true }
 rust_decimal = "1.25"
-schnorr_fun = "0.10"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -265,26 +263,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-rejoin-test"
-path = "message_routing/rejoin_test.rs"
-
-[[bin]]
-name = "ic-systest-rejoin-test-large-state"
-path = "message_routing/rejoin_test_large_state.rs"
-
-[[bin]]
-name = "ic-systest-system-subnets-test"
-path = "execution/system_subnets_test.rs"
-
-[[bin]]
-name = "ic-systest-memory-safety-test"
-path = "message_routing/memory_safety_test.rs"
-
-[[bin]]
-name = "ic-systest-system-api-security-test"
-path = "execution/system_api_security_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
@@ -295,10 +273,6 @@ path = "boundary_nodes/bn_update_workload_test.rs"
 [[bin]]
 name = "ic-systest-custom-domains-integration"
 path = "boundary_nodes/custom_domains_integration_test.rs"
-
-[[bin]]
-name = "ic-systest-general-execution"
-path = "execution/general_execution_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
@@ -329,32 +303,8 @@ name = "ic-systest-update-workload-large-payload"
 path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
-name = "ic-systest-canister-sig-verification-cache-test"
-path = "crypto/canister_sig_verification_cache_test.rs"
-
-[[bin]]
-name = "ic-systest-ic-crypto-csp-socket-test"
-path = "crypto/ic_crypto_csp_socket_test.rs"
-
-[[bin]]
-name = "ic-systest-ic-crypto-csp-umask-test"
-path = "crypto/ic_crypto_csp_umask_test.rs"
-
-[[bin]]
-name = "ic-systest-rpc-csp-vault-reconnection-test"
-path = "crypto/rpc_csp_vault_reconnection_test.rs"
-
-[[bin]]
 name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
-
-[[bin]]
-name = "ic-systest-state-sync-malicious-chunk-test"
-path = "message_routing/state_sync_malicious_chunk_test.rs"
-
-[[bin]]
-name = "ic-systest-canister-global-reboot-test"
-path = "message_routing/global_reboot_test.rs"
 
 [[bin]]
 name = "ic-xc-ledger-suite-orchestrator"

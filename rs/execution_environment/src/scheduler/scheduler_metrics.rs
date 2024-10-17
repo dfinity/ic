@@ -115,6 +115,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
     pub(super) num_canister_snapshots: IntGauge,
+    pub(super) zero_instruction_messages: IntCounter,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -717,6 +718,12 @@ impl SchedulerMetrics {
                 "scheduler_num_canister_snapshots",
                 "Total number of canister snapshots on this subnet.",
             ),
+            zero_instruction_messages: metrics_registry.int_counter(
+                "scheduler_zero_instruction_messages",
+                "Number of messages that were scheduled to be \
+                executed, but didn't end up using any cycles. Possibly \
+                because the canister couldn't prepay for the execution."
+            )
         }
     }
 

@@ -493,7 +493,7 @@ mod tests {
         .collect::<BTreeMap<_, _>>();
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_new_subnets = vec![
+        let transcripts_for_remote_subnets = vec![
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -520,7 +520,7 @@ mod tests {
 
         // Run the
         let result = generate_responses_to_setup_initial_dkg_calls(
-            &transcripts_for_new_subnets[..],
+            &transcripts_for_remote_subnets[..],
             &no_op_logger(),
         );
         assert_eq!(result.len(), 1);

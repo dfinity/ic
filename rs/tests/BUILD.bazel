@@ -12,7 +12,6 @@ load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
-    "src/memory_safety.wasm",
     "src/message.wasm",
     "src/counter.wat",
 ])
@@ -28,7 +27,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
-        "src/memory_safety.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],

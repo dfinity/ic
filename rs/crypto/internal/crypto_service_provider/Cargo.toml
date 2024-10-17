@@ -85,7 +85,7 @@ mockall = { workspace = true }
 num_cpus = "1.16"
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
-rsa = "0.9"
+rsa = { workspace = true }
 slog-async = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
