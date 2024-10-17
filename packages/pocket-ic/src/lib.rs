@@ -1299,6 +1299,10 @@ pub enum WasmResult {
 
 /// Attempt to start a new PocketIC server if it's not already running.
 pub fn start_or_reuse_server() -> Url {
+    if let Some(url_str) = std::env::var_os("POCKET_IC_URL") {
+        return Url::parse(url_str.to_str().unwrap()).unwrap();
+    }
+
     let bin_path = match std::env::var_os("POCKET_IC_BIN") {
         None => "./pocket-ic".to_string(),
         Some(path) => path
