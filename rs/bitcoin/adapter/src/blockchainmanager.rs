@@ -693,7 +693,7 @@ impl BlockchainManager {
 
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
     /// or in the block cache.
-    pub async fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<BlockHeader>) {
+    pub fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<BlockHeader>) {
         let state = self.blockchain.lock().unwrap();
         for header in next_headers {
             let hash = header.block_hash();
@@ -708,11 +708,7 @@ impl BlockchainManager {
 
     /// Wrapper function to access the blockchain state to prune blocks that are no longer
     /// needed.
-    pub async fn prune_blocks(
-        &mut self,
-        anchor: BlockHash,
-        processed_block_hashes: Vec<BlockHash>,
-    ) {
+    pub fn prune_blocks(&mut self, anchor: BlockHash, processed_block_hashes: Vec<BlockHash>) {
         {
             let mut blockchain = self.blockchain.lock().unwrap();
             let anchor_height = blockchain
@@ -1417,10 +1413,7 @@ pub mod test {
             .map(|h| h.block_hash())
             .collect::<Vec<_>>();
 
-        blockchain_manager
-            .enqueue_new_blocks_to_download(next_headers)
-            .await;
-
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
         assert_eq!(blockchain_manager.block_sync_queue.len(), 5);
 
         let enqueued_blocks = blockchain_manager
@@ -1467,10 +1460,7 @@ pub mod test {
             assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
             blockchain.add_block(block).expect("unable to add block");
         }
-        blockchain_manager
-            .enqueue_new_blocks_to_download(next_headers)
-            .await;
-
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
         assert_eq!(blockchain_manager.block_sync_queue.len(), 3);
 
         let enqueued_blocks = blockchain_manager
@@ -1511,9 +1501,7 @@ pub mod test {
         }
 
         blockchain_manager.add_peer(&mut channel, &addr);
-        blockchain_manager
-            .enqueue_new_blocks_to_download(next_headers)
-            .await;
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
 
         // The block sync queue should contain 10 block hashes. Missing block 3 as it is in the cache already.
         assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
@@ -1521,9 +1509,7 @@ pub mod test {
         blockchain_manager.sync_blocks(&mut channel);
         assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
 
-        blockchain_manager
-            .prune_blocks(next_hashes[2], next_hashes[3..8].to_vec())
-            .await;
+        blockchain_manager.prune_blocks(next_hashes[2], next_hashes[3..8].to_vec());
         // `getdata` requests should be completely clears based on the processed block hashes.
         assert_eq!(blockchain_manager.getdata_request_info.len(), 1);
         // Block sync should only contain block 11's hash.
@@ -1573,19 +1559,17 @@ pub mod test {
         }
 
         blockchain_manager.add_peer(&mut channel, &addr);
-        blockchain_manager
-            .enqueue_new_blocks_to_download(next_headers)
-            .await;
+        blockchain_manager.enqueue_new_blocks_to_download(next_headers);
 
         // The block sync queue should contain 10 block hashes. Missing block 3 as it is in the cache already.
         assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
-        blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
+        blockchain_manager.prune_blocks(genesis_hash, vec![]);
         assert_eq!(blockchain_manager.block_sync_queue.len(), 10);
 
         blockchain_manager.sync_blocks(&mut channel);
         assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
 
-        blockchain_manager.prune_blocks(genesis_hash, vec![]).await;
+        blockchain_manager.prune_blocks(genesis_hash, vec![]);
         // `getdata` requests should be completely clears based on the processed block hashes.
         assert_eq!(blockchain_manager.getdata_request_info.len(), 8);
         // Block sync should only contain block 11's hash.

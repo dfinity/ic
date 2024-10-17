@@ -91,10 +91,10 @@ pub fn start_main_event_loop(
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
                     match command {
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
-                            blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
+                            blockchain_manager.enqueue_new_blocks_to_download(next_headers);
                         }
                         BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
-                            blockchain_manager.prune_blocks(anchor, processed_block_hashes).await;
+                            blockchain_manager.prune_blocks(anchor, processed_block_hashes);
                         }
                     };
                 }
