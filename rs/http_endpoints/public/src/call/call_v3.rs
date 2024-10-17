@@ -1,7 +1,6 @@
 //! Module that deals with requests to /api/v3/canister/.../call.
 
 use super::{
-    call_v2::{self, Accepted, AsynchronousCallHandlerState, CallV2Response},
     ingress_watcher::{IngressWatcherHandle, SubscriptionError},
     IngressError, IngressValidator,
 };
@@ -18,7 +17,7 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{self, DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
