@@ -37,6 +37,15 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
     },
+    /// Creates GuestOSConfig object from existing HostOS config.json file
+    GenerateGuestosConfig {
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        hostos_config_json_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
+        #[arg(long, value_name = "ipv6_address")]
+        guestos_ipv6_address: String,
+    },
 }
 
 #[derive(Parser)]
@@ -191,6 +200,55 @@ pub fn main() -> Result<()> {
             println!(
                 "HostOSConfig has been written to {}",
                 hostos_config_json_path.display()
+            );
+
+            Ok(())
+        }
+        Some(Commands::GenerateGuestosConfig {
+            hostos_config_json_path,
+            guestos_config_json_path,
+            guestos_ipv6_address,
+        }) => {
+            let hostos_config_json_path = Path::new(&hostos_config_json_path);
+
+            let hostos_config: HostOSConfig =
+                serde_json::from_reader(File::open(hostos_config_json_path)?)?;
+
+            // update select file paths for GuestOS
+            let mut guestos_icos_settings = hostos_config.icos_settings;
+            let guestos_config_path = Path::new("/boot/config");
+            if let Some(ref mut path) = guestos_icos_settings.ssh_authorized_keys_path {
+                *path = guestos_config_path.join("accounts_ssh_authorized_keys");
+            }
+
+            let mut guestos_network_settings = hostos_config.network_settings;
+            // Update the GuestOS networking if `guestos_ipv6_address` is provided
+            match &guestos_network_settings.ipv6_config {
+                Ipv6Config::Deterministic(deterministic_ipv6_config) => {
+                    guestos_network_settings.ipv6_config = Ipv6Config::Fixed(FixedIpv6Config {
+                        address: guestos_ipv6_address,
+                        gateway: deterministic_ipv6_config.gateway,
+                    });
+                }
+                _ => {
+                    anyhow::bail!(
+                        "HostOSConfig Ipv6Config should always be of type Deterministic. Cannot reassign GuestOS networking."
+                    );
+                }
+            }
+
+            let guestos_config = GuestOSConfig {
+                network_settings: guestos_network_settings,
+                icos_settings: guestos_icos_settings,
+                guestos_settings: hostos_config.guestos_settings,
+            };
+
+            let guestos_config_json_path = Path::new(&guestos_config_json_path);
+            serialize_and_write_config(guestos_config_json_path, &guestos_config)?;
+
+            println!(
+                "GuestOSConfig has been written to {}",
+                guestos_config_json_path.display()
             );
 
             Ok(())

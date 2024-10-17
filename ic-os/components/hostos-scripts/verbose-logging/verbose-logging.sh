@@ -1,18 +1,8 @@
 #!/bin/bash
 
-CONFIG="${CONFIG:=/boot/config/config.ini}"
+source /opt/ic/bin/config.sh
 
-function read_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "verbose") verbose="${value}" ;;
-        esac
-    done <"${CONFIG}"
-}
-
-read_variables
+verbose=$(get_config_value '.hostos_settings.verbose')
 
 if [[ "${verbose,,}" == "true" ]]; then
     echo "##########################################" >/dev/tty1

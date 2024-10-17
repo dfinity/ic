@@ -3,8 +3,6 @@
 # Provision a node based on an injected "ic-bootstrap.tar" file. This script
 # is meant to be run as a prerequisite before launching orchestrator/replica.
 #
-# The configuration format is described in guestos/docs/ConfigStore.adoc
-#
 # The tar file can be supplied using one of two methods:
 # - as "ic-bootstrap.tar" stored on a (virtual) removable media attached
 #   on first boot
@@ -104,7 +102,7 @@ function process_bootstrap() {
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in filebeat.conf network.conf nns.conf backup.conf malicious_behavior.conf query_stats.conf bitcoind_addr.conf jaeger_addr.conf socks_proxy.conf; do
+    for FILE in network.conf malicious_behavior.conf config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
