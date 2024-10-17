@@ -16732,6 +16732,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pocket-ic-test-canister"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-cdk 0.16.0",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "polling"
 version = "3.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
