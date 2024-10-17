@@ -1329,7 +1329,7 @@ fn test_upgrade_serialization_fixed_tx() {
 
 #[test]
 fn test_downgrade_from_incompatible_version() {
-    ic_icrc1_ledger_sm_tests::test_downgrade_from_incompatible_version(
+    ic_ledger_suite_state_machine_tests::test_downgrade_from_incompatible_version(
         ledger_wasm_mainnet(),
         ledger_wasm_next_version(),
         ledger_wasm(),
@@ -1705,7 +1705,7 @@ fn test_icrc21_standard() {
 
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
-    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
+    use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]
     fn should_export_num_archives_metrics() {
