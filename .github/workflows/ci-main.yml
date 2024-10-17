@@ -59,19 +59,17 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-
-          # Skip long running tests (> 5 minutes) on PRs:
-          TEST_TAG_FILTERS=""
-          if [[ "${{ github.event_name }}" == 'pull_request' ]]; then
-            TEST_TAG_FILTERS="--test_tag_filters=-long_test"
+          TEST_TAG_FILTERS=(-post_master -system_test_hourly -system_test_nightly -system_test_nightly_nns -system_test_staging -system_test_hotfix -system_test_benchmark -fuzz_test -fi_tests_nightly -nns_tests_nightly)
+          if [[ "${{ github.event_name }}" == 'pull_request' || "${{ github.event_name }}" == 'merge_group' ]]; then
+            TEST_TAG_FILTERS+=(-long_test)
           fi
-
+          IFS=','
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
-            echo "BAZEL_EXTRA_ARGS=--test_timeout_filters=short,moderate --flaky_test_attempts=3 --test_tag_filters=-long_test" >> $GITHUB_ENV
+            echo "BAZEL_EXTRA_ARGS=--test_tag_filters=${TEST_TAG_FILTERS[*]} --test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-            echo "BAZEL_EXTRA_ARGS=$TEST_TAG_FILTERS --test_timeout_filters=short,moderate" >> $GITHUB_ENV
+            echo "BAZEL_EXTRA_ARGS=--test_tag_filters=${TEST_TAG_FILTERS[*]} --test_timeout_filters=short,moderate" >> $GITHUB_ENV
           else
-            echo "BAZEL_EXTRA_ARGS=$TEST_TAG_FILTERS --keep_going" >> $GITHUB_ENV
+            echo "BAZEL_EXTRA_ARGS=--test_tag_filters=${TEST_TAG_FILTERS[*]} --keep_going" >> $GITHUB_ENV
           fi
       - name: Run Bazel Test All
         id: bazel-test-all
