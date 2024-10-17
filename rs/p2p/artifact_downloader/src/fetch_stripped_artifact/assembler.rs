@@ -31,6 +31,10 @@ use super::{
     },
 };
 
+const MAX_INGRESS_MESSAGES_COUNT: usize = 4_000;
+const MAX_INGRESS_MESSAGE_SIZE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_INGRESS_PAYLOAD_SIZE_BYTES: usize = 8 * 1024 * 1024;
+
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
 struct BouncerFactoryWrapper<Pool: ValidatedPoolReader<ConsensusMessage>> {
@@ -170,6 +174,14 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         let missing_ingress_ids = assembler.missing_ingress_messages();
+        if missing_ingress_ids.len() > MAX_INGRESS_MESSAGES_COUNT {
+            warn!(
+                self.log,
+                "The stripped block has too many ingress messages: {}",
+                missing_ingress_ids.len()
+            );
+            return Err(Aborted {});
+        }
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
         for missing_ingress_id in missing_ingress_ids {
@@ -203,10 +215,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             }
 
             if let Err(err) = assembler.try_insert_ingress_message(ingress) {
-                warn!(
-                    self.log,
-                    "Failed to ingress message {}. This is a bug.", err
-                );
+                warn!(self.log, "Failed to insert ingress message: {}.", err);
 
                 return Err(Aborted {});
             }
@@ -274,10 +283,14 @@ async fn get_or_fetch<P: Peers>(
 
 #[derive(Debug, PartialEq, Error)]
 pub(crate) enum InsertionError {
-    #[error("Trying to insert an ingress message which was never missing")]
+    #[error("Trying to insert an ingress message which was never missing. This is a  bug.")]
     NotNeeded,
-    #[error("Trying to insert an ingress message which was already inserted")]
+    #[error("Trying to insert an ingress message which was already inserted. This is a bug.")]
     AlreadyInserted,
+    #[error("Ingress message too large ({0} bytes)")]
+    IngressMessageTooLarge(usize),
+    #[error("Ingress payload too large ({0} bytes)")]
+    IngressPayloadTooLarge(usize),
 }
 
 #[derive(Debug, Error)]
@@ -291,6 +304,7 @@ pub(crate) enum AssemblyError {
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
     ingress_messages: Vec<(IngressMessageId, Option<SignedIngress>)>,
+    accumulated_size: usize,
 }
 
 impl BlockProposalAssembler {
@@ -303,6 +317,7 @@ impl BlockProposalAssembler {
                 .map(|ingress_message_id| (ingress_message_id.clone(), None))
                 .collect(),
             stripped_block_proposal,
+            accumulated_size: 0,
         }
     }
 
@@ -326,6 +341,16 @@ impl BlockProposalAssembler {
         &mut self,
         ingress_message: SignedIngress,
     ) -> Result<(), InsertionError> {
+        let message_size = ingress_message.count_bytes();
+
+        if message_size > MAX_INGRESS_MESSAGE_SIZE_BYTES {
+            return Err(InsertionError::IngressMessageTooLarge(message_size));
+        }
+
+        if self.accumulated_size + message_size > MAX_INGRESS_PAYLOAD_SIZE_BYTES {
+            return Err(InsertionError::IngressPayloadTooLarge(message_size));
+        }
+
         let ingress_message_id = IngressMessageId::from(&ingress_message);
 
         // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
@@ -340,6 +365,7 @@ impl BlockProposalAssembler {
             Err(InsertionError::AlreadyInserted)
         } else {
             *ingress = Some(ingress_message);
+            self.accumulated_size += message_size;
             Ok(())
         }
     }
