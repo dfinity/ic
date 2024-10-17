@@ -243,7 +243,7 @@ impl BlockchainManager {
 
     /// This function processes "inv" messages received from Bitcoin nodes.
     /// Given a block_hash, this method sends the corresponding "getheaders" message to the Bitcoin node.
-    async fn received_inv_message(
+    fn received_inv_message(
         &mut self,
         channel: &mut impl Channel,
         addr: &SocketAddr,
@@ -404,7 +404,7 @@ impl BlockchainManager {
     }
 
     /// This function processes "block" messages received from Bitcoin nodes
-    async fn received_block_message(
+    fn received_block_message(
         &mut self,
         addr: &SocketAddr,
         block: &Block,
@@ -622,7 +622,7 @@ impl BlockchainManager {
     /// This function is called by the adapter when a new event takes place.
     /// The event could be receiving "getheaders", "getdata", "inv" messages from bitcoin peers.
     /// The event could be change in connection status with a bitcoin peer.
-    pub async fn process_bitcoin_network_message(
+    pub fn process_bitcoin_network_message(
         &mut self,
         channel: &mut impl Channel,
         addr: SocketAddr,
@@ -632,7 +632,6 @@ impl BlockchainManager {
             NetworkMessage::Inv(inventory) => {
                 if self
                     .received_inv_message(channel, &addr, inventory)
-                    .await
                     .is_err()
                 {
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
@@ -647,7 +646,7 @@ impl BlockchainManager {
                 }
             }
             NetworkMessage::Block(block) => {
-                if self.received_block_message(&addr, block).await.is_err() {
+                if self.received_block_message(&addr, block).is_err() {
                     return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
                 }
             }
@@ -912,7 +911,6 @@ pub mod test {
         let message = NetworkMessage::Headers(chain.clone());
         assert!(blockchain_manager
             .process_bitcoin_network_message(&mut channel, addr1, &message)
-            .await
             .is_ok());
 
         blockchain_manager.add_peer(&mut channel, &addr2);
@@ -972,7 +970,6 @@ pub mod test {
                 sockets[0],
                 &NetworkMessage::Headers(chain.clone())
             )
-            .await
             .is_ok());
 
         assert_eq!(
@@ -1001,7 +998,6 @@ pub mod test {
         );
         assert!(blockchain_manager
             .process_bitcoin_network_message(&mut channel, sockets[0], &message)
-            .await
             .is_ok());
         if let Some(command) = channel.pop_front() {
             assert_eq!(
@@ -1097,9 +1093,7 @@ pub mod test {
         }
 
         // Ensure there is now 1 request.
-        let result = blockchain_manager
-            .received_block_message(&peer_addr, &block_1)
-            .await;
+        let result = blockchain_manager.received_block_message(&peer_addr, &block_1);
         assert!(result.is_ok());
         {
             let available_requests_for_peer = blockchain_manager
@@ -1110,9 +1104,7 @@ pub mod test {
             assert_eq!(available_requests_for_peer, 1);
         }
 
-        let result = blockchain_manager
-            .received_block_message(&peer_addr, &block_2)
-            .await;
+        let result = blockchain_manager.received_block_message(&peer_addr, &block_2);
         assert!(result.is_ok());
         blockchain_manager.sync_blocks(&mut channel).await;
         // Ensure there is now zero requests.
