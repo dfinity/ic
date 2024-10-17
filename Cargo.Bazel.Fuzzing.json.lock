@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "a08079ea6aaa6a0d254b0be86086cdd80def2fdf40540d0e16c267f67bbff84a",
-=======
   "checksum": "23b8c4c80ca99d2cb874403f59f756788b97b830a3dd2f48826f239b0028a3c3",
->>>>>>> origin/master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -762,7 +758,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             }
           ],
@@ -3140,7 +3136,7 @@
               "target": "doc_comment"
             },
             {
-              "id": "predicates 3.1.2",
+              "id": "predicates 3.0.4",
               "target": "predicates"
             },
             {
@@ -10496,7 +10492,7 @@
               "target": "candid_derive"
             },
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             }
           ],
@@ -18392,7 +18388,7 @@
               "target": "pprof"
             },
             {
-              "id": "predicates 3.1.2",
+              "id": "predicates 3.0.4",
               "target": "predicates"
             },
             {
@@ -18525,7 +18521,7 @@
               "target": "rolling_file"
             },
             {
-              "id": "rsa 0.9.6",
+              "id": "rsa 0.9.2",
               "target": "rsa"
             },
             {
@@ -18963,7 +18959,7 @@
               "target": "minicbor_derive"
             },
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             },
             {
@@ -36115,7 +36111,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             }
           ],
@@ -39538,7 +39534,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "predicates 3.1.2",
+              "id": "predicates 3.0.4",
               "target": "predicates"
             },
             {
@@ -39611,7 +39607,7 @@
               "target": "fragile"
             },
             {
-              "id": "predicates 3.1.2",
+              "id": "predicates 3.0.4",
               "target": "predicates"
             },
             {
@@ -44818,14 +44814,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "paste 1.0.15": {
+    "paste 1.0.14": {
       "name": "paste",
-      "version": "1.0.15",
+      "version": "1.0.14",
       "package_url": "https://github.com/dtolnay/paste",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/paste/1.0.15/download",
-          "sha256": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+          "url": "https://static.crates.io/crates/paste/1.0.14/download",
+          "sha256": "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
         }
       },
       "targets": [
@@ -44862,14 +44858,14 @@
         "deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.15"
+        "version": "1.0.14"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -47453,14 +47449,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "predicates 3.1.2": {
+    "predicates 3.0.4": {
       "name": "predicates",
-      "version": "3.1.2",
+      "version": "3.0.4",
       "package_url": "https://github.com/assert-rs/predicates-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/predicates/3.1.2/download",
-          "sha256": "7e9086cc7640c29a356d1a29fd134380bee9d8f79a17410aa76e7ad295f42c97"
+          "url": "https://static.crates.io/crates/predicates/3.0.4/download",
+          "sha256": "6dfc28575c2e3f19cb3c73b93af36460ae898d426eba6fc15b9bd2a5220758a0"
         }
       },
       "targets": [
@@ -47508,6 +47504,10 @@
               "target": "float_cmp"
             },
             {
+              "id": "itertools 0.11.0",
+              "target": "itertools"
+            },
+            {
               "id": "normalize-line-endings 0.3.0",
               "target": "normalize_line_endings"
             },
@@ -47523,7 +47523,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.1.2"
+        "version": "3.0.4"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -54271,14 +54271,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rsa 0.9.6": {
+    "rsa 0.9.2": {
       "name": "rsa",
-      "version": "0.9.6",
+      "version": "0.9.2",
       "package_url": "https://github.com/RustCrypto/RSA",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rsa/0.9.6/download",
-          "sha256": "5d0e5124fcb30e76a7e79bfee683a2746db83784b86289f6251b54b7950a0dfc"
+          "url": "https://static.crates.io/crates/rsa/0.9.2/download",
+          "sha256": "6ab43bb47d23c1a631b4b680199a45255dce26fa9ab2fa902581f624ff13e6a8"
         }
       },
       "targets": [
@@ -54313,6 +54313,10 @@
         "deps": {
           "common": [
             {
+              "id": "byteorder 1.5.0",
+              "target": "byteorder"
+            },
+            {
               "id": "const-oid 0.9.5",
               "target": "const_oid"
             },
@@ -54328,6 +54332,10 @@
             {
               "id": "num-integer 0.1.46",
               "target": "num_integer"
+            },
+            {
+              "id": "num-iter 0.1.43",
+              "target": "num_iter"
             },
             {
               "id": "num-traits 0.2.19",
@@ -54369,7 +54377,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.6"
+        "version": "0.9.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -64891,7 +64899,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             }
           ],
@@ -72040,7 +72048,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.15",
+              "id": "paste 1.0.14",
               "target": "paste"
             },
             {
@@ -78875,11 +78883,7 @@
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
-<<<<<<< HEAD
-    "paste 1.0.15",
-=======
     "paste 1.0.14",
->>>>>>> origin/master
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
@@ -78887,7 +78891,7 @@
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
     "pprof 0.13.0",
-    "predicates 3.1.2",
+    "predicates 3.0.4",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
@@ -78921,7 +78925,7 @@
     "rlp 0.5.2",
     "rocksdb 0.22.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.6",
+    "rsa 0.9.2",
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
