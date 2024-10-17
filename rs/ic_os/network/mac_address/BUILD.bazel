@@ -4,24 +4,21 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config:config_lib",
     "//rs/ic_os/utils",
-    "//rs/ic_os/network/mac_address",
     "@crate_index//:anyhow",
-    "@crate_index//:ping",
-    "@crate_index//:rayon",
+    "@crate_index//:regex",
+    "@crate_index//:sha2",
+    "@crate_index//:hex",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
 ]
 
 rust_library(
-    name = "network",
+    name = "mac_address",
     srcs = glob(
         ["src/**/*.rs"],
     ),
     aliases = {},
-    crate_name = "network",
+    crate_name = "mac_address",
     edition = "2021",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
@@ -30,6 +27,6 @@ rust_library(
 rust_test(
     name = "test",
     size = "small",
-    crate = ":network",
+    crate = ":mac_address",
     deps = DEPENDENCIES,
 )
