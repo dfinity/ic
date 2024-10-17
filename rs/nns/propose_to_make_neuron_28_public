@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+GOVERNANCE=rrkah-fqaaa-aaaaa-aaaaq-cai
+
+dfx --identity hsm \
+    canister \
+    --network ic \
+    call \
+    --candid rs/nns/governance/canister/governance.did \
+    $GOVERNANCE \
+    manage_neuron \
+    '(record {
+        neuron_id_or_subaccount = opt variant { NeuronId = record { id = 51 }} ;
+        command = opt variant { MakeProposal = record {
+            title = opt "Make Neuron 28 (\"Internet Computer Association\") Public";
+            url = "https://forum.dfinity.org/t/strengthening-governance-by-aligning-neuron-28s-voting-power-under-neuron-27/35957" ;
+            summary = "# Make Neuron 28 (\"Internet Computer Association\") Public" ;
+            action = opt variant { ManageNeuron = record {
+                neuron_id_or_subaccount = opt variant { NeuronId = record { id = 28 } } ;
+                command = opt variant { Configure = record {
+                    operation = opt variant { SetVisibility = record {
+                        visibility = opt 2 ; // Public
+                    } };
+                } } ;
+                id = null ;
+            } };
+        } } ;
+        id = null ;
+    })'
