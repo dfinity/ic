@@ -18,6 +18,7 @@ use ic_system_test_driver::util::{
 use ic_types::messages::{Blob, HttpQueryResponse};
 use ic_universal_canister::wasm;
 use slog::info;
+use std::env;
 use std::time::Duration;
 
 fn main() -> Result<()> {
@@ -46,8 +47,10 @@ pub fn config(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let log = env.logger();
     let non_nns_node = env.get_first_healthy_system_but_not_nns_node_snapshot();
-    let ii_canister_id =
-        non_nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
+    let ii_canister_id = non_nns_node.create_and_install_canister_with_arg(
+        &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
+        None,
+    );
     info!(
         log,
         "II canister with id={ii_canister_id} installed on subnet with id={}",

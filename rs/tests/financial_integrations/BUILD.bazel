@@ -16,6 +16,9 @@ LEDGER_CANISTER_RUNTIME_DEPS = [
 
 system_test_nns(
     name = "btc_get_balance_test",
+    env = {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+    },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
