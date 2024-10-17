@@ -495,15 +495,11 @@ impl PrivateKey {
     ///
     /// This can theoretically fail, in the case that k/s generated is zero.
     /// This will never occur in practice
-    fn sign_bip340_with_aux_rand(
-        &self,
-        message: &[u8; 32],
-        aux_rand: &[u8; 32],
-    ) -> Option<[u8; 64]> {
+    fn sign_bip340_with_aux_rand(&self, message: &[u8], aux_rand: &[u8; 32]) -> Option<[u8; 64]> {
         let bip340 = k256::schnorr::SigningKey::from(&self.key);
 
         bip340
-            .sign_prehash_with_aux_rand(message, aux_rand)
+            .sign_raw(message, aux_rand)
             .map(|s| s.to_bytes())
             .ok()
     }
@@ -511,7 +507,7 @@ impl PrivateKey {
     /// Sign a message with BIP340 Schnorr
     pub fn sign_message_with_bip340<R: Rng + CryptoRng>(
         &self,
-        message: &[u8; 32],
+        message: &[u8],
         rng: &mut R,
     ) -> [u8; 64] {
         loop {
@@ -532,7 +528,7 @@ impl PrivateKey {
     /// The aux_rand parameter for BIP340 is just to re-randomize the signature,
     /// and may prevent certain forms of fault attack. It it is otherwise not necessary
     /// for security.
-    pub fn sign_message_with_bip340_no_rng(&self, message: &[u8; 32]) -> [u8; 64] {
+    pub fn sign_message_with_bip340_no_rng(&self, message: &[u8]) -> [u8; 64] {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(0);
         self.sign_message_with_bip340(message, &mut rng)
     }
