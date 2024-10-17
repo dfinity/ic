@@ -95,6 +95,9 @@ const STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY: NumOsPages =
 /// also used as the maximum size for the Wasm chunk store of each canister.
 pub const WASM_MAX_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024); // 100 MiB
 
+/// The overhead for dirty pages in Wasm64.
+pub const WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER: u64 = 4;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
@@ -238,6 +241,9 @@ pub struct Config {
 
     /// The maximum size of the stable memory.
     pub max_stable_memory_size: NumBytes,
+
+    /// The dirty page overhead factor for Wasm64.
+    pub wasm64_dirty_page_overhead_multiplier: u64,
 }
 
 impl Config {
@@ -276,6 +282,7 @@ impl Config {
             wasm_max_size: WASM_MAX_SIZE,
             max_wasm_memory_size: NumBytes::new(MAX_WASM_MEMORY_IN_BYTES),
             max_stable_memory_size: NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES),
+            wasm64_dirty_page_overhead_multiplier: WASM64_DIRTY_PAGE_OVERHEAD_MULTIPLIER,
         }
     }
 }
