@@ -195,7 +195,7 @@ impl LedgerSuiteConfig {
                     )
                 });
         }
-        println!("Upgraded {} archives", num_archives);
+        println!("Upgraded {} archive(s)", num_archives);
     }
 
     fn upgrade_index(&self, state_machine: &StateMachine, wasm: &Wasm) {
