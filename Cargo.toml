@@ -10,6 +10,7 @@ members = [
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
+    "packages/pocket-ic/test_canister",
     "packages/ic-vetkd-utils",
     "rs/artifact_pool",
     "rs/async_utils",

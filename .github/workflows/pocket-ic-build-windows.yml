@@ -1,0 +1,36 @@
+name: 'PocketIC library build on Windows'
+on:
+  pull_request:
+    paths:
+      - packages/pocket-ic/**
+# runs for the same workflow are cancelled on PRs
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+permissions: read-all
+jobs:
+  pocket_ic_library_build_windows:
+    name: 'PocketIC library build on Windows'
+    runs-on: windows-2022
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v4
+      - name: 'Setup WSL'
+        uses: Vampire/setup-wsl@v3
+      - name: 'Install root CA certificates in WSL'
+        shell: wsl-bash {0}
+        run: |
+          sudo apt update && sudo apt install -y ca-certificates
+      - name: 'Setup Rust and Cargo'
+        uses: moonrepo/setup-rust@v1.2.1
+      - name: 'cargo clippy'
+        run: |
+          cargo clippy --locked --all-features -p pocket-ic --all-targets -- \
+            -D warnings \
+            -D clippy::all \
+            -D clippy::mem_forget \
+            -C debug-assertions=off
+      - name: 'cargo build'
+        shell: pwsh
+        run: |
+          cargo build --release --locked -p pocket-ic
