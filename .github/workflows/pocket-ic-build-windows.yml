@@ -19,8 +19,9 @@ jobs:
         uses: moonrepo/setup-rust@v1.2.1
       - name: 'cargo clippy'
         run: |
-          cargo clippy --locked --all-features -p pocket-ic --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
+          cargo clippy --locked --all-features -p pocket-ic -p pocket-ic-test-canister --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off
       - name: 'cargo build'
         shell: pwsh
         run: |
           cargo build --release --locked -p pocket-ic
+          cargo build --release --locked -p pocket-ic --target wasm32-unknown-unknown
