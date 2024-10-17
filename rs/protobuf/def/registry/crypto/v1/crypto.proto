@@ -80,9 +80,20 @@ message SchnorrKeyId {
   string name = 2;
 }
 
+enum VetKdCurve {
+  VETKD_CURVE_UNSPECIFIED = 0;
+  VETKD_CURVE_BLS12381 = 1;
+}
+
+message VetKdKeyId {
+  VetKdCurve curve = 1;
+  string name = 2;
+}
+
 message MasterPublicKeyId {
   oneof key_id {
     EcdsaKeyId ecdsa = 1;
     SchnorrKeyId schnorr = 2;
+    VetKdKeyId vetkd = 3;
   }
 }

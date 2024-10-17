@@ -860,6 +860,9 @@ mod tests {
             MasterPublicKeyId::Schnorr(key_id) => {
                 PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
             }
+            MasterPublicKeyId::VetKd(_) => {
+                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
+            }
         }
     }
 
@@ -879,6 +882,9 @@ mod tests {
                         message: Arc::new(vec![1; 64]),
                         key_id: key_id.clone(),
                     })
+                }
+                MasterPublicKeyId::VetKd(_) => {
+                    todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
                 }
             },
             derivation_path: vec![],

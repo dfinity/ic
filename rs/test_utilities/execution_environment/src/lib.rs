@@ -2149,6 +2149,13 @@ impl ExecutionTestBuilder {
                         public_key: b"cdcdcdcd".to_vec(),
                     },
                 ),
+                MasterPublicKeyId::VetKd(_) => (
+                    key_id,
+                    MasterPublicKey {
+                        algorithm_id: AlgorithmId::ThresBls12_381,
+                        public_key: b"efefefef".to_vec(),
+                    },
+                )
             })
             .collect();
 

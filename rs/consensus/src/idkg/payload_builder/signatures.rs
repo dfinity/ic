@@ -311,6 +311,9 @@ mod tests {
                             signature: vec![i as u8; 32],
                         })
                     }
+                    MasterPublicKeyId::VetKd(_) => {
+                        todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
+                    }
                 },
             );
         }
