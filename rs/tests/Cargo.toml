@@ -268,10 +268,6 @@ name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-bn-update-workload-test"
-path = "boundary_nodes/bn_update_workload_test.rs"
-
-[[bin]]
 name = "ic-systest-custom-domains-integration"
 path = "boundary_nodes/custom_domains_integration_test.rs"
 
@@ -286,22 +282,6 @@ path = "testing_verification/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "ic-systest-network-reliability"
-path = "networking/network_reliability_test.rs"
-
-[[bin]]
-name = "ic-systest-network-large"
-path = "networking/network_large_test.rs"
-
-[[bin]]
-name = "ic-systest-query-workload-long-test"
-path = "networking/query_workload_long_test.rs"
-
-[[bin]]
-name = "ic-systest-update-workload-large-payload"
-path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
 name = "ic-systest-xnet-malicious-slices"
