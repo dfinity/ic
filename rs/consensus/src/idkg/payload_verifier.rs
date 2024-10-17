@@ -879,7 +879,7 @@ mod test {
         let pre_sig_id2 = idkg_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id3 = idkg_payload.uid_generator.next_pre_signature_id();
 
-        let ids = vec![
+        let ids = [
             request_id(1, height),
             request_id(2, height),
             request_id(3, height),

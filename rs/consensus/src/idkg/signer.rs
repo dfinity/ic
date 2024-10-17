@@ -877,7 +877,7 @@ mod tests {
         // Message for a signature currently requested but specifying wrong height
         let wrong_id_2 = RequestId {
             height: id_2.height.decrement(),
-            ..id_2.clone()
+            ..id_2
         };
         let action = Action::new(&requested, &wrong_id_2, height);
         assert_eq!(action, Action::Drop);
@@ -922,9 +922,9 @@ mod tests {
                 let id_1 = request_id(1, height_0);
                 let id_2 = request_id(2, height_30);
 
-                let share1 = create_signature_share(&key_id, NODE_1, id_1.clone());
+                let share1 = create_signature_share(&key_id, NODE_1, id_1);
                 let msg_id1 = share1.message_id();
-                let share2 = create_signature_share(&key_id, NODE_2, id_2.clone());
+                let share2 = create_signature_share(&key_id, NODE_2, id_2);
                 let msg_id2 = share2.message_id();
                 let change_set = vec![
                     IDkgChangeAction::AddToValidated(share1),
@@ -974,13 +974,15 @@ mod tests {
         // Set up the IDKG pool. Pool has shares for requests 0, 1, 2.
         // Only the share for request 0 is issued by us
         let shares = vec![
-            create_signature_share(&key_id, NODE_1, ids[0].clone()),
-            create_signature_share(&key_id, NODE_2, ids[1].clone()),
-            create_signature_share(&key_id, NODE_3, ids[2].clone()),
+            create_signature_share(&key_id, NODE_1, ids[0]),
+            create_signature_share(&key_id, NODE_2, ids[1]),
+            create_signature_share(&key_id, NODE_3, ids[2]),
         ];
 
-        let sig_inputs: Vec<_> = (0..3)
-            .map(|i| {
+        // The block has pre-signatures for requests 0, 3, 4
+        let sig_inputs: Vec<_> = [0, 3, 4]
+            .into_iter()
+            .map(|i: usize| {
                 (
                     ids[i],
                     generator.next_pre_signature_id(),
@@ -989,12 +991,11 @@ mod tests {
             })
             .collect();
 
-        // The block has three pre-signatures (for all requests)
         let block_reader = TestIDkgBlockReader::for_signer_test(
             Height::from(100),
             sig_inputs
                 .iter()
-                .map(|(_, pid, inputs)| (pid.clone(), inputs.clone()))
+                .map(|(_, pid, inputs)| (*pid, inputs.clone()))
                 .collect(),
         );
         let transcript_loader: TestIDkgTranscriptLoader = Default::default();
@@ -1489,8 +1490,8 @@ mod tests {
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pid_1.clone(), create_sig_inputs(1, &key_id)),
-                (pid_2.clone(), create_sig_inputs(2, &key_id)),
+                (pid_1, create_sig_inputs(1, &key_id)),
+                (pid_2, create_sig_inputs(2, &key_id)),
             ],
         );
         let state = fake_state_with_signature_requests(
@@ -1519,7 +1520,7 @@ mod tests {
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
         };
-        let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
+        let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2);
         let msg_id_2 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
             message,
@@ -1605,8 +1606,9 @@ mod tests {
             timestamp: UNIX_EPOCH,
         });
 
-        // A share for a the completed context, but specifying wrong pre-signature (dropped)
-        let wrong_id_3 = ids[2].clone();
+        // A share for a the completed context, but specifying wrong pre-signature height (dropped)
+        let mut wrong_id_3 = ids[2];
+        wrong_id_3.height = ids[2].height.decrement();
         let message = create_signature_share(&key_id, NODE_2, wrong_id_3);
         let msg_id_4 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
@@ -1664,12 +1666,12 @@ mod tests {
 
                 // Set up the IDKG pool
                 // Validated pool has: {signature share 2, signer = NODE_2}
-                let share = create_signature_share(&key_id, NODE_2, id_2.clone());
+                let share = create_signature_share(&key_id, NODE_2, id_2);
                 let change_set = vec![IDkgChangeAction::AddToValidated(share)];
                 idkg_pool.apply(change_set);
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2, height = 100}
-                let message = create_signature_share(&key_id, NODE_2, id_2.clone());
+                let message = create_signature_share(&key_id, NODE_2, id_2);
                 let msg_id_2 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1719,7 +1721,7 @@ mod tests {
                 let (mut idkg_pool, signer) = create_signer_dependencies(pool_config, logger);
 
                 // Unvalidated pool has: {signature share 1, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 0);
+                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1, 0);
                 let msg_id_1 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1728,7 +1730,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_2}
-                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1.clone(), 1);
+                let message = create_signature_share_with_nonce(&key_id, NODE_2, id_1, 1);
                 let msg_id_2 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1737,7 +1739,7 @@ mod tests {
                 });
 
                 // Unvalidated pool has: {signature share 2, signer = NODE_3}
-                let message = create_signature_share_with_nonce(&key_id, NODE_3, id_1.clone(), 2);
+                let message = create_signature_share_with_nonce(&key_id, NODE_3, id_1, 2);
                 let msg_id_3 = message.message_id();
                 idkg_pool.insert(UnvalidatedArtifact {
                     message,
@@ -1975,7 +1977,7 @@ mod tests {
                             .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
-                            request_id: req_id.clone(),
+                            request_id: req_id,
                             share,
                         }
                     })
@@ -2112,7 +2114,7 @@ mod tests {
                             .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
-                            request_id: req_id.clone(),
+                            request_id: req_id,
                             share,
                         }
                     })

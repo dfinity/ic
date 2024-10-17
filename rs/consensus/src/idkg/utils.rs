@@ -266,7 +266,7 @@ pub(super) fn build_signature_inputs(
     };
     let pre_signature = block_reader
         .available_pre_signature(&pre_sig_id)
-        .ok_or_else(|| BuildSignatureInputsError::MissingPreSignature(request_id))?
+        .ok_or(BuildSignatureInputsError::MissingPreSignature(request_id))?
         .clone();
     let nonce = Id::from(
         context
