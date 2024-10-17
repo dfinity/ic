@@ -6,15 +6,15 @@ rust_library(
     name = "utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    crate_root = "src/lib.rs",
     crate_name = "ic_networking_system_test_utils",
+    crate_root = "src/lib.rs",
     deps = [
         # Keep sorted.
         "//rs/interfaces/registry",
         "//rs/nns/governance/api",
         "//rs/protobuf",
         "//rs/registry/canister",
-        "//rs/registry/keys",   
+        "//rs/registry/keys",
         "//rs/registry/nns_data_provider",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
