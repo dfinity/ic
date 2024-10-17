@@ -58,6 +58,11 @@ const INSTALL_CHUNKED_CODE_THRESHOLD: usize = 2_000_000; // 2 MB
 // in the IC protocol.
 const INSTALL_CODE_CHUNK_SIZE: usize = 1 << 20; // 1 MiB
 
+enum HttpMethod {
+    Get,
+    Post,
+}
+
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
     /// The unique ID of this PocketIC instance.
@@ -1047,51 +1052,29 @@ impl PocketIc {
     }
 
     async fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
-        // we may have to try several times if the instance is busy
-        let start = std::time::SystemTime::now();
-        loop {
-            let reqwest_client = &self.reqwest_client;
-            let result = reqwest_client
-                .get(self.instance_url().join(endpoint).unwrap())
-                .send()
-                .await
-                .expect("HTTP failure");
-            match ApiResponse::<_>::from_response(result).await {
-                ApiResponse::Success(t) => break t,
-                ApiResponse::Error { message } => panic!("{}", message),
-                ApiResponse::Busy { state_label, op_id } => {
-                    debug!(
-                        "instance_id={} Instance is busy: state_label: {}, op_id: {}",
-                        self.instance_id, state_label, op_id
-                    );
-                }
-                ApiResponse::Started { state_label, op_id } => {
-                    panic!(
-                        "Error: A 'get' should not return Started: state_label: {}, op_id: {}",
-                        state_label, op_id
-                    )
-                }
-            }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("'get' request to PocketIC server timed out.");
-                }
-            }
-            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-        }
+        self.request(HttpMethod::Get, endpoint, ()).await
     }
 
     async fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
+        self.request(HttpMethod::Post, endpoint, body).await
+    }
+
+    async fn request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        http_method: HttpMethod,
+        endpoint: &str,
+        body: B,
+    ) -> T {
         // we may have to try several times if the instance is busy
         let start = std::time::SystemTime::now();
         loop {
             let reqwest_client = &self.reqwest_client;
-            let result = reqwest_client
-                .post(self.instance_url().join(endpoint).unwrap())
-                .json(&body)
-                .send()
-                .await
-                .expect("HTTP failure");
+            let url = self.instance_url().join(endpoint).unwrap();
+            let builder = match http_method {
+                HttpMethod::Get => reqwest_client.get(url),
+                HttpMethod::Post => reqwest_client.post(url).json(&body),
+            };
+            let result = builder.send().await.expect("HTTP failure");
             match ApiResponse::<_>::from_response(result).await {
                 ApiResponse::Success(t) => break t,
                 ApiResponse::Error { message } => panic!("{}", message),
@@ -1142,7 +1125,7 @@ impl PocketIc {
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
                             if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
                             {
-                                panic!("'post' request to PocketIC server timed out.");
+                                panic!("request to PocketIC server timed out.");
                             }
                         }
                     }
@@ -1150,7 +1133,7 @@ impl PocketIc {
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
                 if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("'post' request to PocketIC server timed out.");
+                    panic!("request to PocketIC server timed out.");
                 }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));

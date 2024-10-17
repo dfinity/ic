@@ -168,9 +168,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "assert_matches": crate.spec(
                 version = "^1.5.0",
             ),
-            "async-channel": crate.spec(
-                version = "2.3.1",
-            ),
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
@@ -257,7 +254,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "=0.10.0",
+                version = "0.10.0",
                 features = [
                     "alloc",
                     "experimental",
@@ -388,6 +385,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "csv": crate.spec(
                 version = "^1.1",
             ),
+            "ctrlc": crate.spec(
+                version = "3.4.5",
+                features = ["termination"],
+            ),
             "curve25519-dalek": crate.spec(
                 version = "^4.1.3",
                 features = ["group", "precomputed-tables"],
@@ -423,7 +424,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.0.0",
+                version = "^1.1.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -675,7 +676,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.13.3",
+                version = "^0.13.4",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -1084,9 +1085,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "schemars": crate.spec(
                 version = "^0.8.16",
             ),
-            "schnorr_fun": crate.spec(
-                version = "^0.10",
-            ),
             "scoped_threadpool": crate.spec(
                 version = "^0.1.9",
             ),
@@ -1423,7 +1421,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^212.0.0",
             ),
             "wat": crate.spec(
-                version = "=1.212.0",
+                version = "1.212.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",
