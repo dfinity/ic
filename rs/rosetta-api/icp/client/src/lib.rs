@@ -242,6 +242,56 @@ impl RosettaClient {
         }])
     }
 
+    pub async fn build_start_dissolving_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "START_DISSOLVING".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn build_stop_dissolving_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "STOP_DISSOLVING".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                NeuronIdentifierMetadata { neuron_index }
+                    .try_into()
+                    .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
     pub async fn network_list(&self) -> anyhow::Result<NetworkListResponse> {
         self.call_endpoint("/network/list", &MetadataRequest { metadata: None })
             .await
@@ -705,6 +755,60 @@ impl RosettaClient {
             signer_keypair,
             network_identifier,
             set_dissolve_delay_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// If a neuron is in the state NOT_DISSOLVING you start the dissolving process witht his function.
+    /// The neuron will then move to the DISSOLVING state.
+    pub async fn start_dissolving_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        neuron_index: u64,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let start_dissolving_operations = RosettaClient::build_start_dissolving_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_index,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            start_dissolving_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// If a neuron is in the state DISSOLVING you can stop the dissolving process with this function.
+    /// The neuron will then move to the NOT_DISSOLVING state.
+    pub async fn stop_dissolving_neuron<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        neuron_index: u64,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let stop_dissolving_operations = RosettaClient::build_stop_dissolving_operations(
+            signer_keypair.generate_principal_id()?.0,
+            neuron_index,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            stop_dissolving_operations,
             None,
             None,
         )
