@@ -153,6 +153,11 @@ impl Ic00MethodPermissions {
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
             },
+            Ic00Method::SubnetStats => Self {
+                method,
+                allow_remote_subnet_sender: true,
+                allow_only_nns_subnet_sender: false,
+            },
             Ic00Method::FetchCanisterLogs => Self {
                 method,
                 // `FetchCanisterLogs` method is only allowed for messages sent by users,
