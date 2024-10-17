@@ -213,7 +213,7 @@ pub fn canister_rejects_ingress_only_from_one_caller(env: TestEnv) {
     })
 }
 
-// TODO(EXC-186): Enable this test.
+/* TODO(EXC-186): Enable this test.
 pub fn message_to_canister_with_not_enough_balance_is_rejected(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
@@ -236,3 +236,4 @@ pub fn message_to_canister_with_not_enough_balance_is_rejected(env: TestEnv) {
         }
     })
 }
+*/

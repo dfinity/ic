@@ -237,7 +237,7 @@ rust_test(
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
@@ -286,7 +286,7 @@ rust_test(
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icrc1",
-        "//rs/ledger_suite/tests/sm-tests",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/types/base_types",
     ],
 )

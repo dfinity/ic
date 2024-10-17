@@ -82,6 +82,25 @@ system_test_nns(
     ],
 )
 
+system_test_nns(
+    name = "small_high_perf",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
 system_test(
     name = "from_config",
     env = NNS_CANISTER_ENV,

@@ -361,7 +361,11 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/crypto",
     "rs/tests/driver",
+    "rs/tests/execution",
+    "rs/tests/message_routing",
+    "rs/tests/message_routing/rejoin_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",
@@ -469,9 +473,8 @@ actix-rt = "2.10.0"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-stream = "0.3.5"
-async-trait = "0.1.81"
+async-stream = "0.3.6"
+async-trait = "0.1.83"
 axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
@@ -539,7 +542,6 @@ ic-agent = { version = "0.37.1", features = [
 ] }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
-ic-btc-validation = "0.1.0"
 ic-cbor = "2.6.0"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
@@ -551,7 +553,7 @@ ic-response-verification = "2.6.0"
 ic-stable-structures = "0.6.5"
 ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
-ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
+ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -585,17 +587,16 @@ nftables = "0.4"
 nix = "0.24.3"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-opentelemetry = { version = "0.23.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.16.0", features = ["grpc-tonic"] }
-opentelemetry-prometheus = "0.16.0"
-opentelemetry_sdk = { version = "0.23.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.26.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.26.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.26.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",
     "pem",
     "pkcs8",
 ] }
-pairing = "=0.23"
+pairing = "0.23"
 parking_lot = "0.12.3"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
@@ -662,11 +663,11 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.3", features = [ "derive" ] }
+strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
-tar = "=0.4.39"
+tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
@@ -691,7 +692,7 @@ tower-http = { version = "0.5.2", features = [
 ] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-opentelemetry = "0.24.0"
+tracing-opentelemetry = "0.27.0"
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
@@ -700,13 +701,13 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
-walkdir = "=2.3.3"
+walkdir = "2.3.3"
 walrus = "0.21.1"
 wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
 wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
-wat = "=1.212.0"
+wat = "1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
