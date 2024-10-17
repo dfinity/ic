@@ -68,7 +68,7 @@ jobs:
           # We save the excluded test tags in an environment variable such that ci/bazel-scripts/diff.sh can read them:
           echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
 
-          # Prepend the excluded test tags with '-' such that they can be passed to --test_tag_filters= below:
+          # Prepend the excluded test tags with a '-' such that they can be passed to --test_tag_filters= below:
           TEST_TAG_FILTERS=()
           for tag in "${EXCLUDED_TEST_TAGS[*]}"; do
             TEST_TAG_FILTERS+=("-$tag")
