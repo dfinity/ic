@@ -12,8 +12,6 @@ use slog::info;
 use std::fs;
 use std::path::PathBuf;
 
-const WALLET_CANISTER_0_7_2_WASM: &str = "external/wallet_canister_0.7.2/file/wallet.wasm";
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
