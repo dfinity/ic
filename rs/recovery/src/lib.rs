@@ -25,6 +25,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
+use std::io::ErrorKind;
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -148,7 +149,22 @@ impl Recovery {
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
 
-        Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path])?;
+        match Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path]) {
+            Err(RecoveryError::IoError(s, err)) => match err.kind() {
+                ErrorKind::NotFound | ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
+                    format!(
+                        "Couldn't create directories. To make sure they exist \
+                        and have the right permissions set, run the following command:\n\n  \
+                        sudo mkdir -p {} && sudo chown $USER {}\n",
+                        recovery_dir.display(),
+                        recovery_dir.display()
+                    ),
+                    err,
+                )),
+                _ => Err(RecoveryError::IoError(s, err)),
+            },
+            x => x,
+        }?;
 
         let registry_helper = RegistryHelper::new(
             logger.clone(),
@@ -991,7 +1007,7 @@ mod tests {
 
         let (name, height) =
             Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
-                .expect("Failed getting the latest checkpoint name and height");
+                .expect_graceful("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
         assert_eq!(height, Height::from(64900));
