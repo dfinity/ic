@@ -29,6 +29,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
@@ -634,6 +635,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
+            replica_version: Some((&item.replica_version).into()),
         }
     }
 }
@@ -763,6 +765,8 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
+            // TODO: Review. This could be incorrect. Would that have consequences?
+            replica_version: ReplicaVersion::default(),
         })
     }
 }
@@ -800,6 +804,7 @@ impl SystemMetadata {
             expected_compiled_wasms: BTreeSet::new(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            replica_version: ReplicaVersion::default(),
         }
     }
 
@@ -1069,6 +1074,7 @@ impl SystemMetadata {
             ref expected_compiled_wasms,
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
+            replica_version: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");

@@ -107,6 +107,14 @@ impl fmt::Display for ReplicaVersionParseError {
 
 impl Error for ReplicaVersionParseError {}
 
+impl From<&ReplicaVersion> for ic_protobuf::state::system_metadata::v1::ReplicaVersion {
+    fn from(value: &ReplicaVersion) -> Self {
+        Self {
+            version_id: value.version_id.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
