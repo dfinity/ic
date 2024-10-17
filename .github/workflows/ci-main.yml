@@ -59,10 +59,21 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          TEST_TAG_FILTERS=(-post_master -system_test_hourly -system_test_nightly -system_test_nightly_nns -system_test_staging -system_test_hotfix -system_test_benchmark -fuzz_test -fi_tests_nightly -nns_tests_nightly)
+
+          # Determine which tests to skip:
+          EXCLUDED_TEST_TAGS=(post_master system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
           if [[ "${{ github.event_name }}" == 'pull_request' || "${{ github.event_name }}" == 'merge_group' ]]; then
-            TEST_TAG_FILTERS+=(-long_test)
+            TEST_TAG_FILTERS+=(long_test)
           fi
+          # We save the excluded test tags in an environment variable such that ci/bazel-scripts/diff.sh can read them:
+          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
+
+          # Prepend the excluded test tags with '-' such that they can be passed to --test_tag_filters= below:
+          TEST_TAG_FILTERS=()
+          for tag in "${EXCLUDED_TEST_TAGS[*]}"; do
+            TEST_TAG_FILTERS+=("-$tag")
+          done
+
           IFS=','
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
             echo "BAZEL_EXTRA_ARGS=--test_tag_filters=${TEST_TAG_FILTERS[*]} --test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
