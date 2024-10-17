@@ -2,6 +2,8 @@
 
 set -Eeuo pipefail
 
+GOVERNANCE=rrkah-fqaaa-aaaaa-aaaaq-cai
+
 dfx --identity hsm \
     canister \
     --network ic \
