@@ -2609,7 +2609,7 @@ impl Payload<'_> for SubnetStatsArgs {}
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct SubnetStatsResponse {
-    replica_version: String,
+    pub replica_version: String,
 }
 
 impl Payload<'_> for SubnetStatsResponse {}
