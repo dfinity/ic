@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::thread;
 
 use super::Governance;
@@ -20,10 +20,13 @@ mod common;
 mod store;
 
 pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
+use common::{function_domain_union, governance_account_id};
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
 
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
+mod claim_neuron;
+pub use claim_neuron::claim_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
@@ -98,6 +101,81 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     );
     state.add("transaction_fee", gov.transaction_fee().to_tla_value());
     state
+}
+
+fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
+    vec![
+        (
+            format!("{}_Process_Ids", pid),
+            BTreeSet::from([pid]).to_tla_value(),
+        ),
+        (
+            "Neuron_Ids".to_string(),
+            function_domain_union(trace, "neuron").to_tla_value(),
+        ),
+        (
+            "MIN_STAKE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("min_stake")
+                        .expect("min_stake not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        (
+            "TRANSACTION_FEE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("transaction_fee")
+                        .expect("transaction_fee not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        ("Governance_Account_Ids".to_string(), {
+            let mut ids = function_domain_union(trace, "neuron_id_by_account");
+            ids.insert(governance_account_id());
+            ids.to_tla_value()
+        }),
+    ]
+}
+
+fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
+    for ResolvedStatePair {
+        ref mut start,
+        ref mut end,
+    } in trace
+    {
+        for state in &mut [start, end] {
+            state
+                .0
+                 .0
+                .remove("transaction_fee")
+                .expect("Didn't record the transaction fee");
+            state
+                .0
+                 .0
+                .remove("min_stake")
+                .expect("Didn't record the min stake");
+            if !state.0 .0.contains_key("governance_to_ledger") {
+                state.0 .0.insert(
+                    "governance_to_ledger".to_string(),
+                    TlaValue::Seq(Vec::new()),
+                );
+            }
+            if !state.0 .0.contains_key("ledger_to_governance") {
+                state.0 .0.insert(
+                    "ledger_to_governance".to_string(),
+                    TlaValue::Set(BTreeSet::new()),
+                );
+            }
+        }
+    }
 }
 
 // Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
