@@ -151,10 +151,10 @@ impl Recovery {
 
         match Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path]) {
             Err(RecoveryError::IoError(s, err)) => match err.kind() {
-                ErrorKind::NotFound | ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
+                ErrorKind::PermissionDenied => Err(RecoveryError::IoError(
                     format!(
-                        "Couldn't create directories. To make sure they exist \
-                        and have the right permissions set, run the following command:\n\n  \
+                        "No permission to create recovery directory. Consider manually \
+                        creating the directory with the right permissions by running:\n\n  \
                         sudo mkdir -p {} && sudo chown $USER {}\n",
                         recovery_dir.display(),
                         recovery_dir.display()
