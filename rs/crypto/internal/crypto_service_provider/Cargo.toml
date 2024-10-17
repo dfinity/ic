@@ -24,7 +24,7 @@ ic-crypto-internal-multi-sig-bls12381 = { path = "../crypto_lib/multi_sig/bls12_
 ic-crypto-internal-seed = { path = "../crypto_lib/seed" }
 ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-threshold-sig-ecdsa = { path = "../crypto_lib/threshold_sig/tecdsa" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "../crypto_lib/threshold_sig/canister_threshold_sig" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
@@ -66,7 +66,7 @@ assert_matches = { workspace = true }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
-ic-crypto-internal-threshold-sig-ecdsa-test-utils = { path = "../crypto_lib/threshold_sig/tecdsa/test_utils" }
+ic-crypto-internal-threshold-sig-canister-threshold-sig-test-utils = { path = "../crypto_lib/threshold_sig/canister_threshold_sig/test_utils" }
 ic-crypto-node-key-generation = { path = "../../node_key_generation" }
 ic-crypto-temp-crypto-vault = { path = "../../temp_crypto/temp_vault" }
 ic-crypto-test-utils = { path = "../../test_utils" }
@@ -85,7 +85,7 @@ mockall = { workspace = true }
 num_cpus = "1.16"
 proptest = { workspace = true }
 proptest-derive = { workspace = true }
-rsa = "0.9"
+rsa = { workspace = true }
 slog-async = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

@@ -15,11 +15,10 @@ on:
   workflow_call:
 
 # runs for the same workflow are cancelled on PRs but not on master
+# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-
-permissions: read-all
 
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
@@ -73,7 +72,7 @@ anchors:
     name: Set up Python
     uses: actions/setup-python@v5
     with:
-      python-version: '3.10'
+      python-version: '3.12'
   bazel-upload: &bazel-upload
     name: Upload bazel-targets
     uses: actions/upload-artifact@v4
@@ -156,7 +155,7 @@ jobs:
 
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 120
+    timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
