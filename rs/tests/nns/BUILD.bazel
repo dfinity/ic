@@ -160,7 +160,9 @@ system_test(
 
 system_test(
     name = "bitcoin_set_config_proposal_test",
-    env = NNS_CANISTER_ENV,
+    env = dict(NNS_CANISTER_ENV.items() + {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+    }.items()),
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
