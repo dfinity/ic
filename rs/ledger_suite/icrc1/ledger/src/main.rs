@@ -22,7 +22,6 @@ use ic_ledger_canister_core::ledger::{
     TransferError as CoreTransferError,
 };
 use ic_ledger_canister_core::runtime::total_memory_size_bytes;
-use ic_ledger_core::approvals::AllowancesData;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
@@ -226,7 +225,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 
     Access::with_ledger_mut(|ledger| {
         ledger.state = LedgerState::Migrating(LedgerField::Allowances);
-        ledger.approvals.allowances_data.clear_arrivals();
+        ledger.clear_arrivals();
     });
     migrate_next_part(
         MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
@@ -253,33 +252,18 @@ fn migrate_next_part(instruction_limit: u64) {
             };
             match field {
                 LedgerField::Allowances => {
-                    match ledger.approvals.allowances_data.pop_first_allowance() {
-                        Some((account_spender, allowance)) => {
-                            ledger
-                                .stable_approvals
-                                .allowances_data
-                                .set_allowance(account_spender, allowance);
-                            migrated_allowances += 1;
-                        }
-                        None => {
-                            ledger.state =
-                                LedgerState::Migrating(LedgerField::AllowancesExpirations);
-                        }
-                    };
+                    if ledger.migrate_one_allowance() {
+                        migrated_allowances += 1;
+                    } else {
+                        ledger.state = LedgerState::Migrating(LedgerField::AllowancesExpirations);
+                    }
                 }
                 LedgerField::AllowancesExpirations => {
-                    match ledger.approvals.allowances_data.pop_first_expiry() {
-                        Some((timestamp, account_spender)) => {
-                            ledger
-                                .stable_approvals
-                                .allowances_data
-                                .insert_expiry(timestamp, account_spender);
-                            migrated_expirations += 1;
-                        }
-                        None => {
-                            ledger.state = LedgerState::Ready;
-                        }
-                    };
+                    if ledger.migrate_one_expiration() {
+                        migrated_expirations += 1;
+                    } else {
+                        ledger.state = LedgerState::Ready;
+                    }
                 }
             }
         }
@@ -378,23 +362,25 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             ledger.blockchain().num_archived_blocks.saturating_add(ledger.blockchain().blocks.len() as u64) as f64,
             "Total number of transactions stored in the main memory, plus total number of transactions sent to the archive.",
         )?;
-        let token_pool: Nat = ledger.balances().token_pool.into();
-        w.encode_gauge(
-            "ledger_balances_token_pool",
-            token_pool.0.to_f64().unwrap_or(f64::INFINITY),
-            "Total number of Tokens in the pool.",
-        )?;
-        let total_supply: Nat = ledger.balances().total_supply().into();
-        w.encode_gauge(
-            "ledger_total_supply",
-            total_supply.0.to_f64().unwrap_or(f64::INFINITY),
-            "Total number of tokens in circulation.",
-        )?;
-        w.encode_gauge(
-            "ledger_balance_store_entries",
-            ledger.balances().store.len() as f64,
-            "Total number of accounts in the balance store.",
-        )?;
+        if is_ready() {
+            let token_pool: Nat = ledger.balances().token_pool.into();
+            w.encode_gauge(
+                "ledger_balances_token_pool",
+                token_pool.0.to_f64().unwrap_or(f64::INFINITY),
+                "Total number of Tokens in the pool.",
+            )?;
+            let total_supply: Nat = ledger.balances().total_supply().into();
+            w.encode_gauge(
+                "ledger_total_supply",
+                total_supply.0.to_f64().unwrap_or(f64::INFINITY),
+                "Total number of tokens in circulation.",
+            )?;
+            w.encode_gauge(
+                "ledger_balance_store_entries",
+                ledger.balances().store.len() as f64,
+                "Total number of accounts in the balance store.",
+            )?;
+        }
         w.encode_gauge(
             "ledger_most_recent_block_time_seconds",
             (ledger
@@ -421,11 +407,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 format!("Failed to read number of archives: {}", err),
             ))?,
         }
-        w.encode_gauge(
-            "ledger_num_approvals",
-            ledger.approvals().get_num_approvals() as f64,
-            "Total number of approvals.",
-        )?;
+        if is_ready() {
+            w.encode_gauge(
+                "ledger_num_approvals",
+                ledger.approvals().get_num_approvals() as f64,
+                "Total number of approvals.",
+            )?;
+        }
         Ok(())
     })
 }

@@ -381,9 +381,9 @@ impl Default for LedgerState {
 pub struct Ledger {
     balances: LedgerBalances<Tokens>,
     #[serde(default)]
-    pub approvals: LedgerAllowances<Tokens>,
+    approvals: LedgerAllowances<Tokens>,
     #[serde(default)]
-    pub stable_approvals: AllowanceTable<StableAllowancesData>,
+    stable_approvals: AllowanceTable<StableAllowancesData>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -530,6 +530,34 @@ impl Ledger {
     pub fn is_ready(&self) -> bool {
         matches!(self.state, LedgerState::Ready)
     }
+
+    pub fn migrate_one_allowance(&mut self) -> bool {
+        match self.approvals.allowances_data.pop_first_allowance() {
+            Some((account_spender, allowance)) => {
+                self.stable_approvals
+                    .allowances_data
+                    .set_allowance(account_spender, allowance);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn migrate_one_expiration(&mut self) -> bool {
+        match self.approvals.allowances_data.pop_first_expiry() {
+            Some((timestamp, account_spender)) => {
+                self.stable_approvals
+                    .allowances_data
+                    .insert_expiry(timestamp, account_spender);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn clear_arrivals(&mut self) {
+        self.approvals.allowances_data.clear_arrivals();
+    }  
 }
 
 impl LedgerContext for Ledger {

@@ -35,7 +35,6 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentInfo, ConsentMessage};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use icrc_ledger_types::icrc3::archive::GetArchivesArgs;
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock as IcrcBlock, GetBlocksRequest, GetBlocksResponse,
 };
