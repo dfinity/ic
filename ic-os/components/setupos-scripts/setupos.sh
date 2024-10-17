@@ -41,10 +41,18 @@ main() {
     /opt/ic/bin/check-setupos-age.sh
     /opt/ic/bin/check-hardware.sh
     /opt/ic/bin/check-network.sh
+    if kernel_cmdline_bool_default_false ic.setupos.stop_before_installation; then
+        echo "* Installation skipped by request via kernel command line; stopping here"
+        exit
+    fi
     /opt/ic/bin/setup-disk.sh
     /opt/ic/bin/install-hostos.sh
     /opt/ic/bin/install-guestos.sh
     /opt/ic/bin/setup-hostos-config.sh
+    if kernel_cmdline_bool_default_false ic.setupos.stop_before_reboot; then
+        echo "* Reboot skipped by request via kernel command line; stopping here"
+        exit
+    fi
     reboot_setupos
     log_end "$(basename $0)"
 }
