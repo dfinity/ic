@@ -48,23 +48,10 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// The subnets that should not serve synchronous responses to v3 update calls.
-/// The list contains all system subnets.
-const SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3: [&str; 1] =
-    ["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"];
-
 /// Returns true if the subnet is whitelisted to serve synchronous responses to v3
 /// update calls.
 fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
-    let subnet_is_in_disabled_list =
-        SUBNETS_WITH_DISABLED_SYNCHRONOUS_CALL_V3
-            .iter()
-            .any(|s| match PrincipalId::from_str(s) {
-                Ok(principal_id) => SubnetId::from(principal_id) == *subnet_id,
-                Err(_) => false,
-            });
-
-    !subnet_is_in_disabled_list
+    true
 }
 
 /// Create the consensus pool directory (if none exists)
