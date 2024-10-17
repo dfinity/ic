@@ -446,7 +446,7 @@ fn icrc1_test_upgrade_serialization_fixed_tx() {
 
 #[test]
 fn icrc1_test_downgrade_from_incompatible_version() {
-    ic_icrc1_ledger_sm_tests::test_downgrade_from_incompatible_version(
+    ic_ledger_suite_state_machine_tests::test_downgrade_from_incompatible_version(
         ledger_mainnet_wasm(),
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
