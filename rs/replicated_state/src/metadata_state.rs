@@ -2447,6 +2447,7 @@ pub(crate) mod testing {
             expected_compiled_wasms: Default::default(),
             bitcoin_get_successors_follow_up_responses: Default::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
+            replica_version: ReplicaVersion::default(),
         };
     }
 }
