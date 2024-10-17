@@ -1472,7 +1472,7 @@ message Governance {
   }
   CachedUpgradeSteps cached_upgrade_steps = 29;
 
-  // Information about the timers that perform periodic tasks of this Swap canister.
+  // Information about the timers that perform periodic tasks of this Governance canister.
   optional Timers timers = 31;
 }
 

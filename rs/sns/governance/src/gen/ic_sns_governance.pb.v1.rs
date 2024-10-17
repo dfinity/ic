@@ -1648,7 +1648,7 @@ pub struct Governance {
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
     #[prost(message, optional, tag = "29")]
     pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
-    /// Information about the timers that perform periodic tasks of this Swap canister.
+    /// Information about the timers that perform periodic tasks of this Governance canister.
     #[prost(message, optional, tag = "31")]
     pub timers: ::core::option::Option<Timers>,
 }
