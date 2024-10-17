@@ -46,6 +46,7 @@ use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::sync::Arc;
+use std::time::{Instant, UNIX_EPOCH};
 use std::{
     cmp,
     collections::{BTreeMap, HashMap},
@@ -1495,8 +1496,6 @@ fn test_controllers<T>(
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
 
-    env.run_until_completion(/*max_ticks=*/ 10);
-
     let archive_info = list_archives(&env, ledger_id);
     assert_eq!(archive_info.len(), 1);
 
@@ -1632,7 +1631,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, ledger_id);
     let first_archive = ArchiveInfo {
@@ -1670,7 +1668,6 @@ where
     for i in 0..NUM_BLOCKS_TO_ARCHIVE {
         transfer(&env, ledger_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-    env.run_until_completion(/*max_ticks=*/ 10);
     let archive_info = list_archives(&env, ledger_id);
     let second_archive = ArchiveInfo {
         canister_id: "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap(),
@@ -1713,8 +1710,6 @@ pub fn test_archiving<T>(
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let archive_info = list_archives(&env, canister_id);
     assert_eq!(archive_info.len(), 1);
@@ -1839,8 +1834,6 @@ where
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
         transfer(&env, canister_id, p1.0, p2.0, 10_000 + i * 10_000).expect("transfer failed");
     }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
 
     let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
     assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
@@ -2587,13 +2580,14 @@ pub fn test_upgrade_serialization(
     upgrade_args: Vec<u8>,
     minter: Arc<BasicIdentity>,
     verify_blocks: bool,
+    downgrade_to_mainnet_should_succeed: bool,
 ) {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
     let minter_principal: Principal = minter.sender().unwrap();
     const INITIAL_TX_BATCH_SIZE: usize = 100;
     const ADDITIONAL_TX_BATCH_SIZE: usize = 15;
-    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 6 * ADDITIONAL_TX_BATCH_SIZE;
+    const TOTAL_TX_COUNT: usize = INITIAL_TX_BATCH_SIZE + 8 * ADDITIONAL_TX_BATCH_SIZE;
     runner
         .run(
             &(valid_transactions_strategy(
@@ -2601,7 +2595,7 @@ pub fn test_upgrade_serialization(
                 FEE,
                 TOTAL_TX_COUNT,
                 now,
-            ),),
+            ).no_shrink(),),
             |(transactions,)| {
                 let env = StateMachine::new();
                 env.set_time(now);
@@ -2648,7 +2642,39 @@ pub fn test_upgrade_serialization(
                     // Test serializing to the memory manager
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
                     // Test upgrade to memory manager again
-                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
+                    test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
+
+                    // Current mainnet ICP and ICRC wasms (V1) can both deserialize from memory manager
+                    match env.upgrade_canister(
+                        ledger_id,
+                        ledger_wasm_mainnet.clone(),
+                        upgrade_args.clone(),
+                    ) {
+                        Ok(_) => {
+                            if !downgrade_to_mainnet_should_succeed {
+                                panic!("Downgrade from memory manager directly to mainnet should fail!")
+                            } else {
+                                // In case this succeeded, we need to upgrade the ledger back to
+                                // the next version (via the current version), so that the
+                                // subsequent upgrade is from
+                                // `ledger_wasm_nextmigrationversionmemorymanager` to
+                                // `ledger_wasm_current`, rather than from `ledger_wasm_mainnet` to
+                                // `ledger_wasm_current` (currently, from V2 -> V1, rather than from
+                                // V0 -> V1).
+                                test_upgrade(ledger_wasm_current.clone());
+                                test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
+                            }
+                        }
+                        Err(e) => {
+                            if downgrade_to_mainnet_should_succeed {
+                               panic!("Downgrade from memory manager to mainnet should succeed (since mainnet is V1), but failed with error: {}", e)
+                            }
+                            assert!(
+                                e.description().contains("failed to decode ledger state")
+                                    || e.description().contains("Decoding stable memory failed")
+                            )
+                        }
+                    };
                 }
                 // Test deserializing from memory manager
                 test_upgrade(ledger_wasm_current.clone());
@@ -2670,7 +2696,6 @@ pub fn test_upgrade_serialization(
 pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
-    ledger_wasm_nextmigrationversionmemorymanager: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
     T: CandidType,
@@ -2763,18 +2788,6 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     // Test if the old serialized approvals and balances are correctly deserialized
     test_upgrade(ledger_wasm_current.clone(), balances.clone());
     // Test the new wasm serialization
-    test_upgrade(ledger_wasm_current.clone(), balances.clone());
-    // Test serializing to the memory manager
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager.clone(),
-        balances.clone(),
-    );
-    // Test upgrade to memory manager again
-    test_upgrade(
-        ledger_wasm_nextmigrationversionmemorymanager,
-        balances.clone(),
-    );
-    // Test deserializing from memory manager
     test_upgrade(ledger_wasm_current, balances.clone());
 
     // Add some more approvals
@@ -2808,6 +2821,70 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
             assert_eq!(allowance.expires_at, Some(expiration));
         }
     }
+}
+
+pub fn test_downgrade_from_incompatible_version<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_nextledgerversion: Vec<u8>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with unsupported future version.
+    let (env, canister_id) = setup(
+        ledger_wasm_nextledgerversion.clone(),
+        encode_init_args,
+        vec![],
+    );
+
+    // For now the mainnet ledger does not perform the check and downgrade is possible.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to downgrade to mainnet");
+
+    // Upgrade to current version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the same verison.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the next version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_nextledgerversion,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to next version");
+
+    // Downgrade not possible.
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from future ledger version should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to downgrade from incompatible version"))
+        }
+    };
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
@@ -4238,5 +4315,219 @@ where
         from_account,
         spender_account,
         receiver_account,
+    );
+}
+
+pub struct TransactionGenerationParameters {
+    pub mint_multiplier: u64,
+    pub transfer_multiplier: u64,
+    pub approve_multiplier: u64,
+    pub transfer_from_multiplier: u64,
+    pub burn_multiplier: u64,
+    pub num_transactions_per_type: usize,
+}
+
+pub fn generate_transactions(
+    state_machine: &StateMachine,
+    canister_id: CanisterId,
+    params: TransactionGenerationParameters,
+) {
+    let start = Instant::now();
+    let minter_account = crate::minting_account(state_machine, canister_id)
+        .unwrap_or_else(|| panic!("minter account should be set for {:?}", canister_id));
+    let u64_fee = crate::fee(state_machine, canister_id);
+    let fee = Nat::from(u64_fee);
+    let burn_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.burn_multiplier)
+            .unwrap_or_else(|| panic!("burn amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.transfer_multiplier)
+            .unwrap_or_else(|| panic!("transfer amount overflowed for canister {:?}", canister_id)),
+    );
+    let mint_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.mint_multiplier)
+            .unwrap_or_else(|| panic!("mint amount overflowed for canister {:?}", canister_id)),
+    );
+    let transfer_from_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.transfer_from_multiplier)
+            .unwrap_or_else(|| {
+                panic!(
+                    "transfer_from amount overflowed for canister {:?}",
+                    canister_id
+                )
+            }),
+    );
+    let approve_amount = Nat::from(
+        u64_fee
+            .checked_mul(params.approve_multiplier)
+            .unwrap_or_else(|| panic!("approve amount overflowed for canister {:?}", canister_id)),
+    );
+    let mut accounts = vec![];
+    for i in 0..params.num_transactions_per_type {
+        let subaccount = match i {
+            0 => None,
+            _ => Some([i as u8; 32]),
+        };
+        accounts.push(Account {
+            owner: PrincipalId::new_user_test_id(i as u64).0,
+            subaccount,
+        });
+    }
+    // Mint
+    let mut minted = 0usize;
+    println!("minting");
+    for to in &accounts {
+        send_transfer(
+            state_machine,
+            canister_id,
+            minter_account.owner,
+            &TransferArg {
+                from_subaccount: minter_account.subaccount,
+                to: *to,
+                fee: None,
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(minted as u64)),
+                amount: mint_amount.clone(),
+            },
+        )
+        .expect("should be able to mint");
+        minted += 1;
+        if minted >= params.num_transactions_per_type {
+            break;
+        }
+    }
+    // Transfer
+    println!("transferring");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let to = accounts[(i + 1) % params.num_transactions_per_type];
+        send_transfer(
+            state_machine,
+            canister_id,
+            from.owner,
+            &TransferArg {
+                from_subaccount: from.subaccount,
+                to,
+                fee: Some(fee.clone()),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(i as u64)),
+                amount: transfer_amount.clone(),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    // Approve
+    println!("approving");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let spender = accounts[(i + 1) % params.num_transactions_per_type];
+        let current_allowance = get_allowance(state_machine, canister_id, from, spender);
+        let expires_at = state_machine
+            .time()
+            .checked_add(std::time::Duration::from_secs(3600))
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        send_approval(
+            state_machine,
+            canister_id,
+            from.owner,
+            &ApproveArgs {
+                from_subaccount: from.subaccount,
+                spender,
+                amount: approve_amount.clone(),
+                expected_allowance: Some(current_allowance.allowance.clone()),
+                expires_at: Some(expires_at),
+                fee: Some(fee.clone()),
+                memo: Some(Memo::from(i as u64)),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    // Transfer From
+    println!("transferring from");
+    for i in 0..params.num_transactions_per_type {
+        let from = accounts[i];
+        let spender = accounts[(i + 1) % params.num_transactions_per_type];
+        let to = accounts[(i + 2) % params.num_transactions_per_type];
+        send_transfer_from(
+            state_machine,
+            canister_id,
+            spender.owner,
+            &TransferFromArgs {
+                spender_subaccount: spender.subaccount,
+                from,
+                to,
+                amount: transfer_from_amount.clone(),
+                fee: Some(fee.clone()),
+                memo: Some(Memo::from(i as u64)),
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+            },
+        )
+        .expect("should be able to transfer from");
+    }
+    // Burn
+    println!("burning");
+    for (i, from) in accounts
+        .iter()
+        .enumerate()
+        .take(params.num_transactions_per_type)
+    {
+        send_transfer(
+            state_machine,
+            canister_id,
+            from.owner,
+            &TransferArg {
+                from_subaccount: from.subaccount,
+                to: minter_account,
+                fee: None,
+                created_at_time: Some(
+                    state_machine
+                        .time()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                ),
+                memo: Some(Memo::from(i as u64)),
+                amount: burn_amount.clone(),
+            },
+        )
+        .expect("should be able to transfer");
+    }
+    println!(
+        "generated {} transactions in {:?}",
+        params.num_transactions_per_type * 5,
+        start.elapsed()
     );
 }

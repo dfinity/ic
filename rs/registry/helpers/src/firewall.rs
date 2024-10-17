@@ -1,18 +1,15 @@
-use crate::deserialize_registry_value;
-use crate::node::NodeRecord;
+use crate::{deserialize_registry_value, node::NodeRecord};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
-use ic_protobuf::registry::firewall::v1::FirewallConfig;
-use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
-use ic_protobuf::registry::node::v1::ConnectionEndpoint;
-use ic_registry_keys::get_node_record_node_id;
-use ic_registry_keys::make_firewall_config_record_key;
-use ic_registry_keys::make_firewall_rules_record_key;
-use ic_registry_keys::make_node_record_key;
-use ic_registry_keys::FirewallRulesScope;
-use ic_registry_keys::NODE_RECORD_KEY_PREFIX;
+use ic_protobuf::registry::{
+    firewall::v1::{FirewallConfig, FirewallRuleSet},
+    node::v1::ConnectionEndpoint,
+};
+use ic_registry_keys::{
+    get_node_record_node_id, make_firewall_config_record_key, make_firewall_rules_record_key,
+    make_node_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+};
 use ic_types::{NodeId, RegistryVersion};
-use std::collections::HashSet;
-use std::net::IpAddr;
+use std::{collections::HashSet, net::IpAddr};
 
 /// A trait that allows access to firewall rules and ancillary information.
 pub trait FirewallRegistry {
@@ -147,11 +144,7 @@ mod tests {
                             ip_addr: ip.to_string(),
                             port: 2457,
                         }),
-                        node_operator_id: vec![],
-                        hostos_version_id: None,
-                        chip_id: None,
-                        public_ipv4_config: None,
-                        domain: None,
+                        ..Default::default()
                     },
                 )
             })

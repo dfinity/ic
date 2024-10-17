@@ -11,7 +11,7 @@ use ic_crypto_internal_test_vectors::unhex::{
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types as ni_dkg_types;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionSecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_sig_types;
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     gen_keypair, CommitmentOpeningBytes, EccCurveType, EccScalarBytes, MEGaKeySetK256Bytes,
     MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
 };

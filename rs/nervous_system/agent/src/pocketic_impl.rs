@@ -1,6 +1,6 @@
 use candid::Principal;
 use ic_nervous_system_clients::Request;
-use pocket_ic::PocketIc;
+use pocket_ic::nonblocking::PocketIc;
 use thiserror::Error;
 
 use crate::CallCanisters;
@@ -16,6 +16,8 @@ pub enum PocketIcCallError {
     #[error("canister did not respond with the expected response type: {0}")]
     CandidDecode(candid::Error),
 }
+
+impl crate::sealed::Sealed for PocketIc {}
 
 impl CallCanisters for PocketIc {
     type Error = PocketIcCallError;
@@ -34,6 +36,7 @@ impl CallCanisters for PocketIc {
                 R::METHOD,
                 request_bytes,
             )
+            .await
         } else {
             self.query_call(
                 canister_id,
@@ -41,6 +44,7 @@ impl CallCanisters for PocketIc {
                 R::METHOD,
                 request_bytes,
             )
+            .await
         }
         .map_err(PocketIcCallError::PocketIc)?;
 

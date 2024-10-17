@@ -249,6 +249,10 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Setup environment deps
         id: setup-environment-deps
         shell: bash

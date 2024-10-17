@@ -975,8 +975,6 @@ fn expected_block_timestamp(rounds: u32, phase: u32, start_time: SystemTime) -> 
             .expect("checked_add should not overflow")
             .checked_add(
                 SYNC_STEP_SECONDS
-                    .checked_add(Duration::from_nanos(1)) // timestamp increases by 1ns every phase
-                    .expect("checked_mul should not overflow")
                     .checked_mul(phase)
                     .expect("checked_mul should not overflow"),
             )
@@ -1687,7 +1685,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_bytes_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
             index_wasm(),
             encode_init_args,
         );

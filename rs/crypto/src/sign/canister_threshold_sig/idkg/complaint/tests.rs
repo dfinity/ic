@@ -10,7 +10,7 @@ use crate::sign::tests::{
 };
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{EccCurveType, MEGaPublicKey};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -413,7 +413,7 @@ fn mega_encryption_pk_record<R: Rng + CryptoRng>(
 }
 
 fn generate_mega_public_key<R: Rng + CryptoRng>(rng: &mut R) -> MEGaPublicKey {
-    let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_ecdsa::gen_keypair(
+    let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_canister_threshold_sig::gen_keypair(
         EccCurveType::K256,
         Seed::from_rng(rng),
     );

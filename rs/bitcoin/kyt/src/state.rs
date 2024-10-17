@@ -1,4 +1,4 @@
-use crate::types::BtcNetwork;
+use crate::{providers::Provider, types::BtcNetwork};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
+use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
@@ -34,8 +35,15 @@ pub enum HttpGetTxError {
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error(HttpGetTxError),
+    Error(FetchTxStatusError),
     Fetched(FetchedTx),
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchTxStatusError {
+    pub provider: Provider,
+    pub max_response_bytes: u32,
+    pub error: HttpGetTxError,
 }
 
 /// Once the transaction data is successfully fetched, we create
@@ -45,8 +53,46 @@ pub enum FetchTxStatus {
 /// input address will be computed and filled in.
 #[derive(Clone, Debug)]
 pub struct FetchedTx {
-    pub tx: Transaction,
+    pub tx: TransactionKytData,
     pub input_addresses: Vec<Option<Address>>,
+}
+
+/// Instead of storing the full transaction data, we only
+/// store relevant bits, including inputs (which are previous
+/// outputs) and output addresses.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TransactionKytData {
+    pub inputs: Vec<PreviousOutput>,
+    pub outputs: Vec<Address>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PreviousOutput {
+    pub txid: Txid,
+    pub vout: u32,
+}
+
+impl TryFrom<Transaction> for TransactionKytData {
+    type Error = bitcoin::address::FromScriptError;
+
+    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+        let inputs = tx
+            .input
+            .iter()
+            .map(|input| PreviousOutput {
+                txid: Txid::from(*(input.previous_output.txid.as_ref() as &[u8; 32])),
+                vout: input.previous_output.vout,
+            })
+            .collect();
+        let mut outputs = Vec::new();
+        for output in tx.output.iter() {
+            outputs.push(Address::from_script(
+                &output.script_pubkey,
+                bitcoin::Network::Bitcoin,
+            )?)
+        }
+        Ok(Self { inputs, outputs })
+    }
 }
 
 // Max number of concurrent http outcalls.
@@ -62,16 +108,16 @@ const MAX_FETCH_TX_ENTRIES: usize = 10_000;
 //
 // TODO(XC-191): persist canister state
 thread_local! {
-    static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
-    static FETCH_TX_CACHE: RefCell<FetchTxCache<FetchTxStatus>> = RefCell::new(
+    pub(crate) static OUTCALL_CAPACITY: RefCell<u32> = const { RefCell::new(MAX_CONCURRENT) };
+    pub(crate) static FETCH_TX_CACHE: RefCell<FetchTxCache<FetchTxStatus>> = RefCell::new(
         FetchTxCache::new(MAX_FETCH_TX_ENTRIES)
     );
 }
 
 // Time in nanoseconds since the epoch (1970-01-01).
-type Timestamp = u64;
+pub(crate) type Timestamp = u64;
 
-struct FetchTxCache<T> {
+pub(crate) struct FetchTxCache<T> {
     max_entries: usize,
     status: BTreeMap<Txid, T>,
     created: VecDeque<(Txid, Timestamp)>,
@@ -127,8 +173,7 @@ impl<T> FetchTxCache<T> {
         self.created.retain(|(id, _)| *id != txid);
     }
 
-    #[cfg(test)]
-    fn iter(&self) -> impl Iterator<Item = (Txid, Timestamp, &T)> + '_ {
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = (Txid, Timestamp, &T)> + '_ {
         self.created
             .iter()
             .map(|(txid, timestamp)| (*txid, *timestamp, self.status.get(txid).unwrap()))
