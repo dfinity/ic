@@ -210,6 +210,10 @@ impl RosettaClient {
         }])
     }
 
+    pub async fn call(&self, req: CallRequest) -> anyhow::Result<CallResponse> {
+        self.call_endpoint("/call", &req).await
+    }
+
     pub async fn build_set_dissolve_timestamp_operations(
         signer_principal: Principal,
         neuron_index: u64,
