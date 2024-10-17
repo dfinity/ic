@@ -2489,6 +2489,7 @@ mod tests {
             maturity_modulation: None,
             cached_upgrade_steps: None,
             target_version: None,
+            timers: None,
         }
     }
 

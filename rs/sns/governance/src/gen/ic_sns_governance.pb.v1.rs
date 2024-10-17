@@ -1648,6 +1648,9 @@ pub struct Governance {
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
     #[prost(message, optional, tag = "29")]
     pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
+    /// Information about the timers that perform periodic tasks of this Swap canister.
+    #[prost(message, optional, tag = "31")]
+    pub timers: ::core::option::Option<Timers>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1994,6 +1997,41 @@ pub mod governance {
         }
     }
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Timers {
+    #[prost(uint64, optional, tag = "1")]
+    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersResponse {}
 /// Request message for 'get_metadata'.
 #[derive(
     candid::CandidType,

@@ -1471,7 +1471,18 @@ message Governance {
     optional uint64 response_timestamp_seconds = 3;
   }
   CachedUpgradeSteps cached_upgrade_steps = 29;
+
+  // Information about the timers that perform periodic tasks of this Swap canister.
+  optional Timers timers = 31;
 }
+
+message Timers {
+  optional uint64 last_reset_timestamp_seconds = 1;
+  optional uint64 last_spawned_timestamp_seconds = 2;
+}
+
+message ResetTimersRequest {}
+message ResetTimersResponse {}
 
 // Request message for 'get_metadata'.
 message GetMetadataRequest {}

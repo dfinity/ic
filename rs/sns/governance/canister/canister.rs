@@ -14,7 +14,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::{caller as cdk_caller, heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_timers::TimerId;
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
 use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
@@ -45,7 +46,7 @@ use ic_sns_governance::{
         GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
         ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
         ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        RewardEvent, SetMode, SetModeResponse,
+        ResetTimersRequest, ResetTimersResponse, RewardEvent, SetMode, SetModeResponse,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -54,6 +55,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     boxed::Box,
+    cell::RefCell,
     convert::TryFrom,
     time::{Duration, SystemTime},
 };
@@ -67,6 +69,15 @@ use std::{
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 static mut GOVERNANCE: Option<Governance> = None;
+
+thread_local! {
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
+}
+
+/// This guarantees that timers cannot be restarted more often than once every 100 intervals.
+const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(600);
+
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(2);
 
 /// Returns an immutable reference to the governance's global state.
 ///
@@ -238,6 +249,8 @@ fn canister_init_(init_payload: GovernanceProto) {
         };
         GOVERNANCE = Some(governance);
     }
+
+    init_timers();
 }
 
 /// Executes some logic before executing an upgrade, including serializing and writing the
@@ -288,6 +301,9 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
+
+    init_timers();
+
     log!(INFO, "Completed post upgrade");
 }
 
@@ -520,10 +536,49 @@ fn get_maturity_modulation(request: GetMaturityModulationRequest) -> GetMaturity
     )
 }
 
-/// The canister's heartbeat.
-#[heartbeat]
-async fn canister_heartbeat() {
-    governance_mut().heartbeat().await
+async fn run_periodic_tasks() {
+    if let Some(ref mut timers) = governance_mut().proto.timers {
+        timers.last_spawned_timestamp_seconds.replace(now_seconds());
+    };
+
+    governance_mut().run_periodic_tasks().await;
+}
+
+fn init_timers() {
+    if let Some(ref mut timers) = governance_mut().proto.timers {
+        timers.last_reset_timestamp_seconds.replace(now_seconds());
+    };
+
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
+        ic_cdk::spawn(run_periodic_tasks())
+    });
+    TIMER_ID.with(|saved_timer_id| {
+        let mut saved_timer_id = saved_timer_id.borrow_mut();
+        if let Some(saved_timer_id) = *saved_timer_id {
+            ic_cdk_timers::clear_timer(saved_timer_id);
+        }
+        saved_timer_id.replace(new_timer_id);
+    });
+}
+
+#[update]
+fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
+
+    if let Some(timers) = governance_mut().proto.timers {
+        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
+            assert!(
+                now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                    >= reset_timers_cool_down_interval_seconds,
+                "Reset has already been called within the past {:?} seconds",
+                reset_timers_cool_down_interval_seconds
+            );
+        }
+    }
+
+    init_timers();
+
+    ResetTimersResponse {}
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
