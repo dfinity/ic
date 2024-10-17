@@ -982,7 +982,7 @@ mod tests {
         let sig_inputs: Vec<_> = (0..3)
             .map(|i| {
                 (
-                    ids[i].clone(),
+                    ids[i],
                     generator.next_pre_signature_id(),
                     create_sig_inputs(i as u8, &key_id),
                 )
@@ -1553,43 +1553,35 @@ mod tests {
     fn test_validate_signature_shares_incomplete_contexts(key_id: MasterPublicKeyId) {
         let mut generator = IDkgUIDGenerator::new(subnet_test_id(1), Height::new(0));
         let height = Height::from(100);
-        let (id_1, id_2, id_3) = (
-            request_id(1, height),
-            request_id(2, height),
-            request_id(3, height),
-        );
-        let (pid_1, pid_2, pid_3) = (
-            generator.next_pre_signature_id(),
-            generator.next_pre_signature_id(),
-            generator.next_pre_signature_id(),
-        );
+        let ids: Vec<_> = (0..3).map(|i| request_id(i, height)).collect();
+        let pids: Vec<_> = (0..3).map(|_| generator.next_pre_signature_id()).collect();
 
         // Set up the signature requests
-        // The block contains pre-signatures for requests 1, 2, 3
+        // The block contains pre-signatures for requests 0, 1, 2
         let block_reader = TestIDkgBlockReader::for_signer_test(
             height,
             vec![
-                (pid_1, create_sig_inputs(1, &key_id)),
-                (pid_2, create_sig_inputs(2, &key_id)),
-                (pid_3, create_sig_inputs(3, &key_id)),
+                (pids[0], create_sig_inputs(0, &key_id)),
+                (pids[1], create_sig_inputs(1, &key_id)),
+                (pids[2], create_sig_inputs(2, &key_id)),
             ],
         );
         let state = fake_state_with_signature_requests(
             height,
             [
                 // One context without matched pre-signature
-                fake_signature_request_context_with_pre_sig(id_1, key_id.clone(), None),
+                fake_signature_request_context_with_pre_sig(ids[0], key_id.clone(), None),
                 // One context without nonce
-                fake_signature_request_context_with_pre_sig(id_2, key_id.clone(), Some(pid_2)),
+                fake_signature_request_context_with_pre_sig(ids[1], key_id.clone(), Some(pids[1])),
                 // One completed context
-                fake_signature_request_context_from_id(key_id.clone(), pid_3, id_3),
+                fake_signature_request_context_from_id(key_id.clone(), pids[2], ids[2]),
             ],
         );
 
         // Set up the IDKG pool
         let mut artifacts = Vec::new();
         // A share for the first incomplete context (deferred)
-        let message = create_signature_share(&key_id, NODE_2, id_1);
+        let message = create_signature_share(&key_id, NODE_2, ids[0]);
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,
@@ -1597,7 +1589,7 @@ mod tests {
         });
 
         // A share for the second incomplete context (deferred)
-        let message = create_signature_share(&key_id, NODE_2, id_2.clone());
+        let message = create_signature_share(&key_id, NODE_2, ids[1]);
         artifacts.push(UnvalidatedArtifact {
             message,
             peer_id: NODE_2,
@@ -1605,7 +1597,7 @@ mod tests {
         });
 
         // A share for a the completed context (accepted)
-        let message = create_signature_share(&key_id, NODE_2, id_3.clone());
+        let message = create_signature_share(&key_id, NODE_2, ids[2]);
         let msg_id_3 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
             message,
@@ -1614,7 +1606,7 @@ mod tests {
         });
 
         // A share for a the completed context, but specifying wrong pre-signature (dropped)
-        let wrong_id_3 = id_3.clone();
+        let wrong_id_3 = ids[2].clone();
         let message = create_signature_share(&key_id, NODE_2, wrong_id_3);
         let msg_id_4 = message.message_id();
         artifacts.push(UnvalidatedArtifact {
