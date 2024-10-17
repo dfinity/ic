@@ -135,7 +135,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    // TODO after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
     // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     let _neuron_info: NeuronInfoResponse = client
@@ -151,7 +151,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    // TODO after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
     // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     let _neuron_info: NeuronInfoResponse = client
@@ -162,7 +162,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    // TODO after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
     // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     // Return staked account.
@@ -561,7 +561,7 @@ async fn test_staking_raw(client: &RosettaApiClient) -> (AccountIdentifier, Arc<
         .metadata
         .try_into()
         .unwrap();
-    // TODO after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
     // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     // Return staked account.
