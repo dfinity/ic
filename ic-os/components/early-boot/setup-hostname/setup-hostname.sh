@@ -50,6 +50,7 @@ function validate_arguments() {
 
 function read_config_variables() {
     mgmt_mac=$(get_config_value '.icos_settings.mgmt_mac')
+    mgmt_mac=${mgmt_mac//:/}  # Remove colons from mgmt_mac
 }
 
 function construct_hostname() {
