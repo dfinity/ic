@@ -715,7 +715,6 @@ mod tests {
     use ic_types::Randomness;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use idkg::common::CombinedSignature;
-    use idkg::RequestId;
     use std::collections::BTreeSet;
     use std::convert::TryInto;
 
@@ -814,7 +813,7 @@ mod tests {
         let mut contexts = BTreeMap::new();
         for (key_id, id, batch_time, pre_sig) in parameters {
             let (callback_id, mut context) = fake_signature_request_context_with_pre_sig(
-                &request_id(id, Height::from(0)),
+                request_id(id, Height::from(0)),
                 key_id,
                 pre_sig,
             );
@@ -1065,7 +1064,7 @@ mod tests {
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
         let request_id = request_id(0, Height::from(0));
         let context =
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, &request_id);
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id, request_id);
         let signature_request_contexts = BTreeMap::from([context.clone()]);
 
         let valid_keys = BTreeSet::from([key_id.clone()]);

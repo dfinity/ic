@@ -879,33 +879,24 @@ mod test {
         let pre_sig_id2 = idkg_payload.uid_generator.next_pre_signature_id();
         let pre_sig_id3 = idkg_payload.uid_generator.next_pre_signature_id();
 
-        let height = Height::from(0);
-        let id1 = request_id(1, height);
-        let id2 = request_id(2, height);
-        let id3 = request_id(3, height);
+        let ids = vec![
+            request_id(1, height),
+            request_id(2, height),
+            request_id(3, height),
+        ];
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, &id1),
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, &id2),
-            fake_signature_request_context_with_pre_sig(&id3, key_id.clone(), Some(pre_sig_id3)),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id1, ids[0]),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, ids[1]),
+            fake_signature_request_context_with_pre_sig(ids[2], key_id.clone(), Some(pre_sig_id3)),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());
 
-        let request_ids: Vec<RequestId> = signature_request_contexts
-            .iter()
-            .flat_map(|(callback_id, context)| {
-                context.matched_pre_signature.map(|(_, height)| RequestId {
-                    callback_id: *callback_id,
-                    height,
-                })
-            })
-            .collect::<Vec<RequestId>>();
-
         let pseudo_random_id = |i| {
-            let request_id: &RequestId = &request_ids[i];
+            let request_id: &RequestId = &ids[i];
             let callback_id = request_id.callback_id;
             signature_request_contexts
                 .get(&callback_id)
@@ -918,10 +909,10 @@ mod test {
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
 
         // Add the pre-signatures and transcripts to block reader and payload
-        let sig_inputs = (1..4)
+        let sig_inputs = (0..signature_request_contexts.len())
             .map(|i| {
                 create_sig_inputs_with_args(
-                    i,
+                    i as u8,
                     &env.nodes.ids(),
                     key_transcript.clone(),
                     Height::from(44),
@@ -943,7 +934,7 @@ mod test {
         // Only the first context has a completed signature so far
         let mut signature_builder = TestThresholdSignatureBuilder::new();
         signature_builder.signatures.insert(
-            request_ids[0].clone(),
+            ids[0],
             CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             }),
@@ -970,7 +961,7 @@ mod test {
         let prev_payload = idkg_payload.clone();
         // Now the second context has a completed signature as well
         signature_builder.signatures.insert(
-            request_ids[1].clone(),
+            ids[1],
             CombinedSignature::Ecdsa(ThresholdEcdsaCombinedSignature {
                 signature: vec![1; 32],
             }),
@@ -1051,8 +1042,8 @@ mod test {
         let id2 = request_id(2, height);
 
         let signature_request_contexts = BTreeMap::from_iter([
-            fake_signature_request_context_with_pre_sig(&id1, key_id.clone(), Some(pre_sig_id)),
-            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, &id2),
+            fake_signature_request_context_with_pre_sig(id1, key_id.clone(), Some(pre_sig_id)),
+            fake_signature_request_context_from_id(key_id.clone(), pre_sig_id2, id2),
         ]);
         let snapshot =
             fake_state_with_signature_requests(height, signature_request_contexts.clone());

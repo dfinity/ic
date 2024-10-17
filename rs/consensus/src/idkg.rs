@@ -562,7 +562,6 @@ mod tests {
         complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
         opening_prefix, schnorr_sig_share_prefix, IDkgArtifactIdData,
     };
-    use ic_types::messages::CallbackId;
     use ic_types::{
         consensus::idkg::{RequestId, SigShareIdData},
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},

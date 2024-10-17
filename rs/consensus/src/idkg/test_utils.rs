@@ -123,7 +123,7 @@ pub fn fake_signature_request_context(
 }
 
 pub fn fake_signature_request_context_with_pre_sig(
-    request_id: &RequestId,
+    request_id: RequestId,
     key_id: MasterPublicKeyId,
     pre_signature: Option<PreSigId>,
 ) -> (CallbackId, SignWithThresholdContext) {
@@ -142,7 +142,7 @@ pub fn fake_signature_request_context_with_pre_sig(
 pub fn fake_signature_request_context_from_id(
     key_id: MasterPublicKeyId,
     pre_sig_id: PreSigId,
-    request_id: &RequestId,
+    request_id: RequestId,
 ) -> (CallbackId, SignWithThresholdContext) {
     let height = request_id.height;
     let context = SignWithThresholdContext {
@@ -150,7 +150,7 @@ pub fn fake_signature_request_context_from_id(
         args: fake_signature_request_args(key_id),
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        pseudo_random_id: [pre_sig_id.0 as u8; 32],
+        pseudo_random_id: [request_id.callback_id.get() as u8; 32],
         matched_pre_signature: Some((pre_sig_id, height)),
         nonce: Some([0; 32]),
     };
