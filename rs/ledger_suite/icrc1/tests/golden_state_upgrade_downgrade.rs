@@ -1,4 +1,4 @@
-use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
+use crate::common::{archive_wasm, index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -7,7 +7,8 @@ use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, TransactionGenerationParameters,
+    generate_transactions, get_all_ledger_and_archive_blocks, list_archives,
+    TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::StateMachine;
@@ -38,6 +39,9 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
@@ -46,11 +50,15 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
-        Wasm::from_bytes(ledger_wasm())
+        Wasm::from_bytes(ledger_wasm()),
+        Wasm::from_bytes(archive_wasm())
     );
 }
 
@@ -62,24 +70,30 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(index_ng_wasm()),
-        Wasm::from_bytes(ledger_wasm())
+        Wasm::from_bytes(ledger_wasm()),
+        Wasm::from_bytes(archive_wasm())
     );
 }
 
 pub struct Wasms {
     index_wasm: Wasm,
     ledger_wasm: Wasm,
+    archive_wasm: Wasm,
 }
 
 impl Wasms {
-    fn new(index_wasm: Wasm, ledger_wasm: Wasm) -> Self {
+    fn new(index_wasm: Wasm, ledger_wasm: Wasm, archive_wasm: Wasm) -> Self {
         Self {
             index_wasm,
             ledger_wasm,
+            archive_wasm,
         }
     }
 }
@@ -164,6 +178,26 @@ impl LedgerSuiteConfig {
         }
     }
 
+    fn upgrade_archives(&self, state_machine: &StateMachine, wasm: &Wasm) {
+        let canister_id =
+            CanisterId::unchecked_from_principal(PrincipalId::from_str(self.ledger_id).unwrap());
+        let archives = list_archives(state_machine, canister_id);
+        let num_archives = archives.len();
+        for archive in archives {
+            let archive_canister_id =
+                CanisterId::unchecked_from_principal(PrincipalId(archive.canister_id));
+            state_machine
+                .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "should successfully upgrade archive '{}': {}",
+                        archive_canister_id, e
+                    )
+                });
+        }
+        println!("Upgraded {} archives", num_archives);
+    }
+
     fn upgrade_index(&self, state_machine: &StateMachine, wasm: &Wasm) {
         let canister_id =
             CanisterId::unchecked_from_principal(PrincipalId::from_str(self.index_id).unwrap());
@@ -198,6 +232,8 @@ impl LedgerSuiteConfig {
         self.upgrade_index(state_machine, &self.mainnet_wasms.index_wasm);
         self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
         self.upgrade_ledger(state_machine, &self.mainnet_wasms.ledger_wasm);
+        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
+        self.upgrade_archives(state_machine, &self.mainnet_wasms.archive_wasm);
     }
 
     fn upgrade_to_master(&self, state_machine: &StateMachine) {
@@ -206,6 +242,8 @@ impl LedgerSuiteConfig {
         self.upgrade_index(state_machine, &self.master_wasms.index_wasm);
         self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
         self.upgrade_ledger(state_machine, &self.master_wasms.ledger_wasm);
+        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
+        self.upgrade_archives(state_machine, &self.master_wasms.archive_wasm);
     }
 }
 
