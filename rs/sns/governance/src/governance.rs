@@ -696,6 +696,12 @@ pub struct Governance {
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
 
+    /// Global lock for all periodic tasks that relate to upgrades - this guarantees
+    /// that they don't interleave with one another.
+    /// `None` means that the lock is not currently held by any task.
+    /// `Some(x)` means that a task is has been holding the lock since timestamp `x`.
+    pub upgrade_periodic_task_lock: Option<u64>,
+
     /// Whether test features are enabled.
     /// Test features should not be exposed in production. But, code that should
     /// not run in production can be gated behind a check for this flag as an
@@ -777,6 +783,7 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            upgrade_periodic_task_lock: None,
             test_features_enabled: false,
         };
 
@@ -4625,8 +4632,17 @@ impl Governance {
 
         self.process_proposals();
 
-        if self.should_check_upgrade_status() {
-            self.check_upgrade_status().await;
+        if self.release_upgrade_periodic_task_lock() {
+            if self.should_check_upgrade_status() {
+                self.check_upgrade_status().await;
+            }
+            
+            if self.should_refresh_cached_upgrade_steps() {
+                self.temporarily_lock_refresh_cached_upgrade_steps();
+                self.refresh_cached_upgrade_steps().await;
+            }
+
+            release_upgrade_periodic_task_lock();
         }
 
         let should_distribute_rewards = self.should_distribute_rewards();
@@ -4659,10 +4675,29 @@ impl Governance {
 
         self.maybe_gc();
 
-        if self.should_refresh_cached_upgrade_steps() {
-            self.temporarily_lock_refresh_cached_upgrade_steps();
-            self.refresh_cached_upgrade_steps().await;
+    }
+
+    // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
+    // if it is currently released or was last acquired over 10 minutes ago.
+    fn acquire_upgrade_perodic_task_lock(&mut self) -> bool {
+        const UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
+        let now = self.env.now();
+        match self.upgrade_periodic_task_lock {
+            Some(time_acquired) if self.env.now() > time_acquired + UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS => {
+
+                self.upgrade_periodic_task_lock = Some(self.env.now());
+                true;
+            }
+            Some(_) => false,
+            None => {
+                self.upgrade_periodic_task_lock = Some(self.env.now());
+                true
+            }
         }
+    }
+
+    fn release_upgrade_periodic_task_lock(&mut self) {
+        self.upgrade_periodic_task_lock = None;
     }
 
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
