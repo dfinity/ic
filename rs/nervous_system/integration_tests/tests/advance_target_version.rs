@@ -86,6 +86,7 @@ async fn test_get_upgrade_journal() {
         let sns_pb::GetUpgradeJournalResponse {
             upgrade_steps,
             response_timestamp_seconds,
+            ..
         } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
         let upgrade_steps = upgrade_steps
             .expect("upgrade_steps should be Some")
@@ -152,7 +153,29 @@ async fn test_get_upgrade_journal() {
 
         assert_eq!(
             upgrade_steps.versions,
-            vec![initial_sns_version, new_sns_version_1, new_sns_version_2,]
+            vec![
+                initial_sns_version,
+                new_sns_version_1,
+                new_sns_version_2.clone()
+            ]
         );
+    }
+
+    // Advance the target version.
+    {
+        sns::governance::advance_target_version(
+            &pocket_ic,
+            sns.governance.canister_id,
+            new_sns_version_2.clone(),
+        )
+        .await;
+    }
+
+    // Check that the target version is set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(target_version, Some(new_sns_version_2.clone()));
     }
 }

@@ -27,8 +27,8 @@ use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, GovernanceError, MintTokensRequest,
-    MintTokensResponse, Neuron,
+    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
 };
 use ic_sns_governance::{
     governance::{
@@ -598,6 +598,14 @@ fn get_upgrade_journal(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalRespon
 #[update]
 async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
     governance_mut().mint_tokens(request).await
+}
+
+// Test-only API that advances the target version of the SNS.
+#[cfg(feature = "test")]
+#[update]
+fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
+    governance_mut().proto.target_version = request.target_version;
+    AdvanceTargetVersionResponse {}
 }
 
 fn main() {
