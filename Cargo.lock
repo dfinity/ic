@@ -13573,6 +13573,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_crypto_system_tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-fstrim-tool",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-universal-canister",
+ "ic_consensus_system_test_utils",
+ "k256",
+ "rand 0.8.5",
+ "reqwest 0.12.8",
+ "serde_bytes",
+ "serde_cbor",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

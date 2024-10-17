@@ -304,22 +304,6 @@ name = "ic-systest-update-workload-large-payload"
 path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
-name = "ic-systest-canister-sig-verification-cache-test"
-path = "crypto/canister_sig_verification_cache_test.rs"
-
-[[bin]]
-name = "ic-systest-ic-crypto-csp-socket-test"
-path = "crypto/ic_crypto_csp_socket_test.rs"
-
-[[bin]]
-name = "ic-systest-ic-crypto-csp-umask-test"
-path = "crypto/ic_crypto_csp_umask_test.rs"
-
-[[bin]]
-name = "ic-systest-rpc-csp-vault-reconnection-test"
-path = "crypto/rpc_csp_vault_reconnection_test.rs"
-
-[[bin]]
 name = "ic-systest-xnet-malicious-slices"
 path = "message_routing/xnet/xnet_malicious_slices.rs"
 
