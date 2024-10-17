@@ -147,7 +147,14 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/registry/subnet_type",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
 )
 
 system_test_nns(
