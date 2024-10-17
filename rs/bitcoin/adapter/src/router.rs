@@ -53,7 +53,7 @@ pub fn start_main_event_loop(
             let sleep_idle_interval = Duration::from_millis(100);
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
-                blockchain_manager.make_idle().await;
+                blockchain_manager.make_idle();
                 // TODO: instead of sleeping here add some async synchronization.
                 sleep(sleep_idle_interval).await;
                 continue;

@@ -201,7 +201,7 @@ impl BlockchainManager {
     /// This method is used when the adapter is no longer receiving RPC calls from the replica.
     /// Clears the block cache, peer info, the blocks to be synced, outgoing command queue, and
     /// the `getdata` request info.
-    pub async fn make_idle(&mut self) {
+    pub fn make_idle(&mut self) {
         self.metrics.idle.inc();
 
         self.block_sync_queue.clear();
@@ -1395,7 +1395,7 @@ pub mod test {
 
         assert_eq!(blockchain_manager.peer_info.len(), 1);
 
-        blockchain_manager.make_idle().await;
+        blockchain_manager.make_idle();
         assert_eq!(blockchain_manager.block_sync_queue.len(), 0);
         assert!(blockchain_manager
             .blockchain
