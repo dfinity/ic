@@ -162,7 +162,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "node_redeployment_test",
+    name = "node_redeploy_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
@@ -182,5 +182,6 @@ system_test_nns(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+        "@crate_index//:tokio",
     ],
 )
