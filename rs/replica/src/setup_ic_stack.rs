@@ -32,13 +32,10 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch, OnceCell,
