@@ -13,5 +13,5 @@ sha2 = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-tokio-test = "0.4.4"
+tokio-test = { workspace = true }
 local_key = { path = "../local_key" }
