@@ -712,6 +712,22 @@ impl XNetPayloadBuilderImpl {
                     ));
                 }
             }
+
+            // Ensure the signal limit is respected.
+            let signal_limit = get_signal_limit(Some(expected), slice.header().begin());
+            if messages.len() > signal_limit {
+                warn!(
+                    self.log,
+                    "Stream from {}: slice length ({}) above limit ({})",
+                    subnet_id,
+                    messages.len(),
+                    signal_limit
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {}: slice length above limit",
+                    subnet_id
+                ));
+            }
         }
 
         let byte_size = match (self.count_bytes_fn)(certified_slice) {
@@ -908,6 +924,24 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
                 .map(|len| SYSTEM_SUBNET_STREAM_MSG_LIMIT.saturating_sub(len))
         }
     }
+}
+
+/// Calculates an upper bound for how many messages can be included into a block based on how many
+/// signals the reverse stream will contain after inducting the stream slice.
+///
+/// This is computed such that the stream index of the last message is at most `slice_begin +
+/// 50_000`. Since `slice_begin` is used for garbage collecting signals, this ensures at most
+/// `50_000` signals in the reverse stream.
+pub fn get_signal_limit(begin: Option<&ExpectedIndices>, slice_begin: StreamIndex) -> usize {
+    // TODO: Replace the 50_000 with a constant. This should be the same constant used in the
+    // stream builder: `MAX_STREAM_MESSAGES`.
+    begin.map_or(50_000, |begin| {
+        let slice_end_index = slice_begin + 50_000.into();
+        // Note: `begin.message_index` is the `signals_end` of the reverse stream.
+        slice_end_index
+            .get()
+            .saturating_sub(begin.message_index.get()) as usize
+    })
 }
 
 /// Resolves a stream index and byte limit to an `EndpointLocator`, consisting
