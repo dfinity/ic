@@ -3339,30 +3339,6 @@ pub struct AdvanceTargetVersionResponse {}
     candid::Deserialize,
     comparable::Comparable,
     Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct AdvanceTargetVersionRequest {
-    #[prost(message, optional, tag = "1")]
-    pub target_version: ::core::option::Option<governance::Version>,
-}
-/// The response to a request to add maturity to a neuron. The associated endpoint is only
-/// available when governance is compiled with the `test` feature enabled.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct AdvanceTargetVersionResponse {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
     Copy,
     PartialEq,
     ::prost::Message,
