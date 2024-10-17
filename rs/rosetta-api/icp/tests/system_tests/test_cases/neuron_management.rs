@@ -167,6 +167,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
 
 #[test]
 fn test_start_and_stop_neuron_dissolve() {
+    let rt = Runtime::new().unwrap();
     rt.block_on(async {
         let env = RosettaTestingEnvironment::builder()
             .with_initial_balances(
