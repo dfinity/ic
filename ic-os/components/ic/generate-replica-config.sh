@@ -21,7 +21,6 @@ EOF
 
 function read_config_variables() {
     NNS_URLS=$(get_config_value '.icos_settings.nns_urls | join(",")')
-    NODE_INDEX=$(get_config_value '.icos_settings.hostname')
     BACKUP_RETENTION_TIME_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_retention_time_seconds')
     BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
     QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
@@ -108,13 +107,15 @@ function get_if_address_retries() {
 
 function set_default_config_values() {
     [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
-    [ "${NODE_INDEX}" = "null" ] && NODE_INDEX="0"
     [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"  # Default value is 24h
     [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"  # Default value is 1h
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"  # Default is 600 blocks (around 10min)
 
     # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
+
+    # todo: remove node_index variable and hard-code into ic.json5.template
+    NODE_INDEX="0"
 }
 
 # Read malicious behavior config variables from file. The file must be of the
