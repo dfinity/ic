@@ -11,13 +11,10 @@ use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{
-    sync::{
-        mpsc::{channel, Receiver},
-        Mutex,
-    },
+    sync::mpsc::{channel, Receiver},
     time::{interval, sleep},
 };
 
@@ -109,7 +106,7 @@ pub fn start_main_event_loop(
                 _ = tick_interval.tick() => {
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
-                    connection_manager.tick(blockchain_manager.get_height().await, handle_stream);
+                    connection_manager.tick(blockchain_manager.get_height(), handle_stream);
                     blockchain_manager
                         .tick(&mut connection_manager).await;
                     transaction_manager.advertise_txids(&mut connection_manager);
