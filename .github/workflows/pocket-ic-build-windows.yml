@@ -15,12 +15,6 @@ jobs:
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
-      - name: 'Setup WSL'
-        uses: Vampire/setup-wsl@v3
-      - name: 'Install root CA certificates in WSL'
-        shell: wsl-bash {0}
-        run: |
-          sudo apt update && sudo apt install -y ca-certificates
       - name: 'Setup Rust and Cargo'
         uses: moonrepo/setup-rust@v1.2.1
       - name: 'cargo clippy'
