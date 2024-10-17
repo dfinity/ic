@@ -22,7 +22,7 @@ application_domain(ic_manageboot_t, ic_manageboot_exec_t)
 # write upgrades into partition). Allow entering sudo, and return
 # to the original domain when sudo re-executes the script (so
 # it is now running same domain, but with root privileges).
-sudo_role_template(ic_manageboot, ic_manageboot_t, ic_manageboot_exec_t, system_r)
+sudo_role_template(ic_manageboot, system_r, ic_manageboot_t)
 domtrans_pattern(ic_manageboot_sudo_t, ic_manageboot_exec_t, ic_manageboot_t)
 # Under certain circumstances, sudo signals its children.
 allow ic_manageboot_sudo_t ic_manageboot_t : process { signal };
@@ -123,7 +123,7 @@ allow ic_manageboot_t ic_manageboot_t : unix_stream_socket { connect create geta
 # Allow searching runtime process directories (/var/run which is symlinked to /run).
 # It is not perfectly clear what/why it is doing that, but it is harmless
 # enough. May to to forbid it and see if it still works.
-files_search_runtime(ic_manageboot_t)
+files_search_pids(ic_manageboot_t)
 
 # Allow reading /opt/ic/share/version.txt
 read_files_pattern(ic_manageboot_t, usr_t, usr_t)
