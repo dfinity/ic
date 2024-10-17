@@ -264,7 +264,7 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
 
                 // Assert that the proposal has been accepted and executed.
                 let proposal = sns_canisters.get_proposal(proposal_id).await;
-                println!("{:#?}", proposal.latest_tally);
+                println!("proposal = {:#?}", proposal);
                 assert_ne!(proposal.decided_timestamp_seconds, 0);
                 assert_ne!(proposal.executed_timestamp_seconds, 0);
                 // assert that it didn't just end because we got an absolute majority
