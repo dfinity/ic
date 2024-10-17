@@ -58,8 +58,11 @@ fn test(env: TestEnv) {
 
     dfx.version();
 
+    let path = std::env::var("WALLET_CANISTER_0_7_2_WASM")
+        .expect("Environment variable 'WALLET_CANISTER_0_7_2_WASM' should be set");
+
     let wallet_wasm_path: PathBuf =
-        fs::canonicalize(get_dependency_path(WALLET_CANISTER_0_7_2_WASM)).unwrap();
+        fs::canonicalize(get_dependency_path(path)).expect("Could not read wallet canister");
 
     info!(
         log,
