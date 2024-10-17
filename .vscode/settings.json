@@ -9,4 +9,20 @@
         "editor.formatOnSave": true
     },
     "bazel.buildifierExecutable": "@buildifier",
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#770077",
+        "activityBar.activeBackground": "#007700",
+        "activityBar.activeBorder": "#009100",
+        "activityBar.foreground": "#ffffff",
+        "activityBar.inactiveForeground": "#bbbbbb",
+        "activityBar.border": "#8a008a",
+        "activityBarBadge.background": "#990000",
+        "activityBarBadge.foreground": "#ffffff",
+        "titleBar.activeBackground": "#8a008a",
+        "titleBar.inactiveBackground": "#770077",
+        "titleBar.activeForeground": "#ffffff",
+        "titleBar.inactiveForeground": "#dadada",
+        "titleBar.border": "#550055",
+        "statusBar.border": "#550055"
+    },
 }
