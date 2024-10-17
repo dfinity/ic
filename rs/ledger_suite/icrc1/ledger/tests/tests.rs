@@ -167,29 +167,31 @@ fn test_upgrade() {
     ic_ledger_suite_state_machine_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
-#[test]
-fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
-    ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
-        ledger_mainnet_wasm(),
-        encode_init_args,
-        ledger_wasm(),
-        encode_upgrade_args,
-        ledger_mainnet_wasm(),
-        encode_upgrade_args,
-    )
-}
+// It is not possible to downgrade to mainnet for now, disable the tests.
+// Similar testing is done by icrc1_test_downgrade_from_incompatible_version
+// #[test]
+// fn test_install_mainnet_ledger_then_upgrade_then_downgrade() {
+//     ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
+//         ledger_mainnet_wasm(),
+//         encode_init_args,
+//         ledger_wasm(),
+//         encode_upgrade_args,
+//         ledger_mainnet_wasm(),
+//         encode_upgrade_args,
+//     )
+// }
 
-#[test]
-fn test_install_current_ledger_then_upgrade_then_downgrade_to_mainnet_version() {
-    ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
-        ledger_wasm(),
-        encode_init_args,
-        ledger_wasm(),
-        encode_upgrade_args,
-        ledger_mainnet_wasm(),
-        encode_upgrade_args,
-    )
-}
+// #[test]
+// fn test_install_current_ledger_then_upgrade_then_downgrade_to_mainnet_version() {
+//     ic_ledger_suite_state_machine_tests::test_install_upgrade_downgrade(
+//         ledger_wasm(),
+//         encode_init_args,
+//         ledger_wasm(),
+//         encode_upgrade_args,
+//         ledger_mainnet_wasm(),
+//         encode_upgrade_args,
+//     )
+// }
 
 #[test]
 fn test_upgrade_archive_options() {
