@@ -158,7 +158,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
             ),
         };
         // The Dissolve Delay Timestamp should be updated
-        // Since the state machine is live we do not know exactlz how much time will be left at the time of calling the governance canister.
+        // Since the state machine is live we do not know exactly how much time will be left at the time of calling the governance canister.
         // It should be between dissolve_delay_timestamp and dissolve_delay_timestamp - X seconds depending on how long it takes to call the governance canister
         assert!(dissolve_delay_timestamp <= additional_dissolve_delay);
         assert!(dissolve_delay_timestamp > 0);
@@ -167,7 +167,6 @@ fn test_set_neuron_dissolve_delay_timestamp() {
 
 #[test]
 fn test_start_and_stop_neuron_dissolve() {
-    let rt = Runtime::new().unwrap();
     rt.block_on(async {
         let env = RosettaTestingEnvironment::builder()
             .with_initial_balances(

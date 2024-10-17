@@ -17,7 +17,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
