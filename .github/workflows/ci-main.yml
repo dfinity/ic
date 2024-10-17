@@ -66,14 +66,14 @@ jobs:
             TEST_TAG_FILTERS+=(long_test)
           fi
           # We save the excluded test tags in an environment variable such that ci/bazel-scripts/diff.sh can read them:
-          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
+          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[@]}" >> $GITHUB_ENV
 
           # Prepend the excluded test tags with a '-' such that they can be passed to --test_tag_filters= below:
           TEST_TAG_FILTERS=()
-          for tag in "${EXCLUDED_TEST_TAGS[*]}"; do
+          for tag in "${EXCLUDED_TEST_TAGS[@]}"; do
             TEST_TAG_FILTERS+=("-$tag")
           done
-
+          # Test tag filters need to be separated by commas:
           IFS=','
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
             echo "BAZEL_EXTRA_ARGS=--test_tag_filters=${TEST_TAG_FILTERS[*]} --test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
