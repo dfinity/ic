@@ -4,12 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "@crate_index//:hmac",
     "@crate_index//:lazy_static",
     "@crate_index//:num-bigint",
     "@crate_index//:p256",
     "@crate_index//:pem",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:sha2",
     "@crate_index//:simple_asn1",
     "@crate_index//:zeroize",
 ]
@@ -21,6 +23,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:hex",
+    "@crate_index//:hex-literal",
     "@crate_index//:wycheproof",
 ]
 
