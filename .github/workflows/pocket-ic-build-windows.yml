@@ -10,7 +10,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
-permissions: read-all
 jobs:
   pocket_ic_library_build_windows:
     name: 'PocketIC library build on Windows'
