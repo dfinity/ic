@@ -1074,17 +1074,17 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
-        std::thread::spawn(move || {
-            SandboxedExecutionController::monitor_and_evict_sandbox_processes(
-                logger_copy,
-                backends_copy,
-                metrics_copy,
-                min_sandbox_count,
-                max_sandbox_count,
-                max_sandbox_idle_time,
-                rx,
-            );
-        });
+        // std::thread::spawn(move || {
+        //     SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+        //         logger_copy,
+        //         backends_copy,
+        //         metrics_copy,
+        //         min_sandbox_count,
+        //         max_sandbox_count,
+        //         max_sandbox_idle_time,
+        //         rx,
+        //     );
+        // });
 
         let exit_watcher = Arc::new(ExitWatcher {
             logger: logger.clone(),
