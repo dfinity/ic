@@ -22,7 +22,10 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_histogram_vec_count, fetch_histogram_vec_stats, fetch_int_counter, labels, metric_vec,
+    HistogramStats,
+};
 use ic_types::{
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -3704,4 +3707,57 @@ fn test_sign_with_schnorr_api_is_enabled() {
             .sign_with_threshold_contexts_count(&key_id),
         1
     );
+}
+
+#[test]
+fn test_execution_canister_message_queue_latency_seconds_ingress() {
+    fn get_metric_stats(test: &ExecutionTest) -> HistogramStats {
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "execution_canister_message_queue_latency_seconds",
+        )
+        .get(&labels(&[
+            ("message_type", "ingress"),
+            ("call_tree_depth", "0"),
+        ]))
+        .cloned()
+        .unwrap_or_default()
+    }
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+    test.ingress_raw(canister_id, "test", vec![]);
+
+    assert_eq!(get_metric_stats(&test).count, 0);
+    test.execute_all();
+    assert_eq!(get_metric_stats(&test).count, 1);
+}
+
+#[test]
+fn test_execution_canister_message_queue_latency_seconds_request() {
+    fn get_metric_stats(test: &ExecutionTest) -> HistogramStats {
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "execution_canister_message_queue_latency_seconds",
+        )
+        .get(&labels(&[
+            ("message_type", "request"),
+            ("call_tree_depth", "0"),
+        ]))
+        .cloned()
+        .unwrap_or_default()
+    }
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let canister_a = test
+        .canister_from_binary(UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+    let canister_b = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
+
+    test.ingress_raw(
+        canister_a,
+        "update",
+        wasm().call_simple(canister_b, "test", call_args()).build(),
+    );
+    assert_eq!(get_metric_stats(&test).count, 0);
+    test.execute_all();
+    assert_eq!(get_metric_stats(&test).count, 1);
 }

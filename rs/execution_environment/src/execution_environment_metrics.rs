@@ -59,6 +59,8 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     /// Critical error for attempting to execute new message
     /// while already in progress a long-running message.
     pub(crate) long_execution_already_in_progress: IntCounter,
+    /// Time spent in queue for canister message before executing it.
+    pub(crate) canister_message_queue_latency: HistogramVec,
 }
 
 impl ExecutionEnvironmentMetrics {
@@ -119,6 +121,13 @@ impl ExecutionEnvironmentMetrics {
                 "Total number of intra-subnet messages that exceed the 2 MiB limit for inter-subnet messages."
             ),
             long_execution_already_in_progress: metrics_registry.error_counter("execution_environment_long_execution_already_in_progress"),
+            canister_message_queue_latency: metrics_registry.histogram_vec(
+                "execution_canister_message_queue_latency_seconds",
+                "Time spent in queue for canister message before executing it in seconds.",
+                // Buckets: 0s, 0.1s, 0.2s, 0.5s, ..., 500 seconds
+                decimal_buckets_with_zero(-1, 2),
+                &["message_type", "call_tree_depth"],
+            ),
         }
     }
 
