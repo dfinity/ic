@@ -553,17 +553,19 @@ EOF
         ],
         outs = ["launch_local_vm_script"],
         cmd = """
-        IMAGE="$(location :disk-img.tar)"
+        IMAGE="$$PWD/$(location :disk-img.tar)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d)
+TEMP=\\$$(mktemp -d --suffix=.qemu-launch-remote-vm)
+# Clean up after ourselves when exiting.
+trap 'rm -rf \\$$TEMP' EXIT
 CID=\\$$((\\$$RANDOM + 3))
-cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
-tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+tar xSf $$IMAGE
+truncate -s 128G target.img
+qemu-system-x86_64 -machine type=q35,accel=kvm -enable-kvm -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -device vhost-vsock-pci,guest-cid=\\$$CID -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
@@ -579,17 +581,19 @@ EOF
         ],
         outs = ["launch_local_vm_script_no_kvm"],
         cmd = """
-        IMAGE="$(location :disk-img.tar)"
+        IMAGE="$$PWD/$(location :disk-img.tar)"
         cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "\\$$BUILD_WORKSPACE_DIRECTORY"
-TEMP=\\$$(mktemp -d)
+TEMP=\\$$(mktemp -d --suffix=.qemu-launch-remote-vm)
+# Clean up after ourselves when exiting.
+trap 'rm -rf \\$$TEMP' EXIT
 CID=\\$$((\\$$RANDOM + 3))
-cp $$IMAGE \\$$TEMP
 cd \\$$TEMP
-tar xf disk-img.tar
-qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
+tar xSf $$IMAGE
+truncate -s 128G target.img
+qemu-system-x86_64 -machine type=q35 -nographic -m 4G -bios /usr/share/ovmf/OVMF.fd -boot c -drive file=target.img,format=raw,if=virtio -drive file=disk.img,format=raw,if=virtio -netdev user,id=user.0,hostfwd=tcp::2222-:22 -device virtio-net,netdev=user.0
 EOF
         """,
         executable = True,
