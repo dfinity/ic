@@ -2,7 +2,7 @@ use crate::{
     admin_helper::RegistryParams,
     cli::{print_height_info, read_optional, read_optional_node_ids, read_optional_version},
     command_helper::pipe_all,
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
@@ -121,7 +121,7 @@ impl NNSRecoveryFailoverNodes {
             subnet_args.validate_nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
