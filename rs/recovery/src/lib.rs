@@ -992,6 +992,7 @@ pub fn get_member_ips(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::GracefulExpect;
     use ic_test_utilities_tmpdir::tmpdir;
 
     #[test]
