@@ -765,8 +765,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 Some(blockmaker_metrics) => (blockmaker_metrics, metrics).try_into()?,
                 None => BlockmakerMetricsTimeSeries::default(),
             },
-            // TODO: Review. This could be incorrect. Would that have consequences?
-            replica_version: ReplicaVersion::default(),
+            replica_version: item.replica_version.map(|v| v.into()).unwrap_or_default(),
         })
     }
 }

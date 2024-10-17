@@ -115,6 +115,22 @@ impl From<&ReplicaVersion> for ic_protobuf::state::system_metadata::v1::ReplicaV
     }
 }
 
+impl From<ReplicaVersion> for ic_protobuf::state::system_metadata::v1::ReplicaVersion {
+    fn from(value: ReplicaVersion) -> Self {
+        Self {
+            version_id: value.version_id,
+        }
+    }
+}
+
+impl From<ic_protobuf::state::system_metadata::v1::ReplicaVersion> for ReplicaVersion {
+    fn from(value: ic_protobuf::state::system_metadata::v1::ReplicaVersion) -> Self {
+        Self {
+            version_id: value.version_id,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
