@@ -26,4 +26,4 @@ jobs:
         shell: pwsh
         run: |
           cargo build --release --locked -p pocket-ic
-          cargo build --release --locked -p pocket-ic --target wasm32-unknown-unknown
+          cargo build --release --locked -p pocket-ic-test-canister --target wasm32-unknown-unknown
