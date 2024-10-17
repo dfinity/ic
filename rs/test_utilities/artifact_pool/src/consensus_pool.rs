@@ -173,6 +173,7 @@ impl TestConsensusPool {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         dkg_pool: Option<Arc<RwLock<DkgPoolImpl>>>,
     ) -> Self {
+        let metrics_registry = ic_metrics::MetricsRegistry::new();
         let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
             subnet_id,
             registry_client.clone(),
@@ -180,10 +181,7 @@ impl TestConsensusPool {
             state_manager.clone(),
             dkg_pool.unwrap_or_else(|| {
                 Arc::new(std::sync::RwLock::new(
-                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                        ic_metrics::MetricsRegistry::new(),
-                        no_op_logger(),
-                    ),
+                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(&metrics_registry, no_op_logger()),
                 ))
             }),
         ));
@@ -193,7 +191,7 @@ impl TestConsensusPool {
             subnet_id,
             (&ic_test_utilities_consensus::make_genesis(summary)).into(),
             pool_config,
-            ic_metrics::MetricsRegistry::new(),
+            &metrics_registry,
             no_op_logger(),
             time_source.clone(),
         );

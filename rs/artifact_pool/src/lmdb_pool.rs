@@ -1908,7 +1908,7 @@ impl PersistentIDkgPoolSection {
         config: LMDBConfig,
         read_only: bool,
         log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         pool: &str,
         pool_type: &str,
     ) -> Self {

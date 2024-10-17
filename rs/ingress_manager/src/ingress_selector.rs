@@ -1856,7 +1856,7 @@ mod tests {
                 let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
                     node_id,
                     pool_config,
-                    metrics_registry.clone(),
+                    &metrics_registry,
                     log.clone(),
                 )));
                 let time_source = FastForwardTimeSource::new();
