@@ -8,16 +8,16 @@
     "sha256": "612410c71e893bb64772ab8131d77264740398f3932d873cb4f640fc257f9e61"
   },
   "ck_btc_ledger": {
-    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
-    "sha256": "10265a7d88461317953030fb0e6da20b9035260a11d077a1b249d4a18a5b8577"
+    "rev": "b98f0feed23702b954e61912e81c1613c075cffd",
+    "sha256": "0f194ee27c3a046423b5d36725df71b62156cec173a6c52890fcc2ac2308bbbf"
   },
   "ck_eth_index": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
     "sha256": "de250f08dc7e699144b73514f55fbbb3a3f8cd97abf0f7ae31d9fb7494f55234"
   },
   "ck_eth_ledger": {
-    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
-    "sha256": "566f1c1ae68cca5618e74cdb2239d989084d92237b04a31f7898182ad0547a93"
+    "rev": "b98f0feed23702b954e61912e81c1613c075cffd",
+    "sha256": "50959283b0e1f130eedbe8fb326ce0c65d757227d21ddc9153bcc6420e922986"
   },
   "cycles-minting": {
     "rev": "ca8847547d327ce8a3bd81d25a590e01da1a3af5",
@@ -56,8 +56,8 @@
     "sha256": "18fa2612dd51837d8f54769761b421627826fa1e19bb3a788ea6ffa8bd59f7b8"
   },
   "sns_archive": {
-    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
-    "sha256": "4f002f50679af4cc2d5a91b842eeff47bc1aff22286a42cf4c605a28b46b6689"
+    "rev": "b98f0feed23702b954e61912e81c1613c075cffd",
+    "sha256": "d8c712ad8beeb7c88556b7da1cb7bae28ba983c369fea4d221f281b899a6af76"
   },
   "sns_governance": {
     "rev": "c494c2af8bfc70a6501448dc73bf806477388738",
@@ -68,8 +68,8 @@
     "sha256": "612410c71e893bb64772ab8131d77264740398f3932d873cb4f640fc257f9e61"
   },
   "sns_ledger": {
-    "rev": "d1db89ed78716b9258a8ec75bd6f53aa067a5be7",
-    "sha256": "10265a7d88461317953030fb0e6da20b9035260a11d077a1b249d4a18a5b8577"
+    "rev": "b98f0feed23702b954e61912e81c1613c075cffd",
+    "sha256": "0f194ee27c3a046423b5d36725df71b62156cec173a6c52890fcc2ac2308bbbf"
   },
   "sns_root": {
     "rev": "db5901a6e90b718918978ae5167b9c98d5aa7ab6",
