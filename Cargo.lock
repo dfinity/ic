@@ -13049,7 +13049,6 @@ dependencies = [
 name = "ic-validate-eq-derive"
 version = "0.0.0"
 dependencies = [
- "darling 0.20.10",
  "proc-macro2",
  "quote",
  "syn 1.0.109",

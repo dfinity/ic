@@ -8,7 +8,6 @@ path = "src/lib.rs"
 proc-macro = true
 
 [dependencies]
-darling = "0.20.10"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
