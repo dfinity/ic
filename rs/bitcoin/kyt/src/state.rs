@@ -1,4 +1,4 @@
-use crate::types::BtcNetwork;
+use crate::{providers::Provider, types::BtcNetwork};
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -35,8 +35,15 @@ pub enum HttpGetTxError {
 pub enum FetchTxStatus {
     PendingOutcall,
     PendingRetry { max_response_bytes: u32 },
-    Error(HttpGetTxError),
+    Error(FetchTxStatusError),
     Fetched(FetchedTx),
+}
+
+#[derive(Debug, Clone)]
+pub struct FetchTxStatusError {
+    pub provider: Provider,
+    pub max_response_bytes: u32,
+    pub error: HttpGetTxError,
 }
 
 /// Once the transaction data is successfully fetched, we create

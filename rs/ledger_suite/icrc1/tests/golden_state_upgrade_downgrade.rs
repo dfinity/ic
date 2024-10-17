@@ -3,10 +3,10 @@ use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
-use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
+use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_icrc1_ledger_sm_tests::{
+use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
@@ -32,12 +32,20 @@ type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[cfg(not(feature = "u256-tokens"))]
 lazy_static! {
-    pub static ref MAINNET_WASMS: Wasms = Wasms::new(
+    pub static ref MAINNET_CKBTC_WASMS: Wasms = Wasms::new(
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
+        ))
+    );
+    pub static ref MAINNET_SNS_WASMS: Wasms = Wasms::new(
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
+        )),
+        Wasm::from_bytes(load_wasm_using_env_var(
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -54,14 +62,6 @@ lazy_static! {
         )),
         Wasm::from_bytes(load_wasm_using_env_var(
             "CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
-        ))
-    );
-    pub static ref MAINNET_U64_WASMS: Wasms = Wasms::new(
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_INDEX_DEPLOYED_VERSION_WASM_PATH",
-        )),
-        Wasm::from_bytes(load_wasm_using_env_var(
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH",
         ))
     );
     pub static ref MASTER_WASMS: Wasms = Wasms::new(
@@ -335,12 +335,13 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
-        minter: ck_btc_minter,
-        burn_indexes: vec![
-            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
-        ],
-    };
+    let burns_without_spender =
+        ic_ledger_suite_state_machine_tests::in_memory_ledger::BurnsWithoutSpender {
+            minter: ck_btc_minter,
+            burn_indexes: vec![
+                100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+            ],
+        };
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 
@@ -350,7 +351,7 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             CK_BTC_INDEX_CANISTER_ID,
             CK_BTC_LEDGER_CANISTER_NAME,
         ),
-        &MAINNET_WASMS,
+        &MAINNET_CKBTC_WASMS,
         &MASTER_WASMS,
         Some(burns_without_spender),
         true,
@@ -491,7 +492,7 @@ fn should_upgrade_icrc_ck_u256_canisters_with_golden_state() {
     }
 }
 
-#[cfg(feature = "u256-tokens")]
+#[cfg(not(feature = "u256-tokens"))]
 #[test]
 fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     // SNS canisters
@@ -643,7 +644,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
 
     let mut canister_configs = vec![LedgerSuiteConfig::new_with_params(
         OPENCHAT_LEDGER_SUITE,
-        &MAINNET_U64_WASMS,
+        &MAINNET_SNS_WASMS,
         &MASTER_WASMS,
         None,
         true,
@@ -680,7 +681,7 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     ] {
         canister_configs.push(LedgerSuiteConfig::new(
             canister_id_and_name,
-            &MAINNET_U64_WASMS,
+            &MAINNET_SNS_WASMS,
             &MASTER_WASMS,
         ));
     }
