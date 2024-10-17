@@ -137,7 +137,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
     Ok(proposal_id)
 }
 
-async fn get_canisters_to_upgrade(
+pub(crate) async fn get_canisters_to_upgrade(
     env: &dyn Environment,
     root_canister_id: CanisterId,
     canister_type: SnsCanisterType,
@@ -174,7 +174,7 @@ async fn get_canisters_to_upgrade(
         .collect()
 }
 
-fn canister_type_and_wasm_hash_for_upgrade(
+pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     current_version: &Version,
     next_version: &Version,
 ) -> Result<(SnsCanisterType, Vec<u8>), String> {

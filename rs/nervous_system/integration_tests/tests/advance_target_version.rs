@@ -154,7 +154,7 @@ async fn test_get_upgrade_journal() {
         assert_eq!(
             upgrade_steps.versions,
             vec![
-                initial_sns_version,
+                initial_sns_version.clone(),
                 new_sns_version_1,
                 new_sns_version_2.clone()
             ]
@@ -177,5 +177,19 @@ async fn test_get_upgrade_journal() {
             sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
 
         assert_eq!(target_version, Some(new_sns_version_2.clone()));
+    }
+
+    wait_for_next_periodic_task(1000).await;
+    for _ in 0..25 {
+        pocket_ic.tick().await;
+    }
+
+    // Check that the deployed version is now set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse {
+            deployed_version, ..
+        } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(deployed_version, Some(new_sns_version_2.clone()));
     }
 }
