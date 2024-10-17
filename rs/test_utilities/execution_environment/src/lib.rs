@@ -2155,7 +2155,7 @@ impl ExecutionTestBuilder {
                         algorithm_id: AlgorithmId::ThresBls12_381,
                         public_key: b"efefefef".to_vec(),
                     },
-                )
+                ),
             })
             .collect();
 
