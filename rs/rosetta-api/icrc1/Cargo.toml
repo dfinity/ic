@@ -76,7 +76,6 @@ ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
 once_cell = "1.8.0"
 pocket-ic = { path = "../../../packages/pocket-ic" }
-ring = { version = "0.16.11", features = ["std"] }
 url = { workspace = true }
 
 [[test]]

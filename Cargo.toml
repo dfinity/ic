@@ -466,11 +466,11 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
+actix-web = "4.9.0"
+actix-rt = "2.10.0"
 anyhow = "^1"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
-actix-web = "4.9.0"
-actix-rt = "2.10.0"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
@@ -499,7 +499,6 @@ clap = { version = "4.5.18", features = ["derive", "string"] }
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
 cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false }
-
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.13"
 curve25519-dalek = { version = "4.1.3", features = [
@@ -519,7 +518,6 @@ ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
 futures = "0.3.30"
 futures-util = "0.3.30"
-ic-sha3 = "1.0.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -551,6 +549,7 @@ ic-certificate-verification = "2.6.0"
 ic-certification = "2.6.0"
 ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
+ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
 ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
@@ -607,6 +606,7 @@ pprof = { version = "0.13.0", default-features = false, features = [
     "prost-codec",
 ] }
 pretty_assertions = "1.4.0"
+proc-macro2 = "1.0.88"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
@@ -614,6 +614,7 @@ proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
+quote = "1.0.37"
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",

@@ -3094,7 +3094,6 @@ dependencies = [
  "futures-util",
  "get_if_addrs",
  "getrandom",
- "glob",
  "group",
  "hashlink",
  "hex",
@@ -3195,7 +3194,6 @@ dependencies = [
  "pairing",
  "parking_lot 0.12.1",
  "paste",
- "pathdiff",
  "pcre2",
  "pem 1.1.1",
  "pin-project-lite",
@@ -3226,7 +3224,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_distr",
  "rand_pcg 0.3.1",
- "randomkit",
  "ratelimit",
  "rayon",
  "rcgen",
@@ -3281,7 +3278,6 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "stubborn-io",
- "substring",
  "subtle",
  "syn 1.0.109",
  "sync_wrapper 1.0.1",
@@ -7711,12 +7707,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
 
 [[package]]
-name = "pathdiff"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-
-[[package]]
 name = "pbkdf2"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8326,9 +8316,9 @@ checksum = "dc375e1527247fe1a97d8b7156678dfe7c1af2fc075c9a4db3690ecd2a148068"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.85"
+version = "1.0.88"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
+checksum = "7c3a7fc5db1e57d5a779a352c8cdb57b29aa4c40cc69c3a68a7fedc815fbf2f9"
 dependencies = [
  "unicode-ident",
 ]
@@ -8695,9 +8685,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.35"
+version = "1.0.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "291ec9ab5efd934aaf503a6466c5d5251535d108ee747472c3977cc5acc868ef"
+checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
 dependencies = [
  "proc-macro2",
 ]
@@ -8870,15 +8860,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "randomkit"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -10670,15 +10651,6 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "tokio",
-]
-
-[[package]]
-name = "substring"
-version = "1.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-dependencies = [
- "autocfg 1.1.0",
 ]
 
 [[package]]
