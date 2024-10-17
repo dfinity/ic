@@ -83,6 +83,7 @@ impl RerandomizedPresignature {
         message: &[u8],
         randomness: &Randomness,
         derivation_path: &DerivationPath,
+        taproot_tree_root: Option<&[u8]>,
         key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
     ) -> CanisterThresholdResult<Self> {
@@ -112,6 +113,11 @@ impl RerandomizedPresignature {
         ro.add_point("pre_sig", &pre_sig)?;
         ro.add_point("key_transcript", &idkg_key)?;
         ro.add_scalar("key_tweak", &key_tweak)?;
+
+        if let Some(ttr) = taproot_tree_root {
+            ro.add_bytestring("taproot_tree_root", ttr)?;
+        }
+
         let presig_randomizer = ro.output_scalar(curve)?;
 
         let randomized_pre_sig =
@@ -128,6 +134,51 @@ impl RerandomizedPresignature {
     }
 }
 
+fn compute_taproot_tweak(pk: &EccPoint, h: &[u8]) -> CanisterThresholdResult<EccScalar> {
+    let tag = "TapTweak";
+
+    let h_tag = ic_crypto_sha2::Sha256::hash(tag.as_bytes());
+
+    let mut sha256 = ic_crypto_sha2::Sha256::new();
+    sha256.write(&h_tag);
+    sha256.write(&h_tag);
+    sha256.write(&pk.affine_x_bytes()?);
+    sha256.write(h);
+
+    // This fails if the hash is greater than the group order;
+    // this happens with small probability but the failure is
+    // mandated by BIP-0341
+    EccScalar::deserialize(EccCurveType::K256, &sha256.finish())
+        .map_err(|_| CanisterThresholdError::InvalidScalar)
+}
+
+fn apply_taproot_tweak(
+    rerandomized: &RerandomizedPresignature,
+    taproot_tree_root: Option<&[u8]>,
+) -> CanisterThresholdResult<(EccPoint, bool, EccScalar)> {
+    if let Some(h) = taproot_tree_root {
+        // If taproot we have to perform yet another additive tweak
+        let tap_tweak = compute_taproot_tweak(&rerandomized.derived_key, h)?;
+
+        let rr_even = rerandomized.derived_key.is_y_even()?;
+
+        let g_tweak = EccPoint::mul_by_g(&tap_tweak);
+
+        if rr_even {
+            let (tweak_key, flip) = fix_to_even_y(&rerandomized.derived_key.add_points(&g_tweak)?)?;
+            let tweak_sum = rerandomized.key_tweak.add(&tap_tweak)?;
+            Ok((tweak_key, flip, tweak_sum))
+        } else {
+            let (tweak_key, flip) = fix_to_even_y(&rerandomized.derived_key.sub_points(&g_tweak)?)?;
+            let tweak_sum = rerandomized.key_tweak.sub(&tap_tweak)?;
+            Ok((tweak_key, flip, tweak_sum))
+        }
+    } else {
+        let (dk, flip) = fix_to_even_y(&rerandomized.derived_key)?;
+        Ok((dk, flip, rerandomized.key_tweak.clone()))
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ThresholdBip340SignatureShareInternal {
     s: EccScalar,
@@ -137,6 +188,7 @@ impl ThresholdBip340SignatureShareInternal {
     pub(crate) fn new(
         derivation_path: &DerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         randomness: Randomness,
         key_transcript: &IDkgTranscriptInternal,
         key_opening: &CommitmentOpening,
@@ -147,12 +199,13 @@ impl ThresholdBip340SignatureShareInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
 
-        // We have to potentially negate the key and/or R to ensure we have even y
-        let (derived_key, flip_key_share) = fix_to_even_y(&rerandomized.derived_key)?;
+        let (derived_key, flip_key_share, key_tweak) =
+            apply_taproot_tweak(&rerandomized, taproot_tree_root)?;
         let (presig_r, flip_presig_share) = fix_to_even_y(&rerandomized.randomized_pre_sig)?;
 
         let key_opening = match key_opening {
@@ -167,7 +220,7 @@ impl ThresholdBip340SignatureShareInternal {
 
         let e = bip340_challenge_hash(&presig_r, &derived_key, message)?;
 
-        let tweaked_x = key_opening.add(&rerandomized.key_tweak)?;
+        let tweaked_x = key_opening.add(&key_tweak)?;
 
         /*
          * The linear combination used to create the share varies based on if we
@@ -208,6 +261,7 @@ impl ThresholdBip340SignatureShareInternal {
         &self,
         derivation_path: &DerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         randomness: Randomness,
         signer_index: NodeIndex,
         key_transcript: &IDkgTranscriptInternal,
@@ -217,11 +271,13 @@ impl ThresholdBip340SignatureShareInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
 
-        let (derived_key, flip_sk) = fix_to_even_y(&rerandomized.derived_key)?;
+        let (derived_key, flip_sk, key_tweak) =
+            apply_taproot_tweak(&rerandomized, taproot_tree_root)?;
         let (presig_r, flip_r) = fix_to_even_y(&rerandomized.randomized_pre_sig)?;
 
         let e = bip340_challenge_hash(&presig_r, &derived_key, message)?;
@@ -230,7 +286,7 @@ impl ThresholdBip340SignatureShareInternal {
             .combined_commitment
             .commitment()
             .evaluate_at(signer_index)?
-            .add_points(&EccPoint::mul_by_g(&rerandomized.key_tweak))?;
+            .add_points(&EccPoint::mul_by_g(&key_tweak))?;
         let node_r = presig_transcript
             .combined_commitment
             .commitment()
@@ -330,6 +386,7 @@ impl ThresholdBip340CombinedSignatureInternal {
     pub fn new(
         derivation_path: &DerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         randomness: Randomness,
         key_transcript: &IDkgTranscriptInternal,
         presig_transcript: &IDkgTranscriptInternal,
@@ -345,6 +402,7 @@ impl ThresholdBip340CombinedSignatureInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
@@ -377,6 +435,7 @@ impl ThresholdBip340CombinedSignatureInternal {
         &self,
         derivation_path: &DerivationPath,
         message: &[u8],
+        taproot_tree_root: Option<&[u8]>,
         randomness: Randomness,
         presig_transcript: &IDkgTranscriptInternal,
         key_transcript: &IDkgTranscriptInternal,
@@ -389,11 +448,13 @@ impl ThresholdBip340CombinedSignatureInternal {
             message,
             &randomness,
             derivation_path,
+            taproot_tree_root,
             key_transcript,
             presig_transcript,
         )?;
 
-        let (derived_key, _) = fix_to_even_y(&rerandomized.derived_key)?;
+        let (derived_key, _, _) = apply_taproot_tweak(&rerandomized, taproot_tree_root)?;
+
         let (presig_r, _) = fix_to_even_y(&rerandomized.randomized_pre_sig)?;
 
         if self.r != presig_r {

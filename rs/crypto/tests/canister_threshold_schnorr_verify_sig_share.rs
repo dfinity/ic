@@ -194,6 +194,7 @@ fn should_fail_when_key_internal_transcript_raw_switched() {
             ThresholdSchnorrSigInputs::new(
                 inputs.derivation_path(),
                 inputs.message(),
+                None,
                 *inputs.nonce(),
                 inputs.presig_transcript().clone(),
                 key_transcript_with_other_internal_raw,
