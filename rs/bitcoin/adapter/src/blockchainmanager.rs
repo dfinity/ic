@@ -1470,7 +1470,7 @@ pub mod test {
             txdata: vec![],
         };
         {
-            let mut blockchain = blockchain_manager.blockchain.lock();
+            let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
             assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
             blockchain.add_block(block).expect("unable to add block");
@@ -1512,7 +1512,7 @@ pub mod test {
         };
 
         {
-            let mut blockchain = blockchain_manager.blockchain.lock();
+            let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
             assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
             blockchain.add_block(block_3).expect("unable to add block");

@@ -247,7 +247,6 @@ fn are_multiple_blocks_allowed(network: Network, anchor_height: BlockHeight) -> 
 mod test {
     use super::*;
 
-    use std::future::IntoFuture;
     use std::sync::{Arc, Mutex};
 
     use bitcoin::Network;
@@ -314,10 +313,7 @@ mod test {
         };
 
         {
-            let mut blockchain: <Result<
-                std::sync::MutexGuard<'_, BlockchainState>,
-                std::sync::PoisonError<std::sync::MutexGuard<'_, BlockchainState>>,
-            > as IntoFuture>::Output = handler.state.lock().unwrap();
+            let mut blockchain = handler.state.lock().unwrap();
             blockchain.add_headers(&main_chain);
             blockchain.add_headers(&side_chain);
             blockchain.add_headers(&side_chain_2);
