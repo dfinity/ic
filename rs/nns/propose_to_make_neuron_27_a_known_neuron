@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+dfx --identity hsm \
+    canister \
+    --network ic \
+    call \
+    --candid rs/nns/governance/canister/governance.did \
+    $GOVERNANCE \
+    manage_neuron \
+    '(record {
+        neuron_id_or_subaccount = opt variant { NeuronId = record { id = 51 }} ;
+        command = opt variant { MakeProposal = record {
+            title = opt "Make Neuron 27 A Known Neuron";
+            url = "https://forum.dfinity.org/t/strengthening-governance-by-aligning-neuron-28s-voting-power-under-neuron-27/35957";
+            summary = "# Make Neuron 27 a Known Neuron
+
+Its name will be “DFINITY Foundation”. Its description will be as quoted in Appendix A.
+
+# Background
+
+## Current Status of Neuron 27
+
+In the NNS Dapp and the IC Dashboard, this neuron is displayed as though it is
+a known neuron named “DFINITY Foundation”. For example, when you view a proposal
+in IC Dashboard, towards the bottom of the page, it shows the votes of known
+neurons, as well as the vote of this neuron. However, this neuron was never
+officially registered as a known neuron in the NNS.
+
+## Why This Neuron Was Not a Known Neuron Before
+
+The known neuron feature did not exist in early versions of NNS. By the time the
+known neuron feature was added, the NNS Dapp and IC Dashboard were already
+treating this neuron specially.
+
+## What Changed
+
+The development of the “Public and Private Neurons” feature (approved in
+[motion proposal 130832]) is nearing completion (per the
+[plan described in the forum]). The main remaining step is to begin enforcing
+private visibility.
+
+[motion proposal 130832]: https://dashboard.internetcomputer.org/proposal/130832
+[plan described in the forum]: https://forum.dfinity.org/t/request-for-comments-api-changes-for-public-private-neurons/33360
+
+However, if private enforcement were to be enabled now, neuron 27'"'"'s votes
+would become invisible. This proposal avoids that, because when private
+enforcement is enabled, the votes of known neurons (and public neurons) will
+(still) be visible.
+
+# Impact
+
+This removes one of the last blockers for the full release of the “Public and
+Private Neurons” feature.
+
+This ensures that the current status quo is maintained. I.e., this neuron’s
+votes will remain visible after the full release of the “Public and Private
+Neurons” feature.
+
+# Appendix A: Description
+
+The DFINITY Foundation is a major driving force behind the development of the
+Internet Computer. To realize the vision of a decentralized, permissionless, and
+secure world computer, the foundation employs world-class scientists and
+engineers with expertise in cryptography and distributed systems. As a Swiss
+non-profit, the foundation'"'"'s mission is to empower developers and users by
+creating a scalable platform that efficiently hosts the next generation of
+applications.
+
+This neuron exercises its voting power by following key members of the DFINITY
+team. Notably, this neuron cannot vote directly through its controller
+principal, as its private key was irretrievably destroyed at the neuron'"'"'s
+inception during a special ceremony involving multiple early core members of the
+DFINITY team. This structure ensures that the voting power behind this neuron
+remains decentralized.
+
+The DFINITY Foundation is highly engaged in all proposals and proposal
+discussions. We are deeply invested in nurturing a vibrant ecosystem, supporting
+developers, and engaging with the broader community. Our commitment to
+transparency and accountability ensures that the interests of all stakeholders
+are represented as we work together to unlock the full potential of a truly
+permissionless and decentralized internet.
+" ;
+            action = opt variant { RegisterKnownNeuron = record {
+                id = opt record { id = 27 } ;
+                known_neuron_data = opt record {
+                    name = "DFINITY Foundation" ;
+                    description = "The DFINITY Foundation is a major driving force behind the development of the Internet Computer. To realize the vision of a decentralized, permissionless, and secure world computer, the foundation employs world-class scientists and engineers with expertise in cryptography and distributed systems. As a Swiss non-profit, the foundation'"'"'s mission is to empower developers and users by creating a scalable platform that efficiently hosts the next generation of applications.
+
+This neuron exercises its voting power by following key members of the DFINITY team. Notably, this neuron cannot vote directly through its controller principal, as its private key was irretrievably destroyed at the neuron'"'"'s inception during a special ceremony involving multiple early core members of the DFINITY team. This structure ensures that the voting power behind this neuron remains decentralized.
+
+The DFINITY Foundation is highly engaged in all proposals, and proposal discussions. We are deeply invested in nurturing a vibrant ecosystem, supporting developers, and engaging with the broader community. Our commitment to transparency and accountability ensures that the interests of all stakeholders are represented as we work together to unlock the full potential of a truly permissionless and decentralized internet.
+" ;
+                } ;
+            } };
+        } } ;
+        id = null ;
+    })'
