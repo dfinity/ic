@@ -5,10 +5,10 @@ use clap::{Parser, Subcommand};
 
 use config::types::{HostOSConfig, Ipv6Config};
 use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
+use mac_address::mac_address::{generate_mac_address, FormattedMacAddress};
+use mac_address::node_type::NodeType;
 use network::generate_network_config;
 use network::ipv6::generate_ipv6_address;
-use network::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
-use network::node_type::NodeType;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
 

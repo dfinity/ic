@@ -2,16 +2,13 @@ use std::path::Path;
 
 use anyhow::{anyhow, Result};
 
-use crate::mac_address::UnformattedMacAddress;
 use crate::systemd::generate_systemd_config_files;
 use config::types::{Ipv6Config, NetworkSettings};
 use ipv6::generate_ipv6_address;
-use mac_address::FormattedMacAddress;
+use mac_address::mac_address::{FormattedMacAddress, UnformattedMacAddress};
 
 pub mod interfaces;
 pub mod ipv6;
-pub mod mac_address;
-pub mod node_type;
 pub mod systemd;
 
 /// Write SetupOS or HostOS systemd network configuration.

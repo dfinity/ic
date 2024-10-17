@@ -2268,6 +2268,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.19",
  "ic-types",
+ "mac_address",
  "once_cell",
  "regex",
  "serde",
@@ -4788,6 +4789,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.19",
  "config",
+ "mac_address",
  "network",
  "utils",
 ]
@@ -14908,6 +14910,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "mac_address"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "regex",
+ "serde",
+ "sha2 0.10.8",
+ "utils",
+]
+
+[[package]]
 name = "mach2"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15364,14 +15378,12 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "config",
- "hex",
+ "mac_address",
  "ping",
  "rayon",
- "regex",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
- "sha2 0.10.8",
  "utils",
 ]
 
@@ -18983,6 +18995,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.19",
  "config",
+ "mac_address",
  "network",
  "utils",
 ]
