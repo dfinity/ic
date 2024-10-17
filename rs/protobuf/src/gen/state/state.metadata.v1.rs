@@ -472,6 +472,13 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
+    #[prost(message, optional, tag = "22")]
+    pub replica_version: ::core::option::Option<ReplicaVersion>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReplicaVersion {
+    #[prost(string, tag = "1")]
+    pub version_id: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

@@ -193,6 +193,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransaction
                     | ic00::Method::BitcoinGetCurrentFeePercentiles
                     | ic00::Method::NodeMetricsHistory
+                    | ic00::Method::SubnetStats
                     | ic00::Method::FetchCanisterLogs
                     | ic00::Method::ProvisionalCreateCanisterWithCycles
                     | ic00::Method::ProvisionalTopUpCanister
