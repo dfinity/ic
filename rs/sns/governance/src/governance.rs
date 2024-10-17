@@ -4682,10 +4682,6 @@ impl Governance {
 
         self.process_proposals();
 
-        if self.should_check_upgrade_status() {
-            self.check_upgrade_status().await;
-        }
-
         let should_distribute_rewards = self.should_distribute_rewards();
 
         // Getting the total governance token supply from the ledger is expensive enough
@@ -4715,7 +4711,11 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
+        
+        if self.should_check_upgrade_status() {
+            self.check_upgrade_status().await;
+        } 
+        
         if self.should_refresh_cached_upgrade_steps() {
             self.temporarily_lock_refresh_cached_upgrade_steps();
             self.refresh_cached_upgrade_steps().await;
@@ -4774,10 +4774,14 @@ impl Governance {
                                     }
                                 }
                             }
+                        } else {
+                            log!(ERROR, "Deployed version is not on the upgrade path");
+                            // TODO: put this in a function called invalidate or something
+                            self.proto.cached_upgrade_steps = None;
                         }
                     }
                 }
-            }
+            } 
         }
     }
 
