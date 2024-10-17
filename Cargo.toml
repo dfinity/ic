@@ -361,6 +361,7 @@ members = [
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/message_routing",
@@ -472,9 +473,8 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-stream = "0.3.5"
-async-trait = "0.1.81"
+async-stream = "0.3.6"
+async-trait = "0.1.83"
 axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
@@ -540,7 +540,6 @@ ic-agent = { version = "0.37.1", features = [
 ] }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
-ic-btc-validation = "0.1.0"
 ic-cbor = "2.6.0"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
@@ -587,10 +586,9 @@ nftables = "0.4"
 nix = "0.24.3"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-opentelemetry = { version = "0.23.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.16.0", features = ["grpc-tonic"] }
-opentelemetry-prometheus = "0.16.0"
-opentelemetry_sdk = { version = "0.23.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.26.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.26.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.26.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -695,7 +693,7 @@ tower-http = { version = "0.5.2", features = [
 ] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-opentelemetry = "0.24.0"
+tracing-opentelemetry = "0.27.0"
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",

@@ -768,14 +768,6 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// the return type.
 async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
-        OpOut::Pruned => (
-            StatusCode::GONE,
-            Json(ApiResponse::<()>::Error {
-                message: "Pruned".to_owned(),
-            })
-            .into_response(),
-        )
-            .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(
