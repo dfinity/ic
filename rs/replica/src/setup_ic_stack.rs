@@ -32,13 +32,10 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, PrincipalId, SubnetId,
+    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
-use std::{
-    str::FromStr,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 use tokio::sync::{
     mpsc::{channel, UnboundedSender},
     watch, OnceCell,
@@ -50,7 +47,7 @@ const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
 /// Returns true if the subnet is whitelisted to serve synchronous responses to v3
 /// update calls.
-fn enable_synchronous_call_handler_for_v3_endpoint(subnet_id: &SubnetId) -> bool {
+fn enable_synchronous_call_handler_for_v3_endpoint(_subnet_id: &SubnetId) -> bool {
     true
 }
 
