@@ -13,7 +13,7 @@ impl JsonRpcProvider {
             JsonRpcProvider::Provider1 => "https://ethereum.blockpi.network/v1/rpc/public",
             JsonRpcProvider::Provider2 => "https://ethereum-rpc.publicnode.com",
             JsonRpcProvider::Provider3 => "https://cloudflare-eth.com/v1/mainnet",
-            JsonRpcProvider::Provider4 => "https://eth-mainnet.g.alchemy.com/v2/demo",
+            JsonRpcProvider::Provider4 => "https://eth.llamarpc.com",
         }
     }
 }

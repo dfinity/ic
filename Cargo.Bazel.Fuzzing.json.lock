@@ -1,5 +1,5 @@
 {
-  "checksum": "23b8c4c80ca99d2cb874403f59f756788b97b830a3dd2f48826f239b0028a3c3",
+  "checksum": "4fe82831a028ca3a4394f2810b1a2bc468d70e5b7b3e77c5ea07cfd075a5e079",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17927,7 +17927,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.1.0",
+              "id": "evm_rpc_types 1.2.0",
               "target": "evm_rpc_types"
             },
             {
@@ -21806,14 +21806,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.1.0": {
+    "evm_rpc_types 1.2.0": {
       "name": "evm_rpc_types",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.1.0/download",
-          "sha256": "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.2.0/download",
+          "sha256": "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
         }
       },
       "targets": [
@@ -21873,7 +21873,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -78772,7 +78772,7 @@
     "escargot 0.5.8",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
-    "evm_rpc_types 1.1.0",
+    "evm_rpc_types 1.2.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
