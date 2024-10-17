@@ -2181,7 +2181,8 @@ impl StateManagerImpl {
             .expect("Failed to receive deallocation notification");
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep, and
+    /// Remove any inmemory state at height h with h < last_height_to_keep
+    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
     /// any checkpoint at height h < last_checkpoint_to_keep
     ///
     /// Shared inner function of the public functions remove_states_below
@@ -2190,6 +2191,7 @@ impl StateManagerImpl {
         &self,
         last_height_to_keep: Height,
         last_checkpoint_to_keep: Height,
+        extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
             last_height_to_keep >= last_checkpoint_to_keep,
@@ -3298,7 +3300,11 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
-        self.remove_states_below_impl(oldest_height_to_keep, oldest_checkpoint_to_keep);
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            oldest_checkpoint_to_keep,
+            &BTreeSet::new(),
+        );
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
@@ -3310,7 +3316,11 @@ impl StateManager for StateManagerImpl {
     /// * The latest state
     /// * The latest certified state
     /// * State 0
-    fn remove_inmemory_states_below(&self, requested_height: Height) {
+    fn remove_inmemory_states_below(
+        &self,
+        requested_height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    ) {
         let _timer = self
             .metrics
             .api_call_duration
@@ -3323,7 +3333,11 @@ impl StateManager for StateManagerImpl {
             .min(requested_height)
             .max(Height::new(1));
 
-        self.remove_states_below_impl(oldest_height_to_keep, Self::INITIAL_STATE_HEIGHT);
+        self.remove_states_below_impl(
+            oldest_height_to_keep,
+            Self::INITIAL_STATE_HEIGHT,
+            extra_heights_to_keep,
+        );
     }
 
     fn commit_and_certify(
