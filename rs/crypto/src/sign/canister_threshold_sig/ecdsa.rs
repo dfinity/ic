@@ -1,7 +1,7 @@
 //! Implementations of ThresholdEcdsaSigner
 use super::MasterPublicKeyExtractionError;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
     CanisterThresholdSerializationError, DerivationPath, EccCurveType, IDkgTranscriptInternal,
     ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,

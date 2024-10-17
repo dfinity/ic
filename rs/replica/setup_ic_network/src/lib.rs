@@ -60,6 +60,13 @@ use std::{
 use tokio::sync::{mpsc::UnboundedSender, watch};
 use tower_http::trace::TraceLayer;
 
+/// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
+/// will strip all ingress messages from blocks, before sending them to peers. On a receiver side,
+/// we will reconstruct the blocks by looking up the referenced ingress messages in the ingress
+/// pool or, if they are not there, by fetching missing ingress messages from peers who are
+/// advertising the blocks.
+const HASHES_IN_BLOCKS_FEATURE_ENABLED: bool = false;
+
 pub const MAX_ADVERT_BUFFER: usize = 100_000;
 /// This limit is used to protect against a malicious peer advertising many ingress messages.
 /// If no malicious peers are present the ingress pools are bounded by a separate limit.
@@ -342,14 +349,27 @@ fn start_consensus(
         join_handles.push(jh);
 
         let bouncer = Arc::new(ConsensusBouncer::new(metrics_registry, message_router));
-        let assembler = ic_artifact_downloader::FetchArtifact::new(
-            log.clone(),
-            rt_handle.clone(),
-            consensus_pool,
-            bouncer,
-            metrics_registry.clone(),
-        );
-        new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
+        if HASHES_IN_BLOCKS_FEATURE_ENABLED {
+            let assembler = ic_artifact_downloader::FetchStrippedConsensusArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                consensus_pool,
+                artifact_pools.ingress_pool.clone(),
+                bouncer,
+                metrics_registry.clone(),
+                node_id,
+            );
+            new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
+        } else {
+            let assembler = ic_artifact_downloader::FetchArtifact::new(
+                log.clone(),
+                rt_handle.clone(),
+                consensus_pool,
+                bouncer,
+                metrics_registry.clone(),
+            );
+            new_p2p_consensus.add_client(consensus_rx, client, assembler, SLOT_TABLE_NO_LIMIT);
+        };
     };
 
     let ingress_sender = {

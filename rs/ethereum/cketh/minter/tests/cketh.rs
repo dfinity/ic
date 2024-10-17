@@ -16,14 +16,14 @@ use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
     double_and_increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
 };
-use ic_cketh_test_utils::mock::{JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders};
+use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
     block_response, decode_transaction, default_signed_eip_1559_transaction, empty_logs,
     hash_transaction, multi_logs_for_single_transaction,
 };
 use ic_cketh_test_utils::{
-    use_evm_rpc_canister, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE,
-    CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
+    use_evm_rpc_canister, CkEthSetup, JsonRpcProvider, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+    CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
     DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EFFECTIVE_GAS_PRICE, ETH_HELPER_CONTRACT_ADDRESS,
@@ -221,10 +221,10 @@ fn should_not_mint_when_logs_too_inconsistent() {
 
     CkEthSetup::default_with_maybe_evm_rpc()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-            mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
-                .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
-                .respond_with(JsonRpcProvider::Alchemy, public_node_logs.clone())
+            mock.respond_with(JsonRpcProvider::Provider1, block_pi_logs.clone())
+                .respond_with(JsonRpcProvider::Provider2, public_node_logs.clone())
+                .respond_with(JsonRpcProvider::Provider3, block_pi_logs.clone())
+                .respond_with(JsonRpcProvider::Provider4, public_node_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -246,10 +246,10 @@ fn should_mint_when_1_error_with_3_out_of_4_strategy() {
 
         CkEthSetup::default_with_maybe_evm_rpc()
             .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
-                mock.respond_with(JsonRpcProvider::BlockPi, block_pi_logs.clone())
-                    .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                    .respond_with(JsonRpcProvider::LlamaNodes, block_pi_logs.clone())
-                    .respond_with(JsonRpcProvider::Alchemy, block_pi_logs.clone())
+                mock.respond_with(JsonRpcProvider::Provider1, block_pi_logs.clone())
+                    .respond_with(JsonRpcProvider::Provider2, public_node_logs.clone())
+                    .respond_with(JsonRpcProvider::Provider3, block_pi_logs.clone())
+                    .respond_with(JsonRpcProvider::Provider4, block_pi_logs.clone())
             }))
             .expect_mint();
     }
@@ -381,19 +381,19 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
         .start_processing_withdrawals()
         .retrieve_fee_history(move |mock| {
             mock.modify_response(
-                JsonRpcProvider::BlockPi,
+                JsonRpcProvider::Provider1,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740742_u64.into()
                 },
             )
             .modify_response(
-                JsonRpcProvider::PublicNode,
+                JsonRpcProvider::Provider2,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740743_u64.into()
                 },
             )
             .modify_response(
-                JsonRpcProvider::LlamaNodes,
+                JsonRpcProvider::Provider3,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740744_u64.into()
                 },
@@ -739,7 +739,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
             "topics": [cketh.received_eth_event_topic()]
         }]))
         .respond_for_all_with(empty_logs())
-        .respond_for_providers_with([JsonRpcProvider::PublicNode, JsonRpcProvider::Alchemy], json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
+        .respond_for_providers_with([JsonRpcProvider::Provider2, JsonRpcProvider::Provider4], json!({"error":{"code":-32000,"message":"max message response size exceed"},"id":74,"jsonrpc":"2.0"}))
         .build()
         .expect_rpc_calls(&cketh);
 

@@ -3,6 +3,7 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::sns::Sns;
+use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -33,7 +34,9 @@ use ic_nns_test_utils::{
     },
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_sns_governance::pb::v1::{self as sns_pb, governance::Version};
+use ic_sns_governance::pb::v1::{
+    self as sns_pb, governance::Version, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse,
+};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
@@ -1650,6 +1653,20 @@ pub mod sns {
                 }
             };
             Decode!(&result, sns_pb::GetUpgradeJournalResponse).unwrap()
+        }
+
+        pub async fn advance_target_version(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            target_version: Version,
+        ) -> AdvanceTargetVersionResponse {
+            let payload = AdvanceTargetVersionRequest {
+                target_version: Some(target_version),
+            };
+            pocket_ic
+                .call(sns_governance_canister_id, payload)
+                .await
+                .unwrap()
         }
     }
 
