@@ -1,10 +1,7 @@
-use std::collections::HashSet;
-
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
 use ic_stable_structures::Storable;
-use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(n)
