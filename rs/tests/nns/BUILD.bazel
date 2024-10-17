@@ -7,6 +7,29 @@ exports_files([
     "secret_key.pem",
 ])
 
+# TODO: Once we stop loading DEPENDENCIES from //rs/tests::common.bzl, rename this to just DEPENDENCIES.
+MIGRATED_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/config",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/test_utils",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    # Do *NOT* add //rs/tests here.
+    "//rs/tests/ckbtc",
+    "//rs/tests/consensus/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/tests/nns/nns_dapp",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:libflate",
+    "@crate_index//:reqwest",
+    "@crate_index//:slog",
+]
+
 # nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "nns_upgrade_test",
@@ -137,7 +160,9 @@ system_test(
 
 system_test(
     name = "bitcoin_set_config_proposal_test",
-    env = NNS_CANISTER_ENV,
+    env = dict(NNS_CANISTER_ENV.items() + {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+    }.items()),
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -145,7 +170,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["@btc_canister//file"],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = MIGRATED_DEPENDENCIES,
 )
 
 system_test(

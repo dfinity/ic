@@ -64,13 +64,13 @@ tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "2.0.12"
+assert_cmd = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-utilities = { path = "../test_utilities" }
-predicates = "3.0.4"
+predicates = { workspace = true }
 wat = { workspace = true }
 
 [[bench]]

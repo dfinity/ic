@@ -54,26 +54,26 @@ impl FetchEnv for KytCanisterEnv {
         state::FetchGuard::new(txid)
     }
 
+    fn btc_network(&self) -> BtcNetwork {
+        get_config().btc_network
+    }
+
     async fn http_get_tx(
         &self,
+        provider: providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        // TODO(XC-159): Support multiple providers
-        let request = providers::create_request(get_config().btc_network, txid, max_response_bytes);
+        let request = provider.create_request(txid, max_response_bytes);
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
         match http_request(request, cycles).await {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
-                    let code = if response.status == 429u32 {
-                        RejectionCode::SysTransient
-                    } else {
-                        RejectionCode::SysFatal
-                    };
+                    // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
-                        code,
+                        code: RejectionCode::SysTransient,
                         message: format!("HTTP GET {} received code {}", url, response.status),
                     });
                 }
@@ -129,7 +129,6 @@ pub async fn check_transaction_inputs(txid: Txid) -> CheckTransactionResponse {
     match env.try_fetch_tx(txid) {
         TryFetchResult::Pending => CheckTransactionRetriable::Pending.into(),
         TryFetchResult::HighLoad => CheckTransactionRetriable::HighLoad.into(),
-        TryFetchResult::Error(err) => (txid, err).into(),
         TryFetchResult::NotEnoughCycles => CheckTransactionStatus::NotEnoughCycles.into(),
         TryFetchResult::Fetched(fetched) => env.check_fetched(txid, &fetched).await,
         TryFetchResult::ToFetch(do_fetch) => {
