@@ -17,7 +17,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
-    CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
+    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
 };
 use setup::setup;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
