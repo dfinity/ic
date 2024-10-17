@@ -171,6 +171,7 @@ sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_gateway }}@${IPV4_GATEWAY}@" \
     -e "s@{{ domain }}@${DOMAIN}@" \
     -e "s@{{ nns_urls }}@${NNS_URLS}@" \
+    -e "s@{{ nns_urls }}@${NNS_URLS}@" \
     -e "s@{{ node_index }}@${NODE_INDEX}@" \
     -e "s@{{ backup_retention_time_secs }}@${BACKUP_RETENTION_TIME_SECS}@" \
     -e "s@{{ backup_purging_interval_secs }}@${BACKUP_PURGING_INTERVAL_SECS}@" \
