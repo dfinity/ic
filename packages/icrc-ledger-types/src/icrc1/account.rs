@@ -223,6 +223,8 @@ impl Storable for Account {
 mod tests {
     use assert_matches::assert_matches;
     use ic_stable_structures::Storable;
+    use proptest::prelude::prop;
+    use proptest::strategy::Strategy;
     use std::str::FromStr;
 
     use candid::Principal;
@@ -230,6 +232,20 @@ mod tests {
     use crate::icrc1::account::{
         Account, ICRC1TextReprError, DEFAULT_SUBACCOUNT, MAX_SERIALIZATION_LEN,
     };
+
+    pub fn principal_strategy() -> impl Strategy<Value = Principal> {
+        let bytes_strategy = prop::collection::vec(0..=255u8, 29);
+        bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
+    }
+
+    pub fn account_strategy() -> impl Strategy<Value = Account> {
+        let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+        let principal_strategy = principal_strategy();
+        (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
+            owner: principal,
+            subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
+        })
+    }
 
     #[test]
     fn test_account_display_default_subaccount() {
@@ -386,31 +402,9 @@ mod tests {
 
     #[test]
     fn test_account_serialization() {
-        let owner =
-            Principal::from_text("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
-                .unwrap();
-        let subaccount = Some(
-            hex::decode("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        );
-        let account1 = Account { owner, subaccount };
-        let account2 = Account {
-            owner,
-            subaccount: None,
-        };
-        let account3 = Account {
-            owner: Principal::anonymous(),
-            subaccount,
-        };
-        let account4 = Account {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        };
-        let accounts = vec![account1, account2, account3, account4];
-        for account in accounts {
-            assert_eq!(Account::from_bytes(account.to_bytes()), account);
-        }
+        use proptest::{prop_assert_eq, proptest};
+        proptest!(|(account in account_strategy())| {
+            prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
+        })
     }
 }
