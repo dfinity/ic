@@ -3,6 +3,7 @@ set -eEuo pipefail
 rustup default stable
 
 export PATH="$HOME/.local/bin:$PATH"
+# Ignore externally-managed-environment pip error, install packages system-wide.
 PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install pre-commit
 
 # Make sure CI can pull from the private repo.
