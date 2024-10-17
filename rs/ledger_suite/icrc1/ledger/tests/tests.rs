@@ -418,6 +418,9 @@ fn icrc1_test_upgrade_serialization() {
         upgrade_args,
         minter,
         true,
+        // With the ckBTC and ckETH mainnet canisters being at V1, and the tip-of-master also being V1,
+        // downgrading the ledger canister to the mainnet version from the tip-of-master version
+        // should succeed.
         true,
     );
 }

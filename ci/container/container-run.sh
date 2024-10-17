@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+eprintln() {
+    echo "$@" >&2
+}
+
 if [ -n "${IN_NIX_SHELL:-}" ]; then
-    echo "Please do not run $0 inside of nix-shell." >&2
+    eprintln "Please do not run $0 inside of nix-shell."
     exit 1
 fi
 
 if [ -e /run/.containerenv ]; then
-    echo "Nested $0 is not supported." >&2
+    eprintln "Nested $0 is not supported."
     exit 1
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    echo "Podman missing...install it." >&2
+    eprintln "Podman missing...install it."
     exit 1
 fi
 
@@ -39,17 +43,17 @@ CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
-        -f | --full) echo "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
+        -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
-                    echo "$2 is not a directory! Create it and try again."
+                    eprintln "$2 is not a directory! Create it and try again."
                     usage && exit 1
                 fi
                 CACHE_DIR="$2"
-                echo "Bind-mounting $CACHE_DIR as cache directory."
+                eprintln "Bind-mounting $CACHE_DIR as cache directory."
             else
-                echo "Missing argument for -c | --cache-dir!"
+                eprintln "Missing argument for -c | --cache-dir!"
                 usage && exit 1
             fi
             shift
@@ -73,7 +77,7 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
 fi
 
 if findmnt /hoststorage >/dev/null; then
-    echo "Purging non-relevant container images"
+    eprintln "Purging non-relevant container images"
     sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
@@ -127,6 +131,7 @@ if [ "$(id -u)" = "1000" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
+
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
@@ -151,7 +156,7 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
         -e SSH_AUTH_SOCK="/ssh-agent"
     )
 else
-    echo "No ssh-agent to forward."
+    eprintln "No ssh-agent to forward."
 fi
 
 # make sure we have all bind-mounts
@@ -160,22 +165,28 @@ mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 PODMAN_RUN_USR_ARGS=()
 if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
-    echo "Sourcing user's ~/.container-run.conf"
+    eprintln "Sourcing user's ~/.container-run.conf"
     source "$HOME/.container-run.conf"
 fi
 
-# privileged rootful podman is required due to requirements of IC-OS guest build
-# additionally, we need to use hosts's cgroups and network
+# Omit -t if not a tty.
+# Also shut up logging, because podman will by default log
+# every byte of standard output to the journal, and that
+# destroys the journal + wastes enormous amounts of CPU.
+# I witnessed journald and syslog peg 2 cores of my devenv
+# when running a simple cat /path/to/file.
+if tty >/dev/null 2>&1; then
+    tty_arg=-t
+else
+    tty_arg=
+fi
+other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+# Privileged rootful podman is required due to requirements of IC-OS guest build;
+# additionally, we need to use hosts's cgroups and network.
 if [ $# -eq 0 ]; then
     set -x
-    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
-        "$IMAGE" ${USHELL:-/usr/bin/bash}
-    set +x
+    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
 else
     set -x
-    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
-        "$IMAGE" "$@"
-    set +x
+    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
 fi

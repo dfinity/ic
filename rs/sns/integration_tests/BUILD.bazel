@@ -189,6 +189,7 @@ rust_ic_test_suite_with_extra_srcs(
         ["src/*.rs"],
         exclude = [
             "src/lib.rs",
+            "src/golden_state_swap_upgrade_twice.rs",
         ],
     ),
     aliases = ALIASES,
@@ -203,4 +204,58 @@ rust_ic_test_suite_with_extra_srcs(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
     deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
+)
+
+# To run this test,
+#
+#     bazel \
+#         test \
+#         --test_env=SSH_AUTH_SOCK \
+#         --test_timeout=43200 \
+#         //rs/sns/integration_tests:golden_state_swap_upgrade_twice
+#
+# The unusual things in this command are:
+#  - `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment variable to be
+#    "forwarded" from your shell to the sandbox where the test is run. This authorizes the test
+#    to download the test data.
+#  - `--test_timeout=43200`: This sets the test timeout to 12 hours (more than currently required).
+#
+# Additionally, the following flags are recommended (but not required):
+#
+# --test_output=streamed
+# --test_arg=--nocapture
+#
+# These let you watch the progress of the test, rather than only being able to see the output only
+# at the end.
+#
+# See the .bazelrc for more configuration information.
+rust_ic_test_suite_with_extra_srcs(
+    name = "golden_state_swap_upgrade_twice",
+    # This uses on the order of 50 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/golden_state_swap_upgrade_twice.rs",
+    ],
+    aliases = ALIASES,
+    args = [
+        "--test-threads",
+        "7",
+    ],
+    crate_features = ["test"],
+    data = DATA_DEPS + [
+        "@mainnet_sns-swap-canister//file",
+    ],
+    env = dict(ENV.items() + [
+        ("MAINNET_SNS_SWAP_CANISTER_WASM_PATH", "$(rootpath @mainnet_sns-swap-canister//file)"),
+    ]),
+    extra_srcs = [],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "cpu:8",
+        "manual",  # TODO: Enable on CI
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + ["//rs/nns/test_utils/golden_nns_state"],
 )

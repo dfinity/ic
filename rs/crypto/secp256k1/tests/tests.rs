@@ -152,12 +152,12 @@ fn should_accept_bip340_signatures_that_we_generate() {
 
     let mut rng = test_rng();
 
-    for _ in 0..100 {
+    for len in 0..100 {
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
         let pk = sk.public_key();
 
-        let mut msg = rng.gen::<[u8; 32]>();
+        let mut msg = vec![0u8; len];
         rng.fill_bytes(&mut msg);
         let sig = sk.sign_message_with_bip340(&msg, &mut rng);
 

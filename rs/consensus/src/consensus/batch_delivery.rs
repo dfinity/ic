@@ -276,7 +276,7 @@ pub fn generate_responses_to_subnet_calls(
             summary.dkg.configs.keys().collect::<Vec<_>>()
         );
         consensus_responses.append(&mut generate_responses_to_setup_initial_dkg_calls(
-            &summary.dkg.transcripts_for_new_subnets_with_callback_ids,
+            &summary.dkg.transcripts_for_remote_subnets,
             log,
         ))
     } else {
@@ -304,14 +304,14 @@ struct TranscriptResults {
 /// This function creates responses to the SetupInitialDKG system calls with the
 /// computed DKG key material for remote subnets, without needing values from the state.
 pub fn generate_responses_to_setup_initial_dkg_calls(
-    transcripts_for_new_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
+    transcripts_for_remote_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
 
     let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
 
-    for (id, callback_id, transcript) in transcripts_for_new_subnets.iter() {
+    for (id, callback_id, transcript) in transcripts_for_remote_subnets.iter() {
         let add_transcript = |transcript_results: &mut TranscriptResults| {
             let value = Some(transcript.clone());
             match id.dkg_tag {

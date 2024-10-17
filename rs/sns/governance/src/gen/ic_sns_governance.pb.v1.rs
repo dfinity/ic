@@ -3308,6 +3308,32 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+/// A test-only API that advances the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub target_version: ::core::option::Option<governance::Version>,
+}
+/// The response to a request to advance the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionResponse {}
+/// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
+/// It is being implemented as part of the "effortless SNS upgrade" feature.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3355,6 +3381,9 @@ pub struct GetUpgradeJournalResponse {
     pub upgrade_steps: ::core::option::Option<governance::Versions>,
     #[prost(uint64, optional, tag = "2")]
     pub response_timestamp_seconds: ::core::option::Option<u64>,
+    /// The target version that the SNS will be upgraded to.
+    /// Currently, this field is always None, but in the "effortless SNS upgrade"
+    /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
 }

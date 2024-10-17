@@ -29,14 +29,12 @@ AKA:: Testcase 2.4
 end::catalog[] */
 
 use candid::{Decode, Encode};
-use futures::future::join_all;
-use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
+use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
 use ic_management_canister_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::types::*;
@@ -911,144 +909,7 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
     })
 }
 
-pub fn config_compute_allocation(env: TestEnv) {
-    InternetComputer::new()
-        .add_subnet(Subnet::fast_single_node(SubnetType::System))
-        .add_subnet(Subnet::fast_single_node(SubnetType::Application))
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-}
-
-/// This tests expects to be run on a clean slate, i.e. requires it's own Pot
-/// with one subnet of type Application.
-/// Tests whether the compute allocation limits are enforced on an app subnet
-/// both when creating canisters via the provisional API and via another
-/// canister (which acts as the wallet canister).
-pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
-    let logger = env.logger();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
-    // See the corresponding field in the execution environment config.
-    let allocatable_compute_capacity_in_percent = 50;
-    // Note: the DTS scheduler requires at least 2 scheduler cores
-    assert!(ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores >= 2);
-    let app_sched_cores =
-        (ic_config::subnet_config::SchedulerConfig::application_subnet().scheduler_cores - 1)
-            * allocatable_compute_capacity_in_percent
-            / 100;
-    const MAX_COMP_ALLOC: Option<u64> = Some(99);
-    block_on(async move {
-        let mut canister_principals = Vec::new();
-        let cans = join_all((0..app_sched_cores).map(|_| {
-            UniversalCanister::new_with_params_with_retries(
-                &agent,
-                app_node.effective_canister_id(),
-                MAX_COMP_ALLOC,
-                Some(u64::MAX as u128),
-                None,
-                &logger,
-            )
-        }))
-        .await;
-        for can in cans {
-            canister_principals.push(can.canister_id());
-        }
-
-        // Installing the app_sched_cores + 1st canister should fail.
-        let can = UniversalCanister::new_with_params(
-            &agent,
-            app_node.effective_canister_id(),
-            MAX_COMP_ALLOC,
-            Some(u64::MAX as u128),
-            None,
-        )
-        .await;
-        assert!(can.is_err());
-
-        let mgr = ManagementCanister::create(&agent);
-        // Stop and delete all canisters.
-
-        let res = join_all(
-            canister_principals
-                .iter()
-                .map(|c_id| mgr.stop_canister(c_id).call_and_wait()),
-        )
-        .await;
-        res.into_iter()
-            .for_each(|x| x.expect("Could not stop canister."));
-
-        let res = join_all(
-            canister_principals
-                .iter()
-                .map(|c_id| mgr.delete_canister(c_id).call_and_wait()),
-        )
-        .await;
-        res.into_iter()
-            .for_each(|x| x.expect("Could not delete canister."));
-
-        // Create universal canister with 'best effort' compute allocation of `0`.
-        let uni_can = UniversalCanister::new_with_params_with_retries(
-            &agent,
-            app_node.effective_canister_id(),
-            Some(0),
-            Some(u64::MAX as u128),
-            None,
-            &logger,
-        )
-        .await;
-        let arbitrary_bytes = b";ioapusdvzn,x";
-
-        async fn install_canister(
-            universal_canister: &UniversalCanister<'_>,
-            reply_data: &[u8],
-        ) -> Result<(Principal, Vec<u8>), AgentError> {
-            let created_canister = universal_canister
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(10_000_000_000_000_000u128).into_parts(),
-                )))
-                .await
-                .map(|res| {
-                    Decode!(res.as_slice(), CreateCanisterResult)
-                        .unwrap()
-                        .canister_id
-                })
-                .expect("Could not create canister.");
-
-            universal_canister
-                .update(
-                    wasm().call(
-                        management::update_settings(created_canister)
-                            .with_compute_allocation(MAX_COMP_ALLOC.unwrap()),
-                    ),
-                )
-                .await?;
-
-            let res = universal_canister
-                .update(wasm().call(
-                    management::install_code(created_canister, UNIVERSAL_CANISTER_WASM).on_reply(
-                        wasm().inter_update(
-                            created_canister,
-                            call_args().other_side(wasm().reply_data(reply_data)),
-                        ),
-                    ),
-                ))
-                .await;
-            res.map(|r| (created_canister, r))
-        }
-
-        let results =
-            join_all((0..app_sched_cores).map(|_| install_canister(&uni_can, arbitrary_bytes)))
-                .await;
-        for r in results {
-            assert_eq!(r.unwrap().1, arbitrary_bytes);
-        }
-
-        let res = install_canister(&uni_can, arbitrary_bytes).await;
-        assert_reject(res, RejectCode::CanisterReject);
-    })
-}
-
-// TODO(EXC-186): Enable this test.
+/* TODO(EXC-186): Enable this test.
 pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
@@ -1087,8 +948,9 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
         }
     })
 }
+*/
 
-// TODO(EXC-186): Enable this test.
+/* TODO(EXC-186): Enable this test.
 pub fn canisters_are_deallocated_when_their_balance_falls(env: TestEnv) {
     #[derive(candid::CandidType)]
     struct Argument {
@@ -1153,6 +1015,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(env: TestEnv) {
         }
     });
 }
+*/
 
 fn create_canister_test(env: TestEnv, payload: Vec<u8>) {
     let logger = env.logger();
@@ -1334,85 +1197,6 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(env: TestEnv) {
     })
 }
 
-/// A test to ensure that controller and controllee canisters can exist on
-/// different subnets and they can still control each other.
-pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
-    let logger = env.logger();
-    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let combinations = vec![
-        (ver_app_node.clone(), app_node.clone()),
-        (app_node, ver_app_node),
-    ];
-    block_on({
-        async move {
-            async fn install_via_cr(
-                cr: &UniversalCanister<'_>,
-                target: Principal,
-            ) -> Result<Vec<u8>, AgentError> {
-                cr.update(
-                    wasm().call(
-                        management::install_code(target, UNIVERSAL_CANISTER_WASM)
-                            .with_mode(management::InstallMode::Reinstall),
-                    ),
-                )
-                .await
-            }
-
-            for (cr_node, ce_node) in combinations {
-                let controller_agent = cr_node.build_default_agent_async().await;
-                let controllee_agent = ce_node.build_default_agent_async().await;
-
-                let controller = UniversalCanister::new_with_retries(
-                    &controller_agent,
-                    cr_node.effective_canister_id(),
-                    &logger,
-                )
-                .await;
-                let controllee = UniversalCanister::new_with_retries(
-                    &controllee_agent,
-                    ce_node.effective_canister_id(),
-                    &logger,
-                )
-                .await;
-
-                // before setting the controller, this call must fail.
-                assert_reject(
-                    install_via_cr(&controller, controllee.canister_id()).await,
-                    RejectCode::CanisterReject,
-                );
-
-                set_controller(
-                    &controllee.canister_id(),
-                    &controller.canister_id(),
-                    &controllee_agent,
-                )
-                .await;
-
-                let mgr = ManagementCanister::create(&controllee_agent);
-                assert_http_submit_fails(
-                    mgr.stop_canister(&controllee.canister_id()).call().await,
-                    RejectCode::CanisterError,
-                );
-
-                install_via_cr(&controller, controllee.canister_id())
-                    .await
-                    .unwrap();
-
-                controller
-                    .update(wasm().call(management::stop_canister(controllee.canister_id())))
-                    .await
-                    .unwrap();
-
-                controller
-                    .update(wasm().call(management::delete_canister(controllee.canister_id())))
-                    .await
-                    .unwrap();
-            }
-        }
-    })
-}
-
 pub fn refunds_after_uninstall_are_refunded(env: TestEnv) {
     let logger = env.logger();
     // Choosing an NNS subnet since they aren't charged, so
@@ -1483,56 +1267,6 @@ pub fn refunds_after_uninstall_are_refunded(env: TestEnv) {
 
             assert_eq!(a_balance, 100);
             assert_eq!(b_balance, 100);
-        }
-    })
-}
-
-/// This test assumes it's being executed using
-/// `config_max_number_of_canisters`, which limits the allowed canisters on the
-/// subnet to be 3.
-pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: TestEnv) {
-    let logger = env.logger();
-    let node = env.get_first_healthy_node_snapshot();
-    let agent = node.build_default_agent();
-    block_on({
-        async move {
-            let mgr = ManagementCanister::create(&agent);
-            // Create 3 canisters when 3 are allowed, should succeed.
-            mgr.create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait()
-                .await
-                .unwrap();
-            mgr.create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait()
-                .await
-                .unwrap();
-            let canister =
-                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                    .await;
-
-            // Attempt to create a fourth canister when only 3 are allowed, should fail.
-            let res = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait()
-                .await;
-            assert_reject(res, RejectCode::SysFatal);
-
-            // Creating a canister via another canister would also fail since we're at
-            // limit.
-            assert_reject(
-                canister
-                    .update(wasm().call(management::create_canister(
-                        Cycles::from(100_000_000_000u64).into_parts(),
-                    )))
-                    .await,
-                RejectCode::CanisterReject,
-            );
         }
     })
 }
