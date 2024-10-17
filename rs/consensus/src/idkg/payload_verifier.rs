@@ -1043,6 +1043,9 @@ mod test {
                     MasterPublicKeyId::Schnorr(_) => {
                         SignWithSchnorrReply { signature: vec![] }.encode()
                     }
+                    MasterPublicKeyId::VetKd(_) => {
+                        todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
+                    }
                 }),
             ));
 
@@ -1076,6 +1079,9 @@ mod test {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => {
+                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
+            }
         };
         // Add a pre-signature for the "wrong_key_id"
         insert_test_sig_inputs(

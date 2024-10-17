@@ -1082,6 +1082,9 @@ mod tests {
                         signature: vec![2; 32],
                     })
                 }
+                MasterPublicKeyId::VetKd(_) => {
+                    todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
+                }
             },
         );
 
@@ -1923,6 +1926,9 @@ mod tests {
                         algorithm,
                         &mut rng,
                     ))
+                }
+                MasterPublicKeyId::VetKd(_) => {
+                    todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
                 }
             };
             payload_0.available_pre_signatures.insert(
