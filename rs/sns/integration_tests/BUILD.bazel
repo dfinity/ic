@@ -211,14 +211,11 @@ rust_ic_test_suite_with_extra_srcs(
 #     bazel \
 #         test \
 #         --test_env=SSH_AUTH_SOCK \
-#         --test_timeout=43200 \
 #         //rs/sns/integration_tests:golden_state_swap_upgrade_twice
 #
-# The unusual things in this command are:
-#  - `--test_env=SSH_AUTH_SOCK`: This causes the SSH_AUTH_SOCK environment variable to be
-#    "forwarded" from your shell to the sandbox where the test is run. This authorizes the test
-#    to download the test data.
-#  - `--test_timeout=43200`: This sets the test timeout to 12 hours (more than currently required).
+# The unusual thing in this command is `--test_env=SSH_AUTH_SOCK`. This causes the SSH_AUTH_SOCK
+# environment variable to be "forwarded" from your shell to the sandbox where the test is run.
+# This authorizes the test to download the test data.
 #
 # Additionally, the following flags are recommended (but not required):
 #
@@ -253,7 +250,7 @@ rust_ic_test_suite_with_extra_srcs(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = [
         "cpu:8",
-        "manual",  # TODO: Enable on CI
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
         "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
         "requires-network",  # Because mainnet state is downloaded (and used).
     ],
