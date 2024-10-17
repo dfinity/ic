@@ -60,25 +60,9 @@ pub fn main() -> Result<()> {
                 &setupos_config.network_settings
             );
 
-            let mgmt_mac = match setupos_config
-                .icos_settings
-                .icos_dev_settings
-                .mgmt_mac
-                .as_ref()
-            {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
             let generated_mac = generate_mac_address(
-                &mgmt_mac,
-                &setupos_config.icos_settings.hostname,
+                &setupos_config.icos_settings.mgmt_mac,
+                &setupos_config.icos_settings.deployment_environment,
                 &NodeType::SetupOS,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
@@ -99,20 +83,9 @@ pub fn main() -> Result<()> {
             );
 
             let node_type = node_type.parse::<NodeType>()?;
-            let mgmt_mac = match setupos_config.icos_settings.icos_dev_settings.mgmt_mac {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
             let generated_mac = generate_mac_address(
-                &mgmt_mac,
-                &setupos_config.icos_settings.hostname,
+                &setupos_config.icos_settings.mgmt_mac,
+                &setupos_config.icos_settings.deployment_environment,
                 &node_type,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);

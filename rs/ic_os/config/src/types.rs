@@ -83,12 +83,13 @@ pub struct BackupSpoolSettings {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
+    pub mgmt_mac: FormattedMacAddress,
+    pub deployment_environment: String,
     pub logging: Logging,
     /// This file must be a text file containing the public key of the NNS to be used.
     pub nns_public_key_path: PathBuf,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    pub hostname: String,
     /// This file contains the Node Operator private key,
     /// which is registered with the NNS and used to sign the IC join request.
     pub node_operator_private_key_path: Option<PathBuf>,
@@ -102,10 +103,8 @@ pub struct ICOSSettings {
     pub icos_dev_settings: ICOSDevSettings,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
-pub struct ICOSDevSettings {
-    pub mgmt_mac: Option<String>,
-}
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
+pub struct ICOSDevSettings {}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct Logging {

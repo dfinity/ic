@@ -115,22 +115,31 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let icos_dev_settings = ICOSDevSettings {
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    println!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
             };
 
             let icos_settings = ICOSSettings {
+                mgmt_mac,
+                deployment_environment: deployment_json_settings.deployment.name,
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
                     .then_some(node_operator_private_key_path),
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
-                icos_dev_settings,
+                icos_dev_settings: ICOSDevSettings::default(),
             };
 
             let setupos_settings = SetupOSSettings;

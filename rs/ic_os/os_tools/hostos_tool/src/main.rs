@@ -56,26 +56,9 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let mgmt_mac = match hostos_config
-                .icos_settings
-                .icos_dev_settings
-                .mgmt_mac
-                .as_ref()
-            {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
-
             let generated_mac = generate_mac_address(
-                &mgmt_mac,
-                &hostos_config.icos_settings.hostname,
+                &hostos_config.icos_settings.mgmt_mac,
+                &hostos_config.icos_settings.deployment_environment,
                 &NodeType::HostOS,
             )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
@@ -95,26 +78,12 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let mgmt_mac = match hostos_config
-                .icos_settings
-                .icos_dev_settings
-                .mgmt_mac
-                .as_ref()
-            {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
             let node_type = node_type.parse::<NodeType>()?;
-
-            let generated_mac =
-                generate_mac_address(&mgmt_mac, &hostos_config.icos_settings.hostname, &node_type)?;
+            let generated_mac = generate_mac_address(
+                &hostos_config.icos_settings.mgmt_mac,
+                &hostos_config.icos_settings.deployment_environment,
+                &node_type,
+            )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             let ipv6_config = if let Ipv6Config::Deterministic(ipv6_config) =
@@ -141,26 +110,12 @@ pub fn main() -> Result<()> {
                 &hostos_config.network_settings
             );
 
-            let mgmt_mac = match hostos_config
-                .icos_settings
-                .icos_dev_settings
-                .mgmt_mac
-                .as_ref()
-            {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
             let node_type = node_type.parse::<NodeType>()?;
-
-            let generated_mac =
-                generate_mac_address(&mgmt_mac, &hostos_config.icos_settings.hostname, &node_type)?;
+            let generated_mac = generate_mac_address(
+                &hostos_config.icos_settings.mgmt_mac,
+                &hostos_config.icos_settings.deployment_environment,
+                &node_type,
+            )?;
             eprintln!("Using generated mac (unformatted) {}", generated_mac);
 
             let generated_mac = FormattedMacAddress::from(&generated_mac);
@@ -172,23 +127,7 @@ pub fn main() -> Result<()> {
             let hostos_config: HostOSConfig =
                 deserialize_config(DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)?;
 
-            let mgmt_mac = match hostos_config
-                .icos_settings
-                .icos_dev_settings
-                .mgmt_mac
-                .as_ref()
-            {
-                Some(config_mac) => {
-                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
-                    eprintln!(
-                        "Using mgmt_mac address found in deployment.json: {}",
-                        mgmt_mac
-                    );
-                    mgmt_mac
-                }
-                None => get_ipmi_mac()?,
-            };
-            println!("{}", mgmt_mac);
+            println!("{}", hostos_config.icos_settings.mgmt_mac);
             Ok(())
         }
         None => Err(anyhow!(
