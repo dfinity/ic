@@ -1,11 +1,11 @@
 //! The state manager public interface.
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    batch::BatchSummary, consensus::certification::Certification, AccumulatedPriority, CanisterId,
+    CryptoHashOfPartialState, CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
@@ -403,4 +403,7 @@ pub trait StateReader: Send + Sync {
     fn get_certified_state_snapshot(
         &self,
     ) -> Option<Box<dyn CertifiedStateSnapshot<State = Self::State> + 'static>>;
+
+    /// Returns a map of scheduler priorities.
+    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority>;
 }

@@ -15,17 +15,20 @@ use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     batch::BatchSummary,
     consensus::certification::Certification,
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::{CryptoHash, CryptoHashOf},
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CryptoHash, CryptoHashOf,
+    },
     messages::{Request, RequestOrResponse, Response},
     xnet::{
         CertifiedStreamSlice, RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex,
         StreamIndexedQueue, StreamSlice,
     },
-    CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
+    AccumulatedPriority, CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    RegistryVersion, SubnetId,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Barrier, RwLock};
 
 #[derive(Clone)]
@@ -262,6 +265,16 @@ impl StateReader for FakeStateManager {
             .unwrap()
             .last()
             .map_or_else(initial_state, |snap| snap.make_labeled_state())
+    }
+
+    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
+        self.states
+            .read()
+            .unwrap()
+            .last()
+            .map_or_else(HashMap::new, |snapshot| {
+                snapshot.state.get_scheduler_priorities()
+            })
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {
@@ -704,6 +717,10 @@ impl StateReader for RefMockStateManager {
 
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>> {
         self.mock.read().unwrap().get_latest_state()
+    }
+
+    fn get_latest_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
+        self.mock.read().unwrap().get_latest_scheduler_priorities()
     }
 
     fn get_state_at(&self, height: Height) -> StateManagerResult<Labeled<Arc<Self::State>>> {

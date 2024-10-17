@@ -256,6 +256,7 @@ impl CanisterManagerBuilder {
             Arc::clone(&cycles_account_manager),
             SchedulerConfig::application_subnet().dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(FakeStateManager::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(

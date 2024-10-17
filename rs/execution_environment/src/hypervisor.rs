@@ -9,13 +9,14 @@ use ic_embedders::{CompilationCache, CompilationResult};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::LogVisibilityV2;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NetworkTopology;
 use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
+use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{
@@ -276,6 +277,7 @@ impl Hypervisor {
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
@@ -288,6 +290,7 @@ impl Hypervisor {
                     metrics_registry,
                     &embedder_config,
                     Arc::clone(&fd_factory),
+                    Arc::clone(&state_reader),
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)

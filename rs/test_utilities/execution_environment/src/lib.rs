@@ -2182,6 +2182,7 @@ impl ExecutionTestBuilder {
             Arc::clone(&cycles_account_manager),
             dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            Arc::new(FakeStateManager::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
