@@ -258,7 +258,7 @@ impl ThresholdSchnorrSigInputsRef {
         ThresholdSchnorrSigInputs::new(
             &self.derivation_path,
             &self.message,
-            None, // TODO &self.taproot_tree_root
+            None, // TODO(CRP-2630)
             self.nonce,
             presig_transcript,
             key_transcript,

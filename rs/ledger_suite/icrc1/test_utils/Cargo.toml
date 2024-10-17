@@ -23,7 +23,6 @@ num-traits = { workspace = true }
 proptest = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-ring = { version = "0.17.7", features = ["std"] }
 rosetta-core = { path = "../../../rosetta-api/common/rosetta_core" }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

@@ -56,7 +56,7 @@ use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
     sync::{mpsc, Mutex, RwLock},
-    task::{spawn, spawn_blocking, JoinHandle},
+    task::{spawn, spawn_blocking, JoinHandle, JoinSet},
     time::{self, sleep, Instant},
 };
 use tonic::Request as TonicRequest;
@@ -211,7 +211,6 @@ pub enum OpOut {
     MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
     RawResponse(Shared<ApiResponse>),
-    Pruned,
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
     CanisterHttp(Vec<CanisterHttpRequest>),
@@ -316,7 +315,6 @@ impl std::fmt::Debug for OpOut {
                     ))
                 )
             }
-            OpOut::Pruned => write!(f, "Pruned"),
             OpOut::MessageId((effective_principal, message_id)) => {
                 write!(
                     f,
@@ -738,6 +736,16 @@ impl ApiState {
             drop(instance_state);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
+    }
+
+    pub async fn delete_all_instances(arc_self: Arc<ApiState>) {
+        let mut tasks = JoinSet::new();
+        let num_instances = arc_self.instances.read().await.len();
+        for instance_id in 0..num_instances {
+            let arc_self_clone = arc_self.clone();
+            tasks.spawn(async move { arc_self_clone.delete_instance(instance_id).await });
+        }
+        tasks.join_all().await;
     }
 
     pub async fn create_http_gateway(
@@ -1434,19 +1442,12 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok((op_out, old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok((op_out, _old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
                 op_id,
             );
-            // prune this sync computation from graph, but only the value
-            let mut graph_guard = graph.write().await;
-            let cached_computations = graph_guard.entry(old_state_label.clone()).or_default();
-            let (new_state_label, _) = cached_computations.get(&OpId(op_id.clone())).unwrap();
-            cached_computations.insert(OpId(op_id), (new_state_label.clone(), OpOut::Pruned));
-            drop(graph_guard);
-
             return Ok(UpdateReply::Output(op_out));
         }
 

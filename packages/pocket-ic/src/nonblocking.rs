@@ -7,6 +7,7 @@ use crate::common::rest::{
     RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
 };
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use candid::{
     decode_args, encode_args,
@@ -19,7 +20,7 @@ use ic_cdk::api::management_canister::main::{
     SkipPreUpgrade, UpdateSettingsArgument, UploadChunkArgument,
 };
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
-use reqwest::Url;
+use reqwest::{StatusCode, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 use slog::Level;
@@ -56,6 +57,11 @@ const INSTALL_CHUNKED_CODE_THRESHOLD: usize = 2_000_000; // 2 MB
 // as a sequence of chunks. This constant is specified
 // in the IC protocol.
 const INSTALL_CODE_CHUNK_SIZE: usize = 1 << 20; // 1 MiB
+
+enum HttpMethod {
+    Get,
+    Post,
+}
 
 /// Main entry point for interacting with PocketIC.
 pub struct PocketIc {
@@ -102,8 +108,8 @@ impl PocketIc {
             bitcoind_addr,
         };
 
-        let parent_pid = std::os::unix::process::parent_id();
-        let log_guard = setup_tracing(parent_pid);
+        let test_driver_pid = std::process::id();
+        let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
         let instance_id = match reqwest_client
@@ -1046,51 +1052,29 @@ impl PocketIc {
     }
 
     async fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
-        // we may have to try several times if the instance is busy
-        let start = std::time::SystemTime::now();
-        loop {
-            let reqwest_client = &self.reqwest_client;
-            let result = reqwest_client
-                .get(self.instance_url().join(endpoint).unwrap())
-                .send()
-                .await
-                .expect("HTTP failure");
-            match ApiResponse::<_>::from_response(result).await {
-                ApiResponse::Success(t) => break t,
-                ApiResponse::Error { message } => panic!("{}", message),
-                ApiResponse::Busy { state_label, op_id } => {
-                    debug!(
-                        "instance_id={} Instance is busy: state_label: {}, op_id: {}",
-                        self.instance_id, state_label, op_id
-                    );
-                }
-                ApiResponse::Started { state_label, op_id } => {
-                    panic!(
-                        "Error: A 'get' should not return Started: state_label: {}, op_id: {}",
-                        state_label, op_id
-                    )
-                }
-            }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("'get' request to PocketIC server timed out.");
-                }
-            }
-            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-        }
+        self.request(HttpMethod::Get, endpoint, ()).await
     }
 
     async fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
+        self.request(HttpMethod::Post, endpoint, body).await
+    }
+
+    async fn request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        http_method: HttpMethod,
+        endpoint: &str,
+        body: B,
+    ) -> T {
         // we may have to try several times if the instance is busy
         let start = std::time::SystemTime::now();
         loop {
             let reqwest_client = &self.reqwest_client;
-            let result = reqwest_client
-                .post(self.instance_url().join(endpoint).unwrap())
-                .json(&body)
-                .send()
-                .await
-                .expect("HTTP failure");
+            let url = self.instance_url().join(endpoint).unwrap();
+            let builder = match http_method {
+                HttpMethod::Get => reqwest_client.get(url),
+                HttpMethod::Post => reqwest_client.post(url).json(&body),
+            };
+            let result = builder.send().await.expect("HTTP failure");
             match ApiResponse::<_>::from_response(result).await {
                 ApiResponse::Success(t) => break t,
                 ApiResponse::Error { message } => panic!("{}", message),
@@ -1141,7 +1125,7 @@ impl PocketIc {
                         if let Some(max_request_time_ms) = self.max_request_time_ms {
                             if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
                             {
-                                panic!("'post' request to PocketIC server timed out.");
+                                panic!("request to PocketIC server timed out.");
                             }
                         }
                     }
@@ -1149,7 +1133,7 @@ impl PocketIc {
             }
             if let Some(max_request_time_ms) = self.max_request_time_ms {
                 if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("'post' request to PocketIC server timed out.");
+                    panic!("request to PocketIC server timed out.");
                 }
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
@@ -1412,4 +1396,38 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
         }
         _ => None,
     }
+}
+
+/// Retrieves a default effective canister id for canister creation on a PocketIC instance
+/// characterized by:
+///  - a PocketIC instance URL of the form http://<ip>:<port>/instances/<instance_id>;
+///  - a PocketIC HTTP gateway URL of the form http://<ip>:port for a PocketIC instance.
+///
+/// Returns an error if the PocketIC instance topology could not be fetched or parsed, e.g.,
+/// because the given URL points to a replica (i.e., does not meet any of the above two properties).
+pub async fn get_default_effective_canister_id(
+    pocket_ic_url: String,
+) -> Result<Principal, DefaultEffectiveCanisterIdError> {
+    let client = reqwest::Client::new();
+    let res = loop {
+        let res = client
+            .get(format!(
+                "{}{}",
+                pocket_ic_url.trim_end_matches('/'),
+                "/_/topology"
+            ))
+            .send()
+            .await?;
+        if res.status() == StatusCode::CONFLICT {
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+        } else {
+            break res.error_for_status()?;
+        }
+    };
+    let topology_bytes = res.bytes().await?;
+    let topology_str = String::from_utf8(topology_bytes.to_vec())?;
+    let topology: Topology = serde_json::from_str(&topology_str)?;
+    let default_effective_canister_id =
+        Principal::from_slice(&topology.default_effective_canister_id.canister_id);
+    Ok(default_effective_canister_id)
 }

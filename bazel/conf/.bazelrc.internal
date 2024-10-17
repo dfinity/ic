@@ -1,7 +1,6 @@
 # A .bazelrc used internally by DFINITY for metrics, cache, etc
 
 # Build event upload configuration
-build:bes --build_event_binary_file=bazel-bep.pb --profile=profile.json
 build:bes --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build:bes --bes_backend=bes.idx.dfinity.network
 build:bes --bes_upload_mode=wait_for_upload_complete
@@ -12,6 +11,7 @@ build:bes --remote_build_event_upload=minimal
 build:ci --config=bes
 # additionally, upload build events asynchronously on CI
 build:ci --bes_upload_mode=fully_async
+build:ci --build_event_binary_file=bazel-bep.pb --profile=profile.json
 
 # DFINITY internal remote cache setup
 build --remote_cache=bazel-remote.idx.dfinity.network

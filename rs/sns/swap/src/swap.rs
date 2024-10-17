@@ -427,8 +427,9 @@ impl Swap {
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
             auto_finalize_swap_response: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
+            direct_participation_icp_e8s: Some(0),
+            neurons_fund_participation_icp_e8s: Some(0),
+            timers: None,
         };
         if init.validate_swap_init_for_one_proposal_flow().is_ok() {
             // Automatically fill out the fields that the (legacy) open request
@@ -1012,6 +1013,32 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
+    // TODO[NNS1-3386]: Remove this function.
+    pub fn migrate_state(&mut self) {
+        if self.direct_participation_icp_e8s.is_none() {
+            let direct_participation_icp_e8s =
+                self.buyers
+                    .values()
+                    .fold(0_u64, |sum_icp_e8s, buyer_state| {
+                        let amount_icp_e8s = buyer_state.amount_icp_e8s();
+                        sum_icp_e8s.saturating_add(amount_icp_e8s)
+                    });
+            self.direct_participation_icp_e8s = Some(direct_participation_icp_e8s);
+        }
+
+        if self.neurons_fund_participation_icp_e8s.is_none() {
+            let neurons_fund_participation_icp_e8s =
+                self.cf_participants
+                    .iter()
+                    .fold(0_u64, |sum_icp_e8s, neurons_fund_participant| {
+                        let participant_total_icp_e8s =
+                            neurons_fund_participant.participant_total_icp_e8s();
+                        sum_icp_e8s.saturating_add(participant_total_icp_e8s)
+                    });
+            self.neurons_fund_participation_icp_e8s = Some(neurons_fund_participation_icp_e8s);
+        }
+    }
+
     /// Runs those tasks that should be run periodically.
     ///
     /// The argument 'now_fn' is a function that returns the current time for bookkeeping
@@ -1412,7 +1439,10 @@ impl Swap {
         let result = self.restore_dapp_controllers(sns_root_client).await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(INFO, "Successfully restored dapp controllers, {:?}", result);
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -1430,7 +1460,14 @@ impl Swap {
             .await;
 
         match result {
-            Ok(result) => result.into(),
+            Ok(result) => {
+                log!(
+                    INFO,
+                    "Successfully took sole control of dapp controllers, {:?}",
+                    result
+                );
+                SetDappControllersCallResult::from(result)
+            }
             Err(err_message) => {
                 log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
                 SetDappControllersCallResult { possibility: None }
@@ -3771,6 +3808,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             purge_old_tickets_next_principal,
             already_tried_to_auto_finalize,
             auto_finalize_swap_response,
+            timers,
 
             // These are (potentially large) collections. To avoid an
             // overwhelmingly large log message, we need summarize and/or
@@ -3829,6 +3867,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
                 "neurons_fund_participation_icp_e8s",
                 neurons_fund_participation_icp_e8s,
             )
+            .field("timers", timers)
             .finish()
     }
 }

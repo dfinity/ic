@@ -4,7 +4,7 @@ use super::MasterPublicKeyExtractionError;
 use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgTranscriptInternalBytes, ThresholdSchnorrCreateSigShareVaultError,
 };
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     combine_bip340_signature_shares, combine_ed25519_signature_shares,
     verify_bip340_signature_share, verify_ed25519_signature_share,
     verify_threshold_bip340_signature, verify_threshold_ed25519_signature, DerivationPath,
