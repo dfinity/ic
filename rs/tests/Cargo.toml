@@ -19,8 +19,6 @@ bincode = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
-certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
-chacha20poly1305 = "0.10.0"
 chrono = { workspace = true }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
@@ -114,7 +112,6 @@ ic_consensus_threshold_sig_system_test_utils = { path = "./consensus/tecdsa/util
 icp-ledger = { path = "../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
-indoc = "1.0.9"
 itertools = { workspace = true }
 json5 = "0.4.1"
 k256 = { workspace = true }
@@ -268,10 +265,6 @@ path = "testing_verification/test_driver_e2e_scenarios.rs"
 [[bin]]
 name = "ic-systest-bn-update-workload-test"
 path = "boundary_nodes/bn_update_workload_test.rs"
-
-[[bin]]
-name = "ic-systest-custom-domains-integration"
-path = "boundary_nodes/custom_domains_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
