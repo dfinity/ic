@@ -1,4 +1,4 @@
-use crate::common::{archive_wasm, index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
+use crate::common::{index_ng_wasm, ledger_wasm, load_wasm_using_env_var};
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -730,4 +730,8 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
     for canister_config in canister_configs {
         canister_config.perform_upgrade_downgrade_testing(&state_machine);
     }
+}
+
+fn archive_wasm() -> Vec<u8> {
+    load_wasm_using_env_var("IC_ICRC1_ARCHIVE_WASM_PATH")
 }
