@@ -100,6 +100,20 @@ impl IngressPayload {
         self.id_and_pos.is_empty()
     }
 
+    pub fn push(&mut self, ingress: &SignedIngress) {
+        let id = IngressMessageId::from(ingress);
+        let pos = self.buffer.len() as u64;
+
+        self.buffer.extend(ingress.binary().as_ref());
+        self.id_and_pos.push((id, pos));
+    }
+
+    pub fn pop(&mut self) {
+        if let Some((_, pos)) = self.id_and_pos.pop() {
+            self.buffer.resize(pos as usize, /*value=*/ 0);
+        }
+    }
+
     // TODO(kpop): run some benchmarks and see if it makes sense to change the type of
     // `[IngressPayload::id_and_pos]`
     pub fn get_by_id(&self, ingress_message_id: &IngressMessageId) -> Option<SignedIngress> {
