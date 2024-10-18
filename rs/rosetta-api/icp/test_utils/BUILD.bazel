@@ -37,7 +37,7 @@ ALIASES = {
 }
 
 rust_library(
-    name = "test_utils",
+    name = "ic_rosetta_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
@@ -48,9 +48,9 @@ rust_library(
 )
 
 rust_test(
-    name = "test_utils_test",
+    name = "ic_rosetta_test_utils_test",
     aliases = ALIASES,
-    crate = ":test_utils",
+    crate = ":ic_rosetta_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

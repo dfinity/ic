@@ -70,7 +70,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
-    "//rs/rosetta-api/icp/test_utils",
+    "//rs/rosetta-api/icp/test_utils:ic_rosetta_test_utils",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_json",
