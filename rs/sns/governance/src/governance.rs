@@ -73,7 +73,6 @@ use crate::{
     },
 };
 use candid::{Decode, Encode};
-#[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
@@ -704,13 +703,56 @@ pub struct Governance {
     /// that they don't interleave with one another.
     /// `None` means that the lock is not currently held by any task.
     /// `Some(x)` means that a task is has been holding the lock since timestamp `x`.
-    pub upgrade_periodic_task_lock: Option<u64>,
+    pub upgrade_periodic_task_lock: UpgradePeriodicTaskLock,
 
     /// Whether test features are enabled.
     /// Test features should not be exposed in production. But, code that should
     /// not run in production can be gated behind a check for this flag as an
     /// extra layer of protection.
     pub test_features_enabled: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UpgradePeriodicTaskKind {
+    CheckUpgradeStatus,
+    RefreshCachedUpgradeSteps,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UpgradePeriodicTaskLock {
+    Released,
+    Locked(u64, UpgradePeriodicTaskKind),
+}
+
+impl Governance {
+    pub async fn try_run_isolated_upgrade_task<'a, F, Fut>(
+        &'a mut self,
+        task_kind: UpgradePeriodicTaskKind,
+        task: F,
+    ) where
+        F: FnOnce(&'a mut Governance) -> Fut,
+        Fut: std::future::Future<Output = &'a mut Governance>,
+    {
+        let now = self.env.now();
+        let may_acquire = match self.upgrade_periodic_task_lock {
+            UpgradePeriodicTaskLock::Locked(acquired_at, kind)
+                if acquired_at + UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS < now =>
+            {
+                true
+            }
+            UpgradePeriodicTaskLock::Locked(_, _) => false,
+            UpgradePeriodicTaskLock::Released => true,
+        };
+
+        if !may_acquire {
+            return;
+        }
+
+        self.upgrade_periodic_task_lock = UpgradePeriodicTaskLock::Locked(now, task_kind);
+
+        let gov = task(self).await;
+        gov.upgrade_periodic_task_lock = UpgradePeriodicTaskLock::Released;
+    }
 }
 
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
@@ -787,7 +829,7 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
-            upgrade_periodic_task_lock: None,
+            upgrade_periodic_task_lock: UpgradePeriodicTaskLock::Released,
             test_features_enabled: false,
         };
 
@@ -4634,17 +4676,20 @@ impl Governance {
 
         self.process_proposals();
 
-        if self.acquire_upgrade_perodic_task_lock() {
-            if self.should_check_upgrade_status() {
-                self.check_upgrade_status().await;
-            }
+        if self.should_check_upgrade_status() {
+            self.try_run_isolated_upgrade_task(
+                UpgradePeriodicTaskKind::CheckUpgradeStatus,
+                Governance::check_upgrade_status,
+            )
+            .await;
+        }
 
-            if self.should_refresh_cached_upgrade_steps() {
-                self.temporarily_lock_refresh_cached_upgrade_steps();
-                self.refresh_cached_upgrade_steps().await;
-            }
-
-            self.release_upgrade_periodic_task_lock();
+        if self.should_refresh_cached_upgrade_steps() {
+            self.try_run_isolated_upgrade_task(
+                UpgradePeriodicTaskKind::RefreshCachedUpgradeSteps,
+                Governance::refresh_cached_upgrade_steps,
+            )
+            .await;
         }
 
         let should_distribute_rewards = self.should_distribute_rewards();
@@ -4678,29 +4723,6 @@ impl Governance {
         self.maybe_gc();
     }
 
-    // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
-    // if it is currently released or was last acquired over 10 minutes ago.
-    fn acquire_upgrade_perodic_task_lock(&mut self) -> bool {
-        let now = self.env.now();
-        match self.upgrade_periodic_task_lock {
-            Some(time_acquired)
-                if now > time_acquired + UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS =>
-            {
-                self.upgrade_periodic_task_lock = Some(now);
-                true
-            }
-            Some(_) => false,
-            None => {
-                self.upgrade_periodic_task_lock = Some(now);
-                true
-            }
-        }
-    }
-
-    fn release_upgrade_periodic_task_lock(&mut self) {
-        self.upgrade_periodic_task_lock = None;
-    }
-
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
         if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
             cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
@@ -4728,14 +4750,15 @@ impl Governance {
     }
 
     /// Refreshes the cached_upgrade_steps field
-    pub async fn refresh_cached_upgrade_steps(&mut self) {
-        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+    pub async fn refresh_cached_upgrade_steps(&mut self) -> &mut Self {
+        let Some(deployed_version) = self.proto.deployed_version.clone() else {
             log!(
                 ERROR,
                 "Cannot refresh cached_upgrade_steps: deployed_version not set."
             );
-            return;
+            return self;
         };
+        self.temporarily_lock_refresh_cached_upgrade_steps();
         let sns_governance_canister_id = self.env.canister_id().get();
 
         let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
@@ -4753,7 +4776,7 @@ impl Governance {
                     "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
                     err
                 );
-                return;
+                return self;
             }
         };
         let upgrade_steps = Versions {
@@ -4776,6 +4799,8 @@ impl Governance {
                 ..Default::default()
             });
         }
+
+        self
     }
 
     pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
@@ -5241,7 +5266,7 @@ impl Governance {
 
     /// Checks if pending upgrade is complete and either updates deployed_version
     /// or clears pending_upgrade if beyond the limit.
-    async fn check_upgrade_status(&mut self) {
+    async fn check_upgrade_status(&mut self) -> &mut Self {
         // This expect is safe because we only call this after checking exactly that condition in
         // should_check_upgrade_status
         let upgrade_in_progress =
@@ -5260,7 +5285,7 @@ impl Governance {
                 GovernanceError::new_with_message(ErrorType::PreconditionFailed, msg),
             );
 
-            return;
+            return self;
         }
 
         // Pre-checks finished, we now extract needed variables.
@@ -5290,11 +5315,11 @@ impl Governance {
                 proposal_id,
                 GovernanceError::new_with_message(ErrorType::External, error),
             );
-            return;
+            return self;
         }
 
         if lock > 1 {
-            return;
+            return self;
         }
 
         let running_version: Result<Version, String> =
@@ -5327,7 +5352,7 @@ impl Governance {
                         GovernanceError::new_with_message(ErrorType::External, error),
                     );
                 }
-                return;
+                return self;
             }
         };
 
@@ -5353,7 +5378,7 @@ impl Governance {
                     proposal_id,
                     GovernanceError::new_with_message(ErrorType::PreconditionFailed, error),
                 );
-                return;
+                return self;
             }
             Some(version) => version,
         };
@@ -5389,6 +5414,8 @@ impl Governance {
                 }
             }
         }
+
+        self
     }
 
     // This method sets internal state to remove pending_version and sets the proposal status to
@@ -8275,25 +8302,6 @@ mod tests {
                 )
             )
         );
-    }
-
-    #[test]
-    fn test_upgrade_periodic_task_lock() {
-        let env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
-        let mut gov = Governance::new(
-            basic_governance_proto().try_into().unwrap(),
-            Box::new(env),
-            Box::new(DoNothingLedger {}),
-            Box::new(DoNothingLedger {}),
-            Box::new(FakeCmc::new()),
-        );
-
-        assert!(gov.acquire_upgrade_perodic_task_lock());
-        assert!(!gov.acquire_upgrade_perodic_task_lock());
-        assert!(gov.upgrade_periodic_task_lock.is_some());
-
-        gov.release_upgrade_periodic_task_lock();
-        assert!(gov.upgrade_periodic_task_lock.is_none());
     }
 
     #[test]
