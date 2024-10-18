@@ -1,5 +1,5 @@
 {
-  "checksum": "c9bc3e509f30589e67fba9a2ead972a72a8bfa503afedd11da725d8a1e931269",
+  "checksum": "1861efa48e121e05f9daa65d6cd8f5f731aa0244d71351971411b6fdce43fb9a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -762,7 +762,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -3140,7 +3140,7 @@
               "target": "doc_comment"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -6700,7 +6700,7 @@
               "target": "sha2"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -10405,7 +10405,7 @@
               "target": "candid_derive"
             },
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -15272,7 +15272,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -15727,7 +15727,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -17413,7 +17413,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -17750,7 +17750,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.1.0",
+              "id": "evm_rpc_types 1.2.0",
               "target": "evm_rpc_types"
             },
             {
@@ -18211,7 +18211,7 @@
               "target": "pprof"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -18344,7 +18344,7 @@
               "target": "rolling_file"
             },
             {
-              "id": "rsa 0.9.2",
+              "id": "rsa 0.9.6",
               "target": "rsa"
             },
             {
@@ -18504,7 +18504,7 @@
               "target": "stubborn_io"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -18584,7 +18584,7 @@
               "target": "tokio_socks"
             },
             {
-              "id": "tokio-test 0.4.2",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -18782,7 +18782,7 @@
               "target": "minicbor_derive"
             },
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             },
             {
@@ -19744,7 +19744,7 @@
               "target": "signature"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -20015,7 +20015,7 @@
               "target": "sec1"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -21649,14 +21649,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.1.0": {
+    "evm_rpc_types 1.2.0": {
       "name": "evm_rpc_types",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.1.0/download",
-          "sha256": "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.2.0/download",
+          "sha256": "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
         }
       },
       "targets": [
@@ -21716,7 +21716,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -22159,7 +22159,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -22217,7 +22217,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -24630,7 +24630,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -30949,7 +30949,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -36029,7 +36029,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -39527,7 +39527,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -39600,7 +39600,7 @@
               "target": "fragile"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -44777,14 +44777,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "paste 1.0.14": {
+    "paste 1.0.15": {
       "name": "paste",
-      "version": "1.0.14",
+      "version": "1.0.15",
       "package_url": "https://github.com/dtolnay/paste",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/paste/1.0.14/download",
-          "sha256": "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+          "url": "https://static.crates.io/crates/paste/1.0.15/download",
+          "sha256": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
         }
       },
       "targets": [
@@ -44821,14 +44821,14 @@
         "deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.14"
+        "version": "1.0.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -47407,14 +47407,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "predicates 3.0.4": {
+    "predicates 3.1.2": {
       "name": "predicates",
-      "version": "3.0.4",
+      "version": "3.1.2",
       "package_url": "https://github.com/assert-rs/predicates-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/predicates/3.0.4/download",
-          "sha256": "6dfc28575c2e3f19cb3c73b93af36460ae898d426eba6fc15b9bd2a5220758a0"
+          "url": "https://static.crates.io/crates/predicates/3.1.2/download",
+          "sha256": "7e9086cc7640c29a356d1a29fd134380bee9d8f79a17410aa76e7ad295f42c97"
         }
       },
       "targets": [
@@ -47462,10 +47462,6 @@
               "target": "float_cmp"
             },
             {
-              "id": "itertools 0.11.0",
-              "target": "itertools"
-            },
-            {
               "id": "normalize-line-endings 0.3.0",
               "target": "normalize_line_endings"
             },
@@ -47481,7 +47477,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.0.4"
+        "version": "3.1.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -53502,7 +53498,7 @@
               "target": "hmac"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -54273,14 +54269,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rsa 0.9.2": {
+    "rsa 0.9.6": {
       "name": "rsa",
-      "version": "0.9.2",
+      "version": "0.9.6",
       "package_url": "https://github.com/RustCrypto/RSA",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rsa/0.9.2/download",
-          "sha256": "6ab43bb47d23c1a631b4b680199a45255dce26fa9ab2fa902581f624ff13e6a8"
+          "url": "https://static.crates.io/crates/rsa/0.9.6/download",
+          "sha256": "5d0e5124fcb30e76a7e79bfee683a2746db83784b86289f6251b54b7950a0dfc"
         }
       },
       "targets": [
@@ -54315,10 +54311,6 @@
         "deps": {
           "common": [
             {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
               "id": "const-oid 0.9.4",
               "target": "const_oid"
             },
@@ -54334,10 +54326,6 @@
             {
               "id": "num-integer 0.1.46",
               "target": "num_integer"
-            },
-            {
-              "id": "num-iter 0.1.45",
-              "target": "num_iter"
             },
             {
               "id": "num-traits 0.2.19",
@@ -54368,7 +54356,7 @@
               "target": "spki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -54379,7 +54367,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.2"
+        "version": "0.9.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -55746,7 +55734,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -55869,7 +55857,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -57546,7 +57534,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -62938,14 +62926,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "subtle 2.5.0": {
+    "subtle 2.6.1": {
       "name": "subtle",
-      "version": "2.5.0",
+      "version": "2.6.1",
       "package_url": "https://github.com/dalek-cryptography/subtle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/subtle/2.5.0/download",
-          "sha256": "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+          "url": "https://static.crates.io/crates/subtle/2.6.1/download",
+          "sha256": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
         }
       },
       "targets": [
@@ -62976,7 +62964,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.5.0"
+        "version": "2.6.1"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -65024,7 +65012,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -66495,14 +66483,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-test 0.4.2": {
+    "tokio-test 0.4.4": {
       "name": "tokio-test",
-      "version": "0.4.2",
+      "version": "0.4.4",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-test/0.4.2/download",
-          "sha256": "53474327ae5e166530d17f2d956afcb4f8a004de581b3cae10f12006bc8163e3"
+          "url": "https://static.crates.io/crates/tokio-test/0.4.4/download",
+          "sha256": "2468baabc3311435b55dd935f702f42cd1b8abb7e754fb7dfb16bd36aa88f9f7"
         }
       },
       "targets": [
@@ -66549,8 +66537,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.2"
+        "edition": "2021",
+        "version": "0.4.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -67645,7 +67633,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-test 0.4.2",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -69047,7 +69035,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-test 0.4.2",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -69770,7 +69758,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -72173,7 +72161,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             },
             {
@@ -78970,7 +78958,7 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_types 1.1.0",
+    "evm_rpc_types 1.2.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -79081,7 +79069,7 @@
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
-    "paste 1.0.14",
+    "paste 1.0.15",
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
@@ -79089,7 +79077,7 @@
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
     "pprof 0.13.0",
-    "predicates 3.0.4",
+    "predicates 3.1.2",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
@@ -79123,7 +79111,7 @@
     "rlp 0.5.2",
     "rocksdb 0.22.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.2",
+    "rsa 0.9.6",
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
@@ -79166,7 +79154,7 @@
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
-    "subtle 2.5.0",
+    "subtle 2.6.1",
     "syn 1.0.109",
     "sync_wrapper 1.0.1",
     "tar 0.4.39",
@@ -79187,7 +79175,7 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
-    "tokio-test 0.4.2",
+    "tokio-test 0.4.4",
     "tokio-util 0.7.12",
     "toml 0.5.11",
     "tonic 0.12.3",
