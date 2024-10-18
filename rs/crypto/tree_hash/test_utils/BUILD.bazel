@@ -18,7 +18,7 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "test_utils",
+    name = "ic_crypto_tree_hash_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_crypto_tree_hash_test_utils",
@@ -31,8 +31,8 @@ rust_library(
 )
 
 rust_test_suite(
-    name = "test_utils_integration",
+    name = "ic_crypto_tree_hash_test_utils_integration",
     srcs = glob(["tests/**"]),
     edition = "2021",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":test_utils"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_crypto_tree_hash_test_utils"],
 )
