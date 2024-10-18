@@ -51,7 +51,7 @@ def image_deps(mode, malicious = False):
             "//cpp:prestorecon": "/opt/ic/bin/prestorecon:0755",  # Parallel restorecon replacement for filesystem relabeling.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
-            
+
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
         },
