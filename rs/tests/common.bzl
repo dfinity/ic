@@ -67,7 +67,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icrc1",
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/ledger_suite/icrc1/ledger",
-    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils:ic_ledger_canister_blocks_synchronizer_test_utils",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp/test_utils:ic_rosetta_test_utils",

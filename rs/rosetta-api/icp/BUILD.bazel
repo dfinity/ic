@@ -81,7 +81,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/rosetta-api/icp:rosetta-api",
     "//rs/rosetta-api/icp/client:ic-icp-rosetta-client",
-    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils:ic_ledger_canister_blocks_synchronizer_test_utils",
     "//rs/rosetta-api/icp/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/icp/test_utils:ic_rosetta_test_utils",
     "//rs/types/base_types",
