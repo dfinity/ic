@@ -265,6 +265,90 @@ fn test_fetching_block_ranges() {
                         .unwrap();
 
                     assert_eq!(query_blocks_response.blocks.len(), chain_length as usize);
+
+                    // If the number of blocks requested is 0, the response should only contain the genesis block
+                    query_blocks_request.highest_block_index = 0;
+                    let query_blocks_response: QueryBlockRangeResponse = env
+                        .rosetta_client
+                        .call(CallRequest {
+                            network_identifier: env.network_identifier.clone(),
+                            method_name: "query_block_range".to_owned(),
+                            parameters: ObjectMap::try_from(query_blocks_request.clone()).unwrap(),
+                        })
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                    let genesis_block_hash = icp_ledger::Block::block_hash(
+                        query_encoded_blocks(&agent, 0, 1)
+                            .await
+                            .blocks
+                            .first()
+                            .unwrap(),
+                    );
+                    assert_eq!(query_blocks_response.blocks.len(), 1);
+                    assert_eq!(
+                        to_hash(
+                            &query_blocks_response
+                                .blocks
+                                .first()
+                                .unwrap()
+                                .block_identifier
+                                .hash
+                        )
+                        .unwrap(),
+                        genesis_block_hash
+                    );
+
+                    // If we reduce the highest block index asked for by 1, we should get all blocks except the tip block
+                    query_blocks_request.highest_block_index =
+                        highest_block_index.saturating_sub(1);
+                    let query_blocks_response: QueryBlockRangeResponse = env
+                        .rosetta_client
+                        .call(CallRequest {
+                            network_identifier: env.network_identifier.clone(),
+                            method_name: "query_block_range".to_owned(),
+                            parameters: ObjectMap::try_from(query_blocks_request.clone()).unwrap(),
+                        })
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                    assert_eq!(
+                        query_blocks_response.blocks.len(),
+                        highest_block_index as usize
+                    );
+                    assert_eq!(
+                        to_hash(
+                            &query_blocks_response
+                                .blocks
+                                .first()
+                                .unwrap()
+                                .block_identifier
+                                .hash
+                        )
+                        .unwrap(),
+                        genesis_block_hash
+                    );
+
+                    // If we set the highest block index and the number of blocks to 0 we should get an empty response
+                    query_blocks_request.highest_block_index = 0;
+                    query_blocks_request.number_of_blocks = 0;
+                    let query_blocks_response: QueryBlockRangeResponse = env
+                        .rosetta_client
+                        .call(CallRequest {
+                            network_identifier: env.network_identifier.clone(),
+                            method_name: "query_block_range".to_owned(),
+                            parameters: ObjectMap::try_from(query_blocks_request.clone()).unwrap(),
+                        })
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                    assert!(query_blocks_response.blocks.is_empty());
                 });
                 Ok(())
             },
