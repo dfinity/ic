@@ -9,9 +9,9 @@ use ic_ledger_suite_orchestrator::candid::{
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::{arb_init_arg, arb_principal};
 use ic_ledger_suite_orchestrator_test_utils::{
-    assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
-    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
-    LedgerSuiteOrchestrator, GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
+    assert_reply, cketh_installed_canisters, default_init_arg, new_state_machine,
+    supported_erc20_tokens, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
+    MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
