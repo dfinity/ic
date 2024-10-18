@@ -77,6 +77,7 @@ pub struct MinterInfo {
     pub last_eth_scraped_block_number: Option<Nat>,
     pub last_erc20_scraped_block_number: Option<Nat>,
     pub cketh_ledger_id: Option<Principal>,
+    pub evm_rpc_id: Option<Principal>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]

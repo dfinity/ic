@@ -1546,6 +1546,7 @@ fn should_retrieve_minter_info() {
             last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
             cketh_ledger_id: Some(ckerc20.cketh_ledger_id()),
+            evm_rpc_id: ckerc20.cketh.evm_rpc_id.map(Principal::from),
         }
     );
 }
