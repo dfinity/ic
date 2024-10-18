@@ -19,7 +19,7 @@ use ic_system_test_driver::{
 use serde_json::json;
 use std::{env, io::Read, net::SocketAddrV6, time::Duration};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, bail, Context, Error};
 use candid::{Encode, Principal};
 use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
 use ic_agent::{identity::Secp256k1Identity, Identity};
@@ -218,7 +218,7 @@ async fn setup_remote_docker_host(
 ) -> Result<DeployedUniversalVm, Error> {
     UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
         .with_config_img(get_dependency_path(
-            "rs/tests/custom_domains_uvm_config_image.zst",
+            "rs/tests/boundary_nodes/custom_domains/custom_domains_uvm_config_image.zst",
         ))
         .start(&env)
         .context("failed to setup universal VM")?;
@@ -1285,18 +1285,6 @@ pub async fn get_registration_status(
     }
 }
 
-fn get_service_status(vm: &dyn SshSession, service: &str) -> String {
-    vm.block_on_bash_script(&format!("systemctl is-active {service} 2>&1"))
-        .unwrap()
-}
-
-pub fn is_service_active(vm: &dyn SshSession, service: &str) -> bool {
-    let cmd_output = get_service_status(vm, service);
-    let result = get_service_status(vm, service) == "active";
-    println!("SERVICE-RJB: {service}: {cmd_output} - {result}");
-    result
-}
-
 pub fn get_service_errors(vm: &dyn SshSession, service: &str) -> String {
     vm.block_on_bash_script(&format!(
         r#"journalctl -u {service}.service --since "20 seconds ago" -p err | grep "No entries""#
@@ -1326,6 +1314,6 @@ pub async fn access_domain(bn_client: Client, domain_name: &str) -> Result<Strin
             .expect("failed to get the text from the response");
         Ok(response_text.to_string())
     } else {
-        panic!("boundary node returned an error: {:?}", response.status())
+        bail!("boundary node returned an error: {:?}", response.status())
     }
 }
