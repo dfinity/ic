@@ -14,7 +14,7 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
         "//rs/crypto/temp_crypto",
-        "//rs/crypto/test_utils",
+        "//rs/crypto/test_utils:ic_crypto_test_utils",
         "//rs/types/types",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",

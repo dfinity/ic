@@ -71,7 +71,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/temp_crypto/temp_vault",
-    "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils:ic_crypto_test_utils",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/local_csp_vault",
