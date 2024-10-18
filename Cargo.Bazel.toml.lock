@@ -3059,7 +3059,6 @@ dependencies = [
  "chrono",
  "ciborium",
  "cidr",
- "clap 3.2.25",
  "clap 4.5.18",
  "cloudflare 0.12.0 (git+https://github.com/dfinity/cloudflare-rs.git?rev=a6538a036926bd756986c9c0a5de356daef48881)",
  "colored",

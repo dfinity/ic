@@ -329,13 +329,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cidr": crate.spec(
                 version = "^0.2.2",
             ),
-            "clap_3_2_25": crate.spec(
-                package = "clap",
-                version = "^3.2.25",
-                features = [
-                    "derive",
-                ],
-            ),
             "clap": crate.spec(
                 version = "^4.5.18",
                 features = [
