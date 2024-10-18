@@ -390,9 +390,13 @@ impl TaskQueue {
     }
 
     pub fn len(&self) -> usize {
-        self.paused_or_aborted_task.is_some() as usize
-            + self.on_low_wasm_memory_hook_status.is_ready() as usize
-            + self.queue.len()
+        self.queue.len()
+            + self.paused_or_aborted_task.as_ref().map_or(0, |_| 1)
+            + if self.on_low_wasm_memory_hook_status.is_ready() {
+                1
+            } else {
+                0
+            }
     }
 
     /// peek_hook_status will be removed in the follow-up EXC-1752.

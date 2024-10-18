@@ -2455,14 +2455,14 @@ fn get_instructions_limits_for_subnet_message(
 ///
 /// If either `Heartbeat` or `GlobalTimer` is enqueued, then the other one is
 /// also enqueued in the second position, if it may be scheduled.
+///
+/// If the task on the front of the task queue is hook, it must be executed next.
 fn is_next_method_chosen(
     canister: &mut CanisterState,
     heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
     may_schedule_heartbeat: bool,
     may_schedule_global_timer: bool,
 ) -> bool {
-    // If the task on the front of the task queue is hook,
-    // it must be executed next.
     if canister
         .system_state
         .task_queue
