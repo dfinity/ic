@@ -116,7 +116,7 @@ jobs:
           set -xeuo pipefail
 
           # Determine which tests to skip:
-          EXCLUDED_TEST_TAGS=(post_master system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
+          EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
           if [[ "${{ github.event_name }}" == 'pull_request' || "${{ github.event_name }}" == 'merge_group' ]]; then
             TEST_TAG_FILTERS+=(long_test)
           fi

@@ -18,14 +18,12 @@ MERGE_BASE="${MERGE_BASE_SHA:-HEAD}"
 COMMIT_RANGE="$MERGE_BASE..${BRANCH_HEAD_SHA:-}"
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
-EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
-IFS='|' EXCLUDED_TAGS_EXPRESSION="${EXCLUDED_TAGS[*]}"
-
-if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
-    echo "Changes detected in bazel files. Considering all targets." >&2
-    echo ${BAZEL_TARGETS:-"//..."}
-    exit 0
-fi
+# TODO: temporatily disabled for testing:
+#if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
+#    echo "Changes detected in bazel files. Considering all targets." >&2
+#    echo ${BAZEL_TARGETS:-"//..."}
+#    exit 0
+#fi
 
 files=()
 for file in $DIFF_FILES; do
@@ -58,7 +56,8 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$EXCLUDED_TAGS_EXPRESSION', //...)")
+    EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$(IFS='|' echo "${EXCLUDED_TAGS[*]}")', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1
