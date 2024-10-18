@@ -84,7 +84,10 @@ pub struct BackupSpoolSettings {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct ICOSSettings {
+    /// in nested testing, mgmt_mac is set in deployment.json.template,
+    /// else found dynamically in call to config tool CreateSetuposConfig
     pub mgmt_mac: FormattedMacAddress,
+    /// "mainnet" or "testnet"
     pub deployment_environment: String,
     pub logging: Logging,
     /// This file must be a text file containing the public key of the NNS to be used.
