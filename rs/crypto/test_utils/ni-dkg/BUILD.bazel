@@ -26,7 +26,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils:ic_crypto_test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/types/types_test_utils",
 ]

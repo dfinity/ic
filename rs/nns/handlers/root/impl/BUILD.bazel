@@ -75,7 +75,7 @@ DEV_DEPENDENCIES = [
     "//conditions:default": [
         "//rs/rust_canisters/canister_test",
         "//rs/nns/handlers/root/impl/protobuf_generator:lib",
-        "//rs/nns/test_utils",
+        "//rs/nns/test_utils:ic_nns_test_utils",
         "//rs/types/types",
         "//rs/test_utilities",
         "//rs/test_utilities/compare_dirs",

@@ -54,7 +54,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "test_utils",
+    name = "ic_p2p_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_p2p_test_utils",

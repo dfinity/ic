@@ -57,7 +57,7 @@ DEV_DEPENDENCIES = [
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//rs/rust_canisters/canister_test",
-        "//rs/nns/test_utils",
+        "//rs/nns/test_utils:ic_nns_test_utils",
     ],
 })
 

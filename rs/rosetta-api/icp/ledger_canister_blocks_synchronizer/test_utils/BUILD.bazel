@@ -24,7 +24,7 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "test_utils",
+    name = "ic_ledger_canister_blocks_synchronizer_test_utils",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_ledger_canister_blocks_synchronizer_test_utils",

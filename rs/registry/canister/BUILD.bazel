@@ -61,7 +61,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
     "//rs/registry/proto_data_provider",

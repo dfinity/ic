@@ -19,7 +19,7 @@ rust_library(
         "//rs/nns/common",
         "//rs/nns/governance/api",
         "//rs/nns/sns-wasm",
-        "//rs/nns/test_utils",
+        "//rs/nns/test_utils:ic_nns_test_utils",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",

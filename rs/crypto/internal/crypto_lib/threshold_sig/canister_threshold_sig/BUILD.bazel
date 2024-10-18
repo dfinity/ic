@@ -37,7 +37,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils:ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
     "@crate_index//:bip32",

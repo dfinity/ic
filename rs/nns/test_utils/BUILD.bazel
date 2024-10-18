@@ -19,7 +19,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nervous_system/common/test_utils",
+    "//rs/nervous_system/common/test_utils:ic_nervous_system_common_test_utils",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
@@ -86,7 +86,7 @@ MACRO_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "test_utils",
+    name = "ic_nns_test_utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
@@ -97,7 +97,7 @@ rust_library(
 )
 
 rust_library(
-    name = "test_utils--test_feature",
+    name = "ic_nns_test_utils--test_feature",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
