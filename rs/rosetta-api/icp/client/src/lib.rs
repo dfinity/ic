@@ -765,7 +765,7 @@ impl RosettaClient {
         .await
     }
 
-    /// If a neuron is in the state NOT_DISSOLVING you start the dissolving process witht his function.
+    /// If a neuron is in the state NOT_DISSOLVING you start the dissolving process with this function.
     /// The neuron will then move to the DISSOLVING state.
     pub async fn start_dissolving_neuron<T>(
         &self,
