@@ -6,10 +6,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
-    "@crate_index//:regex",
-    "@crate_index//:sha2",
     "@crate_index//:hex",
+    "@crate_index//:regex",
     "@crate_index//:serde",
+    "@crate_index//:sha2",
 ]
 
 rust_library(
