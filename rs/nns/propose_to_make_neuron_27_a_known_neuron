@@ -87,7 +87,7 @@ permissionless and decentralized Internet.
                 id = opt record { id = 27 } ;
                 known_neuron_data = opt record {
                     name = "DFINITY Foundation" ;
-                    description = "The DFINITY Foundation is a major driving force behind the development of the Internet Computer. To realize the vision of a decentralized, permissionless, and secure world computer, the foundation employs world-class scientists and engineers with expertise in cryptography and distributed systems. As a Swiss non-profit, the foundation'"'"'s mission is to empower developers and users by creating a scalable platform that efficiently hosts the next generation of applications.
+                    description = opt "The DFINITY Foundation is a major driving force behind the development of the Internet Computer. To realize the vision of a decentralized, permissionless, and secure world computer, the foundation employs world-class scientists and engineers with expertise in cryptography and distributed systems. As a Swiss non-profit, the foundation'"'"'s mission is to empower developers and users by creating a scalable platform that efficiently hosts the next generation of applications.
 
 This neuron exercises its voting power by following key members of the DFINITY team. Notably, this neuron cannot vote directly through its controller principal, as its private key was irretrievably destroyed at the neuron'"'"'s inception during a special ceremony. This structure ensures that the voting power behind this neuron remains decentralized.
 
