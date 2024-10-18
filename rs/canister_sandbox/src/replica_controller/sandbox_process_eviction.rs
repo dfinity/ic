@@ -24,6 +24,7 @@ pub(crate) struct EvictionCandidate {
 ///    - if there multiple possible values for `K`, then choose the one that
 ///      evicts the most candidates with `last_used < last_used_threshold`.
 /// 4. Return the evicted candidates.
+#[allow(dead_code)]
 pub(crate) fn evict(
     mut candidates: Vec<EvictionCandidate>,
     min_count_threshold: usize,
@@ -54,6 +55,24 @@ pub(crate) fn evict(
 
     println!("Evicted {} canisters", evicted.len());
 
+    evicted
+}
+
+pub(crate) fn evict_at_most(
+    mut candidates: Vec<EvictionCandidate>,
+    at_most: usize,
+) -> Vec<EvictionCandidate> {
+    candidates.sort_by_key(|x| x.last_used);
+
+    let mut evicted = vec![];
+
+    for candidate in candidates.into_iter().rev() {
+        if evicted.len() >= at_most {
+            break;
+        }
+        evicted.push(candidate)
+    }
+    println!("[evict_at_most:] Evicted {} canisters", evicted.len());
     evicted
 }
 
