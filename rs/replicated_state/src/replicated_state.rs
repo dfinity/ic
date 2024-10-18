@@ -29,13 +29,13 @@ use ic_types::{
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
+    AccumulatedPriority, CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -469,6 +469,18 @@ impl ReplicatedState {
 
     pub fn routing_table(&self) -> Arc<RoutingTable> {
         Arc::clone(&self.metadata.network_topology.routing_table)
+    }
+
+    pub fn get_scheduler_priorities(&self) -> HashMap<CanisterId, AccumulatedPriority> {
+        self.canister_states
+            .iter()
+            .map(|(canister_id, canister_state)| {
+                (
+                    *canister_id,
+                    canister_state.scheduler_state.accumulated_priority,
+                )
+            })
+            .collect()
     }
 
     /// Insert the canister state into the replicated state. If a canister
