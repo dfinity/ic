@@ -550,6 +550,7 @@ impl SchedulerTest {
                 self.scheduler.config.max_instructions_per_round / 16,
             ),
             subnet_available_memory: self.scheduler.exec_env.subnet_available_memory(&state),
+            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);

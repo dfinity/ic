@@ -98,6 +98,8 @@ pub(super) struct QueryContext<'a> {
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
     round_limits: RoundLimits,
+    // The number of concurrent calls / callbacks that is guaranteed to a canister.
+    canister_callback_quota: u64,
     composite_queries: FlagStatus,
     // Walltime at which the query has started to execute.
     query_context_time_start: Instant,
@@ -123,6 +125,8 @@ impl<'a> QueryContext<'a> {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
         subnet_available_memory: SubnetAvailableMemory,
+        subnet_available_callbacks: i64,
+        canister_callback_quota: u64,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -139,6 +143,7 @@ impl<'a> QueryContext<'a> {
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_query_call_graph_instructions),
             subnet_available_memory,
+            subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
         };
@@ -156,6 +161,7 @@ impl<'a> QueryContext<'a> {
                 instruction_overhead_per_query_call,
             ),
             round_limits,
+            canister_callback_quota,
             composite_queries,
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
@@ -1073,6 +1079,7 @@ impl<'a> QueryContext<'a> {
             canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
             wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
+            canister_callback_quota: self.canister_callback_quota,
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
