@@ -14,7 +14,7 @@ use ic_sns_wasm::pb::v1::SnsCanisterType;
 use pocket_ic::PocketIcBuilder;
 use std::time::Duration;
 
-const TICKS_PER_TASK: u64 = 2;
+const TICKS_PER_TASK: u64 = 3;
 
 #[tokio::test]
 async fn test_get_upgrade_journal() {
