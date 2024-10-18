@@ -3,12 +3,10 @@ use std::path::Path;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 
-use config::types::{Ipv6Config, SetupOSConfig};
-use config::{
-    deserialize_config, DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH,
-    DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH,
-};
-use mac_address::mac_address::generate_mac_address;
+use config::config_ini::config_map_from_path;
+use config::deployment_json::get_deployment_settings;
+use config::{DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH};
+use mac_address::mac_address::{generate_mac_address, get_ipmi_mac, FormattedMacAddress};
 use mac_address::node_type::NodeType;
 use network::generate_network_config;
 use network::info::NetworkInfo;
