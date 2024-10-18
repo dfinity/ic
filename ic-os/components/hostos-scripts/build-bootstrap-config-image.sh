@@ -46,13 +46,6 @@ options may be specified:
 
   --node_operator_private_key path
     Should point to a file containing a Node Provider private key PEM.
-
-  --malicious_behavior malicious_behavior
-    A JSON-object that describes the malicious behavior activated on
-    the node. This is only used for testing.
-
-    The Json-object corresponds to this Rust-structure:
-      ic_types::malicious_behaviour::MaliciousBehaviour
 EOF
 }
 
@@ -67,7 +60,6 @@ function build_ic_bootstrap_tar() {
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
     local NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
-    local MALICIOUS_BEHAVIOR
 
     while true; do
         if [ $# == 0 ]; then
@@ -96,9 +88,6 @@ function build_ic_bootstrap_tar() {
             --node_operator_private_key)
                 NODE_OPERATOR_PRIVATE_KEY="$2"
                 ;;
-            --malicious_behavior)
-                MALICIOUS_BEHAVIOR="$2"
-                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -110,11 +99,6 @@ function build_ic_bootstrap_tar() {
     done
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
-
-    # todo: delete malicious_behaviour.conf
-    if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
-        echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
-    fi
 
     # todo: switch nns_public_key.pem, node_operator_private_key.pem. and accounts_ssh to use config object
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then

@@ -100,7 +100,7 @@ function process_bootstrap() {
         fi
     done
 
-    for FILE in malicious_behavior.conf config.json; do
+    for FILE in config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"

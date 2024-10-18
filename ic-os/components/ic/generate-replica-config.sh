@@ -12,8 +12,6 @@ Usage:
 
   Generate replica config from template file.
 
-  -m malicious_behavior.conf: Optional, malicious behavior parameters
-
   -i infile: input ic.json5.template file
   -o outfile: output ic.json5 file
 EOF
@@ -25,9 +23,7 @@ function read_config_variables() {
     BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
     QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
     JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
-
-    # todo:
-    # "malicious_behavior") malicious_behavior="${value}" ;;
+    MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior')
 }
 
 function configure_ipv6() {
@@ -116,27 +112,8 @@ function set_default_config_values() {
     NODE_INDEX="0"
 }
 
-# Read malicious behavior config variables from file. The file must be of the
-# form "key=value" for each line with a specific set of keys permissible (see
-# code below).
-#
-# Arguments:
-# - $1: Name of the file to be read.
-function read_malicious_behavior_variables() {
-    # Read limited set of keys. Be extra-careful quoting values as it could
-    # otherwise lead to executing arbitrary shell code!
-    while IFS="=" read -r key value; do
-        case "$key" in
-            "malicious_behavior") malicious_behavior="${value}" ;;
-        esac
-    done <"$1"
-}
-
-while getopts "m:i:o:" OPT; do
+while getopts "i:o:" OPT; do
     case "${OPT}" in
-        m)
-            MALICIOUS_BEHAVIOR_CONFIG_FILE="${OPTARG}"
-            ;;
         i)
             IN_FILE="${OPTARG}"
             ;;
@@ -157,10 +134,6 @@ fi
 
 configure_ipv6
 configure_ipv4
-
-if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" ]; then
-    read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
-fi
 
 read_config_variables
 set_default_config_values
