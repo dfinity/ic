@@ -1425,7 +1425,7 @@ message Governance {
     // allowing us to fail in case we otherwise have gotten stuck.
     uint64 checking_upgrade_lock = 3;
     // The proposal that initiated this upgrade
-    uint64 proposal_id = 4;
+    optional uint64 proposal_id = 4;
   }
 
   // Version SNS is in process of upgrading to.
@@ -2149,6 +2149,7 @@ message GetUpgradeJournalResponse {
   // Currently, this field is always None, but in the "effortless SNS upgrade"
   // feature, it reflect the version of the SNS that the community has decided to upgrade to.
   Governance.Version target_version = 3;
+  Governance.Version deployed_version = 4;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint
