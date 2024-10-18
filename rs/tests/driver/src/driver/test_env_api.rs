@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! # The Test Environment API
 //!
 //! The goal of this module is to provide the user with an extensible,
@@ -130,7 +131,6 @@
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
 
-#![allow(clippy::disallowed_types)]
 use super::{
     config::NODES_INFO,
     driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR,
