@@ -934,7 +934,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
         NumWasmPages::new(13)
     );
 
-    // The ingress message is executed after the hook.
+    // The second ingress message is executed after the hook.
     test.execute_slice(canister_id);
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
