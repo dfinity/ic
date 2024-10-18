@@ -20,7 +20,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_networking_system_test_utils::subnet_update_workload::config;
+use ic_networking_subnet_update_workload::config;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},

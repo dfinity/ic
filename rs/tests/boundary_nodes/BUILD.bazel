@@ -70,7 +70,7 @@ system_test_nns(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/networking/utils",
+        "//rs/tests/networking/subnet_update_workload",
         "@crate_index//:anyhow",
     ],
 )

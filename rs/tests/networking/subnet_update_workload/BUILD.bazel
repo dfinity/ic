@@ -3,15 +3,14 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
-    name = "utils",
+    name = "subnet_update_workload",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "ic_networking_system_test_utils",
+    crate_name = "ic_networking_subnet_update_workload",
     crate_root = "src/lib.rs",
     deps = [
         # Keep sorted.
         "//rs/interfaces/registry",
-        "//rs/nns/governance/api",
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",
@@ -19,14 +18,8 @@ rust_library(
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:candid",
         "@crate_index//:ic-agent",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:reqwest",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:slog-term",

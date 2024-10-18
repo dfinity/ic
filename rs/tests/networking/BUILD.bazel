@@ -166,11 +166,11 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
-        "//rs/types/types",
         "//rs/nns/governance/api",
         "//rs/protobuf",
         "//rs/registry/canister",
         "//rs/registry/keys",
+        "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:reqwest",
         "@crate_index//:url",
@@ -244,7 +244,7 @@ system_test_nns(
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
-        "//rs/tests/networking/utils",
+        "//rs/tests/networking/subnet_update_workload",
     ],
 )
 
@@ -259,7 +259,7 @@ system_test_nns(
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
-        "//rs/tests/networking/utils",
+        "//rs/tests/networking/subnet_update_workload",
     ],
 )
 

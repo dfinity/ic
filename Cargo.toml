@@ -370,7 +370,7 @@ members = [
     "rs/tests/networking",
     "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
-    "rs/tests/networking/utils",
+    "rs/tests/networking/subnet_update_workload",
     "rs/tests/nested",
     "rs/tests/nns",
     "rs/tests/nns/sns",
