@@ -145,6 +145,48 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         "ledger_suite_orchestrator_canister.wasm.gz",
+#        "ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz",
+        "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz",
+#        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/ledger-suite-orchestrator",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath :ledger_suite_orchestrator_canister.wasm.gz)",
+#        "LEDGER_SUITE_ORCHESTRATOR_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath :ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+#        "LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
+    },
+    proc_macro_deps = [],
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    deps = [
+        # Keep sorted.
+        ":ledger_suite_orchestrator",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/rust_canisters/http_types",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:proptest",
+    ],
+)
+
+rust_ic_test(
+    name = "upgrade_integration_tests",
+    timeout = "long",
+    testonly = True,
+    srcs = ["tests/ledger_suite_upgrade.rs"],
+    data = [
+        "ledger_suite_orchestrator_canister.wasm.gz",
         "ledger_suite_orchestrator_canister_getblocksdisabled.wasm.gz",
         "//rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz",
         "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
