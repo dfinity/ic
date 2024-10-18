@@ -8,7 +8,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::CanisterInfoResponse;
+use ic_management_canister_types::{CanisterInfoResponse, CanisterStatusType};
 use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
@@ -22,10 +22,54 @@ pub struct AddErc20TokenFlow {
 
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
-        for _ in 0..MAX_TICKS {
+        let now = std::time::SystemTime::now();
+        let mut is_live = false;
+        let mut canister_ids = None;
+        let mut counter = 0;
+        while !is_live && counter < MAX_TICKS {
             self.setup.env.tick();
+            canister_ids = self
+                .setup
+                .call_orchestrator_canister_ids(&self.params.contract);
+            match &canister_ids {
+                Some(ids) if ids.ledger.is_some() && ids.index.is_some() => {
+                    let ledger_status = self
+                        .setup
+                        .canister_status_of(PrincipalId(ids.ledger.unwrap()).try_into().unwrap());
+                    let index_status = self
+                        .setup
+                        .canister_status_of(PrincipalId(ids.index.unwrap()).try_into().unwrap());
+                    is_live = ledger_status.status() == CanisterStatusType::Running
+                        && ledger_status.module_hash().is_some()
+                        && index_status.status() == CanisterStatusType::Running
+                        && index_status.module_hash().is_some();
+                }
+                _ => {}
+            }
+            counter += 1;
         }
-        self.setup.assert_managed_canisters(&self.params.contract)
+
+        let canister_ids = canister_ids.unwrap_or_else(|| {
+            panic!(
+                "No managed canister IDs found for contract {:?}",
+                &self.params.contract
+            )
+        });
+        assert_ne!(
+            canister_ids.ledger, canister_ids.index,
+            "BUG: ledger and index canister IDs MUST be different"
+        );
+        now.elapsed().ok().map(|d| {
+            println!(
+                "expect_new_ledger_and_index_canisters finished in {}ms",
+                d.as_millis()
+            )
+        });
+
+        ManagedCanistersAssert {
+            setup: self.setup,
+            canister_ids,
+        }
     }
 }
 
