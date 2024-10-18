@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 config = { path = "../config" }
-hex = { version = "^0.4.3" }
+hex = { workspace = true }
 ping = { version = "^0.5.0" }
 rayon = { workspace = true }
 regex = { workspace = true }

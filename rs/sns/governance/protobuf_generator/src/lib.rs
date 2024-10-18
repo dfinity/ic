@@ -38,7 +38,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Misc Attributes
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronPermissionType",
-        "#[derive(clap::ArgEnum)]",
+        "#[derive(clap::ValueEnum)]",
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.NeuronId",

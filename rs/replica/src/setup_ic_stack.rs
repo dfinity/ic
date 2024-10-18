@@ -45,12 +45,6 @@ use tokio::sync::{
 /// the message id and height of messages that complete execution.
 const COMPLETED_EXECUTION_MESSAGES_BUFFER_SIZE: usize = 10_000;
 
-/// Returns true if the subnet is whitelisted to serve synchronous responses to v3
-/// update calls.
-fn enable_synchronous_call_handler_for_v3_endpoint(_subnet_id: &SubnetId) -> bool {
-    true
-}
-
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
     std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
@@ -357,7 +351,6 @@ pub fn construct_ic_stack(
         tracing_handle,
         max_certified_height_rx,
         finalized_ingress_height_rx,
-        enable_synchronous_call_handler_for_v3_endpoint(&subnet_id),
     );
 
     Ok((

@@ -15,7 +15,7 @@ base64 = { workspace = true }
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 ctrlc = { version = "3.4.5", features = ["termination"] }
 flate2 = { workspace = true }
 form_urlencoded = "1"

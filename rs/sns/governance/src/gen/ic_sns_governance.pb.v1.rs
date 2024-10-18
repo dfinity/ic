@@ -3433,7 +3433,7 @@ pub struct Account {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    clap::ArgEnum,
+    clap::ValueEnum,
     strum_macros::EnumIter,
     Clone,
     Copy,
