@@ -995,7 +995,6 @@ impl SnsCanisters<'_> {
             .await
     }
 
-
     pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
