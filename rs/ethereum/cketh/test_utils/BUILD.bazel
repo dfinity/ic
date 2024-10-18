@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 [
     rust_library(
-        name = "test_utils" + name_suffix,
+        name = "ic_cketh_test_utils" + name_suffix,
         testonly = True,
         srcs = glob(
             ["src/**/*.rs"],
@@ -53,10 +53,10 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_test(
         name = "lib_tests" + name_suffix,
-        crate = ":test_utils" + name_suffix,
+        crate = ":ic_cketh_test_utils" + name_suffix,
         deps = [
             # Keep sorted.
-            ":test_utils" + name_suffix,
+            ":ic_cketh_test_utils" + name_suffix,
         ],
     )
     for name_suffix in [

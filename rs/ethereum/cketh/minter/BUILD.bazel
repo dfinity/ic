@@ -223,13 +223,13 @@ rust_binary(
             "",
             [],
             {},
-            ["//rs/ethereum/cketh/test_utils"],
+            ["//rs/ethereum/cketh/test_utils:ic_cketh_test_utils"],
         ),
         (
             "_evm_rpc",
             ["@evm_rpc.wasm.gz//file"],
             {"EVM_RPC_CANISTER_WASM_PATH": "$(rootpath @evm_rpc.wasm.gz//file)"},
-            ["//rs/ethereum/cketh/test_utils:test_utils_evm_rpc"],
+            ["//rs/ethereum/cketh/test_utils:ic_cketh_test_utils_evm_rpc"],
         ),
     ]
 ]
