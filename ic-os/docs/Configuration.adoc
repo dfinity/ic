@@ -44,13 +44,13 @@ The reason for the bootstrap config image redirection is to ensure that GuestOS 
 
 == GuestOS config partition
 
-TODO: update...
-
 The config partition stores information that must be preserved across system upgrades and needs to be available during early boot time. Consequently, this information cannot reside within the encrypted payload data partition.
 
 Currently, all contents in the config partition are stored as plain-text without integrity protection.
 
 These files are stored in `/boot/config` or `/var/lib/ic`. To see where each configuration file is stored, refer to link:../../components/init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh[bootstrap-ic-node]
+
+Other config partition files produced by the GuestOS at runtime:
 
 === CONFIGURED file
 
