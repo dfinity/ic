@@ -17,6 +17,7 @@ system_test_nns(
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
+        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -40,6 +41,7 @@ system_test_nns(
     env = {
         "KV_STORE_WASM_PATH": "$(rootpath //rs/tests/test_canisters/kv_store)",
         "HTTP_COUNTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/http_counter)",
+        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
