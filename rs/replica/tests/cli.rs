@@ -26,7 +26,7 @@ fn too_many_arguments_causes_exit_code_1() {
         .args(["arg1", "arg2"])
         .assert()
         .stderr(predicate::str::starts_with(
-            "error: Found argument 'arg1' which wasn't expected",
+            "error: unexpected argument 'arg1' found",
         ))
         .failure();
 }

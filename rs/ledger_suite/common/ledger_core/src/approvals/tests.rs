@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
+use ic_stable_structures::Storable;
 use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
@@ -618,4 +619,38 @@ fn expected_allowance_if_zero_no_approval() {
             current_allowance: tokens(0)
         }
     );
+}
+
+use proptest::prelude::{any, prop_assert_eq, proptest};
+use proptest::strategy::Strategy;
+
+#[test]
+fn allowance_serialization() {
+    fn arb_token() -> impl Strategy<Value = Tokens> {
+        any::<u64>().prop_map(Tokens::from_e8s)
+    }
+    fn arb_timestamp() -> impl Strategy<Value = TimeStamp> {
+        any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch)
+    }
+    fn arb_opt_expiration() -> impl Strategy<Value = Option<TimeStamp>> {
+        proptest::option::of(any::<u64>().prop_map(TimeStamp::from_nanos_since_unix_epoch))
+    }
+    fn arb_allowance() -> impl Strategy<Value = Allowance<Tokens>> {
+        (arb_token(), arb_opt_expiration(), arb_timestamp()).prop_map(
+            |(amount, expires_at, arrived_at)| Allowance {
+                amount,
+                expires_at,
+                arrived_at,
+            },
+        )
+    }
+    proptest!(|(allowance in arb_allowance())| {
+        let new_allowance: Allowance<Tokens> = Allowance::from_bytes(allowance.to_bytes());
+        prop_assert_eq!(new_allowance.amount, allowance.amount);
+        prop_assert_eq!(new_allowance.expires_at, allowance.expires_at);
+        prop_assert_eq!(
+            new_allowance.arrived_at,
+            TimeStamp::from_nanos_since_unix_epoch(0)
+        );
+    })
 }
