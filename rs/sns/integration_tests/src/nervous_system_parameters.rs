@@ -262,6 +262,11 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
                     .vote(&user_5, &user_5_subaccount, proposal_id, true)
                     .await;
 
+                sns_canisters
+                    .run_periodic_tasks_now()
+                    .await
+                    .expect("Expected run_periodic_tasks_now to succeed");
+
                 // Assert that the proposal has been accepted and executed.
                 let proposal = sns_canisters.get_proposal(proposal_id).await;
                 println!("proposal = {:#?}", proposal);

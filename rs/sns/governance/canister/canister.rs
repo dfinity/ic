@@ -544,6 +544,13 @@ async fn run_periodic_tasks() {
     governance_mut().run_periodic_tasks().await;
 }
 
+/// Test only feature. Internal method for calling run_periodic_tasks.
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+async fn run_periodic_tasks_now(_request: ()) {
+    governance_mut().run_periodic_tasks().await;
+}
+
 fn init_timers() {
     if let Some(ref mut timers) = governance_mut().proto.timers {
         timers.last_reset_timestamp_seconds.replace(now_seconds());

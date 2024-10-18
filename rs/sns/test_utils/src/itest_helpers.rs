@@ -989,6 +989,13 @@ impl SnsCanisters<'_> {
             .await
     }
 
+    pub async fn run_periodic_tasks_now(&self) -> Result<(), String> {
+        self.governance
+            .update_("run_periodic_tasks_now", candid_one, ())
+            .await
+    }
+
+
     pub async fn add_neuron_permissions_or_panic(
         &self,
         sender: &Sender,
