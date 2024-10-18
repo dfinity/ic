@@ -72,7 +72,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-utils",
     "@crate_index//:once_cell",
-    "@crate_index//:ring",
 ]
 
 MACRO_DEPENDENCIES = [

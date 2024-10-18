@@ -424,7 +424,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = ["serde"],
             ),
             "evm_rpc_types": crate.spec(
-                version = "^1.1.0",
+                version = "^1.2.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -466,14 +466,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "custom",
                 ],
             ),
-            "glob": crate.spec(
-                version = "^0.3.0",
-            ),
             "group": crate.spec(
                 version = "^0.13",
-            ),
-            "ic-sha3": crate.spec(
-                version = "^1.0.0",
             ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
@@ -533,14 +527,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic0": crate.spec(
                 version = "^0.18.11",
-            ),
-            "icrc1-test-env": crate.spec(
-                git = "https://github.com/dfinity/ICRC-1",
-                rev = ICRC_1_REV,
-            ),
-            "icrc1-test-suite": crate.spec(
-                git = "https://github.com/dfinity/ICRC-1",
-                rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
                 version = "^0.37.1",
@@ -602,11 +588,22 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1.1",
                 default_features = False,
             ),
+            "ic-response-verification": crate.spec(
+                version = "2.6.0",
+            ),
+            "ic-sha3": crate.spec(
+                version = "^1.0.0",
+            ),
             "ic-stable-structures": crate.spec(
                 version = "^0.6.5",
             ),
-            "ic-response-verification": crate.spec(
-                version = "2.6.0",
+            "icrc1-test-env": crate.spec(
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = ICRC_1_REV,
+            ),
+            "icrc1-test-suite": crate.spec(
+                git = "https://github.com/dfinity/ICRC-1",
+                rev = ICRC_1_REV,
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^3.0.0",
@@ -867,10 +864,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.12.1",
             ),
             "paste": crate.spec(
-                version = "^1.0.0",
-            ),
-            "pathdiff": crate.spec(
-                version = "^0.2.1",
+                version = "^1.0.15",
             ),
             "pcre2": crate.spec(
                 version = "^0.2.6",
@@ -900,7 +894,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "predicates": crate.spec(
-                version = "^3.0.4",
+                version = "^3.1.2",
             ),
             "pretty-bytes": crate.spec(
                 version = "^0.2.2",
@@ -915,7 +909,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "proc-macro2": crate.spec(
-                version = "^1.0",
+                version = "^1.0.88",
             ),
             "procfs": crate.spec(
                 version = "^0.9",
@@ -964,7 +958,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.5",
             ),
             "quote": crate.spec(
-                version = "^1.0",
+                version = "^1.0.37",
             ),
             "rand": crate.spec(
                 version = "^0.8.5",
@@ -980,9 +974,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "rand_pcg": crate.spec(
                 version = "^0.3.1",
-            ),
-            "randomkit": crate.spec(
-                version = "^0.1.1",
             ),
             "ratelimit": crate.spec(
                 version = "^0.9.1",
@@ -1035,7 +1026,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "rsa": crate.spec(
-                version = "^0.9.2",
+                version = "^0.9.6",
                 features = ["sha2"],
             ),
             "rstest": crate.spec(
@@ -1196,11 +1187,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "stubborn-io": crate.spec(
                 version = "^0.3.2",
             ),
-            "substring": crate.spec(
-                version = "^1.4.5",
-            ),
             "subtle": crate.spec(
-                version = "^2.4",
+                version = "^2.6.1",
             ),
             "syn": crate.spec(
                 version = "^1.0.109",
@@ -1279,7 +1267,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.1",
             ),
             "tokio-test": crate.spec(
-                version = "^0.4.2",
+                version = "^0.4.4",
             ),
             "tokio-util": crate.spec(
                 version = "^0.7.12",

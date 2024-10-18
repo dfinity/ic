@@ -42,4 +42,4 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-validator = { path = "../validator" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-tokio-test = "0.4.0"
+tokio-test = { workspace = true }
