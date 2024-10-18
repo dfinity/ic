@@ -204,7 +204,7 @@ rust_binary(
             ":minter",
             "//packages/ic-ethereum-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+            "//rs/ethereum/ledger-suite-orchestrator/test_utils:ic_ledger_suite_orchestrator_test_utils",
             "//rs/state_machine_tests",
             "//rs/types/base_types",
             "@crate_index//:assert_matches",
