@@ -27,6 +27,12 @@ pub enum RulePolicyError {
         index: usize,
         incident_id: IncidentId,
     },
+    #[error("Rule at index={index} is already linked to an incident_id={incident_id}, attempted to relink to incident_id={incident_id_new}")]
+    LinkingRuleToAnotherIncident {
+        index: usize,
+        incident_id: IncidentId,
+        incident_id_new: IncidentId,
+    },
     #[error("Rule at index={index} with rule_id={rule_id} was deactivated in version={version}, cannot be resubmitted")]
     DeactivatedRuleResubmission {
         index: usize,
@@ -122,6 +128,16 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
                             index: rule_idx,
                             rule_id: rule_id.clone(),
                             version,
+                        },
+                    ))?;
+                }
+                // Check if the rule is relinked to another incident
+                if metadata.incident_id != rule.incident_id {
+                    Err(AddConfigError::RulePolicyViolation(
+                        RulePolicyError::LinkingRuleToAnotherIncident {
+                            index: rule_idx,
+                            incident_id: metadata.incident_id.clone(),
+                            incident_id_new: rule.incident_id.clone(),
                         },
                     ))?;
                 }
