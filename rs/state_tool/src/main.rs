@@ -113,10 +113,10 @@ enum Opt {
         #[clap(long, required = true)]
         subnet_id: PrincipalId,
         /// Canister ID ranges to retain (assigned to the subnet in the routing table).
-        #[clap(long, multiple_values(true))]
+        #[clap(long, num_args(1..))]
         retain: Vec<CanisterIdRange>,
         /// Canister ID ranges to drop (assigned to other subnet in the routing table).
-        #[clap(long, multiple_values(true))]
+        #[clap(long, num_args(1..))]
         drop: Vec<CanisterIdRange>,
         /// New subnet's batch time (original subnet always retains its batch time).
         ///
@@ -144,7 +144,7 @@ enum Opt {
         #[clap(long, required = true)]
         batch_time_nanos: u64,
         /// Canister ID ranges migrated to the new subnet.
-        #[clap(long, required = true, multiple_values(true))]
+        #[clap(long, required = true, num_args(1..))]
         migrated_ranges: Vec<CanisterIdRange>,
     },
 }
