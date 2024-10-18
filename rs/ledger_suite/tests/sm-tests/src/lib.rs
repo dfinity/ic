@@ -2821,6 +2821,74 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
     }
 }
 
+pub fn test_downgrade_from_incompatible_version<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_nextledgerversion: Vec<u8>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with mainnet version.
+    let (env, canister_id) = setup(ledger_wasm_mainnet.clone(), encode_init_args, vec![]);
+
+    // Upgrade to current version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the same verison.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Downgrade to mainnet not possible.
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from future ledger version should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to downgrade from incompatible version"))
+        }
+    };
+
+    // Upgrade to the next version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_nextledgerversion,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to next version");
+
+    // Downgrade to current not possible.
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from future ledger version should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to downgrade from incompatible version"))
+        }
+    };
+}
+
 pub fn icrc1_test_stable_migration_endpoints_disabled<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current_lowinstructionlimits: Vec<u8>,
@@ -2975,74 +3043,6 @@ pub fn test_incomplete_migration<T>(
 
     // All approvals should still be in UPGRADES_MEMORY and downgrade should succeed.
     check_approvals();
-}
-
-pub fn test_downgrade_from_incompatible_version<T>(
-    ledger_wasm_mainnet: Vec<u8>,
-    ledger_wasm_nextledgerversion: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    // Setup ledger with mainnet version.
-    let (env, canister_id) = setup(ledger_wasm_mainnet.clone(), encode_init_args, vec![]);
-
-    // Upgrade to current version.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm.clone(),
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .expect("failed to upgrade to current version");
-
-    // Upgrade to the same verison.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm.clone(),
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .expect("failed to upgrade to current version");
-
-    // Downgrade to mainnet not possible.
-    match env.upgrade_canister(
-        canister_id,
-        ledger_wasm_mainnet,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    ) {
-        Ok(_) => {
-            panic!("Upgrade from future ledger version should fail!")
-        }
-        Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
-        }
-    };
-
-    // Upgrade to the next version.
-    env.upgrade_canister(
-        canister_id,
-        ledger_wasm_nextledgerversion,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    )
-    .expect("failed to upgrade to next version");
-
-    // Downgrade to current not possible.
-    match env.upgrade_canister(
-        canister_id,
-        ledger_wasm,
-        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
-    ) {
-        Ok(_) => {
-            panic!("Upgrade from future ledger version should fail!")
-        }
-        Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
-        }
-    };
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
