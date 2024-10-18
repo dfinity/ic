@@ -169,7 +169,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         let _ = self.repository.get_config(current_version).map(|config| {
             let deactivated_ids = find_difference(&config.rule_ids, &rule_ids);
             deactivated_ids.iter().for_each(|rule_id| {
-                if let Some(mut metadata) = self.repository.get_rule(&rule_id) {
+                if let Some(mut metadata) = self.repository.get_rule(rule_id) {
                     metadata.removed_in_version = Some(next_version);
                     let _ = self.repository.update_rule(rule_id.clone(), metadata);
                 }

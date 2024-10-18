@@ -97,7 +97,7 @@ fn disclose_incidents(
     for incident_id in incident_ids.iter() {
         match repository.get_incident(incident_id) {
             Some(incident_metadata) => {
-                incidents_metadata.push(incident_metadata);
+                incidents_metadata.push((incident_id.clone(), incident_metadata));
             }
             None => {
                 return Err(DiscloseRulesError::IncidentIdNotFound(
@@ -107,9 +107,11 @@ fn disclose_incidents(
         }
     }
 
-    for incident in incidents_metadata {
-        if !incident.is_disclosed {
-            disclose_rules(repository, time, &incident.rule_ids)?;
+    for (incident_id, mut metadata) in incidents_metadata {
+        if !metadata.is_disclosed {
+            disclose_rules(repository, time, &metadata.rule_ids)?;
+            metadata.is_disclosed = true;
+            let _ = repository.update_incident(incident_id, metadata);
         }
     }
 
