@@ -454,7 +454,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     );
 
     let mut thread_pool = thread_pool();
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_checkpoint(
         &state,
         HEIGHT,
         &tip_channel,

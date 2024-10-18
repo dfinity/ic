@@ -64,7 +64,7 @@ pub(crate) fn make_checkpoint(
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
-) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState, HasDowngrade), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -124,21 +124,7 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap();
     }
 
-    let state = {
-        let _timer = metrics
-            .make_checkpoint_step_duration
-            .with_label_values(&["load"])
-            .start_timer();
-        load_checkpoint(
-            &cp,
-            state.metadata.own_subnet_type,
-            metrics,
-            Some(thread_pool),
-            Arc::clone(&fd_factory),
-        )?
-    };
-
-    Ok((cp, state, has_downgrade))
+    Ok((cp, has_downgrade))
 }
 
 pub(crate) fn validate_checkpoint_and_remove_unverified_marker(

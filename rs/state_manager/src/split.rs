@@ -214,7 +214,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
     );
 
-    let (cp_layout, _state, _has_downgrade) = make_checkpoint(
+    let (cp_layout, _has_downgrade) = make_checkpoint(
         state,
         new_height,
         &tip_channel,
