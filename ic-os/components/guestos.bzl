@@ -38,11 +38,11 @@ component_files = {
     Label("ic/ic.json5.template"): "/opt/ic/share/ic.json5.template",
 
     # init
-    Label("init/bootstrap-ic-node/guestos/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
-    Label("init/bootstrap-ic-node/guestos/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
-    Label("init/setup-encryption/guestos/setup-encryption.sh"): "/opt/ic/bin/setup-encryption.sh",
-    Label("init/setup-encryption/guestos/setup-encryption.service"): "/etc/systemd/system/setup-encryption.service",
-    Label("init/setup-encryption/guestos/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
+    Label("init/bootstrap-ic-node/bootstrap-ic-node.sh"): "/opt/ic/bin/bootstrap-ic-node.sh",
+    Label("init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
+    Label("init/setup-encryption/setup-encryption.sh"): "/opt/ic/bin/setup-encryption.sh",
+    Label("init/setup-encryption/setup-encryption.service"): "/etc/systemd/system/setup-encryption.service",
+    Label("init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
     Label("init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("init/setup-lvs/guestos/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
 
@@ -88,7 +88,7 @@ component_files = {
 
     # networking
     Label("networking/generate-network-config/guestos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
-    Label("networking/retry-ipv6-config/guestos/retry-ipv6-config.sh"): "/opt/ic/bin/retry-ipv6-config.sh",
+    Label("networking/retry-ipv6-config/retry-ipv6-config.sh"): "/opt/ic/bin/retry-ipv6-config.sh",
     Label("networking/retry-ipv6-config/retry-ipv6-config.service"): "/etc/systemd/system/retry-ipv6-config.service",
     Label("networking/nftables/reload_nftables.path"): "/etc/systemd/system/reload_nftables.path",
     Label("networking/nftables/reload_nftables.service"): "/etc/systemd/system/reload_nftables.service",
