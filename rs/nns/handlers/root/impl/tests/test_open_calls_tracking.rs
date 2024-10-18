@@ -32,7 +32,6 @@ fn test_canister_status_call_tracking() {
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one::<CanisterStatusResult, CanisterIdRecord>,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )

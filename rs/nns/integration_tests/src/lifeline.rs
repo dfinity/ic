@@ -253,7 +253,6 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         &state_machine,
         CanisterId::ic_00(),
         "uninstall_code",
-        candid_one,
         CanisterIdRecord::from(ROOT_CANISTER_ID),
         LIFELINE_CANISTER_ID.get(),
     )

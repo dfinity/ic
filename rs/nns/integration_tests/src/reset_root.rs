@@ -106,7 +106,6 @@ fn test_other_controllers_cannot_reset_root() {
         &state_machine,
         LIFELINE_CANISTER_ID,
         "hard_reset_root_to_version",
-        candid_one,
         payload,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
     );

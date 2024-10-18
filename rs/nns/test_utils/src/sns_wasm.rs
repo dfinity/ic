@@ -186,7 +186,6 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
         env,
         GOVERNANCE_CANISTER_ID,
         "manage_neuron",
-        candid_one,
         ManageNeuron {
             id: None,
             command: Some(Command::MakeProposal(Box::new(proposal))),
@@ -285,7 +284,6 @@ pub fn deploy_new_sns(
         env,
         sns_wasm_canister_id,
         "deploy_new_sns",
-        candid_one,
         DeployNewSnsRequest {
             sns_init_payload: Some(sns_init_payload),
         },
