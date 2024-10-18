@@ -38,7 +38,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/p2p/test_utils",
+    "//rs/p2p/test_utils:ic_p2p_test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",

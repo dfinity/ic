@@ -27,7 +27,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/p2p/test_utils",
+    "//rs/p2p/test_utils:ic_p2p_test_utils",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
