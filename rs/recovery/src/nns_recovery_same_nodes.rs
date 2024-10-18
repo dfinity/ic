@@ -1,6 +1,6 @@
 use crate::{
     cli::{print_height_info, read_optional, read_optional_version},
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
@@ -96,10 +96,10 @@ impl NNSRecoverySameNodes {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_state_dir = recovery.work_dir.join("new_ic_state");
-        create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
+        create_dir(&new_state_dir).expect_graceful("Failed to create state directory for upload.");
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,

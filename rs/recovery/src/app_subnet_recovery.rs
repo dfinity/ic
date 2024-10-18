@@ -3,7 +3,7 @@ use crate::{
         consent_given, print_height_info, read_optional, read_optional_node_ids,
         read_optional_subnet_id, read_optional_version, wait_for_confirmation,
     },
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
@@ -168,7 +168,7 @@ impl AppSubnetRecovery {
             recovery_args.nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         Self {
             step_iterator: StepType::iter().peekable(),
