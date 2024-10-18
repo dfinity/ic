@@ -465,8 +465,7 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    // TODO: rename this function to run_periodic_task.
-    pub fn heartbeat(&mut self) -> &mut Self {
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
         self.governance.run_periodic_tasks().now_or_never();
         self
     }

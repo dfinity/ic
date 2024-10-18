@@ -1393,10 +1393,9 @@ pub struct VotingRewardsParameters {
     ///
     /// Must be > 0.
     ///
-    /// During such periods, proposals enter the ReadyToSettle state. Once the
-    /// round is over, voting for those proposals entitle voters to voting
-    /// rewards. Such rewards are calculated by the governance canister's
-    /// heartbeat.
+    /// During such periods, proposals enter the ReadyToSettle state. Once the round is over, voting
+    /// for those proposals entitle voters to voting rewards. Such rewards are calculated in
+    /// the governance canister's run_periodic_tasks function.
     ///
     /// This is a nominal amount. That is, the actual time between reward
     /// calculations and distribution cannot be guaranteed to be perfectly
@@ -1531,8 +1530,8 @@ pub struct RewardEvent {
     /// reasons that rewards might not be distributed in a given round.
     ///
     /// 1. "Missed" rounds: there was a long period when we did calculate rewards
-    ///     (longer than 1 round). (I.e. distribute_rewards was not called by
-    ///     heartbeat for whatever reason, most likely some kind of bug.)
+    ///     (longer than 1 round). (I.e. distribute_rewards was not called from
+    ///     run_periodic_tasks, for whatever reason, most likely some kind of bug.)
     ///
     /// 2. Rollover: We tried to distribute rewards, but there were no proposals
     ///     settled to distribute rewards for.
@@ -1640,7 +1639,7 @@ pub struct Governance {
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
     #[prost(message, optional, tag = "30")]
     pub target_version: ::core::option::Option<governance::Version>,
-    /// True if the heartbeat function is currently finalizing disburse maturity, meaning
+    /// True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
