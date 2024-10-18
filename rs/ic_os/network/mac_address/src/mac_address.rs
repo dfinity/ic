@@ -6,6 +6,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::node_type::NodeType;
+use serde::{Deserialize, Serialize};
 use utils::intersperse;
 
 /// Wrapper types for MAC addresses
@@ -16,9 +17,9 @@ use utils::intersperse;
 /// Use `.get()` to get the underlying string
 /// Transform between the types with `from(the_other)`
 // TODO - Make a canonical type which can convert to either un/formatted on demand
-#[derive(Clone, Debug)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct UnformattedMacAddress(String);
-#[derive(Clone, Debug)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct FormattedMacAddress(String);
 
 impl UnformattedMacAddress {
@@ -110,11 +111,11 @@ pub fn get_mac_address_from_ipmitool_output(output: &str) -> Result<FormattedMac
 /// E.g. "6a01eb49a2b0"
 pub fn generate_mac_address(
     mgmt_mac: &FormattedMacAddress,
-    deployment_name: &str,
+    deployment_environment: &str,
     node_type: &NodeType,
 ) -> Result<UnformattedMacAddress> {
     // Newline added to match behavior
-    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_name);
+    let seed = format!("{}{}\n", mgmt_mac.get(), deployment_environment);
     let vendor_part: String = hex::encode(Sha256::digest(seed)).chars().take(8).collect();
     let node_index = node_type.to_char();
     let mac = format!("6a0{}{}", node_index, vendor_part);
