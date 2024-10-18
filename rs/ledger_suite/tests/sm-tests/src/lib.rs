@@ -260,7 +260,7 @@ pub fn transfer(
     )
 }
 
-fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
+pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
     Decode!(
         &env.query(ledger, "archives", Encode!().unwrap())
             .expect("failed to query archives")
