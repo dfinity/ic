@@ -157,9 +157,9 @@ fn pre_upgrade() {
 }
 
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 190_000_000_000;
+const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 199_950_000_000;
 #[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
+const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_950_000_000;
 
 #[cfg(feature = "low-upgrade-instruction-limits")]
 const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 0;
