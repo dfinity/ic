@@ -56,7 +56,7 @@ DEV_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common/test_utils",
     "//rs/nns/sns-wasm/protobuf_generator:lib",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/helpers",
     "//rs/rust_canisters/canister_test",
     "//rs/sns/swap",  # FIXME

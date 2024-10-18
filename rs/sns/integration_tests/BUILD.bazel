@@ -84,7 +84,7 @@ BASE_DEV_DEPENDENCIES = [
 ]
 
 TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
-    "//rs/nns/test_utils:test_utils--test_feature",
+    "//rs/nns/test_utils:ic_nns_test_utils--test_feature",
 ]
 
 MACRO_DEV_DEPENDENCIES = [

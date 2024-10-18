@@ -13,7 +13,7 @@ MIGRATED_DEPENDENCIES = [
     "//rs/config",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",
     # Do *NOT* add //rs/tests here.

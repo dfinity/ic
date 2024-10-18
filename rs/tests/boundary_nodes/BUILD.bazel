@@ -197,7 +197,7 @@ system_test_nns(
         "//rs/nns/common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
-        "//rs/nns/test_utils",
+        "//rs/nns/test_utils:ic_nns_test_utils",
         "//rs/registry/canister",
         "//rs/tests/boundary_nodes/utils",
         "//rs/tests/driver:ic-system-test-driver",

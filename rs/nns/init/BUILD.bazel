@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/local_store",
     "//rs/registry/proto_data_provider",
     "//rs/registry/transport",

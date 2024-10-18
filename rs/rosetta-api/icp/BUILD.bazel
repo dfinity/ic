@@ -78,7 +78,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/root/impl:root",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/rosetta-api/icp:rosetta-api",
     "//rs/rosetta-api/icp/client:ic-icp-rosetta-client",
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",

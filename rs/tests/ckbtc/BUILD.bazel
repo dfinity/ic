@@ -14,7 +14,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/canister",
     "//rs/registry/subnet_features",
     "//rs/registry/subnet_type",
