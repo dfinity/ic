@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/certification/test-utils",
     "//rs/crypto/iccsa",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-    "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
+    "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils:ic_crypto_internal_basic_sig_iccsa_test_utils",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
