@@ -73,7 +73,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/ed25519",
     "//rs/ledger_suite/icp/test_utils:ic_ledger_test_utils",
     "//rs/ledger_suite/icrc1",
-    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
     "//rs/ledger_suite/icrc1/tokens_u256",
     "//rs/nns/governance",
     "//rs/nns/governance/init",

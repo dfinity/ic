@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp:ic-rosetta-api",
     "//rs/rosetta-api/icp:rosetta-api",

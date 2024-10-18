@@ -84,7 +84,7 @@ rust_test(
     data = [":index-ng.did"],
     deps = [
         # Keep sorted.
-        "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
         "@crate_index//:candid_parser",
         "@crate_index//:proptest",
     ],
@@ -121,7 +121,7 @@ rust_test(
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/icrc1/index",
             "//rs/ledger_suite/icrc1/ledger",
-            "//rs/ledger_suite/icrc1/test_utils",
+            "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
             "//rs/ledger_suite/icrc1/tokens_u64",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
             "//rs/registry/subnet_type",

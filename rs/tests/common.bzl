@@ -15,7 +15,7 @@ DEPENDENCIES = [
     "//rs/boundary_node/discower_bowndary:discower-bowndary",
     "//rs/canister_client",
     "//rs/canister_client/sender",
-    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
     "//rs/certification",
     "//rs/config",
     "//rs/limits",
