@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::storage::StorableIncidentMetadata;
 use ic_cdk::api::time;
@@ -164,6 +164,18 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
         // Commit all changes to stable memory.
         // Note: if any operation below fails canister state can become inconsistent.
         // TODO: maybe it is better to panic to rollback changes
+
+        // Mark deactivated rules
+        let _ = self.repository.get_config(current_version).map(|config| {
+            let deactivated_ids = find_difference(&config.rule_ids, &rule_ids);
+            deactivated_ids.iter().for_each(|rule_id| {
+                if let Some(mut metadata) = self.repository.get_rule(&rule_id) {
+                    metadata.removed_in_version = Some(next_version);
+                    let _ = self.repository.update_rule(rule_id.clone(), metadata);
+                }
+            });
+        });
+
         for (rule_id, metadata) in new_rules_metadata.iter().cloned() {
             if !self.repository.add_rule(rule_id.clone(), metadata) {
                 return Err(AddConfigError::Unexpected(anyhow::anyhow!(
@@ -208,10 +220,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
             rule_ids,
         };
 
-        if !self
-            .repository
-            .add_config(next_version, storable_config)
-        {
+        if !self.repository.add_config(next_version, storable_config) {
             return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                 "Config for version {next_version} already exists, failed to add"
             )));
@@ -261,6 +270,14 @@ fn canonicalize_json(value: &Value) -> Result<Value, RuleEncodingError> {
         }
         _ => Ok(value.clone()),
     }
+}
+
+fn find_difference<T: Eq + std::hash::Hash + Clone>(v1: &[T], v2: &[T]) -> Vec<T> {
+    let set2: HashSet<_> = v2.iter().collect();
+    v1.iter()
+        .filter(|&item| !set2.contains(item))
+        .cloned()
+        .collect()
 }
 
 impl From<AddConfigError> for String {
