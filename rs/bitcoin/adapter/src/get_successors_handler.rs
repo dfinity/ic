@@ -190,7 +190,7 @@ fn get_successor_blocks(
 
         queue.extend(
             state
-                .get_cached_header(&block_hash)
+                .get_cached_header(block_hash)
                 .map(|header| header.children.iter())
                 .unwrap_or_default(),
         );
