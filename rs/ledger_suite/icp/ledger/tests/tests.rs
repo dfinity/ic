@@ -1245,10 +1245,7 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
-        // With the ICP mainnet canister being at V1, and the tip-of-master also being V1,
-        // downgrading the ledger canister to the mainnet version from the tip-of-master version
-        // should succeed.
-        true,
+        false,
     );
 }
 
@@ -1505,7 +1502,11 @@ fn test_balances_overflow() {
 
 #[test]
 fn test_approval_trimming() {
-    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(
+        ledger_wasm(),
+        encode_init_args,
+        true,
+    );
 }
 
 #[test]
