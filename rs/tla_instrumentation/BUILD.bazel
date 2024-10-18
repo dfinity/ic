@@ -25,7 +25,10 @@ rust_library(
 
 rust_test(
     name = "structs_test",
-    srcs = ["tla_instrumentation/tests/structs.rs", "tla_instrumentation/tests/common.rs"],
+    srcs = [
+        "tla_instrumentation/tests/common.rs",
+        "tla_instrumentation/tests/structs.rs",
+    ],
     crate_root = "tla_instrumentation/tests/structs.rs",
     data = [
         ":tla_models",
@@ -49,7 +52,10 @@ rust_test(
 
 rust_test(
     name = "multiple_calls_test",
-    srcs = ["tla_instrumentation/tests/multiple_calls.rs", "tla_instrumentation/tests/common.rs"],
+    srcs = [
+        "tla_instrumentation/tests/common.rs",
+        "tla_instrumentation/tests/multiple_calls.rs",
+    ],
     crate_root = "tla_instrumentation/tests/multiple_calls.rs",
     data = [
         ":tla_models",
