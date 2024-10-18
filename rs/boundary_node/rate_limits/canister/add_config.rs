@@ -210,7 +210,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         if !self
             .repository
-            .add_config(next_version.into(), storable_config)
+            .add_config(next_version, storable_config)
         {
             return Err(AddConfigError::Unexpected(anyhow::anyhow!(
                 "Config for version {next_version} already exists, failed to add"

@@ -135,7 +135,7 @@ pub fn init_version_and_config(version: Version) {
             rule_ids: vec![],
         };
         assert!(
-            state.add_config(INIT_VERSION.into(), config),
+            state.add_config(INIT_VERSION, config),
             "Config for version={version} already exists!"
         );
     })
