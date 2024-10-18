@@ -766,6 +766,7 @@ impl Player {
             time,
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version: self.replica_version.clone(),
         };
         let context_time = extra_batch.time;
         let extra_msgs = extra(self, context_time);

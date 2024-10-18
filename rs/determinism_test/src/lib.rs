@@ -17,7 +17,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
-    CanisterId, CryptoHashOfState, Randomness, RegistryVersion,
+    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
 };
 use setup::setup;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
@@ -38,6 +38,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         time: UNIX_EPOCH,
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 
@@ -54,6 +55,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         time: UNIX_EPOCH,
         consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+        replica_version: ReplicaVersion::default(),
     }
 }
 
