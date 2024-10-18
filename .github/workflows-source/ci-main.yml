@@ -116,7 +116,7 @@ jobs:
           set -xeuo pipefail
 
           # Determine which tests to skip and append 'long_test' for pull requests or merge groups
-          EXCLUDED_TEST_TAGS=(post_master system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
+          EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
           [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && EXCLUDED_TEST_TAGS+=(long_test)
 
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
