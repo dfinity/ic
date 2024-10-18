@@ -13,7 +13,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/canonical_state/tree_hash/test_utils:ic_canonical_state_tree_hash_test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash/test_utils",
     "@crate_index//:assert_matches",

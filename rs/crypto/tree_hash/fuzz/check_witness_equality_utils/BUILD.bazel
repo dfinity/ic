@@ -5,7 +5,7 @@ package(default_visibility = ["//rs/crypto/tree_hash/fuzz:__subpackages__"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/canonical_state/tree_hash",
-    "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/canonical_state/tree_hash/test_utils:ic_canonical_state_tree_hash_test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/test_utils",
