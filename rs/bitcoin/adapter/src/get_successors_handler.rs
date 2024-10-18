@@ -157,18 +157,16 @@ fn get_successor_blocks(
     let mut successor_blocks = vec![];
     // Block hashes that should be looked at in subsequent breadth-first searches.
     let mut response_block_size: usize = 0;
-    let mut queue: VecDeque<BlockHash> = state
+    let mut queue: VecDeque<&BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.clone())
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        .map(|c| c.children.iter().collect())
+        .unwrap_or_default();
 
     // Compute the blocks by starting a breadth-first search.
     while let Some(block_hash) = queue.pop_front() {
-        if !seen.contains(&block_hash) {
+        if !seen.contains(block_hash) {
             // Retrieve the block from the cache.
-            match state.get_block(&block_hash) {
+            match state.get_block(block_hash) {
                 Some(block) => {
                     let block_size = block.size();
                     if response_block_size == 0
@@ -193,7 +191,7 @@ fn get_successor_blocks(
         queue.extend(
             state
                 .get_cached_header(&block_hash)
-                .map(|header| header.children.clone())
+                .map(|header| header.children.iter())
                 .unwrap_or_default(),
         );
     }
@@ -213,23 +211,23 @@ fn get_next_headers(
         .copied()
         .chain(blocks.iter().map(|b| b.block_hash()))
         .collect();
-    let mut queue: VecDeque<BlockHash> = state
+
+    let mut queue: VecDeque<&BlockHash> = state
         .get_cached_header(anchor)
-        .map(|c| c.children.clone())
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+        .map(|c| c.children.iter().collect())
+        .unwrap_or_default();
+
     let mut next_headers = vec![];
     while let Some(block_hash) = queue.pop_front() {
         if next_headers.len() >= MAX_NEXT_BLOCK_HEADERS_LENGTH {
             break;
         }
 
-        if let Some(header_node) = state.get_cached_header(&block_hash) {
-            if !seen.contains(&block_hash) {
+        if let Some(header_node) = state.get_cached_header(block_hash) {
+            if !seen.contains(block_hash) {
                 next_headers.push(header_node.header);
             }
-            queue.extend(header_node.children.clone());
+            queue.extend(header_node.children.iter());
         }
     }
     next_headers
