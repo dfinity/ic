@@ -18950,6 +18950,7 @@ dependencies = [
  "clap 4.5.19",
  "indoc",
  "partition_tools",
+ "regex",
  "tempfile",
  "tokio",
 ]
