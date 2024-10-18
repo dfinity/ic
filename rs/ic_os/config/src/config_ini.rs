@@ -116,7 +116,7 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
     }
 }
 
-pub fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
+fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
     let file_contents = read_to_string(config_file_path)
         .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
 

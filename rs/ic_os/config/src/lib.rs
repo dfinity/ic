@@ -20,6 +20,7 @@ pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/con
 
 pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
+pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -34,11 +35,12 @@ pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Resu
     Ok(())
 }
 
-pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
-    let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
+pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_path: P) -> Result<T> {
+    let file =
+        File::open(&file_path).context(format!("Failed to open file: {:?}", file_path.as_ref()))?;
     serde_json::from_reader(file).context(format!(
-        "Failed to deserialize JSON from file: {}",
-        file_path
+        "Failed to deserialize JSON from file: {:?}",
+        file_path.as_ref()
     ))
 }
 
