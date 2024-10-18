@@ -106,7 +106,7 @@ pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-test = "0.4.2"
+tokio-test = { workspace = true }
 
 [features]
 test = []
