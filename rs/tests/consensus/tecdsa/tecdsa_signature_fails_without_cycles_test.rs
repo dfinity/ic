@@ -67,6 +67,7 @@ fn test(env: TestEnv) {
             let method_name = match key_id {
                 MasterPublicKeyId::Ecdsa(_) => "sign_with_ecdsa",
                 MasterPublicKeyId::Schnorr(_) => "sign_with_schnorr",
+                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             };
             assert_eq!(
                 error,
