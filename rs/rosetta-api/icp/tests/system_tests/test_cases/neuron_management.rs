@@ -199,12 +199,12 @@ fn test_start_and_stop_neuron_dissolve() {
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
-            // When a neuron is created its dissolve delay timestamp is set to now which corresponds to the state DISSOLVED
-            DissolveState::WhenDissolvedTimestampSeconds(dissolve_delay_timestamp) => {
+            // When a neuron is created its dissolve delay timestamp is set to two weeks from now and is in NOT DISSOLVING state
+            DissolveState::DissolveDelaySeconds(dissolve_delay_timestamp) => {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
                 k
             ),
         };
@@ -220,7 +220,8 @@ fn test_start_and_stop_neuron_dissolve() {
                 .metadata,
         )
         .unwrap();
-        // If the neuron is already in dissolving state, the response the function to dissolve the neuron will succed but it will not change the state of the neuron
+
+        // The neuron should now be in DISSOLVING state
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
             Some("COMPLETED".to_owned())
@@ -228,7 +229,7 @@ fn test_start_and_stop_neuron_dissolve() {
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
             DissolveState::WhenDissolvedTimestampSeconds(d) => {
-                assert!(dissolve_delay_timestamp >= d);
+                assert!(dissolve_delay_timestamp <= d);
             }
             k => panic!(
                 "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
@@ -236,25 +237,7 @@ fn test_start_and_stop_neuron_dissolve() {
             ),
         };
 
-        let additional_dissolve_delay = 1000;
-        let new_dissolve_delay_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            + additional_dissolve_delay;
-
-        // To be able to set the dissolve delay timestamp we need to set the state machine to live again
-        env.rosetta_client
-            .set_neuron_dissolve_delay(
-                env.network_identifier.clone(),
-                &(*TEST_IDENTITY).clone(),
-                RosettaSetNeuronDissolveDelayArgs::builder(new_dissolve_delay_timestamp)
-                    .with_neuron_index(neuron_index)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
+        // When we try to dissolve an already dissolving neuron the response should succeed with no change to the neuron
         let start_dissolving_response = TransactionOperationResults::try_from(
             env.rosetta_client
                 .start_dissolving_neuron(
