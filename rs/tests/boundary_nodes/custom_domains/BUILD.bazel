@@ -58,6 +58,8 @@ system_test_nns(
     crate_root = "custom_domains_integration_test.rs",
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
+        "CUSTOM_DOMAIN_UVM_CONFIG_PATH": "$(rootpath :custom_domains_uvm_config_image)",
+        "ASSET_CANISTER_WASM_PATH": "$(rootpath @asset_canister//file)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

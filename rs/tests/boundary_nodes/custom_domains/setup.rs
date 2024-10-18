@@ -1,4 +1,14 @@
+use anyhow::{anyhow, bail, Context, Error};
+use candid::{Encode, Principal};
 use certificate_orchestrator_interface::InitArg;
+use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
+use ic_agent::{identity::Secp256k1Identity, Identity};
+use ic_interfaces_registry::RegistryValue;
+use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+use ic_registry_keys::make_routing_table_record_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         asset_canister::{DeployAssetCanister, UploadAssetRequest},
@@ -15,25 +25,13 @@ use ic_system_test_driver::{
     },
     util::{agent_observes_canister_module, block_on},
 };
-
-use serde_json::json;
-use std::{env, io::Read, net::SocketAddrV6, time::Duration};
-
-use anyhow::{anyhow, bail, Context, Error};
-use candid::{Encode, Principal};
-use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
-use ic_agent::{identity::Secp256k1Identity, Identity};
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
 use k256::{elliptic_curve::SecretKey, Secp256k1};
 use pem::Pem;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
+use serde_json::json;
+use std::{env, io::Read, net::SocketAddrV6, time::Duration};
 use tokio::task::{self, JoinHandle};
 
 pub(crate) const CLOUDFLARE_API_PYTHON_PATH: &str = "/config/cloudflare_api.py";
@@ -218,7 +216,8 @@ async fn setup_remote_docker_host(
 ) -> Result<DeployedUniversalVm, Error> {
     UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
         .with_config_img(get_dependency_path(
-            "rs/tests/boundary_nodes/custom_domains/custom_domains_uvm_config_image.zst",
+            env::var("CUSTOM_DOMAIN_UVM_CONFIG_PATH")
+                .expect("CUSTOM_DOMAIN_UVM_CONFIG_PATH not set"),
         ))
         .start(&env)
         .context("failed to setup universal VM")?;
