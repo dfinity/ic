@@ -80,7 +80,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client/sender",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nervous_system/common/test_utils",
+    "//rs/nervous_system/common/test_utils:ic_nervous_system_common_test_utils",
     "//rs/sns/governance/protobuf_generator:lib",
     "//rs/sns/test_utils:ic_sns_test_utils",
     "//rs/test_utilities/compare_dirs",
