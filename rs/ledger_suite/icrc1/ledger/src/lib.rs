@@ -421,11 +421,11 @@ pub struct Ledger {
     #[serde(default = "default_accounts_overflow_trim_quantity")]
     accounts_overflow_trim_quantity: usize,
 
-    #[serde(default)]
-    pub state: LedgerState,
-
     #[serde(default = "default_ledger_version")]
     pub ledger_version: u64,
+
+    #[serde(default)]
+    pub state: LedgerState,
 }
 
 fn default_maximum_number_of_accounts() -> usize {
@@ -523,8 +523,8 @@ impl Ledger {
                 .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
                 .try_into()
                 .unwrap(),
-            state: LedgerState::Ready,
             ledger_version: LEDGER_VERSION,
+            state: LedgerState::Ready,
         };
 
         for (account, balance) in initial_balances.into_iter() {
