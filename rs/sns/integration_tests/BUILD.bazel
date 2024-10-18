@@ -46,11 +46,11 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/sns/test_utils",
+    "//rs/sns/test_utils:ic_sns_test_utils",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/sns/test_utils:test_utils--test_feature",
+    "//rs/sns/test_utils:ic_sns_test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
