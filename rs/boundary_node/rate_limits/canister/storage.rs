@@ -1,38 +1,37 @@
-use std::{borrow::Cow, cell::RefCell};
-
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Bound,
     DefaultMemoryImpl, StableBTreeMap, Storable,
 };
+use rate_limits_api::SchemaVersion;
 use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, cell::RefCell, thread::LocalKey};
 
-use crate::types::{RuleId, Timestamp, Version};
+use crate::types::{IncidentId, RuleId, Timestamp, Version};
 
 // Type aliases for stable memory
 type Memory = VirtualMemory<DefaultMemoryImpl>;
-
-type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
-type StableValue<T> = StableMap<(), T>;
+pub type LocalRef<T> = &'static LocalKey<RefCell<T>>;
+pub type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 
 // Memory IDs for stable memory management
-const MEMORY_ID_VERSION: u8 = 0;
-const _MEMORY_ID_CONFIGS: u8 = 1;
-const _MEMORY_ID_RULES: u8 = 2;
-const _MEMORY_ID_INCIDENTS: u8 = 3;
+const MEMORY_ID_CONFIGS: MemoryId = MemoryId::new(0);
+const MEMORY_ID_RULES: MemoryId = MemoryId::new(1);
+const MEMORY_ID_INCIDENTS: MemoryId = MemoryId::new(2);
 
 // Storables
-#[derive(Clone, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableVersion(pub Version);
 
-#[derive(Clone, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableRuleId(pub String);
 
-#[derive(Clone, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
-pub struct StorableIncidentId(String);
+#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+pub struct StorableIncidentId(pub String);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StorableRuleMetadata {
+    pub incident_id: IncidentId,
     pub rule_raw: Vec<u8>,
     pub description: String,
     pub disclosed_at: Option<Timestamp>,
@@ -40,143 +39,145 @@ pub struct StorableRuleMetadata {
     pub removed_in_version: Option<Version>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct StorableConfig {
-    active_since: Timestamp,
-    rule_ids: Vec<RuleId>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StorableConfig {
+    pub schema_version: SchemaVersion,
+    pub active_since: Timestamp,
+    pub rule_ids: Vec<RuleId>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct StorableRuleIds {
-    rule_ids: Vec<RuleId>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StorableIncidentMetadata {
+    pub is_disclosed: bool,
+    pub rule_ids: Vec<RuleId>,
 }
 
 impl Storable for StorableVersion {
     fn to_bytes(&self) -> Cow<[u8]> {
-        self.0.to_bytes()
+        Cow::Owned(bincode::serialize(&self.0).expect("StorableVersion serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self(u64::from_bytes(bytes))
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self(bincode::deserialize(&bytes).expect("StorableVersion deserialization failed"))
     }
 
-    const BOUND: Bound = <Version as Storable>::BOUND;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: std::mem::size_of::<Version>() as u32,
+        is_fixed_size: true,
+    };
 }
 
 impl Storable for StorableRuleId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        self.0.to_bytes()
+        Cow::Owned(bincode::serialize(&self.0).expect("StorableRuleId serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self(String::from_bytes(bytes))
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self(bincode::deserialize(&bytes).expect("StorableRuleId deserialization failed"))
     }
 
-    // TODO: make it bounded
-    const BOUND: Bound = Bound::Unbounded;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 256,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for StorableIncidentId {
     fn to_bytes(&self) -> Cow<[u8]> {
-        self.0.to_bytes()
+        Cow::Owned(bincode::serialize(&self.0).expect("StorableIncidentId serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self(String::from_bytes(bytes))
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self(bincode::deserialize(&bytes).expect("StorableIncidentId deserialization failed"))
     }
 
-    // TODO: make it bounded
-    const BOUND: Bound = Bound::Unbounded;
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 256,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for StorableConfig {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buf = vec![];
-        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode StorableConfig");
-        Cow::Owned(buf)
+        Cow::Owned(bincode::serialize(self).expect("StorableConfig serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        ciborium::de::from_reader(&bytes[..]).expect("failed to decode StorableConfig")
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        bincode::deserialize(&bytes).expect("StorableConfig deserialization failed")
     }
 
-    // TODO: make it bounded
-    const BOUND: Bound = Bound::Unbounded;
+    // TODO: adjust these bounds
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1024,
+        is_fixed_size: false,
+    };
 }
 
-impl Storable for StorableRuleIds {
+impl Storable for StorableIncidentMetadata {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buf = vec![];
-        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode StorableRuleIds");
-        Cow::Owned(buf)
+        Cow::Owned(bincode::serialize(self).expect("StorableIncidentMetadata serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        ciborium::de::from_reader(&bytes[..]).expect("failed to decode StorableRuleIds")
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        bincode::deserialize(&bytes).expect("StorableIncidentMetadata deserialization failed")
     }
 
-    // TODO: make it bounded
-    const BOUND: Bound = Bound::Unbounded;
+    // TODO: adjust these bounds
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 2048,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for StorableRuleMetadata {
     fn to_bytes(&self) -> Cow<[u8]> {
-        let mut buf = vec![];
-        ciborium::ser::into_writer(self, &mut buf).expect("failed to encode StorableRuleMetadata");
-        Cow::Owned(buf)
+        Cow::Owned(bincode::serialize(self).expect("StorableRuleMetadata serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        ciborium::de::from_reader(&bytes[..]).expect("failed to decode StorableRuleMetadata")
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        bincode::deserialize(&bytes).expect("StorableRuleMetadata deserialization failed")
     }
 
-    // TODO: make it bounded
-    const BOUND: Bound = Bound::Unbounded;
+    // TODO: adjust these bounds
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 4096,
+        is_fixed_size: false,
+    };
 }
 
-pub fn set_stable_version(version: Version) {
-    VERSION.with(|v| {
-        let mut v = v.borrow_mut();
-        v.insert((), StorableVersion(version));
-    });
-}
-
-pub fn get_stable_version() -> Version {
-    let version = VERSION.with(|v| {
-        let v = v.borrow();
-        v.get(&()).expect("failed to get version")
-    });
-    version.0
-}
-
-// Declare storage, initialized lazily
+// Declare storage variables
+// NOTE: initialization is lazy
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-}
-
-thread_local! {
-    pub static VERSION: RefCell<StableValue<StorableVersion>> = RefCell::new(
-        StableValue::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_VERSION))),
-        )
-    );
 
     pub static CONFIGS: RefCell<StableMap<StorableVersion, StorableConfig>> = RefCell::new(
         StableMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(_MEMORY_ID_CONFIGS))),
+            MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_CONFIGS)),
         )
     );
 
     pub static RULES: RefCell<StableMap<StorableRuleId, StorableRuleMetadata>> = RefCell::new(
         StableMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(_MEMORY_ID_RULES))),
+            MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_RULES)),
         )
     );
 
-    pub static INCIDENTS: RefCell<StableMap<StorableIncidentId, StorableRuleIds>> = RefCell::new(
+    pub static INCIDENTS: RefCell<StableMap<StorableIncidentId, StorableIncidentMetadata>> = RefCell::new(
         StableMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(_MEMORY_ID_INCIDENTS))),
+            MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_INCIDENTS)),
         )
     );
+}
+
+impl From<Version> for StorableVersion {
+    fn from(version: Version) -> Self {
+        StorableVersion(version)
+    }
+}
+
+impl From<RuleId> for StorableRuleId {
+    fn from(rule_id: RuleId) -> Self {
+        StorableRuleId(rule_id)
+    }
 }
