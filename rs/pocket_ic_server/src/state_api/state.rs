@@ -1,6 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
+#![allow(clippy::disallowed_types)]
 use crate::pocket_ic::{
     AdvanceTimeAndTick, ApiResponse, CanisterHttpAdapters, EffectivePrincipal, GetCanisterHttp,
     MockCanisterHttp, PocketIc,

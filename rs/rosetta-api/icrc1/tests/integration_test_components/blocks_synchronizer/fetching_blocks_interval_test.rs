@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
 use ic_agent::Identity;
