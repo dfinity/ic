@@ -917,6 +917,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
     test.ingress_raw(canister_id, "grow_mem", vec![]);
     test.ingress_raw(canister_id, "grow_mem", vec![]);
 
+    // First ingress messages gets executed.
     // wasm_memory.size = 1 + 7 = 8
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
     // Hook condition is triggered.
