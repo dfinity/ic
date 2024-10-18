@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.

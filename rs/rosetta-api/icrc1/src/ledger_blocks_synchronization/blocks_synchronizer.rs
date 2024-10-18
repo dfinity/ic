@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::common::storage::types::RosettaBlock;
 use crate::common::{
     storage::storage_client::StorageClient, utils::utils::create_progress_bar_if_needed,
