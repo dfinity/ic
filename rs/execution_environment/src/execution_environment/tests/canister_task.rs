@@ -821,24 +821,45 @@ fn global_timer_produces_transient_error_on_out_of_cycles() {
     assert_eq!(RejectCode::SysTransient, err.code().into());
 }
 
+fn get_wat_with_updade_and_hook_mem_grow(
+    update_grow_mem_size: i32,
+    hook_grow_mem_size: i32,
+) -> String {
+    let mut wat = r#"
+    (module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (func $grow_mem
+        (drop (memory.grow (i32.const "#
+        .to_owned();
+    wat.push_str(update_grow_mem_size.to_string().as_str());
+    wat.push_str(
+        r#")))
+        (call $msg_reply)
+    )
+    (export "canister_update grow_mem" (func $grow_mem))
+    (func (export "canister_on_low_wasm_memory")
+        (drop (memory.grow (i32.const "#,
+    );
+    wat.push_str(hook_grow_mem_size.to_string().as_str());
+    wat.push_str(
+        r#")))
+    )
+    (memory 1 20)
+    )"#,
+    );
+    wat
+}
+
 #[test]
 fn on_low_wasm_memory_is_executed() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let wat = r#"(module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (func $grow_mem
-                (drop (memory.grow (i32.const 7)))
-                (call $msg_reply)
-            )
-            (export "canister_update grow_mem" (func $grow_mem))
-            (func (export "canister_on_low_wasm_memory")
-                (drop (memory.grow (i32.const 5)))
-            )
-            (memory 1 20)
-        )"#;
+    let update_grow_mem_size = 7;
+    let hook_grow_mem_size = 5;
 
-    let canister_id = test.canister_from_wat(wat).unwrap();
+    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
@@ -882,20 +903,12 @@ fn on_low_wasm_memory_is_executed() {
 fn on_low_wasm_memory_is_executed_before_message() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
 
-    let wat = r#"(module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (func $grow_mem
-                (drop (memory.grow (i32.const 7)))
-                (call $msg_reply)
-            )
-            (export "canister_update grow_mem" (func $grow_mem))
-            (func (export "canister_on_low_wasm_memory")
-                (drop (memory.grow (i32.const 5)))
-            )
-            (memory 1 20)
-        )"#;
+    let update_grow_mem_size = 7;
+    let hook_grow_mem_size = 5;
 
-    let canister_id = test.canister_from_wat(wat).unwrap();
+    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
@@ -947,20 +960,12 @@ fn on_low_wasm_memory_is_executed_before_message() {
 fn on_low_wasm_memory_is_executed_once() {
     let mut test = ExecutionTestBuilder::new().build();
 
-    let wat = r#"(module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (func $grow_mem
-                (drop (memory.grow (i32.const 7)))
-                (call $msg_reply)
-            )
-            (export "canister_update grow_mem" (func $grow_mem))
-            (func (export "canister_on_low_wasm_memory")
-                (drop (memory.grow (i32.const 2)))
-            )
-            (memory 1 20)
-        )"#;
+    let update_grow_mem_size = 7;
+    let hook_grow_mem_size = 2;
 
-    let canister_id = test.canister_from_wat(wat).unwrap();
+    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+
+    let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
