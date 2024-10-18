@@ -939,11 +939,11 @@ pub mod test {
         );
     }
 
-    #[tokio::test]
+    #[test]
     /// This unit test verifies if the incoming inv messages are processed correctly.
     /// This test first creates a BlockChainManager, adds a peer, and let the initial sync happen.
     /// The test then sends an inv message for a fork chain, and verifies if the BlockChainManager responds correctly.
-    async fn test_received_inv() {
+    fn test_received_inv() {
         let sockets = vec![SocketAddr::from_str("127.0.0.1:8333").expect("bad address format")];
         let mut channel = TestChannel::new(sockets.clone());
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
