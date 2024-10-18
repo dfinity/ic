@@ -25,9 +25,12 @@ CANISTER_HTTP_BASE_DEPS = [
 COMMON_DEPS = [
     # Keep sorted.
     "//rs/limits",
+    "//rs/registry/subnet_type",
     "//rs/tests/driver:ic-system-test-driver",
-    "//rs/tests/networking/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:slog",
+    "@crate_index//:slog-async",
+    "@crate_index//:slog-term",
 ]
 
 system_test_nns(
@@ -148,10 +151,6 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
-        "//rs/registry/subnet_type",
-        "@crate_index//:slog",
-        "@crate_index//:slog-async",
-        "@crate_index//:slog-term",
         "@crate_index//:tokio",
         "@crate_index//:tokio-util",
     ],
@@ -166,7 +165,16 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/types/types",
+        "//rs/nns/governance/api",
+        "//rs/protobuf",
+        "//rs/registry/canister",
+        "//rs/registry/keys",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:url",
+    ],
 )
 
 system_test_nns(
@@ -181,7 +189,11 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/types/types",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
 )
 
 system_test_nns(
@@ -195,11 +207,15 @@ system_test_nns(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/types/base_types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )
 
 system_test_nns(
-    name = "p2p_performance",
+    name = "p2p_performance_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -211,7 +227,9 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "@crate_index//:ic-agent",
+    ],
 )
 
 system_test_nns(
@@ -225,7 +243,9 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/tests/networking/utils",
+    ],
 )
 
 system_test_nns(
@@ -238,7 +258,9 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
-    deps = COMMON_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/tests/networking/utils",
+    ],
 )
 
 system_test(
