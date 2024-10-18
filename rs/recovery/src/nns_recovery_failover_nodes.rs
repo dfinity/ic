@@ -2,7 +2,7 @@ use crate::{
     admin_helper::RegistryParams,
     cli::{print_height_info, read_optional, read_optional_node_ids, read_optional_version},
     command_helper::pipe_all,
-    error::RecoveryError,
+    error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
@@ -45,11 +45,11 @@ pub enum StepType {
 #[clap(version = "1.0")]
 pub struct NNSRecoveryFailoverNodesArgs {
     /// Id of the broken subnet
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
+    #[clap(long, value_parser=crate::util::subnet_id_from_str)]
     pub subnet_id: SubnetId,
 
     /// Replica version to start the new NNS with (has to be blessed by parent NNS)
-    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    #[clap(long)]
     pub replica_version: Option<ReplicaVersion>,
 
     #[clap(long)]
@@ -84,7 +84,7 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long)]
     pub parent_nns_host_ip: Option<IpAddr>,
 
-    #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
+    #[clap(long, num_args(1..), value_parser=crate::util::node_id_from_str)]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
 
@@ -121,7 +121,7 @@ impl NNSRecoveryFailoverNodes {
             subnet_args.validate_nns_url.clone(),
             RegistryPollingStrategy::OnlyOnInit,
         )
-        .expect("Failed to init recovery");
+        .expect_graceful("Failed to init recovery");
 
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {

@@ -1638,12 +1638,16 @@ pub struct Governance {
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    #[prost(message, optional, tag = "30")]
+    pub target_version: ::core::option::Option<governance::Version>,
     /// True if the heartbeat function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "26")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
+    #[prost(message, optional, tag = "29")]
+    pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1857,6 +1861,18 @@ pub mod governance {
         #[serde(with = "serde_bytes")]
         pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Versions {
+        #[prost(message, repeated, tag = "1")]
+        pub versions: ::prost::alloc::vec::Vec<Version>,
+    }
     /// An upgrade in progress, defined as a version target and a time at which it is considered failed.
     #[derive(
         candid::CandidType,
@@ -1903,6 +1919,32 @@ pub mod governance {
         /// When current_basis_points was last updated (seconds since UNIX epoch).
         #[prost(uint64, optional, tag = "2")]
         pub updated_at_timestamp_seconds: ::core::option::Option<u64>,
+    }
+    /// The sns's local cache of the upgrade steps recieved from SNS-W.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct CachedUpgradeSteps {
+        /// The upgrade steps that have been returned from SNS-W the last time we
+        /// called list_upgrade_steps.
+        #[prost(message, optional, tag = "1")]
+        pub upgrade_steps: ::core::option::Option<Versions>,
+        /// The timestamp of the request we sent to list_upgrade_steps.
+        /// It's possible that this is greater than the response_timestamp_seconds, because
+        /// we update it as soon as we send the request, and only update the
+        /// response_timestamp and the upgrade_steps when we receive the response.
+        /// The primary use of this is that we can avoid calling list_upgrade_steps
+        /// more frequently than necessary.
+        #[prost(uint64, optional, tag = "2")]
+        pub requested_timestamp_seconds: ::core::option::Option<u64>,
+        /// The timestamp of the response we received from list_upgrade_steps (stored in upgrade_steps).
+        #[prost(uint64, optional, tag = "3")]
+        pub response_timestamp_seconds: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
@@ -3266,6 +3308,61 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+/// A test-only API that advances the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub target_version: ::core::option::Option<governance::Version>,
+}
+/// The response to a request to advance the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionResponse {}
+/// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
+/// It is being implemented as part of the "effortless SNS upgrade" feature.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetUpgradeJournalResponse {
+    #[prost(message, optional, tag = "1")]
+    pub upgrade_steps: ::core::option::Option<governance::Versions>,
+    #[prost(uint64, optional, tag = "2")]
+    pub response_timestamp_seconds: ::core::option::Option<u64>,
+    /// The target version that the SNS will be upgraded to.
+    /// Currently, this field is always None, but in the "effortless SNS upgrade"
+    /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
+    #[prost(message, optional, tag = "3")]
+    pub target_version: ::core::option::Option<governance::Version>,
+}
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
 /// compiled with the `test` feature enabled.
@@ -3336,7 +3433,7 @@ pub struct Account {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    clap::ArgEnum,
+    clap::ValueEnum,
     strum_macros::EnumIter,
     Clone,
     Copy,

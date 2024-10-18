@@ -18,6 +18,7 @@ set -ue
 ##   | inspect/ic0_msg_method_name_size()     |       - |   1.28G |       - |     23.92s |
 
 ## To quickly assess the new changes, run benchmarks just once
+QUICK=${QUICK:-}
 if [ -n "${QUICK}" ]; then
     REPEAT="${REPEAT:=1}"
     NEW_BENCH_ARGS="${NEW_BENCH_ARGS:---warm-up-time 1  --measurement-time 1 --sample-size 10 --noplot}"

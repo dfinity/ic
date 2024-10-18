@@ -23,7 +23,7 @@ function log_and_halt_installation_on_error() {
             echo "                                     ERROR"
             echo "--------------------------------------------------------------------------------"
             echo -e "\n\n"
-            echo "${log_message}"
+            echo -e "${log_message}"
             echo -e "\n\n"
             echo "--------------------------------------------------------------------------------"
             echo "                                     ERROR"

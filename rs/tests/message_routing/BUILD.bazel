@@ -1,33 +1,60 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+exports_files([
+    "memory_safety.wasm",
+])
 
 system_test_nns(
     name = "global_reboot_test",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + XNET_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:itertools",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test(
     name = "memory_safety_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    compile_data = [
+        "memory_safety.wasm",
+    ],
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test_nns(
@@ -35,15 +62,19 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(
@@ -51,16 +82,21 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     tags = [
         "k8s",
         "system_test_hotfix",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(
@@ -68,8 +104,8 @@ system_test_nns(
     env = {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync_test_canister)",
     },
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     malicious = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_nightly",
@@ -77,7 +113,14 @@ system_test_nns(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = ["//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh"] + GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test(

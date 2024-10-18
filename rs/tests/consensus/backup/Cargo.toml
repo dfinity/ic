@@ -1,0 +1,35 @@
+[package]
+name = "consensus-backup-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+hex = { workspace = true }
+ic-backup = { path = "../../../backup" }
+ic-base-types = { path = "../../../types/base_types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
+ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+serde_json = { workspace = true }
+slog = { workspace = true }
+tempfile = { workspace = true }
+
+[lib]
+name = "ic_consensus_system_test_backup_common"
+path = "common.rs"
+
+[[bin]]
+name = "ic-systest-backup-upgrade"
+path = "backup_manager_upgrade_test.rs"
+
+[[bin]]
+name = "ic-systest-backup-downgrade"
+path = "backup_manager_downgrade_test.rs"

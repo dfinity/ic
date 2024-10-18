@@ -64,6 +64,23 @@ package(default_visibility = ["//visibility:public"])
                 "@crate_index//:canbench-rs",
             ],
         ),
+        (
+            "_nextledgerversion",
+            "",
+            ["next-ledger-version"],
+            [
+            ],
+        ),
+        (
+            "_u256_nextledgerversion",
+            "_u256",
+            [
+                "next-ledger-version",
+                "u256-tokens",
+            ],
+            [
+            ],
+        ),
     ]
 ]
 
@@ -157,21 +174,20 @@ package(default_visibility = ["//visibility:public"])
             ],
         ),
         (
-            "_nextmigrationversionmemorymanager",
-            ["next-migration-version-memory-manager"],
+            "_nextledgerversion",
+            [],
             [
-                ":ledger",
+                ":ledger_nextledgerversion",
                 "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
         (
-            "_u256_nextmigrationversionmemorymanager",
+            "_u256_nextledgerversion",
             [
-                "next-migration-version-memory-manager",
                 "u256-tokens",
             ],
             [
-                ":ledger_u256",
+                ":ledger_u256_nextledgerversion",
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
@@ -198,7 +214,7 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
-            ":ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm",
+            ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
             "@mainnet_ckbtc_ic-icrc1-ledger//file",
@@ -213,7 +229,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_MEM_MGR_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextmigrationversionmemorymanager.wasm)",
+            "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
         },
         deps = [
             # Keep sorted.
@@ -221,7 +237,7 @@ rust_test(
             "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1",
-            "//rs/ledger_suite/tests/sm-tests:sm-tests" + name_suffix,
+            "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests" + name_suffix,
             "//rs/ledger_suite/common/ledger_canister_core",
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1/test_utils",
@@ -270,7 +286,7 @@ rust_test(
         "//rs/ledger_suite/common/ledger_canister_core",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icrc1",
-        "//rs/ledger_suite/tests/sm-tests",
+        "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/types/base_types",
     ],
 )
@@ -279,17 +295,18 @@ rust_test(
 # Benchmarking:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64 for legder using u64 tokens.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256 for legder using u256 tokens.
+# Testing:
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u64_test for legder using u64 tokens.
+# * bazel test //rs/ledger_suite/icrc1/ledger:canbench_u256_test for legder using u256 tokens.
 # Updating the results file:
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u64_update for updating the results file.
 # * bazel run //rs/ledger_suite/icrc1/ledger:canbench_u256_update for updating the results file.
-# Currently, updating the results file is not automated, and there are no tests to avoid
-# regression. For now, we can use it as an example for benchmarking as part of an
-# investigation of potential performance issues, or when we make a change that can affect
-# the performance measured in this benchmark.
+#  If the performance change is expected, run these targets to save the updated benchmark results.
 [
     rust_canbench(
         name = "canbench" + name_suffix,
         srcs = glob(["src/**/*.rs"]),
+        add_test = True,
         crate_features = features,
         proc_macro_deps = [
             # Keep sorted.

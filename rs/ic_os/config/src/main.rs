@@ -166,9 +166,21 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
+            // update select file paths for HostOS
+            let mut hostos_icos_settings = setupos_config.icos_settings;
+            let hostos_config_path = Path::new("/boot/config");
+            if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
+                *path = hostos_config_path.join("ssh_authorized_keys");
+            }
+            if let Some(ref mut path) = hostos_icos_settings.node_operator_private_key_path {
+                *path = hostos_config_path.join("node_operator_private_key.pem");
+            }
+            hostos_icos_settings.nns_public_key_path =
+                hostos_config_path.join("nns_public_key.pem");
+
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
-                icos_settings: setupos_config.icos_settings,
+                icos_settings: hostos_icos_settings,
                 hostos_settings: setupos_config.hostos_settings,
                 guestos_settings: setupos_config.guestos_settings,
             };

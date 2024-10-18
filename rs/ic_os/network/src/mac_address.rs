@@ -124,6 +124,10 @@ pub fn generate_mac_address(
 /// Retrieves the MAC address from the IPMI LAN interface
 pub fn get_ipmi_mac() -> Result<FormattedMacAddress> {
     let output = Command::new("ipmitool").arg("lan").arg("print").output()?;
+
+    // A bug in our version of ipmitool causes it to exit with an error
+    // status, but we have enough output to work with anyway.
+    // https://github.com/ipmitool/ipmitool/issues/388
     if !output.status.success() {
         eprintln!(
             "Error running ipmitool: {}",

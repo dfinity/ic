@@ -977,7 +977,7 @@
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "The number of all canister in a subnet.",
+          "description": "The RAM usage of the replica process.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -987,7 +987,7 @@
             "y": 41
           },
           "hiddenSeries": false,
-          "id": 100,
+          "id": 102,
           "legend": {
             "avg": false,
             "current": false,
@@ -1015,19 +1015,18 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "label_replace(\n   quantile by (ic_subnet) (\n     0.5,\n     sum without(status) (\n       replicated_state_registered_canisters{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n     )\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-              "hide": false,
+              "expr": "label_replace(\n  quantile by(ic_subnet) (\n    0.5,\n    process_resident_memory_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "interval": "",
               "legendFormat": "{{ic_subnet}}",
-              "refId": "D"
+              "refId": "A"
             }
           ],
           "thresholds": [],
           "timeRegions": [],
-          "title": "Canisters",
+          "title": "Replica resident memory",
           "tooltip": {
             "shared": true,
-            "sort": 2,
+            "sort": 0,
             "value_type": "individual"
           },
           "transparent": true,
@@ -1039,16 +1038,16 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:328",
-              "format": "none",
+              "$$hashKey": "object:6948",
+              "format": "decbytes",
               "logBase": 1,
               "show": true
             },
             {
-              "$$hashKey": "object:329",
+              "$$hashKey": "object:6949",
               "format": "short",
               "logBase": 1,
-              "show": false
+              "show": true
             }
           ],
           "yaxis": {
@@ -1150,125 +1149,90 @@
           }
         },
         {
-          "cards": {
-            "cardPadding": 0
-          },
-          "color": {
-            "cardColor": "#73BF69",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
           "dashes": false,
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Distribution of non-idle canisters that have a heartbeat or an incoming message, aggregated over **$heatmap_period**.\n\nSuch canisters can be scheduled for execution in a round (but are not necessarily executed due to instruction limits).",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
+          "description": "Over-approximation of the RAM used for storing dirty Wasm pages until the next checkpoint.",
+          "fill": 0,
+          "fillGradient": 0,
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 49
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 124,
-          "interval": "10s",
+          "hiddenSeries": false,
+          "id": 103,
           "legend": {
-            "show": true
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
           "options": {
-            "calculate": false,
-            "calculation": {},
-            "cellGap": 1,
-            "cellValues": {
-              "decimals": 1
-            },
-            "color": {
-              "exponent": 0.5,
-              "fill": "#73BF69",
-              "min": 0,
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Greens",
-              "steps": 128
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": true
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "showValue": "never",
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "decimals": 0,
-              "reverse": false,
-              "unit": "short"
-            }
+            "alertThreshold": true
           },
+          "percentage": false,
           "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
           "targets": [
             {
               "exemplar": true,
-              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_executable_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
-              "format": "heatmap",
-              "interval": "$heatmap_period",
-              "intervalFactor": 1,
-              "legendFormat": "{{le}}",
+              "expr": "label_replace(\n  quantile by (ic_subnet) (\n    0.5,\n    current_heap_delta{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
               "refId": "A"
             }
           ],
-          "title": "Executable canisters distribution",
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "Current heap delta",
           "tooltip": {
-            "show": true,
-            "showHistogram": true
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
           },
-          "tooltipDecimals": 1,
           "transparent": true,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
           },
-          "yAxis": {
-            "decimals": 0,
-            "format": "short",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "yaxes": [
+            {
+              "$$hashKey": "object:6952",
+              "format": "decbytes",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:6953",
+              "format": "short",
+              "logBase": 1,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
         },
         {
           "aliasColors": {},
@@ -1365,7 +1329,7 @@
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "The RAM usage of the replica process.",
+          "description": "Total number of states loaded to memory by the state manager.",
           "fill": 0,
           "fillGradient": 0,
           "gridPos": {
@@ -1375,7 +1339,7 @@
             "y": 57
           },
           "hiddenSeries": false,
-          "id": 102,
+          "id": 109,
           "legend": {
             "avg": false,
             "current": false,
@@ -1403,15 +1367,16 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "label_replace(\n  quantile by(ic_subnet) (\n    0.5,\n    process_resident_memory_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n   quantile by(ic_subnet) (\n     0.5,\n     sum(state_manager_resident_state_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}) by (ic_subnet, instance)\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
               "interval": "",
-              "legendFormat": "{{ic_subnet}}",
-              "refId": "A"
+              "legendFormat": "{{instance}}",
+              "refId": "D"
             }
           ],
           "thresholds": [],
           "timeRegions": [],
-          "title": "Replica resident memory",
+          "title": "Number of states in memory",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -1426,13 +1391,13 @@
           },
           "yaxes": [
             {
-              "$$hashKey": "object:6948",
-              "format": "decbytes",
+              "$$hashKey": "object:334",
+              "format": "none",
               "logBase": 1,
               "show": true
             },
             {
-              "$$hashKey": "object:6949",
+              "$$hashKey": "object:335",
               "format": "short",
               "logBase": 1,
               "show": true
@@ -1536,90 +1501,98 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Over-approximation of the RAM used for storing dirty Wasm pages until the next checkpoint.",
-          "fill": 0,
-          "fillGradient": 0,
+          "description": "The rate at which canisters access new locations in memory requires the corresponding page to be fetched.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 80,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 0,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 65
           },
-          "hiddenSeries": false,
-          "id": 103,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 2,
-          "nullPointMode": "null",
+          "id": 108,
           "options": {
-            "alertThreshold": true
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
           },
-          "percentage": false,
           "pluginVersion": "9.2.5",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": true,
           "targets": [
             {
+              "editorMode": "code",
               "exemplar": true,
-              "expr": "label_replace(\n  quantile by (ic_subnet) (\n    0.5,\n    current_heap_delta{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "expr": "label_replace(\n  quantile by (ic_subnet, api_type, memory_type) (\n    0.5,\n    rate(hypervisor_accessed_pages_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) * 4096\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
               "interval": "",
-              "legendFormat": "{{ic_subnet}}",
+              "legendFormat": "{{ic_subnet}} {{api_type}} {{memory_type}}",
+              "range": true,
               "refId": "A"
             }
           ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "Current heap delta",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
+          "title": "Accessed bytes per second",
           "transparent": true,
-          "type": "graph",
-          "xaxis": {
-            "mode": "time",
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "$$hashKey": "object:6952",
-              "format": "decbytes",
-              "logBase": 1,
-              "show": true
-            },
-            {
-              "$$hashKey": "object:6953",
-              "format": "short",
-              "logBase": 1,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false
-          }
+          "type": "timeseries"
         },
         {
           "aliasColors": {},
@@ -1708,91 +1681,122 @@
           }
         },
         {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
+          "cards": {
+            "cardPadding": 0
+          },
+          "color": {
+            "cardColor": "#73BF69",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateGreens",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
           "dashes": false,
+          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Total number of states loaded to memory by the state manager.",
-          "fill": 0,
-          "fillGradient": 0,
+          "description": "Distribution of memory pages accessed per executed message, aggregated over **$heatmap_period**.\n\nA memory page is 4096 bytes,",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 73
           },
-          "hiddenSeries": false,
-          "id": 109,
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 123,
+          "interval": "10s",
           "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
+            "show": true
           },
-          "lines": true,
-          "linewidth": 2,
-          "nullPointMode": "null",
           "options": {
-            "alertThreshold": true
+            "calculate": false,
+            "calculation": {},
+            "cellGap": 1,
+            "cellValues": {},
+            "color": {
+              "exponent": 0.5,
+              "fill": "#73BF69",
+              "min": 0,
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 128
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "showValue": "never",
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "decimals": 0,
+              "reverse": false,
+              "unit": "none"
+            }
           },
-          "percentage": false,
           "pluginVersion": "9.2.5",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": true,
+          "reverseYBuckets": false,
           "targets": [
             {
               "exemplar": true,
-              "expr": "label_replace(\n   quantile by(ic_subnet) (\n     0.5,\n     sum(state_manager_resident_state_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}) by (ic_subnet, instance)\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{instance}}",
-              "refId": "D"
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(hypervisor_accessed_pages_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+              "format": "heatmap",
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
             }
           ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "Number of states in memory",
+          "title": "Wasm accessed page distribution",
           "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
+            "show": true,
+            "showHistogram": true
           },
           "transparent": true,
-          "type": "graph",
-          "xaxis": {
-            "mode": "time",
-            "show": true,
-            "values": []
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
           },
-          "yaxes": [
-            {
-              "$$hashKey": "object:334",
-              "format": "none",
-              "logBase": 1,
-              "show": true
-            },
-            {
-              "$$hashKey": "object:335",
-              "format": "short",
-              "logBase": 1,
-              "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false
-          }
+          "yAxis": {
+            "decimals": 0,
+            "format": "none",
+            "logBase": 1,
+            "show": true
+          },
+          "yBucketBound": "auto"
         },
         {
           "aliasColors": {},
@@ -1881,60 +1885,36 @@
           }
         },
         {
+          "cards": {
+            "cardPadding": 0
+          },
+          "color": {
+            "cardColor": "#73BF69",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateGreens",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dashes": false,
+          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "The rate at which canisters access new locations in memory requires the corresponding page to be fetched.",
+          "description": "The total number of changes in canister history per canister on a subnet.",
           "fieldConfig": {
             "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
               "custom": {
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "bars",
-                "fillOpacity": 80,
-                "gradientMode": "none",
                 "hideFrom": {
                   "legend": false,
                   "tooltip": false,
                   "viz": false
                 },
-                "lineInterpolation": "linear",
-                "lineWidth": 0,
-                "pointSize": 5,
                 "scaleDistribution": {
                   "type": "linear"
-                },
-                "showPoints": "auto",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
                 }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green"
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              },
-              "unit": "bytes"
+              }
             },
             "overrides": []
           },
@@ -1944,34 +1924,83 @@
             "x": 0,
             "y": 81
           },
-          "id": 108,
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 140,
+          "interval": "10s",
+          "legend": {
+            "show": true
+          },
           "options": {
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
+            "calculate": false,
+            "calculation": {},
+            "cellGap": 1,
+            "cellValues": {},
+            "color": {
+              "exponent": 0.5,
+              "fill": "#73BF69",
+              "min": 0,
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 128
             },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "showValue": "never",
             "tooltip": {
-              "mode": "single",
-              "sort": "none"
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "decimals": 0,
+              "reverse": false,
+              "unit": "none"
             }
           },
           "pluginVersion": "9.2.5",
+          "reverseYBuckets": false,
           "targets": [
             {
-              "editorMode": "code",
               "exemplar": true,
-              "expr": "label_replace(\n  quantile by (ic_subnet, api_type, memory_type) (\n    0.5,\n    rate(hypervisor_accessed_pages_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval]) * 4096\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-              "interval": "",
-              "legendFormat": "{{ic_subnet}} {{api_type}} {{memory_type}}",
-              "range": true,
+              "expr": "round(\n  sum by (le) (\n    quantile by(le, ic_subnet) (\n    0.5,\n    rate(mr_canister_history_total_num_changes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
+              "format": "heatmap",
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
               "refId": "A"
             }
           ],
-          "title": "Accessed bytes per second",
+          "title": "Total number of changes in canister history per canister",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
           "transparent": true,
-          "type": "timeseries"
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "yAxis": {
+            "decimals": 0,
+            "format": "none",
+            "logBase": 1,
+            "show": true
+          },
+          "yBucketBound": "auto"
         },
         {
           "datasource": {
@@ -2084,7 +2113,7 @@
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Distribution of memory pages accessed per executed message, aggregated over **$heatmap_period**.\n\nA memory page is 4096 bytes,",
+          "description": "Counts of heap delta rate limited canisters per round, aggregated over **$heatmap_period**.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -2109,7 +2138,7 @@
           "heatmap": {},
           "hideZeroBuckets": true,
           "highlightCards": true,
-          "id": 123,
+          "id": 131,
           "interval": "10s",
           "legend": {
             "show": true
@@ -2158,7 +2187,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(hypervisor_accessed_pages_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_heap_delta_rate_limited_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
               "format": "heatmap",
               "interval": "$heatmap_period",
               "intervalFactor": 1,
@@ -2166,7 +2195,7 @@
               "refId": "A"
             }
           ],
-          "title": "Wasm accessed page distribution",
+          "title": "Heap delta rate limited canisters per round",
           "tooltip": {
             "show": true,
             "showHistogram": true
@@ -2303,122 +2332,91 @@
           "yBucketBound": "auto"
         },
         {
-          "cards": {
-            "cardPadding": 0
-          },
-          "color": {
-            "cardColor": "#73BF69",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
           "dashes": false,
-          "dataFormat": "tsbuckets",
           "datasource": {
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "The total number of changes in canister history per canister on a subnet.",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
+          "description": "How many times the inner round iteration was executed within the outer round",
+          "fill": 0,
+          "fillGradient": 0,
           "gridPos": {
             "h": 8,
             "w": 12,
             "x": 0,
             "y": 97
           },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 140,
-          "interval": "10s",
+          "hiddenSeries": false,
+          "id": 136,
           "legend": {
-            "show": true
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
           },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
           "options": {
-            "calculate": false,
-            "calculation": {},
-            "cellGap": 1,
-            "cellValues": {},
-            "color": {
-              "exponent": 0.5,
-              "fill": "#73BF69",
-              "min": 0,
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Greens",
-              "steps": 128
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": true
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "showValue": "never",
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "decimals": 0,
-              "reverse": false,
-              "unit": "none"
-            }
+            "alertThreshold": true
           },
+          "percentage": false,
           "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
           "targets": [
             {
               "exemplar": true,
-              "expr": "round(\n  sum by (le) (\n    quantile by(le, ic_subnet) (\n    0.5,\n    rate(mr_canister_history_total_num_changes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
-              "format": "heatmap",
-              "interval": "$heatmap_period",
-              "intervalFactor": 1,
-              "legendFormat": "{{le}}",
-              "refId": "A"
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n       rate(execution_round_inner_iteration_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n     /\n     rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "refId": "D"
             }
           ],
-          "title": "Total number of changes in canister history per canister",
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "The number of iterations per round",
           "tooltip": {
-            "show": true,
-            "showHistogram": true
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
           },
           "transparent": true,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
           },
-          "yAxis": {
-            "decimals": 0,
-            "format": "none",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
+          "yaxes": [
+            {
+              "$$hashKey": "object:328",
+              "format": "none",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:329",
+              "format": "short",
+              "logBase": 1,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
         },
         {
           "cards": {
@@ -2539,124 +2537,6 @@
           "yBucketBound": "auto"
         },
         {
-          "cards": {
-            "cardPadding": 0
-          },
-          "color": {
-            "cardColor": "#73BF69",
-            "colorScale": "sqrt",
-            "colorScheme": "interpolateGreens",
-            "exponent": 0.5,
-            "min": 0,
-            "mode": "spectrum"
-          },
-          "dashes": false,
-          "dataFormat": "tsbuckets",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "000000001"
-          },
-          "description": "Counts of heap delta rate limited canisters per round, aggregated over **$heatmap_period**.",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 105
-          },
-          "heatmap": {},
-          "hideZeroBuckets": true,
-          "highlightCards": true,
-          "id": 131,
-          "interval": "10s",
-          "legend": {
-            "show": true
-          },
-          "options": {
-            "calculate": false,
-            "calculation": {},
-            "cellGap": 1,
-            "cellValues": {},
-            "color": {
-              "exponent": 0.5,
-              "fill": "#73BF69",
-              "min": 0,
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Greens",
-              "steps": 128
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1e-9
-            },
-            "legend": {
-              "show": true
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "showValue": "never",
-            "tooltip": {
-              "show": true,
-              "yHistogram": true
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "decimals": 0,
-              "reverse": false,
-              "unit": "none"
-            }
-          },
-          "pluginVersion": "9.2.5",
-          "reverseYBuckets": false,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_heap_delta_rate_limited_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
-              "format": "heatmap",
-              "interval": "$heatmap_period",
-              "intervalFactor": 1,
-              "legendFormat": "{{le}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Heap delta rate limited canisters per round",
-          "tooltip": {
-            "show": true,
-            "showHistogram": true
-          },
-          "transparent": true,
-          "type": "heatmap",
-          "xAxis": {
-            "show": true
-          },
-          "yAxis": {
-            "decimals": 0,
-            "format": "none",
-            "logBase": 1,
-            "show": true
-          },
-          "yBucketBound": "auto"
-        },
-        {
           "aliasColors": {},
           "bars": false,
           "dashLength": 10,
@@ -2743,93 +2623,6 @@
               "format": "short",
               "logBase": 1,
               "show": true
-            }
-          ],
-          "yaxis": {
-            "align": false
-          }
-        },
-        {
-          "aliasColors": {},
-          "bars": false,
-          "dashLength": 10,
-          "dashes": false,
-          "datasource": {
-            "type": "prometheus",
-            "uid": "000000001"
-          },
-          "description": "How many times the inner round iteration was executed within the outer round",
-          "fill": 0,
-          "fillGradient": 0,
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 113
-          },
-          "hiddenSeries": false,
-          "id": 136,
-          "legend": {
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "show": true,
-            "total": false,
-            "values": false
-          },
-          "lines": true,
-          "linewidth": 2,
-          "nullPointMode": "null",
-          "options": {
-            "alertThreshold": true
-          },
-          "percentage": false,
-          "pluginVersion": "9.2.5",
-          "pointradius": 2,
-          "points": false,
-          "renderer": "flot",
-          "seriesOverrides": [],
-          "spaceLength": 10,
-          "stack": false,
-          "steppedLine": true,
-          "targets": [
-            {
-              "exemplar": true,
-              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n       rate(execution_round_inner_iteration_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n     /\n     rate(execution_round_duration_seconds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
-              "hide": false,
-              "interval": "",
-              "legendFormat": "{{ic_subnet}}",
-              "refId": "D"
-            }
-          ],
-          "thresholds": [],
-          "timeRegions": [],
-          "title": "The number of iterations per round",
-          "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-          },
-          "transparent": true,
-          "type": "graph",
-          "xaxis": {
-            "mode": "time",
-            "show": true,
-            "values": []
-          },
-          "yaxes": [
-            {
-              "$$hashKey": "object:328",
-              "format": "none",
-              "logBase": 1,
-              "show": true
-            },
-            {
-              "$$hashKey": "object:329",
-              "format": "short",
-              "logBase": 1,
-              "show": false
             }
           ],
           "yaxis": {
@@ -2976,6 +2769,761 @@
         }
       ],
       "title": "Execution Metrics",
+      "type": "row"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 310,
+      "panels": [
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "The number of all canister in a subnet.",
+          "fill": 0,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 2
+          },
+          "hiddenSeries": false,
+          "id": 100,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "9.2.5",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "label_replace(\n   quantile by (ic_subnet) (\n     0.5,\n     sum without(status) (\n       replicated_state_registered_canisters{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}\n     )\n   ),\n   \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "refId": "D"
+            }
+          ],
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "Total canisters",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transparent": true,
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:328",
+              "format": "none",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:329",
+              "format": "short",
+              "logBase": 1,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Non-idle canisters that have a heartbeat or an incoming message.\n\nSuch canisters can be scheduled for execution in a round (but are not necessarily executed due to instruction limits).",
+          "fill": 0,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 2
+          },
+          "hiddenSeries": false,
+          "id": 311,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "9.2.5",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PE62C54679EC3C073"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(scheduler_executable_canisters_per_round_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      rate(scheduler_executable_canisters_per_round_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "Non-idle canisters",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transparent": true,
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:328",
+              "format": "none",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:329",
+              "format": "short",
+              "logBase": 1,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Canisters that were actually executed in a round.",
+          "fill": 0,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "hiddenSeries": false,
+          "id": 308,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "9.2.5",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PE62C54679EC3C073"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(scheduler_executed_canisters_per_round_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      rate(scheduler_executed_canisters_per_round_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "Executed canisters",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transparent": true,
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:328",
+              "format": "none",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:329",
+              "format": "short",
+              "logBase": 1,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Number of rounds for which a canister was not scheduled",
+          "fill": 0,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 10
+          },
+          "hiddenSeries": false,
+          "id": 312,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 2,
+          "nullPointMode": "null",
+          "options": {
+            "alertThreshold": true
+          },
+          "percentage": false,
+          "pluginVersion": "9.2.5",
+          "pointradius": 2,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": true,
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PE62C54679EC3C073"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.5,\n      rate(scheduler_canister_age_rounds_sum{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n    /\n      rate(scheduler_canister_age_rounds_count{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "D"
+            }
+          ],
+          "thresholds": [],
+          "timeRegions": [],
+          "title": "Canister age, rounds",
+          "tooltip": {
+            "shared": true,
+            "sort": 2,
+            "value_type": "individual"
+          },
+          "transparent": true,
+          "type": "graph",
+          "xaxis": {
+            "mode": "time",
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "$$hashKey": "object:328",
+              "format": "none",
+              "logBase": 1,
+              "show": true
+            },
+            {
+              "$$hashKey": "object:329",
+              "format": "short",
+              "logBase": 1,
+              "show": false
+            }
+          ],
+          "yaxis": {
+            "align": false
+          }
+        },
+        {
+          "cards": {
+            "cardPadding": 0
+          },
+          "color": {
+            "cardColor": "#73BF69",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateGreens",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dashes": false,
+          "dataFormat": "tsbuckets",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Distribution of non-idle canisters that have a heartbeat or an incoming message, aggregated over **$heatmap_period**.\n\nSuch canisters can be scheduled for execution in a round (but are not necessarily executed due to instruction limits).",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 18
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 124,
+          "interval": "10s",
+          "legend": {
+            "show": true
+          },
+          "options": {
+            "calculate": false,
+            "calculation": {},
+            "cellGap": 1,
+            "cellValues": {
+              "decimals": 1
+            },
+            "color": {
+              "exponent": 0.5,
+              "fill": "#73BF69",
+              "min": 0,
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 128
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "showValue": "never",
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "decimals": 0,
+              "reverse": false,
+              "unit": "short"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "exemplar": true,
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_executable_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+              "format": "heatmap",
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Non-idle canisters distribution",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "transparent": true,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "yAxis": {
+            "decimals": 0,
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          },
+          "yBucketBound": "auto"
+        },
+        {
+          "cards": {
+            "cardPadding": 0
+          },
+          "color": {
+            "cardColor": "#73BF69",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateGreens",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dashes": false,
+          "dataFormat": "tsbuckets",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Distribution of canisters that were actually executed in a round, aggregated over **$heatmap_period**.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 18
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 307,
+          "interval": "10s",
+          "legend": {
+            "show": true
+          },
+          "options": {
+            "calculate": false,
+            "calculation": {},
+            "cellGap": 1,
+            "cellValues": {
+              "decimals": 1
+            },
+            "color": {
+              "exponent": 0.5,
+              "fill": "#73BF69",
+              "min": 0,
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 128
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "showValue": "never",
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "decimals": 0,
+              "reverse": false,
+              "unit": "short"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PE62C54679EC3C073"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_executed_canisters_per_round_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+              "format": "heatmap",
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Executed canisters distribution",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "transparent": true,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "yAxis": {
+            "decimals": 0,
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          },
+          "yBucketBound": "auto"
+        },
+        {
+          "cards": {
+            "cardPadding": 0
+          },
+          "color": {
+            "cardColor": "#73BF69",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateGreens",
+            "exponent": 0.5,
+            "min": 0,
+            "mode": "spectrum"
+          },
+          "dashes": false,
+          "dataFormat": "tsbuckets",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Distribution of number of rounds for which a canister was not scheduled, aggregated over **$heatmap_period**.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 26
+          },
+          "heatmap": {},
+          "hideZeroBuckets": true,
+          "highlightCards": true,
+          "id": 313,
+          "interval": "10s",
+          "legend": {
+            "show": true
+          },
+          "options": {
+            "calculate": false,
+            "calculation": {},
+            "cellGap": 1,
+            "cellValues": {
+              "decimals": 1
+            },
+            "color": {
+              "exponent": 0.5,
+              "fill": "#73BF69",
+              "min": 0,
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Greens",
+              "steps": 128
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "showValue": "never",
+            "tooltip": {
+              "show": true,
+              "yHistogram": true
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "decimals": 0,
+              "reverse": false,
+              "unit": "short"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "reverseYBuckets": false,
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "PE62C54679EC3C073"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "round(\n  sum by (le) (\n    avg by(le, ic_subnet) (\n      increase(scheduler_canister_age_rounds_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)",
+              "format": "heatmap",
+              "interval": "$heatmap_period",
+              "intervalFactor": 1,
+              "legendFormat": "{{le}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Canister age distribution, rounds",
+          "tooltip": {
+            "show": true,
+            "showHistogram": true
+          },
+          "tooltipDecimals": 1,
+          "transparent": true,
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "yAxis": {
+            "decimals": 0,
+            "format": "short",
+            "logBase": 1,
+            "show": true
+          },
+          "yBucketBound": "auto"
+        }
+      ],
+      "title": "Canisters",
       "type": "row"
     },
     {
@@ -7216,6 +7764,104 @@
             "show": true
           },
           "yBucketBound": "auto"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "Scheduled messages which failed to execute any instructions (likely unable to prepay execution).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "wps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 43
+          },
+          "id": 148,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "pluginVersion": "9.2.5",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "label_replace(\n  sum by(ic_subnet) (\n    rate(scheduler_zero_instruction_messages{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$__rate_interval])\n  )\n  ,\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)\n",
+              "hide": false,
+              "interval": "",
+              "legendFormat": "{{ic_subnet}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Messages executing zero instructions",
+          "transparent": true,
+          "type": "timeseries"
         }
       ],
       "title": "Round/Thread/Message Durations and Instructions",
@@ -9870,7 +10516,7 @@
           ],
           "thresholds": [],
           "timeRegions": [],
-          "title": "Subnet canister log memory usage",
+          "title": "Total Subnet Canister Log Memory Usage",
           "tooltip": {
             "shared": true,
             "sort": 0,
@@ -9906,7 +10552,7 @@
             "type": "prometheus",
             "uid": "000000001"
           },
-          "description": "Average canister log memory usage per canister on a subnet",
+          "description": "Average memory usage for canister logs across each subnet",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -9993,7 +10639,102 @@
               "refId": "A"
             }
           ],
-          "title": "Canister log memory usage, average per canister",
+          "title": "Average Subnet Canister Log Memory Usage",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "description": "The rate of `fetch_canister_logs` management canister query executions per second",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "calls/s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 306,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "000000001"
+              },
+              "editorMode": "code",
+              "expr": "sum by(method_name) (\n  quantile by(method_name, ic_subnet) (\n    0.5,\n    sum without(status) (\n      rate(execution_subnet_query_message_duration_seconds_count{\n        job=\"replica\", \n        ic=\"$ic\", \n        ic_subnet=~\"$ic_subnet\", \n        instance=~\"$instance\",\n        method_name=\"query_ic00_fetch_canister_logs\"\n      }[$__rate_interval])\n    )\n  )\n)",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Fetch Canister Logs Query Execution Rate",
           "transparent": true,
           "type": "timeseries"
         },
@@ -10101,7 +10842,7 @@
               "refId": "A"
             }
           ],
-          "title": "Canister log memory usage",
+          "title": "Canister Log Memory Usage",
           "tooltip": {
             "show": true,
             "showHistogram": true
@@ -10389,6 +11130,6 @@
   "timezone": "utc",
   "title": "Execution Metrics",
   "uid": "execution-metrics",
-  "version": 7,
+  "version": 8,
   "weekStart": ""
 }

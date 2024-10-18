@@ -16,13 +16,22 @@ use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_tokens_u256::U256;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::LIFELINE_CANISTER_ID;
+use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
+use ic_nns_test_utils::common::build_governance_wasm;
+use ic_nns_test_utils::common::build_root_wasm;
 use ic_rosetta_test_utils::path_from_env;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
+use pocket_ic::CanisterSettings;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use prost::Message;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -115,7 +124,7 @@ impl RosettaTestingEnvironment {
                 .transfer(
                     args_builder.build(),
                     self.network_identifier.clone(),
-                    arg_with_caller.caller,
+                    &arg_with_caller.caller,
                 )
                 .await
                 .unwrap();
@@ -155,6 +164,7 @@ pub struct RosettaTestingEnvironmentBuilder {
     pub transfer_args_for_block_generating: Option<Vec<ArgWithCaller>>,
     pub minting_account: Option<Account>,
     pub initial_balances: Option<HashMap<AccountIdentifier, icp_ledger::Tokens>>,
+    pub governance_canister: bool,
     pub persistent_storage: bool,
 }
 
@@ -164,6 +174,7 @@ impl RosettaTestingEnvironmentBuilder {
             transfer_args_for_block_generating: None,
             minting_account: None,
             initial_balances: None,
+            governance_canister: false,
             persistent_storage: false,
         }
     }
@@ -181,6 +192,19 @@ impl RosettaTestingEnvironmentBuilder {
         self
     }
 
+    pub fn with_initial_balances(
+        mut self,
+        initial_balances: HashMap<AccountIdentifier, icp_ledger::Tokens>,
+    ) -> Self {
+        self.initial_balances = Some(initial_balances);
+        self
+    }
+
+    pub fn with_governance_canister(mut self) -> Self {
+        self.governance_canister = true;
+        self
+    }
+
     pub fn with_persistent_storage(mut self, enable_persistent_storage: bool) -> Self {
         self.persistent_storage = enable_persistent_storage;
         self
@@ -188,8 +212,6 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub async fn build(self) -> RosettaTestingEnvironment {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-        let replica_url = pocket_ic.make_live(None).await;
-        let replica_port = replica_url.port().unwrap();
 
         let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
         let canister_id = pocket_ic
@@ -233,6 +255,71 @@ impl RosettaTestingEnvironmentBuilder {
             "Installed the Ledger canister ({canister_id}) onto {}",
             pocket_ic.get_subnet(ledger_canister_id).await.unwrap()
         );
+
+        if self.governance_canister {
+            let nns_root_canister_wasm = build_root_wasm();
+            let nns_root_canister_id = Principal::from(ROOT_CANISTER_ID);
+            let nns_root_canister_controller = LIFELINE_CANISTER_ID.get().0;
+            let nns_root_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(nns_root_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![nns_root_canister_controller]),
+                        ..Default::default()
+                    }),
+                    nns_root_canister_id,
+                )
+                .await
+                .expect("Unable to create the NNS Root canister");
+
+            pocket_ic
+                .install_canister(
+                    nns_root_canister,
+                    nns_root_canister_wasm.bytes().to_vec(),
+                    Encode!(&RootCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Some(nns_root_canister_controller),
+                )
+                .await;
+
+            let governance_canister_wasm = build_governance_wasm();
+            let governance_canister_id = Principal::from(GOVERNANCE_CANISTER_ID);
+            let governance_canister_controller = ROOT_CANISTER_ID.get().0;
+            let governance_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(governance_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![governance_canister_controller]),
+                        ..Default::default()
+                    }),
+                    governance_canister_id,
+                )
+                .await
+                .expect("Unable to create the Governance canister");
+            pocket_ic
+                .install_canister(
+                    governance_canister,
+                    governance_canister_wasm.bytes().to_vec(),
+                    GovernanceCanisterInitPayloadBuilder::new()
+                        .build()
+                        .encode_to_vec(),
+                    Some(governance_canister_controller),
+                )
+                .await;
+            pocket_ic
+                .add_cycles(governance_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
+            // Give the governance canister some time to initialize so that we do not hit the
+            // following error:
+            // Could not claim neuron: Unavailable: Neuron ID generation is not available
+            // currently. Likely due to uninitialized RNG.
+            pocket_ic
+                .advance_time(std::time::Duration::from_secs(60))
+                .await;
+            pocket_ic.tick().await;
+        }
+
+        let replica_url = pocket_ic.make_live(None).await;
+        let replica_port = replica_url.port().unwrap();
 
         let mut block_idxes = vec![];
         if let Some(args) = &self.transfer_args_for_block_generating {
