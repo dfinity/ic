@@ -927,7 +927,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
         NumWasmPages::new(8)
     );
 
-    // Though we have the Ingress message awaiting to be processed,
+    // Though we have the second ingress message awaiting to be processed,
     // hook will be executed first.
     test.execute_slice(canister_id);
     assert_eq!(
