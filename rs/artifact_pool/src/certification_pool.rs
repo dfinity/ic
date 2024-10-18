@@ -54,7 +54,7 @@ impl CertificationPoolImpl {
         node_id: NodeId,
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
     ) -> Self {
         let persistent_pool = match config.persistent_pool_backend {
             PersistentPoolBackend::Lmdb(lmdb_config) => Box::new(
@@ -88,7 +88,7 @@ impl CertificationPoolImpl {
                 "The number of invalidated certification artifacts",
             ),
             unvalidated_pool_metrics: PoolMetrics::new(
-                metrics_registry.clone(),
+                metrics_registry,
                 POOL_CERTIFICATION,
                 POOL_TYPE_UNVALIDATED,
             ),
@@ -512,7 +512,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share1 = fake_share(1, 0);
             let id1 = msg_to_id(&share1);
@@ -569,7 +569,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
@@ -601,7 +601,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(20);
@@ -650,7 +650,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(10);
@@ -725,7 +725,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(10, 10);
             pool.insert(to_unvalidated(share_msg.clone()));
@@ -762,7 +762,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
@@ -792,7 +792,7 @@ mod tests {
                 node_test_id(0),
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
@@ -843,7 +843,7 @@ mod tests {
                 node,
                 pool_config,
                 no_op_logger(),
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
             );
 
             let height_offset = 5_000_000_000;

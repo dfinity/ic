@@ -21,7 +21,7 @@ impl TestIngressPool {
             pool: IngressPoolImpl::new(
                 node_id,
                 pool_config,
-                MetricsRegistry::new(),
+                &MetricsRegistry::new(),
                 no_op_logger(),
             ),
         }

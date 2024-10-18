@@ -281,12 +281,12 @@ impl Backup {
         version_path: PathBuf,
         age_threshold: Duration,
         purge_interval: Duration,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
-        let metrics = Metrics::new(&metrics_registry);
+        let metrics = Metrics::new(metrics_registry);
         let (backup_queue, backup_thread) =
             BackupThread::new(version_path.clone(), metrics.clone(), log.clone()).start();
         let (purging_queue, purging_thread) = PurgingThread::new(
@@ -330,7 +330,7 @@ impl Backup {
         version_path: PathBuf,
         age_threshold: Duration,
         purge_interval: Duration,
-        metrics_registry: MetricsRegistry,
+        metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
