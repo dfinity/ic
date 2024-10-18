@@ -66,7 +66,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils:ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils",
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
