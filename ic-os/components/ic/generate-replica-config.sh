@@ -110,8 +110,6 @@ function set_default_config_values() {
     [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"  # Default value is 24h
     [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"  # Default value is 1h
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"  # Default is 600 blocks (around 10min)
-
-    # TODO: If the Jaeger address is not specified the config file will contain Some(""). This needs to be fixed.
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
 
     # todo: remove node_index variable and hard-code into ic.json5.template
