@@ -243,7 +243,7 @@ pub(crate) struct Neuron {
 #[serde(deny_unknown_fields)]
 pub(crate) struct InitialBalances {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    governance: nervous_system_pb::Tokens,
+    treasury: nervous_system_pb::Tokens,
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     swap: nervous_system_pb::Tokens,
@@ -523,14 +523,14 @@ impl Distribution {
         let developer_distribution = Some(developer_distribution);
 
         let (treasury_distribution, swap_distribution) = {
-            let InitialBalances { governance, swap } = initial_balances;
+            let InitialBalances { treasury, swap } = initial_balances;
 
-            observed_total_e8s += governance.e8s.unwrap_or_default();
+            observed_total_e8s += treasury.e8s.unwrap_or_default();
             observed_total_e8s += swap.e8s.unwrap_or_default();
 
             (
                 Some(nns_governance_pb::TreasuryDistribution {
-                    total: Some(*governance),
+                    total: Some(*treasury),
                 }),
                 Some(nns_governance_pb::SwapDistribution { total: Some(*swap) }),
             )
