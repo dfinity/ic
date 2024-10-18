@@ -111,7 +111,7 @@ function build_ic_bootstrap_tar() {
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
-    # todo: delete network.conf and malicious_behaviour.conf
+    # todo: delete malicious_behaviour.conf
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
     fi

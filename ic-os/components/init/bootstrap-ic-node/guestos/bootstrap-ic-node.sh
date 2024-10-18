@@ -102,7 +102,7 @@ function process_bootstrap() {
 
     # stash the following configuration files to config store
     # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
-    for FILE in network.conf malicious_behavior.conf config.json; do
+    for FILE in malicious_behavior.conf config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
             cp "${TMPDIR}/${FILE}" "${CONFIG_ROOT}/${FILE}"
