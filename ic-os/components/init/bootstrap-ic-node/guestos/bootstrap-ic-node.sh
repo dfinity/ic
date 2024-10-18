@@ -69,8 +69,8 @@ function find_config_devices() {
 }
 
 # Process the bootstrap package given as first argument to populate
-# both config space and
-# parts of /var/lib/ic/data and /var/lib/ic/crypto
+# both config space and parts of /var/lib/ic/data and /var/lib/ic/crypto
+# note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
 #
 # Arguments:
 # - $1: path to the bootstrap package (typically /mnt/ic-bootstrap.tar)
@@ -100,8 +100,6 @@ function process_bootstrap() {
         fi
     done
 
-    # stash the following configuration files to config store
-    # note: keep this list in sync with configurations supported in build-bootstrap-config-image.sh
     for FILE in malicious_behavior.conf config.json; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
