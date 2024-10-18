@@ -679,9 +679,7 @@ impl BlockchainManager {
             // request to fetch the newest information from a peer.
             if !self.getheaders_requests.contains_key(&addr) && self.catchup_headers.contains(&addr)
             {
-                let blockchain = self.blockchain.lock().unwrap();
-                let locators = blockchain.locator_hashes();
-                drop(blockchain);
+                let locators = self.blockchain.lock().unwrap().locator_hashes();
                 self.send_getheaders(channel, &addr, (locators, BlockHash::default()));
                 self.catchup_headers.remove(&addr);
             }
@@ -798,8 +796,8 @@ pub mod test {
 
     /// Tests `BlockchainManager::send_getheaders(...)` to ensure the manager's outgoing command
     /// queue
-    #[tokio::test]
-    async fn test_manager_can_send_getheaders_messages() {
+    #[test]
+    fn test_manager_can_send_getheaders_messages() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let mut channel = TestChannel::new(vec![addr]);
         let config = ConfigBuilder::new().build();
@@ -849,8 +847,8 @@ pub mod test {
     /// to the peer. When first starting, the adapter should send only the genesis hash. After headers
     /// are received, the locator hashes sent should follow the algorithm defined in
     /// BlockchainState::locator_hashes.
-    #[tokio::test]
-    async fn test_init_sync() {
+    #[test]
+    fn test_init_sync() {
         let addr1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let addr2 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let sockets = vec![addr1, addr2];
@@ -1032,8 +1030,8 @@ pub mod test {
 
     /// This test performs a surface level check to make ensure the `sync_blocks` and `received_block_message`
     /// adds to and removes from `BlockchainManager.getdata_request_info` correctly.
-    #[tokio::test]
-    async fn test_simple_sync_blocks_and_received_block_message_lifecycle() {
+    #[test]
+    fn test_simple_sync_blocks_and_received_block_message_lifecycle() {
         let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![peer_addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1116,8 +1114,8 @@ pub mod test {
 
     /// This function tests to ensure that the BlockchainManager does not send out `getdata`
     /// requests when the block cache has reached the size threshold.
-    #[tokio::test]
-    async fn test_sync_blocks_size_limit() {
+    #[test]
+    fn test_sync_blocks_size_limit() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1153,8 +1151,8 @@ pub mod test {
 
     /// This function tests to ensure that the BlockchainManager retries timed out `getdata` requests
     /// when calling `sync_blocks`.
-    #[tokio::test]
-    async fn test_ensure_sync_blocks_retries_timed_out_getdata_requests() {
+    #[test]
+    fn test_ensure_sync_blocks_retries_timed_out_getdata_requests() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1208,8 +1206,8 @@ pub mod test {
 
     /// This function tests to ensure that the BlockchainManager retries `getdata` requests
     /// that were sent to peers that have disconnected when calling `sync_blocks`.
-    #[tokio::test]
-    async fn test_manager_retries_getdata_requests_where_the_peer_has_disconnected() {
+    #[test]
+    fn test_manager_retries_getdata_requests_where_the_peer_has_disconnected() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let addr2 = SocketAddr::from_str("127.0.0.1:3338").expect("bad address format");
         let sockets = vec![addr];
@@ -1268,8 +1266,8 @@ pub mod test {
 
     /// This function tests to ensure that the BlockchainManager retries `getdata` requests
     /// that have failed when calling `sync_blocks` with a full block cache.
-    #[tokio::test]
-    async fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
+    #[test]
+    fn test_ensure_getdata_requests_are_retried_with_a_full_cache() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1349,8 +1347,8 @@ pub mod test {
 
     /// Tests the `BlockchainManager::idle(...)` function to ensure it clears the state from the
     /// BlockchainManager.
-    #[tokio::test]
-    async fn test_make_idle() {
+    #[test]
+    fn test_make_idle() {
         let peer_addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let sockets = vec![peer_addr];
         let mut channel = TestChannel::new(sockets.clone());
@@ -1402,8 +1400,8 @@ pub mod test {
         assert_eq!(blockchain_manager.peer_info.len(), 0);
     }
 
-    #[tokio::test]
-    async fn test_enqueue_new_blocks_to_download() {
+    #[test]
+    fn test_enqueue_new_blocks_to_download() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
 
@@ -1428,8 +1426,8 @@ pub mod test {
         );
     }
 
-    #[tokio::test]
-    async fn test_enqueue_new_blocks_to_download_no_duplicates() {
+    #[test]
+    fn test_enqueue_new_blocks_to_download_no_duplicates() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
 
@@ -1475,8 +1473,8 @@ pub mod test {
         );
     }
 
-    #[tokio::test]
-    async fn test_pruning_blocks_based_on_the_anchor_hash_and_processed_hashes() {
+    #[test]
+    fn test_pruning_blocks_based_on_the_anchor_hash_and_processed_hashes() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
@@ -1532,8 +1530,8 @@ pub mod test {
             .is_none());
     }
 
-    #[tokio::test]
-    async fn test_pruning_blocks_to_ensure_it_does_not_prune_anchor_adjacent_blocks() {
+    #[test]
+    fn test_pruning_blocks_to_ensure_it_does_not_prune_anchor_adjacent_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let (genesis, mut blockchain_manager) = create_blockchain_manager(&config);
         let genesis_hash = genesis.block_hash();
@@ -1677,8 +1675,8 @@ pub mod test {
 
     /// Tests that the `handle_getheaders_timeouts(...)` method removes timed out `getheaders` requests
     /// and triggers the discard of the connection.
-    #[tokio::test]
-    async fn test_handle_getheaders_timeouts() {
+    #[test]
+    fn test_handle_getheaders_timeouts() {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
         let addr2 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let mut channel = TestChannel::new(vec![addr, addr2]);
