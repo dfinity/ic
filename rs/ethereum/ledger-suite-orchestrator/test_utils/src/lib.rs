@@ -181,9 +181,13 @@ impl LedgerSuiteOrchestrator {
     }
 
     pub fn add_erc20_token(self, params: AddErc20Arg) -> AddErc20TokenFlow {
+        let now = std::time::SystemTime::now();
         let setup = self.upgrade_ledger_suite_orchestrator_expecting_ok(
             &OrchestratorArg::AddErc20Arg(params.clone()),
         );
+        now.elapsed()
+            .ok()
+            .map(|d| println!("ERC20 token added in {}ms", d.as_millis()));
         AddErc20TokenFlow { setup, params }
     }
 
@@ -321,10 +325,15 @@ pub fn default_init_arg() -> InitArg {
 }
 
 pub fn new_state_machine() -> StateMachine {
-    StateMachineBuilder::new()
+    let now = std::time::SystemTime::now();
+    let s = StateMachineBuilder::new()
         .with_master_ecdsa_public_key()
         .with_default_canister_range()
-        .build()
+        .build();
+    now.elapsed()
+        .ok()
+        .map(|d| println!("State machine created in {}ms", d.as_millis()));
+    s
 }
 
 pub fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
