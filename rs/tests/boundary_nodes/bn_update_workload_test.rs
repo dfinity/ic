@@ -3,9 +3,9 @@
 use anyhow::Result;
 use std::time::Duration;
 
+use ic_networking_subnet_update_workload::{config, test};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
-use ic_tests::networking::subnet_update_workload::{config, test};
 
 // Test parameters
 const APP_SUBNET_SIZE: usize = 4;
