@@ -3,10 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
-    name = "utils",
+    name = "ic_consensus_system_test_utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "ic_consensus_system_test_utils",
     deps = [
         # Keep sorted.
         "//rs/canister_client",
@@ -24,7 +23,7 @@ rust_library(
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/tecdsa/utils:ic_consensus_threshold_sig_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",

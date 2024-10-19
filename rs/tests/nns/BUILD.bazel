@@ -18,7 +18,7 @@ MIGRATED_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     # Do *NOT* add //rs/tests here.
     "//rs/tests/ckbtc",
-    "//rs/tests/consensus/utils",
+    "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/nns/nns_dapp",
     "@crate_index//:anyhow",
@@ -83,7 +83,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",

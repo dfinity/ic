@@ -4,7 +4,7 @@ load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
-    name = "utils",
+    name = "ic_boundary_nodes_system_test_utils",
     testonly = True,
     srcs = [
         "src/constants.rs",
@@ -13,7 +13,6 @@ rust_library(
         "src/setup.rs",
     ],
     compile_data = COUNTER_CANISTER_RUNTIME_DEPS,
-    crate_name = "ic_boundary_nodes_system_test_utils",
     deps = [
         # Keep sorted.
         "//rs/interfaces/registry",

@@ -23,7 +23,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",

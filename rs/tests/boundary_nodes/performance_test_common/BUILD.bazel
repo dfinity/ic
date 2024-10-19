@@ -14,7 +14,7 @@ rust_library(
         "//rs/registry/nns_data_provider",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",

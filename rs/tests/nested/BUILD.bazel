@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/nns/test_utils:ic_nns_test_utils",
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",
-    "//rs/tests/consensus/utils",
+    "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/types",
     "@crate_index//:anyhow",

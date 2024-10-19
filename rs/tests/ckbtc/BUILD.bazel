@@ -20,7 +20,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
-    "//rs/tests/consensus/tecdsa/utils",
+    "//rs/tests/consensus/tecdsa/utils:ic_consensus_threshold_sig_system_test_utils",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",

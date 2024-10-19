@@ -9,7 +9,7 @@ rust_library(
     crate_name = "ic_boundary_nodes_integration_test_common",
     deps = [
         # Keep sorted.
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",

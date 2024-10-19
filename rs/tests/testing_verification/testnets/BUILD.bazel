@@ -57,7 +57,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -76,7 +76,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -95,7 +95,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -138,7 +138,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
@@ -169,7 +169,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -199,7 +199,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
@@ -220,7 +220,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -250,7 +250,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
@@ -285,7 +285,7 @@ system_test_nns(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rosetta-api/tvl/xrc_mock",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nns/nns_dapp",
         "//rs/types/base_types",

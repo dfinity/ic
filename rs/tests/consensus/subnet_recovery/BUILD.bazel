@@ -29,8 +29,8 @@ rust_library(
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/tecdsa/utils",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/tecdsa/utils:ic_consensus_threshold_sig_system_test_utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
@@ -272,7 +272,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/recovery",
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -300,7 +300,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/recovery",
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canister_http",
         "//rs/types/types",
