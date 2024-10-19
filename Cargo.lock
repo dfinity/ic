@@ -9840,11 +9840,14 @@ version = "0.0.1"
 dependencies = [
  "candid",
  "canister-test",
- "ic-base-types",
+ "dfn_candid",
  "ic-cdk 0.16.0",
  "ic-cdk-timers",
+ "ic-config",
  "ic-nns-test-utils",
+ "ic-registry-subnet-type",
  "ic-state-machine-tests",
+ "ic-types",
 ]
 
 [[package]]
@@ -10400,7 +10403,6 @@ dependencies = [
  "candid",
  "canister-test",
  "cycles-minting-canister",
- "dfn_candid",
  "dfn_core",
  "dfn_http",
  "dfn_json",

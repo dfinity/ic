@@ -4,15 +4,18 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
-candid = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
-ic-cdk = { workspace = true }
+ic-types = { path = "../../types/types" }
 ic-cdk-timers = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+ic-config = { path = "../../config" }

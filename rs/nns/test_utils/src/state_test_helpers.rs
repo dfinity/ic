@@ -224,7 +224,6 @@ where
 {
     // move time forward
     machine.advance_time(Duration::from_secs(2));
-    let payload = (payload,);
     let result = machine
         .execute_ingress_as(
             sender,

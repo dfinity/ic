@@ -223,3 +223,24 @@ fn neuron_metrics_calculation_stable() -> BenchResult {
         neuron_store.compute_neuron_metrics(now_seconds(), 1 * E8)
     })
 }
+fn fib(n: u64) -> u64 {
+    if n <= 1 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    }
+}
+
+#[bench(raw)]
+fn bench_fib_17() -> BenchResult {
+    bench_fn(|| {
+        fib(17);
+    })
+}
+
+#[bench(raw)]
+fn bench_fib_16() -> BenchResult {
+    bench_fn(|| {
+        fib(17);
+    })
+}
