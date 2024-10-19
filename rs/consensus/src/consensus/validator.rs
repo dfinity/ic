@@ -972,6 +972,22 @@ impl Validator {
             .block_proposal()
             .get_by_height_range(range)
         {
+            let blockmaker_disqualified = disqualified_ranks
+                .get_block_metadata(proposal.height(), proposal.rank())
+                .is_some();
+            let maybe_matching_notarization = pool_reader
+                .pool()
+                .unvalidated()
+                .notarization()
+                .get_by_height(proposal.height())
+                .find(|notarization| &notarization.content.block == proposal.content.get_hash());
+
+            // Early checking of equivocation + no matching notarization allows us
+            // to skip verification and integrity checking of these blocks
+            if blockmaker_disqualified && maybe_matching_notarization.is_none() {
+                continue;
+            }
+
             // Handle integrity check and verification errors early
             if !proposal.check_integrity() {
                 change_set.push(ChangeAction::HandleInvalid(
@@ -998,13 +1014,7 @@ impl Validator {
             }
 
             // Attempt to validate the proposal through a notarization
-            if let Some(notarization) = pool_reader
-                .pool()
-                .unvalidated()
-                .notarization()
-                .get_by_height(proposal.height())
-                .find(|notarization| &notarization.content.block == proposal.content.get_hash())
-            {
+            if let Some(notarization) = maybe_matching_notarization {
                 // Verify notarization signature. If the signature is valid, both
                 // artifacts may be validated.
                 let verification = self.verify_artifact(pool_reader, &notarization);
@@ -1084,10 +1094,7 @@ impl Validator {
 
             // Skip block proposals with a disqualified rank. We do this after
             // checking for a fast-path validation, to avoid getting stuck.
-            if disqualified_ranks
-                .get_block_metadata(proposal.height(), proposal.rank())
-                .is_some()
-            {
+            if blockmaker_disqualified {
                 continue;
             }
 
