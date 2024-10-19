@@ -6455,6 +6455,7 @@ dependencies = [
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
+ "ic-btc-kyt",
  "ic-canister-log 0.2.0",
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
