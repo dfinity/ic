@@ -33,9 +33,14 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-stream",
+    "@crate_index//:bytes",
     "@crate_index//:once_cell",
     "@crate_index//:rand",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
+    "@crate_index//:rstest",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio-rustls",
     "@crate_index//:uuid",
     "@crate_index//:warp",
 ]
