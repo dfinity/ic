@@ -81,7 +81,7 @@ fn test_next_message_if_over_instructions() {
 
 #[test]
 fn test_upper_bound() {
-    let instructions_limit = 500_000;
+    let instructions_limit = 1_000_000;
     let state_machine = state_machine_for_test(instructions_limit);
 
     let canister_playground_wasm = Project::cargo_bin_maybe_from_env("long-message-canister", &[]);
@@ -94,20 +94,24 @@ fn test_upper_bound() {
         playground_id,
         "test_next_message_if_over_instructions",
         TestParameters {
-            use_break: false,
-            message_threshold: instructions_limit * 4 / 5,
-            upper_bound: Some(instructions_limit * 6 / 5),
+            use_break: true,
+            message_threshold: 400_000,
+            upper_bound: Some(700_000),
         },
         PrincipalId::new_anonymous(),
     )
     .unwrap_err();
-    assert!(err.contains(
-        format!(
-            "Canister call exceeded the limit of {} instructions in the call context.",
-            instructions_limit * 6 / 5
-        )
-        .as_str()
-    ));
+    assert!(
+        err.contains(
+            format!(
+                "Canister call exceeded the limit of {} instructions in the call context.",
+                700_000
+            )
+            .as_str()
+        ),
+        "Error was: {:?}",
+        err
+    );
 
     update_with_sender::<TestParameters, ()>(
         &state_machine,

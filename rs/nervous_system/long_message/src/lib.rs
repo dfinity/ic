@@ -1,12 +1,11 @@
 use ic_cdk::{
     api::{call_context_instruction_counter, instruction_counter},
-    println, update,
+    query,
 };
 
-#[update(hidden = true)]
-fn _long_message_break() {
+#[query(hidden = true)]
+fn __long_message_noop() {
     // This function is used to break the message into smaller parts
-    println!("Breaking the message");
 }
 
 const B: u64 = 1_000_000_000;
@@ -21,10 +20,10 @@ pub const LIMIT_FOR_SYSTEM_SUBNETS: u64 = 45 * B;
 ///
 /// # Panics if the number of instructions used exceeds the given upper bound.
 pub async fn break_message_if_over_instructions(message_threshold: u64, upper_bound: Option<u64>) {
-    let instructions_used = instruction_counter();
-
+    // first we check the upper bound to see if we should panic.
     if let Some(upper_bound) = upper_bound {
         let total_instructions_used = call_context_instruction_counter();
+
         if total_instructions_used > upper_bound {
             panic!(
                 "Canister call exceeded the limit of {} instructions in the call context.",
@@ -33,11 +32,12 @@ pub async fn break_message_if_over_instructions(message_threshold: u64, upper_bo
         }
     }
 
+    let instructions_used = instruction_counter();
     if instructions_used < message_threshold {
         return;
     }
 
-    () = ic_cdk::call(ic_cdk::id(), "_long_message_break", ())
+    () = ic_cdk::call(ic_cdk::id(), "__long_message_noop", ())
         .await
         .unwrap();
 }

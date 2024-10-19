@@ -6,7 +6,7 @@ use std::time::Duration;
 
 #[init]
 fn canister_init() {
-    println!("Playground Canister Init!");
+    println!("long_message_canister init!");
 }
 
 #[derive(CandidType, Deserialize)]
