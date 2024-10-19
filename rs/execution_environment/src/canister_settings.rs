@@ -476,7 +476,10 @@ pub(crate) fn validate_canister_settings(
     if let Some(controllers) = &controllers {
         if controllers.len() > max_controllers {
             return Err(CanisterManagerError::InvalidSettings {
-                message: format!("Invalid settings: 'controllers' length exceeds maximum size allowed of {}.", max_controllers),
+                message: format!(
+                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
+                    max_controllers
+                ),
             });
         }
     }
