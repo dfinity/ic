@@ -1,16 +1,13 @@
+use anyhow::{bail, Context, Result};
+use config::config_ini::config_map_from_path;
+use icos_utils::get_command_stdout;
+use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
+use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
 use std::collections::HashMap;
 use std::fs::write;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-use anyhow::{bail, Context, Result};
-
-use config::config_ini::config_map_from_path;
-use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
-use icos_utils::get_command_stdout;
-
-use network::systemd::IPV6_NAME_SERVER_NETWORKD_CONTENTS;
 
 pub static DEFAULT_GUESTOS_NETWORK_CONFIG_PATH: &str = "/boot/config/network.conf";
 
