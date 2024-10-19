@@ -131,9 +131,10 @@ pub fn retrieve_btc_kyt_failed(
     address: String,
     amount: u64,
     kyt_provider: Principal,
-    uuid: String,
     block_index: u64,
 ) {
+    // UUID is no longer relevant for the new KYT canister
+    let uuid = "".to_string();
     record_event(&Event::RetrieveBtcKytFailed {
         owner,
         address,

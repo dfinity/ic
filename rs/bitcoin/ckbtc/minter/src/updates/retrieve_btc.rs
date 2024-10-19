@@ -1,7 +1,7 @@
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::logs::P0;
 use crate::logs::P1;
-use crate::management::fetch_withdrawal_alerts;
+use crate::management::{check_withdrawal_destination_address, fetch_withdrawal_alerts};
 use crate::memo::{BurnMemo, Status};
 use crate::state::ReimbursementReason;
 use crate::tasks::{schedule_now, TaskType};
@@ -12,6 +12,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_kyt::CheckAddressResponse;
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -195,8 +196,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         return Err(RetrieveBtcError::InsufficientFunds { balance });
     }
 
-    let (uuid, status, kyt_provider) =
-        kyt_check_address(caller, args.address.clone(), args.amount).await?;
+    let (status, kyt_provider) = new_kyt_check_address(args.address.clone()).await?;
 
     match status {
         BtcAddressCheckStatus::Tainted => {
@@ -222,7 +222,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
                     args.address,
                     args.amount,
                     kyt_provider,
-                    uuid,
                     block_index,
                 )
             });
@@ -646,5 +645,31 @@ async fn kyt_check_address(
                 reason
             )))
         }
+    }
+}
+
+async fn new_kyt_check_address(
+    address: String,
+) -> Result<(BtcAddressCheckStatus, Principal), RetrieveBtcError> {
+    let new_kyt_principal = read_state(|s| {
+        s.new_kyt_principal
+            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
+            .get()
+            .into()
+    });
+
+    match check_withdrawal_destination_address(new_kyt_principal, address.clone())
+        .await
+        .map_err(|call_err| {
+            RetrieveBtcError::TemporarilyUnavailable(format!(
+                "Failed to call KYT canister: {}",
+                call_err
+            ))
+        })? {
+        CheckAddressResponse::Failed => {
+            log!(P0, "Discovered a tainted btc address {}", address);
+            Ok((BtcAddressCheckStatus::Tainted, new_kyt_principal))
+        }
+        CheckAddressResponse::Passed => Ok((BtcAddressCheckStatus::Clean, new_kyt_principal)),
     }
 }
