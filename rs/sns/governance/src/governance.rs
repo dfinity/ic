@@ -832,12 +832,12 @@ impl UpgradeLock {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = ()>,
     {
-        self.try_acquire_upgrade_lock(now_fn(), task_instance);
-
-        // Run the task instance.
-        task().await;
-
-        self.release_upgrade_lock(now_fn(), task_instance);
+        if self.try_acquire_upgrade_lock(now_fn(), task_instance) {
+            // Run the task instance.
+            task().await;
+    
+            self.release_upgrade_lock(now_fn(), task_instance);
+        }
     }
 }
 
