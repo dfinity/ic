@@ -46,11 +46,11 @@ rust_library(
 
 rust_doc(
     name = "consensus_utils_doc",
-    crate = ":utils",
+    crate = ":ic_consensus_utils",
 )
 
 rust_test(
     name = "consensus_utils_test",
-    crate = ":utils",
+    crate = ":ic_consensus_utils",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
