@@ -18,7 +18,6 @@ rust_library(
     name = "ic_crypto_internal_basic_sig_iccsa_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
-    crate_name = "ic_crypto_internal_basic_sig_iccsa_test_utils",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
