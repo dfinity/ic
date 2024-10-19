@@ -17,7 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/constants",

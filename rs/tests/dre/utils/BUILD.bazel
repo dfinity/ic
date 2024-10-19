@@ -14,7 +14,7 @@ rust_library(
         # Keep sorted
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests",

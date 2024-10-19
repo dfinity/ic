@@ -111,7 +111,7 @@ system_test_nns(
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",

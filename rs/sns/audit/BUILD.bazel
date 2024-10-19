@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/agent",
     "//rs/nervous_system/neurons_fund",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/governance/api",
     "//rs/sns/governance",
     "//rs/sns/swap",

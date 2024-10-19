@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/interfaces/registry",
     "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/test_utils:ic_nns_test_utils",

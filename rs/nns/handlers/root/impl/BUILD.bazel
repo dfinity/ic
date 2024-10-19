@@ -18,11 +18,11 @@ BASE_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",

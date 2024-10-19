@@ -28,7 +28,7 @@ system_test_nns(
         "//rs/nervous_system/clients",
         "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/test_utils:ic_nns_test_utils",

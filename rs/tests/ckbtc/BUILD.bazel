@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common/test_keys",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/test_utils:ic_nns_test_utils",

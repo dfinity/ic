@@ -14,7 +14,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",

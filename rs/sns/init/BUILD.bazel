@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/ledger_suite/icrc1/ledger",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",
     "//rs/nns/governance/api",

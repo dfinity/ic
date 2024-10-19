@@ -5,10 +5,9 @@ load("//rs/tests:system_tests.bzl", "system_test_nns")
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 rust_library(
-    name = "common",
+    name = "ic_consensus_system_test_backup_common",
     testonly = True,
     srcs = ["common.rs"],
-    crate_name = "ic_consensus_system_test_backup_common",
     deps = [
         # Keep sorted.
         "//rs/backup",
@@ -47,7 +46,7 @@ system_test_nns(
         BACKUP_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        ":common",
+        ":ic_consensus_system_test_backup_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -71,7 +70,7 @@ system_test_nns(
         BACKUP_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
-        ":common",
+        ":ic_consensus_system_test_backup_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],

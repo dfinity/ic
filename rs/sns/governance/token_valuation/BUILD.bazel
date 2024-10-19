@@ -5,7 +5,7 @@ package(default_visibility = ["//rs/sns/governance:__subpackages__"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/initial_supply",
     "//rs/nervous_system/runtime",
     "//rs/nns/cmc",

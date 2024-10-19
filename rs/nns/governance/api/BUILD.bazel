@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common/validation",
     "//rs/nervous_system/proto",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/protobuf",
     "//rs/sns/root",
     "//rs/sns/swap:swap",

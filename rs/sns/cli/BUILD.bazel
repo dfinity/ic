@@ -7,11 +7,11 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
     "//rs/nervous_system/agent",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
     "//rs/nervous_system/proto",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",

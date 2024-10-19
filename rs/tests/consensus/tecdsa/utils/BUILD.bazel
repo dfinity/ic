@@ -13,7 +13,7 @@ rust_library(
         "//rs/limits",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/cmc",
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/test_utils:ic_nns_test_utils",

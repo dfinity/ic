@@ -17,10 +17,9 @@ STATIC_FILE_SERVER_IMAGE_RUNTIME_DEPS = [
 ]
 
 rust_library(
-    name = "common",
+    name = "ic_consensus_system_test_subnet_recovery_common",
     testonly = True,
     srcs = ["common.rs"],
-    crate_name = "ic_consensus_system_test_subnet_recovery_common",
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -60,7 +59,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -80,7 +79,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -100,7 +99,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -121,7 +120,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -142,7 +141,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -163,7 +162,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -184,7 +183,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -205,7 +204,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -226,7 +225,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -248,7 +247,7 @@ system_test_nns(
     uses_guestos_dev_test = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
     deps = [
-        ":common",
+        ":ic_consensus_system_test_subnet_recovery_common",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],

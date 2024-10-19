@@ -8,7 +8,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/types/base_types",
     "@crate_index//:anyhow",

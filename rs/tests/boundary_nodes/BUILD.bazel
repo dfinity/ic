@@ -194,7 +194,7 @@ system_test_nns(
         "//rs/boundary_node/discower_bowndary:discower-bowndary",
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/test_utils:ic_nns_test_utils",

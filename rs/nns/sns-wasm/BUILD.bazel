@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",

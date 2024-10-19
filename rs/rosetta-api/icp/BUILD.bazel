@@ -22,7 +22,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/limits",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
