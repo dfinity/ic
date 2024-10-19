@@ -15,7 +15,6 @@ rust_library(
     name = "ic_canonical_state_tree_hash_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
-    crate_name = "ic_canonical_state_tree_hash_test_utils",
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],

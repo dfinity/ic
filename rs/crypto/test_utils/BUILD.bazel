@@ -4,7 +4,6 @@ rust_library(
     name = "ic_crypto_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
-    crate_name = "ic_crypto_test_utils",
     version = "0.9.0",
     visibility = [
         "//rs/canister_client:__subpackages__",

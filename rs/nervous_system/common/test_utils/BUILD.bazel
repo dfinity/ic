@@ -33,7 +33,6 @@ MACRO_DEPENDENCIES = [
 rust_library(
     name = "ic_nervous_system_common_test_utils",
     srcs = glob(["src/**/*.rs"]),
-    crate_name = "ic_nervous_system_common_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,

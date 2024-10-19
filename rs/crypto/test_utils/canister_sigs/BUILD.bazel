@@ -10,7 +10,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
-        "//rs/certification/test-utils",
+        "//rs/certification/test-utils:ic_certification_test_utils",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils:ic_crypto_internal_basic_sig_iccsa_test_utils",
         "//rs/crypto/temp_crypto",

@@ -79,7 +79,7 @@ DEV_DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/canonical_state",
-    "//rs/certification/test-utils",
+    "//rs/certification/test-utils:ic_certification_test_utils",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/mocks",

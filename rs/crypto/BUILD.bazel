@@ -57,7 +57,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/certification/test-utils",
+    "//rs/certification/test-utils:ic_certification_test_utils",
     "//rs/crypto/ecdsa_secp256r1",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
