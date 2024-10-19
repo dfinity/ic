@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/consensus",
     "//rs/config",
     "//rs/consensus",
-    "//rs/consensus/utils",
+    "//rs/consensus/utils:ic_consensus_utils",
     "//rs/crypto/ed25519",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/secp256k1",

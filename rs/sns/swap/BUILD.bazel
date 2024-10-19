@@ -27,7 +27,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/types/base_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:comparable",

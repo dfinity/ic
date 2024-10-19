@@ -38,7 +38,7 @@ DEPENDENCIES = [
     "//rs/sns/governance/token_valuation",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",

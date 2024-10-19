@@ -11,7 +11,7 @@ rust_library(
         # Keep sorted.
         "//rs/config",
         "//rs/protobuf",
-        "//rs/utils",
+        "//rs/utils:ic_utils",
         "@crate_index//:chrono",
         "@crate_index//:serde",
         "@crate_index//:slog",

@@ -30,7 +30,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:hex",

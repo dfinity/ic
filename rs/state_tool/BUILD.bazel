@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//rs/state_manager",
     "//rs/sys",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:prost",

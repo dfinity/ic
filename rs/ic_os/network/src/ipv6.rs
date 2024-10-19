@@ -3,7 +3,7 @@ use std::net::Ipv6Addr;
 use anyhow::{anyhow, Context, Result};
 
 use crate::mac_address::UnformattedMacAddress;
-use utils::intersperse;
+use icos_utils::intersperse;
 
 /// Generate a deterministic ipv6 address
 pub fn generate_ipv6_address(

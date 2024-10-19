@@ -34,7 +34,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "//rs/utils/lru_cache",
     "@crate_index//:candid",
     "@crate_index//:hex",

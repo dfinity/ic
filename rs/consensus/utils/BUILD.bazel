@@ -31,12 +31,11 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "utils",
+    name = "ic_consensus_utils",
     srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//conditions:default": [],
     }),
-    crate_name = "ic_consensus_utils",
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:strum_macros",

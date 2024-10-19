@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/proto",
     "//rs/types/base_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:prost",

@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use ping::dgramsock;
 use rayon::prelude::*;
 
-use utils::{get_command_stdout, retry, retry_pred};
+use icos_utils::{get_command_stdout, retry, retry_pred};
 
 static SYSFS_NETWORK_DIR: &str = "/sys/class/net";
 

@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//rs/sns/swap:swap",
     "//rs/types/base_types",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",

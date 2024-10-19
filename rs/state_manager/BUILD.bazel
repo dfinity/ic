@@ -38,7 +38,7 @@ rust_library(
         "//rs/types/base_types",
         "//rs/types/error_types",
         "//rs/types/types",
-        "//rs/utils",
+        "//rs/utils:ic_utils",
         "//rs/utils/thread",
         "//rs/utils/validate_eq",
         "@crate_index//:bit-vec",

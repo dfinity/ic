@@ -53,7 +53,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:flate2",

@@ -15,7 +15,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "//rs/utils/validate_eq",
     "@crate_index//:base64",
     "@crate_index//:bincode",

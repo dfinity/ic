@@ -17,7 +17,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = {
-        "//rs/utils": "utils",
+        "//rs/utils:ic_utils": "utils",
     },
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",

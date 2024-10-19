@@ -6,7 +6,7 @@ use regex::Regex;
 use sha2::{Digest, Sha256};
 
 use crate::node_type::NodeType;
-use utils::intersperse;
+use icos_utils::intersperse;
 
 /// Wrapper types for MAC addresses
 /// - ensure clients cannot modify or construct incorrectly.
