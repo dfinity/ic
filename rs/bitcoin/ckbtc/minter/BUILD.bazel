@@ -8,6 +8,7 @@ LIB_DEPS = [
     # Keep sorted.
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/bitcoin/kyt:btc_kyt_lib",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/secp256k1",

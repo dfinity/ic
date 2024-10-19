@@ -838,7 +838,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx], vec![utxo]);
@@ -862,7 +863,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
 
         let mut available_amount = 0;
@@ -905,7 +907,8 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None
+            kyt_principal: None,
+            new_kyt_principal: None
         });
 
         for (utxo, acc_idx) in utxos_acc_idx {
@@ -1133,6 +1136,7 @@ fn can_form_a_batch_conditions() {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
+        new_kyt_principal: None,
     });
     // no request, can't form a batch, fail.
     assert!(!state.can_form_a_batch(1, 0));
@@ -1190,6 +1194,7 @@ fn test_build_account_to_utxos_table_pagination() {
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
         kyt_principal: None,
+        new_kyt_principal: None,
     });
     let account1 = Account::from(
         Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")

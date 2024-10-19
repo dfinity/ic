@@ -193,6 +193,9 @@ type InitArgs = record {
 
     /// The canister id of the KYT canister.
     kyt_principal: opt principal;
+
+    /// The canister id of the new KYT canister.
+    new_kyt_principal: opt principal;
 };
 
 // The upgrade parameters of the minter canister.
@@ -216,6 +219,9 @@ type UpgradeArgs = record {
 
     /// The principal of the KYT canister.
     kyt_principal : opt principal;
+
+    /// The principal of the new KYT canister.
+    new_kyt_principal : opt principal;
 };
 
 type RetrieveBtcStatus = variant {
