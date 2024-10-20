@@ -15,8 +15,8 @@ use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerU
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
-use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -376,7 +376,7 @@ fn sanity_check_ledger() {
             .query(ledger_id, "get_blocks", req)
             .map_err(|err| err.code())
         {
-            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            Err(ic_pocket_ic_tests::ErrorCode::CanisterMethodNotFound) => {}
             _ => panic!(
                 "{}",
                 "get_blocks not disabled in the Ledger! (call result: {r:?})"
@@ -394,7 +394,7 @@ fn sanity_check_ledger() {
             .query(ledger_id, "icrc3_get_blocks", req)
             .map_err(|err| err.code())
         {
-            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            Err(ic_pocket_ic_tests::ErrorCode::CanisterMethodNotFound) => {}
             _ => panic!(
                 "{}",
                 "icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"

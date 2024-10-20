@@ -2,9 +2,9 @@ use candid::{Decode, Encode};
 use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap};
 use ic_sns_wasm::pb::v1::SnsWasm;
-use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::str::FromStr;

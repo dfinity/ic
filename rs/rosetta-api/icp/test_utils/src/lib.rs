@@ -1,6 +1,7 @@
 use candid::{Decode, Encode};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_pocket_ic_tests::{StateMachine, WasmResult};
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
     to_model_account_identifier,
@@ -24,7 +25,6 @@ use ic_rosetta_api::request_types::{
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
-use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_types::{messages::Blob, time, CanisterId, PrincipalId};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 use rand::{seq::SliceRandom, thread_rng};

@@ -7,8 +7,8 @@ use ic_nns_test_utils::{
     sns_wasm::{get_sns_subnet_ids, update_sns_subnet_list, update_sns_subnet_list_via_proposal},
     state_test_helpers::{self, create_canister},
 };
+use ic_pocket_ic_tests::StateMachine;
 use ic_sns_wasm::pb::v1::UpdateSnsSubnetListRequest;
-use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
 
 pub mod common;

@@ -8,7 +8,7 @@ use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg};
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{TokensType, Zero};
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;

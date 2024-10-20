@@ -2,7 +2,7 @@ use crate::{setup, transfer, InitArgs, ARCHIVE_TRIGGER_THRESHOLD, MINTER, NUM_BL
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 
 pub enum LedgerSuiteType {

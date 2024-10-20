@@ -31,7 +31,7 @@ use ic_nns_test_utils::{
         setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};

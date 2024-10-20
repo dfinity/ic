@@ -15,7 +15,7 @@ use ic_nns_test_utils::{
         state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_pocket_ic_tests::StateMachine;
 use serde_bytes::ByteBuf;
 use std::time::Duration;
 
