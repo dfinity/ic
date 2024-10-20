@@ -12,6 +12,7 @@ use pocket_ic::{
     update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc, PocketIcBuilder,
     WasmResult,
 };
+#[cfg(unix)]
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
