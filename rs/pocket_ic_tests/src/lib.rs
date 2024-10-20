@@ -117,11 +117,6 @@ impl StateMachineBuilder {
 }
 
 impl StateMachine {
-    // tricky!!!
-    pub fn run_until_completion(&self, max_ticks: usize) {
-        self.sm.run_until_completion(max_ticks)
-    }
-
     // TODO: replace by num_canisters in NNS integration tests
     pub fn num_running_canisters(&self) -> u64 {
         self.sm.num_running_canisters()
