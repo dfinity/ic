@@ -3,6 +3,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_rosetta_api::models::seconds::Seconds;
 use ic_rosetta_api::models::AccountType;
 use ic_rosetta_api::models::BlockIdentifier;
 use ic_rosetta_api::models::ConstructionDeriveRequestMetadata;
@@ -11,6 +12,7 @@ use ic_rosetta_api::models::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::OperationIdentifier;
 use ic_rosetta_api::request_types::NeuronIdentifierMetadata;
 use ic_rosetta_api::request_types::RequestType;
+use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -30,6 +32,7 @@ use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use url::ParseError;
+
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -194,13 +197,51 @@ impl RosettaClient {
             related_operations: None,
             type_: "STAKE".to_string(),
             status: None,
-            account: Some(AccountIdentifier::new(PrincipalId(signer_principal), None).into()),
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
             amount: None,
             coin_change: None,
             metadata: Some(
                 NeuronIdentifierMetadata { neuron_index }
                     .try_into()
                     .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
+            ),
+        }])
+    }
+
+    pub async fn call(&self, req: CallRequest) -> anyhow::Result<CallResponse> {
+        self.call_endpoint("/call", &req).await
+    }
+
+    pub async fn build_set_dissolve_timestamp_operations(
+        signer_principal: Principal,
+        neuron_index: u64,
+        // The number of seconds since Unix epoch.
+        // The dissolve delay will be set to this value
+        // The timestamp has to be in the future and greater or equal to the currently set timestamp
+        timestamp: u64,
+    ) -> anyhow::Result<Vec<Operation>> {
+        Ok(vec![Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "SET_DISSOLVE_TIMESTAMP".to_string(),
+            status: None,
+            account: Some(rosetta_core::identifiers::AccountIdentifier::from(
+                AccountIdentifier::new(PrincipalId(signer_principal), None),
+            )),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                SetDissolveTimestampMetadata {
+                    neuron_index,
+                    timestamp: Seconds(timestamp),
+                }
+                .try_into()
+                .map_err(|e| anyhow::anyhow!("Failed to convert metadata: {:?}", e))?,
             ),
         }])
     }
@@ -545,7 +586,7 @@ impl RosettaClient {
         &self,
         transfer_args: RosettaTransferArgs,
         network_identifier: NetworkIdentifier,
-        signer_keypair: T,
+        signer_keypair: &T,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
         T: RosettaSupportedKeyPair,
@@ -562,7 +603,7 @@ impl RosettaClient {
 
         // This submit wrapper will also wait for the transaction to be finalized
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier,
             transfer_operations,
             // We don't care about the specific memo, only that there exists a memo
@@ -575,7 +616,7 @@ impl RosettaClient {
     pub async fn create_neuron<T>(
         &self,
         network_identifier: NetworkIdentifier,
-        signer_keypair: T,
+        signer_keypair: &T,
         create_neuron_args: RosettaCreateNeuronArgs,
     ) -> anyhow::Result<ConstructionSubmitResponse>
     where
@@ -585,7 +626,7 @@ impl RosettaClient {
         let neuron_account_id = self
             .construction_derive(ConstructionDeriveRequest {
                 network_identifier: network_identifier.clone(),
-                public_key: (&signer_keypair).into(),
+                public_key: PublicKey::from(signer_keypair),
                 metadata: Some(
                     ConstructionDeriveRequestMetadata {
                         account_type: AccountType::Neuron {
@@ -615,7 +656,7 @@ impl RosettaClient {
 
         // This submit wrapper will also wait for the transaction to be finalized
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier.clone(),
             transfer_operations,
             // We don't care about the specific memo, only that there exists a memo
@@ -631,9 +672,43 @@ impl RosettaClient {
         .await?;
 
         self.make_submit_and_wait_for_transaction(
-            &signer_keypair,
+            signer_keypair,
             network_identifier,
             stake_operations,
+            None,
+            None,
+        )
+        .await
+    }
+
+    /// The amount of rewards you can expect to receive are amongst other factors dependent on the amount of time a neuron is locked up for.
+    /// If the dissolve timestamp is set to a value that is before 6 months in the future you will not be getting any rewards for the locked period.
+    /// This is because the last 6 months of a dissolving neuron, the neuron will not get any rewards.
+    /// If you set the dissolve timestamp to 1 year in the future and start dissolving the neuron right away, you will receive rewards for the next 6 months.
+    /// The dissolve timestamp always increases monotonically.
+    /// If the neuron is in the DISSOLVING state, this operation can move the dissolve timestamp further into the future.
+    /// If the neuron is in the NOT_DISSOLVING state, invoking SET_DISSOLVE_TIMESTAMP with time T will attempt to increase the neuron’s dissolve delay (the minimal time it will take to dissolve the neuron) to T - current_time.
+    /// If the neuron is in the DISSOLVED state, invoking SET_DISSOLVE_TIMESTAMP will move it to the NOT_DISSOLVING state and will set the dissolve delay accordingly.
+    pub async fn set_neuron_dissolve_delay<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        set_neuron_dissolve_delay_args: RosettaSetNeuronDissolveDelayArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let set_dissolve_delay_operations = RosettaClient::build_set_dissolve_timestamp_operations(
+            signer_keypair.generate_principal_id()?.0,
+            set_neuron_dissolve_delay_args.neuron_index.unwrap_or(0),
+            set_neuron_dissolve_delay_args.dissolve_delay_seconds,
+        )
+        .await?;
+
+        self.make_submit_and_wait_for_transaction(
+            signer_keypair,
+            network_identifier,
+            set_dissolve_delay_operations,
             None,
             None,
         )
@@ -769,6 +844,43 @@ impl RosettaCreateNeuronArgsBuilder {
         RosettaCreateNeuronArgs {
             staked_amount: self.staked_amount,
             from_subaccount: self.from_subaccount,
+            neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaSetNeuronDissolveDelayArgs {
+    pub neuron_index: Option<u64>,
+    pub dissolve_delay_seconds: u64,
+}
+
+impl RosettaSetNeuronDissolveDelayArgs {
+    pub fn builder(dissolve_delay_seconds: u64) -> RosettaSetNeuronDissolveDelayArgsBuilder {
+        RosettaSetNeuronDissolveDelayArgsBuilder::new(dissolve_delay_seconds)
+    }
+}
+
+pub struct RosettaSetNeuronDissolveDelayArgsBuilder {
+    dissolve_delay_seconds: u64,
+    neuron_index: Option<u64>,
+}
+
+impl RosettaSetNeuronDissolveDelayArgsBuilder {
+    pub fn new(dissolve_delay_seconds: u64) -> Self {
+        Self {
+            dissolve_delay_seconds,
+            neuron_index: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn build(self) -> RosettaSetNeuronDissolveDelayArgs {
+        RosettaSetNeuronDissolveDelayArgs {
+            dissolve_delay_seconds: self.dissolve_delay_seconds,
             neuron_index: self.neuron_index,
         }
     }

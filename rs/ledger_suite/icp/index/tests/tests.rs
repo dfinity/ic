@@ -1685,7 +1685,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_bytes_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_index_total_memory_bytes_metric(
             index_wasm(),
             encode_init_args,
         );

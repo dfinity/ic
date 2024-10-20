@@ -42,7 +42,7 @@ assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 cddl = "0.9.4"
 ic-agent = { workspace = true }
-ic-icrc1-ledger-sm-tests = { path = "../../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-pocket-ic-tests = { path = "../../../pocket_ic_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
@@ -55,3 +55,4 @@ default = []
 get-blocks-disabled = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
 canbench-rs = ["dep:canbench-rs", "dep:assert_matches"]
+next-ledger-version = []

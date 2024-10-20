@@ -1032,6 +1032,22 @@ pub fn nns_increase_dissolve_delay(
     )
 }
 
+pub fn nns_start_dissolving(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> Result<
+    nns_governance_pb::manage_neuron_response::ConfigureResponse,
+    nns_governance_pb::GovernanceError,
+> {
+    nns_configure_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        Operation::StartDissolving(nns_governance_pb::manage_neuron::StartDissolving {}),
+    )
+}
+
 #[must_use]
 pub fn nns_propose_upgrade_nns_canister(
     state_machine: &StateMachine,

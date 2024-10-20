@@ -1,5 +1,5 @@
 [package]
-name = "ic-icrc1-ledger-sm-tests"
+name = "ic-ledger-suite-state-machine-tests"
 description = "StateMachines based tests for https://github.com/dfinity/ICRC-1 ledgers"
 version.workspace = true
 authors.workspace = true

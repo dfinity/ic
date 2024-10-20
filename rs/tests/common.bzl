@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/limits",
     "//rs/crypto/sha2",
-    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cup_explorer",
@@ -28,7 +27,6 @@ DEPENDENCIES = [
     "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
     "//rs/http_utils",
     "//rs/ic_os/dev_test_tools/deterministic_ips",
-    "//rs/ic_os/fstrim_tool",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/clients",
@@ -147,10 +145,8 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
-    "@crate_index//:schnorr_fun",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
@@ -329,11 +325,6 @@ COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-CUSTOM_DOMAINS_RUNTIME_DEPS = [
-    "//rs/tests:custom_domains_uvm_config_image",
-    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]

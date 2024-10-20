@@ -126,6 +126,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -160,7 +161,9 @@ system_test(
 
 system_test(
     name = "bitcoin_set_config_proposal_test",
-    env = NNS_CANISTER_ENV,
+    env = dict(NNS_CANISTER_ENV.items() + {
+        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
+    }.items()),
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

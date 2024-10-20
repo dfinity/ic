@@ -38,6 +38,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }
 ic-sns-root = { path = "../root" }
+ic-nns-test-utils-golden-nns-state = { path = "../../nns/test_utils/golden_nns_state" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"

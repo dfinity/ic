@@ -781,10 +781,10 @@ mod tests {
                         non_finalized_notarization_2
                     )),
                     ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
-                        non_finalized_block_proposal_2_0
+                        non_finalized_block_proposal_2_1
                     )),
                     ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
-                        non_finalized_block_proposal_2_1
+                        non_finalized_block_proposal_2_0
                     )),
                 ]
             );

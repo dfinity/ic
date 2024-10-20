@@ -152,7 +152,7 @@ pub(super) fn create_summary_payload(
     logger: ReplicaLogger,
 ) -> Result<dkg::Summary, PayloadCreationError> {
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent);
-    let mut transcripts_for_new_subnets = BTreeMap::new();
+    let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
@@ -163,7 +163,7 @@ pub(super) fn create_summary_payload(
                         .insert(dkg_id.dkg_tag, transcript)
                         .is_some()
                 } else {
-                    transcripts_for_new_subnets
+                    transcripts_for_remote_subnets
                         .insert(*dkg_id, Ok(transcript))
                         .is_some()
                 };
@@ -188,21 +188,22 @@ pub(super) fn create_summary_payload(
 
     let height = parent.height.increment();
 
-    let (mut configs, transcripts_for_new_subnets, initial_dkg_attempts) = compute_remote_dkg_data(
-        subnet_id,
-        height,
-        registry_client,
-        state_manager,
-        validation_context,
-        transcripts_for_new_subnets,
-        &last_summary
-            .transcripts_for_new_subnets_with_callback_ids
-            .iter()
-            .map(|(id, _, result)| (*id, result.clone()))
-            .collect(),
-        &last_summary.initial_dkg_attempts,
-        &logger,
-    )?;
+    let (mut configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
+        compute_remote_dkg_data(
+            subnet_id,
+            height,
+            registry_client,
+            state_manager,
+            validation_context,
+            transcripts_for_remote_subnets,
+            &last_summary
+                .transcripts_for_remote_subnets
+                .iter()
+                .map(|(id, _, result)| (*id, result.clone()))
+                .collect(),
+            &last_summary.initial_dkg_attempts,
+            &logger,
+        )?;
 
     let interval_length = last_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
@@ -244,7 +245,7 @@ pub(super) fn create_summary_payload(
         configs,
         current_transcripts,
         next_transcripts,
-        transcripts_for_new_subnets,
+        transcripts_for_remote_subnets,
         registry_version,
         interval_length,
         next_interval_length,
@@ -982,7 +983,7 @@ mod tests {
                 // have already attempted to run remote DKG for this target
                 // MAX_REMOTE_DKG_ATTEMPTS times.
                 initial_dkg_attempts.insert(target_id, MAX_REMOTE_DKG_ATTEMPTS);
-                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                let (configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
                     compute_remote_dkg_data(
                         subnet_id,
                         Height::from(0),
@@ -1008,7 +1009,7 @@ mod tests {
 
                 // We rather respond with errors for this target.
                 assert_eq!(
-                    transcripts_for_new_subnets
+                    transcripts_for_remote_subnets
                         .iter()
                         .filter(|(dkg_id, _, result)| dkg_id.target_subnet
                             == NiDkgTargetSubnet::Remote(target_id)
@@ -1025,7 +1026,7 @@ mod tests {
                 // STEP 3:
                 // Call compute_remote_dkg_data the last time, with an empty call context.
                 // (As arranged in the initialization of the state manager...)
-                let (configs, transcripts_for_new_subnets, initial_dkg_attempts) =
+                let (configs, transcripts_for_remote_subnets, initial_dkg_attempts) =
                     compute_remote_dkg_data(
                         subnet_id,
                         Height::from(0),
@@ -1042,7 +1043,7 @@ mod tests {
                 // No configs are created for this remote target any more.
                 assert_eq!(configs.len(), 0);
                 // No transcripts or errors are returned for this target.
-                assert_eq!(transcripts_for_new_subnets.len(), 0);
+                assert_eq!(transcripts_for_remote_subnets.len(), 0);
                 // The corresponding entry is removed from the counter.
                 assert_eq!(initial_dkg_attempts.len(), 0);
             });

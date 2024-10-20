@@ -124,7 +124,7 @@ impl RosettaTestingEnvironment {
                 .transfer(
                     args_builder.build(),
                     self.network_identifier.clone(),
-                    arg_with_caller.caller,
+                    &arg_with_caller.caller,
                 )
                 .await
                 .unwrap();

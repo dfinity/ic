@@ -11,6 +11,7 @@ use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_utils::interfaces::ManagementCanister;
+use nix::sys::signal::Signal;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
     HttpsConfig, InstanceConfig, SubnetConfigSet, SubnetKind, Topology,
@@ -33,19 +34,19 @@ use tempfile::{NamedTempFile, TempDir};
 pub const LOCALHOST: &str = "127.0.0.1";
 
 fn start_server_helper(
-    parent_pid: Option<u32>,
+    test_driver_pid: Option<u32>,
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    let port_file_path = if let Some(parent_pid) = parent_pid {
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid))
+    let port_file_path = if let Some(test_driver_pid) = test_driver_pid {
+        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
     let mut cmd = Command::new(PathBuf::from(bin_path));
-    if let Some(parent_pid) = parent_pid {
-        cmd.arg("--pid").arg(parent_pid.to_string());
+    if let Some(test_driver_pid) = test_driver_pid {
+        cmd.arg("--pid").arg(test_driver_pid.to_string());
     } else {
         cmd.arg("--port-file").arg(port_file_path.clone());
     }
@@ -76,8 +77,8 @@ fn start_server_helper(
 }
 
 pub fn start_server() -> Url {
-    let parent_pid = std::os::unix::process::parent_id();
-    start_server_helper(Some(parent_pid), false, false).0
+    let test_driver_pid = std::process::id();
+    start_server_helper(Some(test_driver_pid), false, false).0
 }
 
 #[test]
@@ -647,7 +648,48 @@ fn check_counter(pic: &PocketIc, canister_id: Principal, expected_ctr: u32) {
 /// can be successfully restored from the respective subnet states,
 /// using `with_nns_state` and `with_subnet_state` on `PocketIcBuilder`.
 #[test]
-fn canister_state_dir() {
+fn canister_state_dir_with_graceful_shutdown() {
+    canister_state_dir(None);
+}
+
+/// Tests that the PocketIC topology and canister states
+/// can be successfully restored from a `state_dir`
+/// after the PocketIC server has received SIGINT.
+#[test]
+fn canister_state_dir_with_sigint() {
+    canister_state_dir(Some(Signal::SIGINT));
+}
+
+/// Tests that the PocketIC topology and canister states
+/// can be successfully restored from a `state_dir`
+/// after the PocketIC server has received SIGTERM.
+#[test]
+fn canister_state_dir_with_sigterm() {
+    canister_state_dir(Some(Signal::SIGTERM));
+}
+
+fn send_signal_to_pic(pic: PocketIc, mut child: Child, shutdown_signal: Option<Signal>) {
+    if let Some(signal) = shutdown_signal {
+        // send shutdown signal to PocketIC server
+        nix::sys::signal::kill(
+            nix::unistd::Pid::from_raw(child.id().try_into().unwrap()),
+            signal,
+        )
+        .unwrap();
+        let status = child.wait().unwrap();
+        assert!(status.success());
+        // the PocketIC instance can't be deleted and thus dropping the PocketIC instance panics
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drop(pic);
+        }))
+        .unwrap_err();
+    } else {
+        // Delete the PocketIC instance.
+        drop(pic);
+    }
+}
+
+fn canister_state_dir(shutdown_signal: Option<Signal>) {
     const INIT_CYCLES: u128 = 2_000_000_000_000;
 
     // Create a temporary state directory persisted throughout the test.
@@ -655,8 +697,10 @@ fn canister_state_dir() {
     let state_dir_path_buf = state_dir.path().to_path_buf();
 
     // Create a PocketIC instance with NNS and app subnets.
+    let (server_url, child) = start_server_helper(None, false, false);
     let pic = PocketIcBuilder::new()
         .with_state_dir(state_dir_path_buf.clone())
+        .with_server_url(server_url)
         .with_nns_subnet()
         .with_application_subnet()
         .build();
@@ -726,11 +770,10 @@ fn canister_state_dir() {
         .unwrap();
     check_counter(&pic, spec_canister_id, 3);
 
-    // Delete the PocketIC instance.
-    drop(pic);
+    send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
-    let (new_server_url, _) = start_server_helper(None, false, false);
+    let (new_server_url, child) = start_server_helper(None, false, false);
 
     // Create a PocketIC instance mounting the state created so far.
     let pic = PocketIcBuilder::new()
@@ -768,8 +811,7 @@ fn canister_state_dir() {
     check_counter(&pic, app_canister_id, 2);
     check_counter(&pic, spec_canister_id, 4);
 
-    // Delete the PocketIC instance.
-    drop(pic);
+    send_signal_to_pic(pic, child, shutdown_signal);
 
     // Start a new PocketIC server.
     let (newest_server_url, _) = start_server_helper(None, false, false);
@@ -852,22 +894,27 @@ fn test_specified_id_call_v3() {
         let bytes = candid::Encode!(&arg).unwrap();
 
         // Submit a call to the `/api/v3/.../call` endpoint.
-        // Note that this might be flaky if it takes more than 10 seconds to process the update call
-        // (then `CallResponse::Poll` would be returned and this test would panic).
-        agent
-            .update(
-                &Principal::management_canister(),
-                "provisional_create_canister_with_cycles",
-            )
-            .with_arg(bytes)
-            .with_effective_canister_id(effective_canister_id)
-            .call()
-            .await
-            .map(|response| match response {
-                CallResponse::Poll(_) => panic!("Expected a reply"),
-                CallResponse::Response(..) => {}
-            })
-            .unwrap();
+        // This endpoint returns `CallResponse::Response` if the update call can be processed in less than 10 seconds.
+        // Otherwise, this endpoint returns `CallResponse::Poll`.
+        // In this test, we want to ensure that PocketIC can produce `CallResponse::Response`.
+        loop {
+            let response = agent
+                .update(
+                    &Principal::management_canister(),
+                    "provisional_create_canister_with_cycles",
+                )
+                .with_arg(bytes.clone())
+                .with_effective_canister_id(effective_canister_id)
+                .call()
+                .await
+                .unwrap();
+            match response {
+                CallResponse::Poll(_) => {}
+                CallResponse::Response(..) => {
+                    break;
+                }
+            };
+        }
     })
 }
 
