@@ -1,14 +1,16 @@
-pub use ic_state_machine_tests::{
-    CanisterId, Cycles, ErrorCode, PrincipalId, StateMachineConfig, StateMachineNode,
-    StateMachineStateDir, SubmitIngressError, Time, UserError, WasmResult,
-};
+pub use ic_error_types::{ErrorCode, UserError};
+pub use ic_state_machine_tests::StateMachineStateDir;
+pub use ic_types::ingress::WasmResult;
+pub use ic_types::time::Time;
+pub use ic_types::{CanisterId, Cycles, PrincipalId};
 
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, MessageId, SubnetId,
+    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, MessageId,
+    StateMachineConfig, SubnetId,
 };
 use pocket_ic::common::rest::SubnetKind;
 use std::time::{Duration, SystemTime};

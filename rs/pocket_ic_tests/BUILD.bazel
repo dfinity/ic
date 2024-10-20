@@ -9,6 +9,8 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
     "//rs/state_machine_tests",
+    "//rs/types/error_types",
+    "//rs/types/types",
 ]
 
 rust_library(
