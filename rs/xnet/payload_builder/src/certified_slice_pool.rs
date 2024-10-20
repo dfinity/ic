@@ -1159,7 +1159,14 @@ impl CertifiedSlicePool {
             None => return Ok(None),
         };
 
-        let signal_limit = get_signal_limit(begin, slice.payload.header.begin());
+        let signal_limit = get_signal_limit(
+            slice.payload.header.begin(),
+            slice
+                .payload
+                .messages
+                .as_ref()
+                .map(|messages| messages.begin()),
+        );
         let msg_limit =
             Some(msg_limit.map_or(signal_limit, |msg_limit| msg_limit.min(signal_limit)));
 

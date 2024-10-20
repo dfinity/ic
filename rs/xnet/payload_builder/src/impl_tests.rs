@@ -287,7 +287,7 @@ async fn validate_slice() {
         });
 
         // Helper for generating a slice from `SUBNET_1` with valid signals; and with
-        // messages between the given indices indices; and validating it.
+        // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
                 SUBNET_1,
@@ -452,7 +452,7 @@ async fn validate_slice_above_msg_limit() {
         });
 
         // Helper for validating a generated slice from `SUBNET_1` with messages between
-        // the given indices indices and the given `signals_end` index.
+        // the given indices and the given `signals_end` index.
         let validate_slice = |message_begin, message_end, signal_end, state| {
             let certified_slice = make_certified_stream_slice(
                 SUBNET_1,
@@ -510,6 +510,71 @@ async fn validate_slice_above_msg_limit() {
     });
 }
 
+#[tokio::test]
+async fn validate_slice_above_signal_limit() {
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
+        let validation_context = get_validation_context_for_test();
+
+        // Message and slice begin and end indices for outgoing stream to `SUBNET_1`.
+        const MESSAGE_BEGIN: u64 = 13;
+        const MESSAGE_END: u64 = 17;
+        const SIGNAL_END: u64 = 50_000 - 15;
+
+        // Expected indices for messages and signals from `SUBNET_1`.
+        const EXPECTED: ExpectedIndices = ExpectedIndices {
+            message_index: StreamIndex::new(SIGNAL_END), // Assume no intervening payloads.
+            signal_index: StreamIndex::new(MESSAGE_BEGIN), // Assume no signals for existing msgs.
+        };
+
+        // State of an `Application` subnet with a stream for `SUBNET_1`.
+        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        state.with_streams(btreemap! {
+            SUBNET_1 => generate_stream(&StreamConfig {
+                message_begin: MESSAGE_BEGIN,
+                message_end: MESSAGE_END,
+                signal_end: SIGNAL_END,
+            }),
+        });
+
+        // Helper for validating a generated slice from `SUBNET_1` with messages between
+        // the given indices and the given `signals_end` index.
+        let validate_slice = |message_begin, message_end, signal_end, state| {
+            let certified_slice = make_certified_stream_slice(
+                SUBNET_1,
+                StreamConfig {
+                    message_begin,
+                    message_end,
+                    signal_end,
+                },
+            );
+            xnet_payload_builder.validate_slice(
+                SUBNET_1,
+                &certified_slice,
+                &EXPECTED,
+                &validation_context,
+                state,
+            )
+        };
+
+        let message_begin = 28;
+        let signals_after_gc = SIGNAL_END - message_begin;
+        let max_message_count = 50_000 - signals_after_gc;
+        let message_end = message_begin + max_message_count;
+        let signal_index = EXPECTED.signal_index.get();
+
+        assert_eq!(
+            SliceValidationResult::Valid {
+                messages_end: message_end.into(),
+                signals_end: signal_index.into(),
+                byte_size: 1
+            },
+            validate_slice(message_begin, message_end, signal_index, &state),
+        );
+    })
+}
+
 /// `validate_slice()` should reject a loopback stream slice. The loopback
 /// stream is inducted separately, within the DSM, not via blocks.
 #[tokio::test]
@@ -541,7 +606,7 @@ async fn validate_slice_loopback_stream() {
         });
 
         // Helper for generating a loopback stream slice with valid signals; and with
-        // messages between the given indices indices; and validating it.
+        // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
                 OWN_SUBNET_ID,
