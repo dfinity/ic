@@ -1,0 +1,14 @@
+[package]
+name = "canister_client"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+k256 = { version = "0.13.1", features = ["pem"] }
+rate-limits-api = { path = "../api" }
+ic-agent = { workspace = true }
+tokio = { workspace = true }
+candid = { workspace = true }
