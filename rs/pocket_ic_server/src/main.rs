@@ -55,20 +55,14 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 #[derive(Parser)]
 #[clap(version = "6.0.0")]
 struct Args {
-    /// If you use PocketIC from the command line, you should not use this flag.
-    /// Client libraries use this flag to provide a common identifier (the process ID of the test
-    /// process) such that the server is only started once and the individual tests can (re-)use
-    /// the same server.
-    #[clap(long)]
-    pid: Option<u32>,
-    /// The IP address at which the PocketIC server should listen (defaults to 127.0.0.1)
+    /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
     ip_addr: Option<String>,
     /// The port at which the PocketIC server should listen
-    #[clap(long, short, default_value_t = 0)]
-    port: u16,
+    #[clap(long, short)]
+    port: Option<u16>,
     /// The file to which the PocketIC server port should be written
-    #[clap(long, conflicts_with = "pid")]
+    #[clap(long, conflicts_with = "port")]
     port_file: Option<PathBuf>,
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
@@ -112,24 +106,11 @@ fn main() {
 async fn start(runtime: Arc<Runtime>) {
     let args = Args::parse();
 
-    // If PocketIC was started with the `--pid` flag, create a port file to communicate the port back to
-    // the parent process (e.g., the `cargo test` invocation). Other tests can then see this port file
-    // and reuse the same PocketIC server.
-    let port_file_path = match (args.port_file, args.pid) {
-        (Some(port_file_path), None) => Some(port_file_path),
-        (None, Some(pid)) => Some(std::env::temp_dir().join(format!("pocket_ic_{}.port", pid))),
-        (None, None) => None,
-        (Some(_), Some(_)) => panic!("At most one of --port-file and --pid can be provided."),
-    };
-    let create_atomically = args.pid.is_some();
-    let port_file = if let Some(ref port_file_path) = port_file_path {
-        match create_file(port_file_path, create_atomically) {
+    let port_file = if let Some(ref port_file_path) = args.port_file {
+        match create_file(port_file_path) {
             Ok(f) => Some(f),
             Err(_) => {
-                if !create_atomically {
-                    panic!("The port file could not be opened!");
-                }
-                // A PocketIC server is already running for this PID, terminate.
+                // A PocketIC server is already running => terminate.
                 return;
             }
         }
@@ -138,12 +119,13 @@ async fn start(runtime: Arc<Runtime>) {
     };
 
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
-    let addr = format!("{}:{}", ip_addr, args.port);
-    let listener = std::net::TcpListener::bind(addr)
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
+    let port = args.port.unwrap_or_default();
+    let addr = format!("{}:{}", ip_addr, port);
+    let listener = std::net::TcpListener::bind(addr.clone())
+        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
     let real_port = listener.local_addr().unwrap().port();
 
-    let _guard = setup_tracing(args.pid);
+    let _guard = setup_tracing();
     // The shared, mutable state of the PocketIC process.
     let api_state = PocketIcApiStateBuilder::default()
         .with_port(real_port)
@@ -211,7 +193,7 @@ async fn start(runtime: Arc<Runtime>) {
     let handle = Handle::new();
     let shutdown_handle = handle.clone();
     let axum_handle = handle.clone();
-    let port_file_path_clone = port_file_path.clone();
+    let port_file_path = args.port_file.clone();
     let app_state_clone = app_state.clone();
     // This is a safeguard against orphaning this child process.
     tokio::spawn(async move {
@@ -224,15 +206,15 @@ async fn start(runtime: Arc<Runtime>) {
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        terminate(app_state, shutdown_handle, port_file_path_clone).await;
+        terminate(app_state, shutdown_handle, port_file_path).await;
     });
     // Register a signal handler.
     let (tx, mut rx) = channel(1);
     let shutdown_handle = handle.clone();
-    let port_file_path_clone = port_file_path.clone();
+    let port_file_path = args.port_file.clone();
     tokio::spawn(async move {
         if let Some(()) = rx.recv().await {
-            terminate(app_state_clone, shutdown_handle, port_file_path_clone).await;
+            terminate(app_state_clone, shutdown_handle, port_file_path).await;
         }
     });
     ctrlc::set_handler(move || {
@@ -284,7 +266,7 @@ async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
 }
 
 // Registers a global subscriber that collects tracing events and spans.
-fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
+fn setup_tracing() -> Option<WorkerGuard> {
     use time::format_description::well_known::Rfc3339;
     use time::OffsetDateTime;
     use tracing_subscriber::prelude::*;
@@ -306,11 +288,7 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
         Ok(p) => {
             std::fs::create_dir_all(&p).expect("Could not create directory");
             let dt = OffsetDateTime::from(std::time::SystemTime::now());
-            let ts = dt.format(&Rfc3339).unwrap().replace(':', "_");
-            let logfile_suffix = match pid {
-                Some(pid) => format!("{}_{}", ts, pid),
-                None => format!("{}_cli", ts),
-            };
+            let logfile_suffix = dt.format(&Rfc3339).unwrap().replace(':', "_");
             let appender = tracing_appender::rolling::never(
                 &p,
                 format!("pocket_ic_server_{logfile_suffix}.log"),
@@ -338,17 +316,12 @@ fn setup_tracing(pid: Option<u32>) -> Option<WorkerGuard> {
     guard
 }
 
-// Create a file at a given path:
-// - if `create_new` is true, then it ensures atomically that this file was created freshly, and gives an error otherwise;
-// - if `create_new` is false and no file exists at the given path, then it creates a new file at that path;
-// - if `create_new` is false and a path exists at the given path, then it open the file at that path and truncates it to be empty.
-fn create_file<P: AsRef<std::path::Path>>(file_path: P, create_new: bool) -> std::io::Result<File> {
+// Create a file at a given path ensuring atomically that the file was created freshly and giving an error otherwise.
+fn create_file<P: AsRef<std::path::Path>>(file_path: P) -> std::io::Result<File> {
     File::options()
         .read(true)
         .write(true)
-        .truncate(true)
-        .create(!create_new)
-        .create_new(create_new)
+        .create_new(true)
         .open(&file_path)
 }
 

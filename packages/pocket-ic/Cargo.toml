@@ -40,6 +40,9 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+wslpath = "0.0.2"
+
 [dev-dependencies]
 candid_parser = { workspace = true }
 ed25519-dalek = { workspace = true }
