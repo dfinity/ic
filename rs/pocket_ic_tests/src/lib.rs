@@ -216,6 +216,16 @@ impl StateMachine {
         self.sm.install_canister(module, payload, settings)
     }
 
+    pub fn install_canister_wat(
+        &self,
+        wat: &str,
+        payload: Vec<u8>,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> CanisterId {
+        self.install_canister(wat::parse_str(wat).expect("invalid WAT"), payload, settings)
+            .unwrap()
+    }
+
     pub fn install_existing_canister(
         &self,
         canister_id: CanisterId,
@@ -254,6 +264,16 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> Result<(), UserError> {
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm, payload)
+    }
+
+    pub fn upgrade_canister_wat(&self, canister_id: CanisterId, wat: &str, payload: Vec<u8>) {
+        self.install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Upgrade,
+            wat::parse_str(wat).expect("invalid WAT"),
+            payload,
+        )
+        .unwrap();
     }
 
     pub fn update_settings(

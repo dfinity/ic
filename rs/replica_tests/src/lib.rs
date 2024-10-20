@@ -14,6 +14,7 @@ use ic_management_canister_types::{
     ProvisionalCreateCanisterWithCyclesArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
+use ic_pocket_ic_tests::StateMachine;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore},
@@ -26,7 +27,6 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
-use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::{

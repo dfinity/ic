@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/types/error_types",
     "//rs/types/types",
+    "@crate_index//:wat",
 ]
 
 rust_library(

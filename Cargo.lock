@@ -10517,6 +10517,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "pocket-ic",
+ "wat",
 ]
 
 [[package]]
@@ -11194,6 +11195,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-management-canister-types",
  "ic-metrics",
+ "ic-pocket-ic-tests",
  "ic-prep",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -11203,7 +11205,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replica",
  "ic-replicated-state",
- "ic-state-machine-tests",
  "ic-sys",
  "ic-test-utilities",
  "ic-test-utilities-logger",

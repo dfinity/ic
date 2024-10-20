@@ -16,3 +16,4 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-types = { path = "../types/types" }
 pocket-ic = { path = "../../packages/pocket-ic" }
+wat = { workspace = true }
