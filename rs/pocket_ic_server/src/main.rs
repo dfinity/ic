@@ -59,10 +59,10 @@ struct Args {
     #[clap(long, short)]
     ip_addr: Option<String>,
     /// The port at which the PocketIC server should listen
-    #[clap(long, short)]
-    port: Option<u16>,
+    #[clap(long, short, default_value_t = 0)]
+    port: u16,
     /// The file to which the PocketIC server port should be written
-    #[clap(long, conflicts_with = "port")]
+    #[clap(long)]
     port_file: Option<PathBuf>,
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
@@ -119,8 +119,7 @@ async fn start(runtime: Arc<Runtime>) {
     };
 
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
-    let port = args.port.unwrap_or_default();
-    let addr = format!("{}:{}", ip_addr, port);
+    let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
         .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
     let real_port = listener.local_addr().unwrap().port();
