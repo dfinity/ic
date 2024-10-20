@@ -1354,6 +1354,7 @@ fn subnet_metrics() {
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_raw_gateway() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
