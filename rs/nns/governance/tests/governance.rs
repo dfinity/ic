@@ -3502,11 +3502,8 @@ fn compute_maturities(
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     // Disable wait for quiet.
     for p in &mut gov.heap_data.proposals.values_mut() {
-        match &mut p.wait_for_quiet_state {
-            Some(wait_for_quiet_state) => {
-                wait_for_quiet_state.current_deadline_timestamp_seconds = fake_driver.now() - 1;
-            }
-            None => (),
+        if let Some(wait_for_quiet_state) = &mut p.wait_for_quiet_state {
+            wait_for_quiet_state.current_deadline_timestamp_seconds = fake_driver.now() - 1;
         }
     }
     gov.run_periodic_tasks().now_or_never();

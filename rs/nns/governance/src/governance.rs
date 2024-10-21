@@ -2089,15 +2089,11 @@ impl Governance {
 
     /// Unlocks a given neuron.
     fn unlock_neuron(&mut self, id: u64) {
-        match self.heap_data.in_flight_commands.remove(&id) {
-            None => {
-                println!(
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case.
-            Some(_) => (),
+        if self.heap_data.in_flight_commands.remove(&id).is_none() {
+            println!(
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 

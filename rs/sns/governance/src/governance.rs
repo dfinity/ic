@@ -938,15 +938,11 @@ impl Governance {
 
     /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
-        match self.proto.in_flight_commands.remove(id) {
-            None => {
-                log!(ERROR,
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case...
-            Some(_) => (),
+        if self.proto.in_flight_commands.remove(id).is_none() {
+            log!(ERROR,
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
