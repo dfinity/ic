@@ -41,7 +41,7 @@ lazy_static! {
             .map(|e| 10_i64.pow(e))
             .collect::<Vec<_>>();
 
-        let units = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let units = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
         powers_of_ten
             .iter()
