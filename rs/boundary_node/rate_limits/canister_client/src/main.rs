@@ -8,12 +8,16 @@ use rate_limits_api::{
     GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
 
-const RATE_LIMIT_CANISTER_ID: &str = "un4fu-tqaaa-aaaab-qadjq-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "zkfwe-6yaaa-aaaab-qacca-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
 
-const TEST_PRIVATE_KEY: &str = "";
+const TEST_PRIVATE_KEY: &str = "-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEIIBzyyJ32Kdjixx+ZJvNeUWsqAzSQZfLsOyXKgxc7aH9oAcGBSuBBAAK
+oUQDQgAECWc6ZRn9bBP96RM1G6h8ZAtbryO65dKg6cw0Oij2XbnAlb6zSPhU+4hh
+gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
+-----END EC PRIVATE KEY-----";
 
 #[tokio::main]
 async fn main() {
