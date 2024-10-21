@@ -136,13 +136,34 @@ pwd="$(pwd)"
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        --guestos) verify_hostos="false"; verify_setupos="false" ;;  # Only verify build reproducibility of GuestOS
-        --hostos) verify_guestos="false"; verify_setupos="false" ;;  # Only verify build reproducibility of HostOS
-        --setupos) verify_guestos="false"; verify_hostos="false" ;;  # Only verify build reproducibility of SetupOS
-        -p) proposal_id="$2"; shift ;;
-        -c) git_commit="$2"; shift ;;
-        -h) print_usage; exit 0 ;;
-        *) print_usage; exit 1 ;;
+        --guestos)
+            verify_hostos="false"
+            verify_setupos="false"
+            ;; # Only verify build reproducibility of GuestOS
+        --hostos)
+            verify_guestos="false"
+            verify_setupos="false"
+            ;; # Only verify build reproducibility of HostOS
+        --setupos)
+            verify_guestos="false"
+            verify_hostos="false"
+            ;; # Only verify build reproducibility of SetupOS
+        -p)
+            proposal_id="$2"
+            shift
+            ;;
+        -c)
+            git_commit="$2"
+            shift
+            ;;
+        -h)
+            print_usage
+            exit 0
+            ;;
+        *)
+            print_usage
+            exit 1
+            ;;
     esac
     shift
 done
@@ -411,13 +432,13 @@ log "Build IC-OS"
 log_success "Built IC-OS successfully"
 
 if [ "$verify_guestos" == "true" ]; then
-mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
+    mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
 fi
 if [ "$verify_hostos" == "true" ]; then
-mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
+    mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
 fi
 if [ "$verify_setupos" == "true" ]; then
-mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
+    mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
 fi
 
 compute_dev_hash() {
@@ -433,13 +454,13 @@ compute_dev_hash() {
 }
 
 if [ "$verify_guestos" == "true" ]; then
-compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
+    compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
 fi
 if [ "$verify_hostos" == "true" ]; then
-compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
+    compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
 fi
 if [ "$verify_setupos" == "true" ]; then
-compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
+    compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
 fi
 
 compare_hashes() {
@@ -461,13 +482,13 @@ compare_hashes() {
 log "Check hash of locally built artifact matches the one fetched from the proposal/CDN"
 
 if [ "$verify_guestos" == "true" ]; then
-compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
+    compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
 fi
 if [ "$verify_hostos" == "true" ]; then
-compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
+    compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
 fi
 if [ "$verify_setupos" == "true" ]; then
-compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
+    compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
 fi
 
 log "Total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
