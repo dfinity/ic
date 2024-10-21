@@ -1,12 +1,7 @@
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE,
-    TEST_KEY_LOCAL, TRANSFER_FEE,
-};
-use crate::ckbtc::minter::utils::{
-    ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-    wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx, wait_for_update_balance,
-};
+#[rustfmt::skip]
+
+use anyhow::Result;
+
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
@@ -14,16 +9,28 @@ use bitcoincore_rpc::{
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_minter::state::eventlog::Event;
-use ic_ckbtc_minter::state::{RetrieveBtcRequest, RetrieveBtcStatus};
-use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
-use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
+use ic_ckbtc_minter::{
+    state::{eventlog::Event, RetrieveBtcRequest, RetrieveBtcStatus},
+    updates::{get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs},
+};
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
+    systest,
     util::{assert_create_agent, block_on, runtime_from_url},
+};
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys,
+    utils::{
+        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
+        wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
+        wait_for_update_balance,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -263,4 +270,11 @@ pub fn test_heartbeat(env: TestEnv) {
             events
         );
     })
+}
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(config)
+        .add_test(systest!(test_heartbeat))
+        .execute_from_args()?;
+    Ok(())
 }

@@ -19,7 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::ckbtc::lib::ADDRESS_LENGTH;
+use crate::ADDRESS_LENGTH;
 use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},

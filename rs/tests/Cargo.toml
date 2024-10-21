@@ -39,7 +39,6 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
 ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
-ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
@@ -233,26 +232,6 @@ path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
 [[bin]]
 name = "ic-systest-rosetta-neuron-staking-test"
 path = "financial_integrations/rosetta/rosetta_neuron_staking_test.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-minter-basics-test"
-path = "financial_integrations/ckbtc/ckbtc_minter_basics_test.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-batching"
-path = "financial_integrations/ckbtc/ckbtc_minter_batching.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-heartbeat"
-path = "financial_integrations/ckbtc/ckbtc_minter_heartbeat.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-retrieve-btc"
-path = "financial_integrations/ckbtc/ckbtc_minter_retrieve_btc.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-update-balance"
-path = "financial_integrations/ckbtc/ckbtc_minter_update_balance.rs"
 
 [[bin]]
 name = "ic-systest-icrc1-agent-test"

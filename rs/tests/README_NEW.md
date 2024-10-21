@@ -59,7 +59,7 @@ devenv-container$ ict test almost_basic_test
 There was an error while executing CLI: 'No test target `almost_basic_test` was found: 
 Did you mean any of:
 //rs/tests/testing_verification:basic_health_test
-//rs/tests/financial_integrations/ckbtc:ckbtc_minter_basics_test
+//rs/tests/ckbtc:ckbtc_minter_basics_test
 ...
 ```
 ## Running a cargo-based (legacy) flavour of a system test
