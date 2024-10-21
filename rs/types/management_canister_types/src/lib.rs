@@ -2224,7 +2224,7 @@ impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
             pb_registry_crypto::SchnorrAlgorithm::try_from(algorithm).map_err(|_| {
                 ProxyDecodeError::ValueOutOfRange {
                     typ: "SchnorrKeyId",
-                    err: format!("Unable to convert {} to a SchnorrKeyId", algorithm),
+                    err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
                 }
             })?,
         )?;
@@ -2347,7 +2347,7 @@ impl TryFrom<pb_registry_crypto::VetKdKeyId> for VetKdKeyId {
                 pb_registry_crypto::VetKdCurve::try_from(item.curve).map_err(|_| {
                     ProxyDecodeError::ValueOutOfRange {
                         typ: "VetKdKeyId",
-                        err: format!("Unable to convert {} to a VetKdKeyId", item.curve),
+                        err: format!("Unable to convert {} to a VetKdCurve", item.curve),
                     }
                 })?,
             )?,
