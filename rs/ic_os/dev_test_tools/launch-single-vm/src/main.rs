@@ -23,6 +23,8 @@ use std::process::Command;
 use tempfile::tempdir;
 use url::Url;
 
+use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
+
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 /// Deploy a single ICOS VM to Farm
@@ -199,6 +201,55 @@ fn main() {
         if let Some(key) = ssh_key_path {
             std::fs::copy(key, keys_dir.join("admin")).unwrap();
         }
+
+        // Build GuestOS config object
+        let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
+        let args = GenerateTestnetConfigArgs {
+            ipv6_config_type: Some("RouterAdvertisement".to_string()),
+            deterministic_prefix: None,
+            deterministic_prefix_length: None,
+            deterministic_gateway: None,
+            fixed_address: None,
+            fixed_gateway: None,
+            ipv4_address: None,
+            ipv4_gateway: None,
+            ipv4_prefix_length: None,
+            ipv4_domain: None,
+            mgmt_mac: None,
+            deployment_environment: Some("testnet".to_string()),
+            elasticsearch_hosts: None,
+            elasticsearch_tags: None,
+            nns_public_key_path: None,
+            nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
+            node_operator_private_key_path: None,
+            ssh_authorized_keys_path: Some("/boot/config/accounts_ssh_authorized_keys".into()),
+            ic_crypto_path: None,
+            ic_state_path: None,
+            ic_registry_local_store_path: None,
+            backup_retention_time_seconds: Some(3600),
+            backup_purging_interval_seconds: None,
+            malicious_behavior: None,
+            query_stats_epoch_length: None,
+            bitcoind_addr: None,
+            jaeger_addr: None,
+            socks_proxy: None,
+            guestos_config_json_path: guestos_config_json_path.clone(),
+        };
+
+        match generate_testnet_config(args) {
+            Ok(()) => {
+                let contents = std::fs::read_to_string(&guestos_config_json_path)
+                    .expect("Failed to read the file");
+                println!("{}", contents);
+            }
+            Err(e) => {
+                println!("Failed to generate testnet config: {:?}", e);
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(10 * 6000));
+
+        // todo: pass guestos config object to build-bootstrap after rewriting the script to accept config object
 
         // Build config image
         let filename = "config.tar.gz";
