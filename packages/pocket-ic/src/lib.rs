@@ -38,14 +38,14 @@ use crate::common::rest::{
     InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetId,
     SubnetKind, SubnetSpec, Topology,
 };
+pub use crate::management_canister::CanisterSettings;
+use crate::management_canister::{CanisterId, CanisterStatusResult};
 use crate::nonblocking::PocketIc as PocketIcAsync;
 use candid::{
     decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
     Principal,
 };
-pub use ic_cdk::api::management_canister::main::CanisterSettings;
-use ic_cdk::api::management_canister::main::{CanisterId, CanisterStatusResponse};
 use ic_transport_types::SubnetMetrics;
 use reqwest::Url;
 use schemars::JsonSchema;
@@ -68,6 +68,7 @@ use tracing::{instrument, warn};
 use wslpath::windows_to_wsl;
 
 pub mod common;
+pub mod management_canister;
 pub mod nonblocking;
 
 const EXPECTED_SERVER_VERSION: &str = "pocket-ic-server 6.0.0";
@@ -670,7 +671,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResponse, CallError> {
+    ) -> Result<CanisterStatusResult, CallError> {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.canister_status(canister_id, sender).await })
     }

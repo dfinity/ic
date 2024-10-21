@@ -24,10 +24,9 @@ doctest = false
 
 [dependencies]
 base64 = { workspace = true }
-candid = "^0.10.2"
+candid = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-cdk = { workspace = true }
 ic-transport-types = { workspace = true }
 reqwest = { workspace = true }
 schemars = "0.8.16"
