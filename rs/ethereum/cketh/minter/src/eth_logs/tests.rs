@@ -117,3 +117,18 @@ mod parse_principal_from_slice {
         principal_bytes
     }
 }
+
+mod subaccount {
+    use crate::eth_logs::Subaccount;
+    use proptest::{array::uniform32, prelude::any, prop_assert_eq, proptest};
+
+    proptest! {
+        #[test]
+        fn should_preserve_bytes_representation(bytes in uniform32(any::<u8>())) {
+            let subaccount = Subaccount::from_bytes(bytes);
+            let actual_bytes = subaccount.to_bytes();
+
+            prop_assert_eq!(bytes, actual_bytes);
+        }
+    }
+}

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
@@ -423,4 +424,24 @@ fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
         return Err("anonymous principal is not allowed".to_string());
     }
     Principal::try_from_slice(principal_bytes).map_err(|err| err.to_string())
+}
+
+enum InternalSubaccountTag {}
+type InternalSubaccount = CheckedAmountOf<InternalSubaccountTag>;
+
+/// Ledger subaccount.
+///
+/// Internally represented as a u256 to optimize cbor encoding for low values,
+/// which can be represented as a u32 or a u64.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
+pub struct Subaccount(#[n(0)] InternalSubaccount);
+
+impl Subaccount {
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(InternalSubaccount::from_be_bytes(bytes))
+    }
+
+    pub fn to_bytes(self) -> [u8; 32] {
+        self.0.to_be_bytes()
+    }
 }
