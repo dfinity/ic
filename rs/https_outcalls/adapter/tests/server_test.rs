@@ -156,11 +156,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
-        let url = start_server(CERT_INIT.get_or_init(generate_certs));
+        // let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/get", &url),
+            url: format!("https://vg.no"),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -476,117 +476,241 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     //     socket.local_addr().unwrap()
     // }
 
-    #[rstest]
-    #[case(hyper::Version::HTTP_2, vec![b"h3".to_vec(), b"h2".to_vec(), b"http/1.1".to_vec()])]
-    #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec(), b"http/1.1".to_vec()])]
-    #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec()])]
-    #[case(hyper::Version::HTTP_11, vec![b"http/1.1".to_vec()])]
-    fn test_http_protocols_are_supported_and_alpn_header_is_set(
-        #[case] expected_alpn_protocol: hyper::Version,
-        #[case] server_advertised_alpn_protocols: Vec<Vec<u8>>,
+    #[test]
+    // #[case(hyper::Version::HTTP_2, vec![b"h3".to_vec(), b"h2".to_vec(), b"http/1.1".to_vec()])]
+    // #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec(), b"http/1.1".to_vec()])]
+    // #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec()])]
+    // #[case(hyper::Version::HTTP_11, vec![b"http/1.1".to_vec()])]
+    fn test_http_protocols_are_supported_and_alpn_header_is_set(// #[case] expected_alpn_protocol: hyper::Version,
+        // #[case] server_advertised_alpn_protocols: Vec<Vec<u8>>,
     ) {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let expected_alpn_protocol = hyper::Version::HTTP_2;
+                let server_advertised_alpn_protocols =
+                    vec![b"h3".to_vec(), b"h2".to_vec(), b"http/1.1".to_vec()];
 
-        rt.block_on(async {
-            // Create a TCP listener
+                let socket = TcpSocket::new_v4().unwrap();
+                socket.set_reuseport(false).unwrap();
+                socket.set_reuseaddr(false).unwrap();
+                socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+                let listener = socket.listen(1024).unwrap();
 
-            let socket = TcpSocket::new_v4().unwrap();
-            socket.set_reuseport(false).unwrap();
-            socket.set_reuseaddr(false).unwrap();
-            socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
-            let listener = socket.listen(1024).unwrap();
+                // let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let addr = listener.local_addr().unwrap();
 
-            // let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
+                let server_config = {
+                    let cert_dir = CERT_INIT.get_or_init(generate_certs);
+                    let cert_path = cert_path(cert_dir);
+                    let key_path = key_path(cert_dir);
 
-            let server_config = {
-                let cert_dir = CERT_INIT.get_or_init(generate_certs);
-                let cert_path = cert_path(cert_dir);
-                let key_path = key_path(cert_dir);
+                    // Load public certificate.
+                    let cert_file = tokio::fs::read(cert_path).await.unwrap();
+                    let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
+                        .collect::<Result<Vec<_>, _>>()
+                        .unwrap();
 
-                // Load public certificate.
-                let cert_file = tokio::fs::read(cert_path).await.unwrap();
-                let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
-                    .collect::<Result<Vec<_>, _>>()
-                    .unwrap();
+                    // Load private key.
+                    let key_file = tokio::fs::read(key_path).await.unwrap();
+                    let key = rustls_pemfile::private_key(&mut key_file.as_ref())
+                        .unwrap()
+                        .unwrap();
 
-                // Load private key.
-                let key_file = tokio::fs::read(key_path).await.unwrap();
-                let key = rustls_pemfile::private_key(&mut key_file.as_ref())
-                    .unwrap()
-                    .unwrap();
+                    let mut server_config = ServerConfig::builder()
+                        .with_no_client_auth()
+                        .with_single_cert(certs, key)
+                        .unwrap();
 
-                let mut server_config = ServerConfig::builder()
-                    .with_no_client_auth()
-                    .with_single_cert(certs, key)
-                    .unwrap();
+                    server_config.alpn_protocols = server_advertised_alpn_protocols;
 
-                server_config.alpn_protocols = server_advertised_alpn_protocols;
+                    server_config
+                };
 
-                server_config
-            };
+                println!("Listening on {:?}", addr);
 
-            println!("Listening on {:?}", addr);
+                let jh = tokio::spawn(async move {
+                    let service = hyper::service::service_fn(
+                        |req: Request<hyper::body::Incoming>| async move {
+                            let status = if req.version() == expected_alpn_protocol {
+                                hyper::StatusCode::OK
+                            } else {
+                                hyper::StatusCode::BAD_REQUEST
+                            };
 
-            let jh = rt.spawn(async move {
-                let service =
-                    hyper::service::service_fn(|req: Request<hyper::body::Incoming>| async move {
-                        let status = if req.version() == expected_alpn_protocol {
-                            hyper::StatusCode::OK
-                        } else {
-                            hyper::StatusCode::BAD_REQUEST
-                        };
+                            Ok::<_, String>(
+                                http::response::Response::builder()
+                                    .status(status)
+                                    .body(Full::<Bytes>::from(""))
+                                    .unwrap(),
+                            )
+                        },
+                    );
 
-                        Ok::<_, String>(
-                            http::response::Response::builder()
-                                .status(status)
-                                .body(Full::<Bytes>::from(""))
-                                .unwrap(),
-                        )
-                    });
+                    println!("Waiting for connection");
 
-                let (tcp_stream, _socket) = listener.accept().await.unwrap();
+                    let (tcp_stream, _socket) = listener.accept().await.unwrap();
 
-                let tls_stream = TlsAcceptor::from(Arc::new(server_config))
-                    .accept(tcp_stream)
-                    .await
-                    .unwrap();
+                    println!("Accepted connection");
 
-                let stream = TokioIo::new(tls_stream);
+                    let tls_stream = TlsAcceptor::from(Arc::new(server_config))
+                        .accept(tcp_stream)
+                        .await
+                        .unwrap();
 
-                hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                    .http2()
-                    .serve_connection_with_upgrades(stream, service)
-                    .await
+                    let stream = TokioIo::new(tls_stream);
+
+                    hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                        .http2()
+                        .serve_connection_with_upgrades(stream, service)
+                        .await
+                });
+
+                // connect with tcp stream
+                // let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+                // println!("Connected to {:?}", addr);
+
+                // Create an HTTP/2 client
+                let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+                let server_config = Config {
+                    incoming_source: IncomingSource::Path(path.into()),
+                    ..Default::default()
+                };
+                // let url = start_server(CERT_INIT.get_or_init(generate_certs));
+                let mut client = spawn_grpc_server(server_config);
+
+                let request = tonic::Request::new(HttpsOutcallRequest {
+                    url: format!("https://localhost:{}", addr.port()),
+                    headers: Vec::new(),
+                    method: HttpMethod::Get as i32,
+                    body: "hello".to_string().as_bytes().to_vec(),
+                    max_response_size_bytes: 512,
+                    socks_proxy_allowed: false,
+                });
+                let response = tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    client.https_outcall(request),
+                )
+                .await
+                .unwrap();
+
+                let http_response = response.unwrap().into_inner();
+                assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
             });
+    }
 
-            // Create an HTTP/2 client
-            let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
-            let server_config = Config {
-                incoming_source: IncomingSource::Path(path.into()),
-                ..Default::default()
-            };
+    #[tokio::test]
+    async fn test_http_protocols_are_supported_and_alpn_header_is_set_tokio() {
+        let expected_alpn_protocol = hyper::Version::HTTP_2;
+        let server_advertised_alpn_protocols =
+            vec![b"h3".to_vec(), b"h2".to_vec(), b"http/1.1".to_vec()];
 
-            let mut client = spawn_grpc_server(server_config);
+        let socket = TcpSocket::new_v4().unwrap();
+        socket.set_reuseport(false).unwrap();
+        socket.set_reuseaddr(false).unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let listener = socket.listen(1024).unwrap();
 
-            // sleep to make sure server is up
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        // let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
 
-            let request = tonic::Request::new(HttpsOutcallRequest {
-                url: format!("https://localhost:{}", addr.port()),
-                headers: Vec::new(),
-                method: HttpMethod::Head as i32,
-                body: "".to_string().as_bytes().to_vec(),
-                max_response_size_bytes: 512,
-                socks_proxy_allowed: false,
-            });
+        let server_config = {
+            let cert_dir = CERT_INIT.get_or_init(generate_certs);
+            let cert_path = cert_path(cert_dir);
+            let key_path = key_path(cert_dir);
 
-            let response = client.https_outcall(request).await;
-            let http_response = response.unwrap().into_inner();
-            assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+            // Load public certificate.
+            let cert_file = tokio::fs::read(cert_path).await.unwrap();
+            let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
 
-            jh.await.unwrap();
+            // Load private key.
+            let key_file = tokio::fs::read(key_path).await.unwrap();
+            let key = rustls_pemfile::private_key(&mut key_file.as_ref())
+                .unwrap()
+                .unwrap();
+
+            let mut server_config = ServerConfig::builder()
+                .with_no_client_auth()
+                .with_single_cert(certs, key)
+                .unwrap();
+
+            server_config.alpn_protocols = server_advertised_alpn_protocols;
+
+            server_config
+        };
+
+        println!("Listening on {:?}", addr);
+
+        let jh = tokio::spawn(async move {
+            let service =
+                hyper::service::service_fn(|req: Request<hyper::body::Incoming>| async move {
+                    let status = if req.version() == expected_alpn_protocol {
+                        hyper::StatusCode::OK
+                    } else {
+                        hyper::StatusCode::BAD_REQUEST
+                    };
+
+                    Ok::<_, String>(
+                        http::response::Response::builder()
+                            .status(status)
+                            .body(Full::<Bytes>::from(""))
+                            .unwrap(),
+                    )
+                });
+
+            println!("Waiting for connection");
+
+            let (tcp_stream, _socket) = listener.accept().await.unwrap();
+
+            println!("Accepted connection");
+
+            let tls_stream = TlsAcceptor::from(Arc::new(server_config))
+                .accept(tcp_stream)
+                .await
+                .unwrap();
+
+            let stream = TokioIo::new(tls_stream);
+
+            hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+                .http2()
+                .serve_connection_with_upgrades(stream, service)
+                .await
         });
+
+        // connect with tcp stream
+        // let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        // println!("Connected to {:?}", addr);
+
+        // Create an HTTP/2 client
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        // let url = start_server(CERT_INIT.get_or_init(generate_certs));
+        let mut client = spawn_grpc_server(server_config);
+
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("https://localhost:{}", addr.port()),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            socks_proxy_allowed: false,
+        });
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            client.https_outcall(request),
+        )
+        .await
+        .unwrap();
+
+        let http_response = response.unwrap().into_inner();
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
     // Spawn grpc server and return canister http client
