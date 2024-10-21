@@ -63,51 +63,51 @@ anchors:
 
 jobs:
 
-  # bazel-test-bare-metal:
-  #   name: Bazel Test Bare Metal
-  #   <<: *dind-large-setup
-  #   timeout-minutes: 120
-  #   runs-on:
-  #     group: zh1
-  #     labels: dind-large
-  #   steps:
-  #     - <<: *checkout
-  #     - <<: *before-script
-  #     - <<: *docker-login
-  #     - name: Run Bazel Launch Bare Metal
-  #       shell: bash
-  #       run: |
-  #         echo "$ZH2_DLL01_CSV_SECRETS" > file1
-  #         echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
+  bazel-test-bare-metal:
+    name: Bazel Test Bare Metal
+    <<: *dind-large-setup
+    timeout-minutes: 120
+    runs-on:
+      group: zh1
+      labels: dind-large
+    steps:
+      - <<: *checkout
+      - <<: *before-script
+      - <<: *docker-login
+      - name: Run Bazel Launch Bare Metal
+        shell: bash
+        run: |
+          echo "$ZH2_DLL01_CSV_SECRETS" > file1
+          echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
-  #         # Run bare metal installation test
-  #         # shellcheck disable=SC2046,SC2086
-  #         bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-  #           //ic-os/setupos/envs/dev:launch_bare_metal -- \
-  #             --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-  #             --csv_filename "$(realpath file1)" \
-  #             --file_share_ssh_key "$(realpath file2)" \
-  #             --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-  #             --file_share_username ci_interim \
-  #             --ci_mode
+          # Run bare metal installation test
+          # shellcheck disable=SC2046,SC2086
+          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+              --csv_filename "$(realpath file1)" \
+              --file_share_ssh_key "$(realpath file2)" \
+              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+              --file_share_username ci_interim \
+              --ci_mode
 
-  #         # Run bare metal node performance benchmarks
-  #         # shellcheck disable=SC2046,SC2086
-  #         bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-  #           //ic-os/setupos/envs/dev:launch_bare_metal -- \
-  #             --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-  #             --csv_filename "$(realpath file1)" \
-  #             --file_share_ssh_key "$(realpath file2)" \
-  #             --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-  #             --file_share_username ci_interim \
-  #             --ci_mode \
-  #             --benchmark
-  #         bazel clean
-  #       env:
-  #         BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-  #         BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-  #         ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
-  #         ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
+          # Run bare metal node performance benchmarks
+          # shellcheck disable=SC2046,SC2086
+          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
+            //ic-os/setupos/envs/dev:launch_bare_metal -- \
+              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+              --csv_filename "$(realpath file1)" \
+              --file_share_ssh_key "$(realpath file2)" \
+              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+              --file_share_username ci_interim \
+              --ci_mode \
+              --benchmark
+          bazel clean
+        env:
+          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
+          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
+          ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
+          ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   fi-tests-nightly:
     name: Bazel Test FI Nightly
@@ -194,6 +194,10 @@ jobs:
     steps:
       - <<: *checkout
       - <<: *before-script
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Setup environment deps
         id: setup-environment-deps
         shell: bash

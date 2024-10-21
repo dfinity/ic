@@ -17,7 +17,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
-permissions: read-all
 env:
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
@@ -59,13 +58,29 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
+
+          # Determine which tests to skip and append 'long_test' for pull requests or merge groups
+          EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
+          [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && EXCLUDED_TEST_TAGS+=(long_test)
+
+          # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
+          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
+
+          # Prepend tags with '-' and join them with commas for Bazel
+          TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
+
+          # Determine BAZEL_EXTRA_ARGS based on event type or branch name
+          BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
-            echo "BAZEL_EXTRA_ARGS=--test_timeout_filters=short,moderate --flaky_test_attempts=3" >> $GITHUB_ENV
+              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
           elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-            echo "BAZEL_EXTRA_ARGS=--test_timeout_filters=short,moderate" >> $GITHUB_ENV
+              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
           else
-            echo "BAZEL_EXTRA_ARGS=--keep_going" >> $GITHUB_ENV
+              BAZEL_EXTRA_ARGS+=" --keep_going"
           fi
+
+          # Export BAZEL_EXTRA_ARGS to environment
+          echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
       - name: Run Bazel Test All
         id: bazel-test-all
         uses: ./.github/actions/bazel-test-all/
@@ -149,7 +164,7 @@ jobs:
             profile.json
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 120
+    timeout-minutes: 130
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
@@ -294,7 +309,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'
       - name: Run Python CI Tests
         id: python-ci-tests
         shell: bash
