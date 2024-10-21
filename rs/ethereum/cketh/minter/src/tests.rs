@@ -48,7 +48,7 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+    use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
     use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
@@ -144,6 +144,46 @@ mod eth_get_logs {
     }
 
     #[test]
+    fn should_parse_received_eth_event_with_subaccount() {
+        let event = r#"{
+            "address": "0x11d7c426eedc044b21066d2be9480d4b99e7cc1a",
+            "topics": [
+                "0x5cf3eb7dcd092fdae9eb9a8bee8249f871222400db54ff78e64b809d723a02bf",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
+            ],
+            "data": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "blockNumber": "0x698ab3",
+            "transactionHash": "0x037305b461a7c69bf65d4e143262fc038b39d5e46da79de1539e3a90e91b9b37",
+            "transactionIndex": "0x12",
+            "blockHash": "0x92d629a73b6e94c799e940868e4961e2674b0ffd28796102add19a89402e03dd",
+            "logIndex": "0x14",
+            "removed": false
+        }"#;
+        let parsed_event =
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let expected_event = ReceivedEthEvent {
+            transaction_hash: "0x037305b461a7c69bf65d4e143262fc038b39d5e46da79de1539e3a90e91b9b37"
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(6916787),
+            log_index: LogIndex::from(20_u8),
+            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+                .parse()
+                .unwrap(),
+            value: Wei::from(1_000_000_000_000_000_u128),
+            principal: Principal::from_str(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            subaccount: LedgerSubaccount::from_bytes([0xff; 32]),
+        }
+        .into();
+
+        assert_eq!(parsed_event, expected_event);
+    }
+
+    #[test]
     fn should_parse_received_erc20_event() {
         let event = r#"{
             "address": "0xE1788E4834c896F1932188645cc36c54d1b80AC1",
@@ -181,6 +221,50 @@ mod eth_get_logs {
                 .parse()
                 .unwrap(),
             subaccount: None,
+        }
+        .into();
+
+        assert_eq!(parsed_event, expected_event);
+    }
+
+    #[test]
+    fn should_parse_received_erc20_event_with_subaccount() {
+        let event = r#"{
+            "address": "0x11d7c426eedc044b21066d2be9480d4b99e7cc1a",
+            "topics": [
+                "0xaef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf",
+                "0x0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
+            ],
+            "data": "0x000000000000000000000000000000000000000000000000000000000001869fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "blockNumber": "0x698adb",
+            "transactionHash": "0xf353e17cbcfea236a8b03d2d800205074e1f5014a3ce0f6dedcf128addb6bea4",
+            "transactionIndex": "0x15",
+            "blockHash": "0xeee67434b62fe62182ee51cdaf2693f112994fd3aa4d043c7e4a16fe775c37e3",
+            "logIndex": "0x45",
+            "removed": false
+        }"#;
+        let parsed_event =
+            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let expected_event = ReceivedErc20Event {
+            transaction_hash: "0xf353e17cbcfea236a8b03d2d800205074e1f5014a3ce0f6dedcf128addb6bea4"
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(6916827),
+            log_index: LogIndex::from(69_u8),
+            from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+                .parse()
+                .unwrap(),
+            value: Erc20Value::from(99_999_u128),
+            principal: Principal::from_str(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+                .parse()
+                .unwrap(),
+            subaccount: LedgerSubaccount::from_bytes([0xff; 32]),
         }
         .into();
 
