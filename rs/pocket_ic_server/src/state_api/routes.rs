@@ -1113,21 +1113,19 @@ pub async fn create_instance(
         None
     };
 
-    let pocket_ic = tokio::task::spawn_blocking(move || {
-        PocketIc::new(
-            runtime,
-            subnet_configs,
-            instance_config.state_dir,
-            instance_config.nonmainnet_features,
-            log_level,
-            instance_config.bitcoind_addr,
-        )
-    })
-    .await
-    .expect("Failed to launch PocketIC");
-
-    let topology = pocket_ic.topology().clone();
-    let instance_id = api_state.add_instance(pocket_ic).await;
+    let (instance_id, topology) = api_state
+        .add_instance(move |instance_id| {
+            PocketIc::new(
+                runtime,
+                instance_id,
+                subnet_configs,
+                instance_config.state_dir,
+                instance_config.nonmainnet_features,
+                log_level,
+                instance_config.bitcoind_addr,
+            )
+        })
+        .await;
     (
         StatusCode::CREATED,
         Json(rest::CreateInstanceResponse::Created {
