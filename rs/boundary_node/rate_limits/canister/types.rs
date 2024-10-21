@@ -35,6 +35,7 @@ pub struct InputRule {
 #[derive(Clone)]
 pub struct OutputRule {
     pub id: RuleId,
+    pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
     pub disclosed_at: Option<Timestamp>,
@@ -54,8 +55,8 @@ impl From<OutputRule> for rate_limits_api::OutputRule {
     fn from(value: OutputRule) -> Self {
         rate_limits_api::OutputRule {
             description: value.description,
-            disclosed_at: value.disclosed_at,
             id: value.id,
+            incident_id: value.incident_id,
             rule_raw: value.rule_raw,
         }
     }

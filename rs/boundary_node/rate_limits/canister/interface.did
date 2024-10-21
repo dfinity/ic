@@ -16,6 +16,7 @@ type InputRule = record {
 // Optional fields rule_raw and description may remain hidden while the rule is under confidentiality restrictions
 type OutputRule = record {
   rule_id: RuleId;                   // Unique identifier for the rule
+  incident_id: IncidentId;           // Identifier for the incident, to which the rule is related
   rule_raw: opt blob;                // Raw rule data (in binary format), expected to be a valid json object, none if the rule is currently confidential
   description: opt text;             // Textual description of the rule, none if the rule is currently confidential
 };

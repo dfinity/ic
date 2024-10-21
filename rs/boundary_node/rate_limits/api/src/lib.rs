@@ -47,9 +47,9 @@ pub struct InputRule {
 #[derive(CandidType, Deserialize, Debug)]
 pub struct OutputRule {
     pub id: RuleId,
+    pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
-    pub disclosed_at: Option<Timestamp>,
 }
 
 #[derive(CandidType, Deserialize, Debug)]

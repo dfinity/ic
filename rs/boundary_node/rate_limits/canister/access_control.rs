@@ -2,8 +2,8 @@ use candid::Principal;
 
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 
-const FULL_ACCESS_ID: &str = "2vxsx-fae";
-const FULL_READ_ID: &str = "2vxsx-fae";
+const FULL_ACCESS_ID: &str = "";
+const FULL_READ_TESTING_ID: &str = ""; // TODO: remove this
 
 pub trait ResolveAccessLevel {
     fn get_access_level(&self) -> AccessLevel;
@@ -37,7 +37,7 @@ impl ResolveAccessLevel for AccessLevelResolver {
         API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
             let mut full_read_principals = cell.borrow_mut();
             // TODO: this is just for testing, remove later
-            let full_read_id = Principal::from_text(FULL_READ_ID).unwrap();
+            let full_read_id = Principal::from_text(FULL_READ_TESTING_ID).unwrap();
             let _ = full_read_principals.insert(full_read_id);
 
             if self.caller_id == full_access_principal {

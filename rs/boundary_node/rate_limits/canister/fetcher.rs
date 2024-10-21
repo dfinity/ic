@@ -86,6 +86,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFe
 
             let output_rule = OutputRule {
                 id: rule_id.clone(),
+                incident_id: rule.incident_id,
                 rule_raw: Some(rule.rule_raw),
                 description: Some(rule.description),
                 disclosed_at: rule.disclosed_at,

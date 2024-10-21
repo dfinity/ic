@@ -15,7 +15,7 @@ pub trait ConfidentialityFormatting {
 #[derive(Debug, thiserror::Error)]
 pub enum ConfidentialFormatterError {
     #[error("Access denied")]
-    AccessDenied,
+    _AccessDenied,
 }
 
 /// A generic confidentiality formatter for various data types
