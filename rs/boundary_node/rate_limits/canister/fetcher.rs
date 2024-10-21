@@ -99,8 +99,8 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFe
             rules,
         };
 
-        let formatted_config = self.formatter.format(&config).map_err(|_| {
-            anyhow::anyhow!("Failed to format config with confidentially constraints")
+        let formatted_config = self.formatter.format(&config).map_err(|err| {
+            anyhow::anyhow!("Failed to format config with confidentially constraints: {err}")
         })?;
 
         let config = ConfigResponse {

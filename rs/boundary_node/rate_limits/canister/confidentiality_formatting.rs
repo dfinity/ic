@@ -40,19 +40,15 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
 
     fn format(&self, config: &OutputConfig) -> Result<OutputConfig, ConfidentialFormatterError> {
         let mut config = config.clone();
-        match self.access_resolver.get_access_level() {
-            AccessLevel::RestrictedRead => {
-                config.rules.iter_mut().for_each(|rule| {
-                    if rule.disclosed_at.is_none() {
-                        rule.description = None;
-                        rule.rule_raw = None;
-                    }
-                });
-                Ok(config)
-            }
-            AccessLevel::FullRead => Ok(config),
-            _ => Err(ConfidentialFormatterError::AccessDenied),
+        if self.access_resolver.get_access_level() == AccessLevel::RestrictedRead {
+            config.rules.iter_mut().for_each(|rule| {
+                if rule.disclosed_at.is_none() {
+                    rule.description = None;
+                    rule.rule_raw = None;
+                }
+            });
         }
+        Ok(config)
     }
 }
 
@@ -66,17 +62,13 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
         rule: &OutputRuleMetadata,
     ) -> Result<OutputRuleMetadata, ConfidentialFormatterError> {
         let mut rule = rule.clone();
-        match self.access_resolver.get_access_level() {
-            AccessLevel::RestrictedRead => {
-                if rule.disclosed_at.is_none() {
-                    rule.description = None;
-                    rule.rule_raw = None;
-                }
-                Ok(rule)
-            }
-            AccessLevel::FullRead => Ok(rule),
-            _ => Err(ConfidentialFormatterError::AccessDenied),
+        if self.access_resolver.get_access_level() == AccessLevel::RestrictedRead
+            && rule.disclosed_at.is_none()
+        {
+            rule.description = None;
+            rule.rule_raw = None;
         }
+        Ok(rule)
     }
 }
 
