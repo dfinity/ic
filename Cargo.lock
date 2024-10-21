@@ -17574,6 +17574,7 @@ dependencies = [
  "ic-cdk-macros 0.9.0",
  "ic-cdk-timers",
  "ic-stable-structures",
+ "mockall 0.13.0",
  "rate-limits-api",
  "serde",
  "serde_json",
