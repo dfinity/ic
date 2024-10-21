@@ -132,13 +132,13 @@ type KeyConfig = record {
   max_queue_size : opt nat32;
 };
 
-type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId; Vetkd : VetKdKeyId };
+type MasterPublicKeyId = variant { Schnorr : SchnorrKeyId; Ecdsa : EcdsaKeyId; VetKd : VetKdKeyId };
 
 type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
 
 type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
-type VetKdKeyId = record { curve: VetKdCurve; name: String };
+type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
 type VetKdCurve = variant { bls12_381 };
 
