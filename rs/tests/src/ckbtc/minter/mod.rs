@@ -1,4 +1,3 @@
-pub mod test_batching;
 pub mod test_heartbeat;
 pub mod test_kyt;
 pub mod test_retrieve_btc;
