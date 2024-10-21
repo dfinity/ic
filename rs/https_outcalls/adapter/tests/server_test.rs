@@ -88,8 +88,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         let basic_get = warp::get()
             .and(warp::path("get"))
-            .and(warp::header::headers_cloned())
-            .map(|header_map| warp::reply::json(&"Hello"));
+            .map(|| warp::reply::json(&"Hello"));
         let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
             Response::builder()
                 .header(
