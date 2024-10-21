@@ -359,6 +359,12 @@ fn make_new_pre_signatures_if_needed_helper(
     let Some(pre_signatures_to_create) = chain_key_config
         .key_configs
         .iter()
+        .filter(|key_config| {
+            matches!(
+                &key_config.key_id,
+                MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_)
+            )
+        })
         .find(|key_config| &key_config.key_id == key_id)
         .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
     else {
@@ -370,7 +376,7 @@ fn make_new_pre_signatures_if_needed_helper(
     }
 
     for _ in 0..(pre_signatures_to_create - unassigned_pre_signatures) {
-        let pre_signature = match key_id {
+        match key_id {
             MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
                 let kappa_config = new_random_unmasked_config(
                     key_id,
@@ -380,11 +386,12 @@ fn make_new_pre_signatures_if_needed_helper(
                 );
                 let lambda_config =
                     new_random_config(key_id, subnet_nodes, registry_version, uid_generator);
-                PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
+                let pre_signature = PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
                     ecdsa_key_id.clone(),
                     kappa_config,
                     lambda_config,
-                ))
+                ));
+                new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
             }
             MasterPublicKeyId::Schnorr(schnorr_key_id) => {
                 let blinder_config = new_random_unmasked_config(
@@ -393,13 +400,16 @@ fn make_new_pre_signatures_if_needed_helper(
                     registry_version,
                     uid_generator,
                 );
-                PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
+                let pre_signature = PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
                     schnorr_key_id.clone(),
                     blinder_config,
-                ))
+                ));
+                new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
+            }
+            MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+                // vetKD does not have pre-signatures
             }
         };
-        new_pre_signatures.insert(uid_generator.next_pre_signature_id(), pre_signature);
     }
 
     new_pre_signatures
@@ -495,6 +505,7 @@ pub(super) mod test_utils {
                     blinder_config_ref,
                 ))
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let configs = pre_signature
             .iter_transcript_configs_in_creation()
@@ -709,6 +720,7 @@ pub(super) mod tests {
         let expected_transcript_ids = match key_id {
             MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
             MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         assert_eq!(transcript_ids.len(), expected_transcript_ids);
         assert_eq!(
