@@ -1,5 +1,6 @@
 load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("@rules_rust//rust:defs.bzl", "rust_library", "system_test_nns")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 
