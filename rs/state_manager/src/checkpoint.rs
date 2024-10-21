@@ -177,6 +177,35 @@ pub fn load_checkpoint_parallel_and_mark_verified(
     Ok(state)
 }
 
+fn map_canister_states<F>(
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+    canister_fn: F,
+) -> Vec<T>
+where
+    F: Fn(&CanisterState) -> T + Send,
+{
+    let mut canister_states = BTreeMap::new();
+    let canister_ids = checkpoint_layout.canister_ids()?;
+    let results = maybe_parallel_map(&mut thread_pool, canister_ids.iter(), |canister_id| {
+        load_canister_state_from_checkpoint(
+            checkpoint_layout,
+            canister_id,
+            Arc::clone(&fd_factory),
+            metrics,
+        )
+    });
+
+    for canister_state in results.into_iter() {
+        let (canister_state, durations) = canister_state?;
+        canister_states.insert(canister_state.system_state.canister_id(), canister_state);
+
+        durations.apply(metrics);
+    }
+
+    canister_states
+}
+
 /// Loads the node state heighted with `height` using the specified
 /// directory layout.
 pub fn load_checkpoint(
