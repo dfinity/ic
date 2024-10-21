@@ -19,7 +19,7 @@ pub struct PoolMetrics {
 }
 
 impl PoolMetrics {
-    pub fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         Self {
             op_duration: metrics_registry.register(
                 HistogramVec::new(
@@ -115,7 +115,7 @@ pub struct IDkgPoolMetrics {
 }
 
 impl IDkgPoolMetrics {
-    pub fn new(metrics_registry: MetricsRegistry, pool: &str, pool_type: &str) -> Self {
+    pub fn new(metrics_registry: &MetricsRegistry, pool: &str, pool_type: &str) -> Self {
         Self {
             pool_artifacts: metrics_registry.register(
                 IntGaugeVec::new(

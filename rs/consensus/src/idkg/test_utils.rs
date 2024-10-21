@@ -693,7 +693,7 @@ pub(crate) fn create_idkg_pool(
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> IDkgPoolImpl {
-    IDkgPoolImpl::new(config, log, metrics_registry, Box::new(IDkgStatsNoOp {}))
+    IDkgPoolImpl::new(config, log, &metrics_registry, Box::new(IDkgStatsNoOp {}))
 }
 
 // Sets up the dependencies and creates the pre signer
