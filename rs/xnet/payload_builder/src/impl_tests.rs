@@ -287,7 +287,7 @@ async fn validate_slice() {
         });
 
         // Helper for generating a slice from `SUBNET_1` with valid signals; and with
-        // messages between the given indices indices; and validating it.
+        // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
                 SUBNET_1,
@@ -452,7 +452,7 @@ async fn validate_slice_above_msg_limit() {
         });
 
         // Helper for validating a generated slice from `SUBNET_1` with messages between
-        // the given indices indices and the given `signals_end` index.
+        // the given indices and the given `signals_end` index.
         let validate_slice = |message_begin, message_end, signal_end, state| {
             let certified_slice = make_certified_stream_slice(
                 SUBNET_1,
@@ -541,7 +541,7 @@ async fn validate_slice_loopback_stream() {
         });
 
         // Helper for generating a loopback stream slice with valid signals; and with
-        // messages between the given indices indices; and validating it.
+        // messages between the given indices; and validating it.
         let validate_slice_with_messages = |message_begin, message_end| {
             let certified_slice = make_certified_stream_slice(
                 OWN_SUBNET_ID,
