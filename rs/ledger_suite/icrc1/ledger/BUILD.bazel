@@ -43,13 +43,28 @@ package(default_visibility = ["//visibility:public"])
         ] + extra_deps,
     )
     for (name_suffix, archive_name_suffix, features, extra_deps) in [
-        ("", "", [], []),
-        ("_u256", "_u256", [], []),
+        (
+            "",
+            "",
+            [],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
         (
             "_canbench",
             "",
             ["canbench-rs"],
             [
+                "//rs/ledger_suite/icrc1/tokens_u64",
                 "@crate_index//:canbench-rs",
             ],
         ),
@@ -61,6 +76,7 @@ package(default_visibility = ["//visibility:public"])
                 "u256-tokens",
             ],
             [
+                "//rs/ledger_suite/icrc1/tokens_u256",
                 "@crate_index//:canbench-rs",
             ],
         ),
@@ -69,6 +85,7 @@ package(default_visibility = ["//visibility:public"])
             "",
             ["next-ledger-version"],
             [
+                "//rs/ledger_suite/icrc1/tokens_u64",
             ],
         ),
         (
@@ -79,6 +96,7 @@ package(default_visibility = ["//visibility:public"])
                 "u256-tokens",
             ],
             [
+                "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
     ]
@@ -108,6 +126,7 @@ package(default_visibility = ["//visibility:public"])
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
@@ -191,6 +210,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/ledger_suite/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_lowupgradeinstructionlimits",
+            ["low-upgrade-instruction-limits"],
+            [
+                ":ledger",
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_lowupgradeinstructionlimits",
+            [
+                "low-upgrade-instruction-limits",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
@@ -214,6 +252,7 @@ rust_test(
         data = [
             ":block.cddl",
             ":ledger_canister" + name_suffix + ".wasm",
+            ":ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm",
             ":ledger_canister" + name_suffix + "_nextledgerversion.wasm",
             "//rs/ledger_suite/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
             "@ic-icrc1-ledger-first-version.wasm.gz//file",
@@ -229,6 +268,7 @@ rust_test(
             "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
             "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_INSTR_LIMITS_PATH": "$(rootpath :ledger_canister" + name_suffix + "_lowupgradeinstructionlimits.wasm)",
             "IC_ICRC1_LEDGER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger_canister" + name_suffix + "_nextledgerversion.wasm)",
         },
         deps = [
@@ -326,6 +366,7 @@ rust_test(
             "@crate_index//:candid",
             "@crate_index//:ciborium",
             "@crate_index//:ic-cdk",
+            "@crate_index//:ic-cdk-timers",
             "@crate_index//:ic-metrics-encoder",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:num-traits",
