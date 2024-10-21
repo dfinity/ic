@@ -185,6 +185,9 @@ dpkg_status(
         "%s:control" % package
         for package in PACKAGES_NOBLE
     ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 passwd(

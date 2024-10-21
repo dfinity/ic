@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of whether a canister ID could be found).
 - Subnet ids can be specified in `SubnetSpec`s for all subnet kinds.
 
+### Removed
+- The CLI option `--pid`: use the CLI option `--port-file` instead.
+
 
 
 ## 6.0.0 - 2024-09-12
