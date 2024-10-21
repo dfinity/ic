@@ -1,10 +1,12 @@
 use candid::Principal;
+use mockall::automock;
 
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 
 const FULL_ACCESS_ID: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
 const FULL_READ_TESTING_ID: &str = "un4fu-tqaaa-aaaab-qadjq-cai"; // TODO: remove this
 
+#[automock]
 pub trait ResolveAccessLevel {
     fn get_access_level(&self) -> AccessLevel;
 }

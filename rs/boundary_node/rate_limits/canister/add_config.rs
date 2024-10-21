@@ -1,7 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::storage::StorableIncidentMetadata;
-use ic_cdk::api::time;
+use crate::{storage::StorableIncidentMetadata, types::Timestamp};
 use rate_limits_api::IncidentId;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -17,7 +16,7 @@ use crate::{
 pub const INIT_VERSION: Version = 1;
 
 pub trait AddsConfig {
-    fn add_config(&self, config: InputConfig) -> Result<(), AddConfigError>;
+    fn add_config(&self, config: InputConfig, time: Timestamp) -> Result<(), AddConfigError>;
 }
 
 #[derive(Debug, Error, Clone)]
@@ -91,7 +90,7 @@ impl<R, A> ConfigAdder<R, A> {
 // - New rules cannot be linked to an already disclosed incident (LinkingRuleToDisclosedIncident error)
 
 impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
-    fn add_config(&self, config: InputConfig) -> Result<(), AddConfigError> {
+    fn add_config(&self, config: InputConfig, time: Timestamp) -> Result<(), AddConfigError> {
         // Only privileged users can perform this operation
         if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
             return Err(AddConfigError::Unauthorized);
@@ -237,7 +236,7 @@ impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
 
         let storable_config = StorableConfig {
             schema_version: config.schema_version,
-            active_since: time(),
+            active_since: time,
             rule_ids,
         };
 
@@ -304,5 +303,39 @@ fn find_difference<T: Eq + std::hash::Hash + Clone>(v1: &[T], v2: &[T]) -> Vec<T
 impl From<AddConfigError> for String {
     fn from(value: AddConfigError) -> Self {
         value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::access_control::MockResolveAccessLevel;
+    use crate::state::MockRepository;
+
+    use super::*;
+
+    #[test]
+    fn test_add_config_success() {
+        let config = InputConfig {
+            schema_version: 1,
+            rules: vec![],
+        };
+        let current_time = 0u64;
+
+        let mut mock_access = MockResolveAccessLevel::new();
+        mock_access
+            .expect_get_access_level()
+            .returning(|| AccessLevel::FullAccess);
+        let mut mock_repository = MockRepository::new();
+
+        mock_repository.expect_get_rule().returning(|_| None);
+        mock_repository.expect_get_version().returning(|| None);
+        mock_repository.expect_get_config().returning(|_| None);
+        mock_repository.expect_add_config().returning(|_, _| true);
+
+        let writer = ConfigAdder::new(mock_repository, mock_access);
+
+        writer
+            .add_config(config, current_time)
+            .expect("failed to add a new config");
     }
 }

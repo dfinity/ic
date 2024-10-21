@@ -1,4 +1,5 @@
 use ic_cdk::api::time;
+use mockall::automock;
 use rate_limits_api::IncidentId;
 
 use crate::{
@@ -10,6 +11,7 @@ use crate::{
     types::{RuleId, Version},
 };
 
+#[automock]
 pub trait Repository {
     fn get_version(&self) -> Option<StorableVersion>;
     fn get_config(&self, version: Version) -> Option<StorableConfig>;

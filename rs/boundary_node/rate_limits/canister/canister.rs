@@ -70,10 +70,11 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
 #[candid_method(update)]
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
+    let current_time = ic_cdk::api::time();
     with_state(|state| {
         let access_resolver: AccessLevelResolver = AccessLevelResolver::new(caller_id);
         let writer = ConfigAdder::new(state, access_resolver);
-        writer.add_config(config.into())
+        writer.add_config(config.into(), current_time)
     })?;
     Ok(())
 }
