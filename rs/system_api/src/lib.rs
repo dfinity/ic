@@ -344,11 +344,11 @@ pub enum ApiType {
         message_accepted: bool,
     },
 
-    // For executing the `canister_heartbeat` or `canister_global_timer` methods
+    // For executing the `canister_heartbeat` or `canister_global_timer` or `canister_on_low_wasm_memory` methods
     SystemTask {
         caller: PrincipalId,
         /// System task to execute.
-        /// Only `canister_heartbeat` and `canister_global_timer` are allowed.
+        /// Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.
         system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
