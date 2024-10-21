@@ -233,7 +233,7 @@ pub fn deliver_batches(
             time: block.context.time,
             consensus_responses,
             blockmaker_metrics,
-            replica_version: current_replica_version.clone(),
+            replica_version: block.version().clone(),
         };
 
         debug!(
