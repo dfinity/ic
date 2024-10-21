@@ -74,7 +74,12 @@ fn setup(env: TestEnv, config: Config) {
         config.nodes_count >= 4,
         "at least 4 nodes are required for state sync"
     );
+    // Override defaults to increase disk size and prevent dynamic partition resizing.
+    let vm_resources = VmResources {
+        boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(300)),
+    };
     InternetComputer::new()
+        .with_default_vm_resources(vm_resources)
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .add_nodes(config.nodes_count)
