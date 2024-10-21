@@ -432,9 +432,13 @@ compute_dev_hash() {
     declare -g "$output_var_name=$computed_hash"
 }
 
+if [ "$verify_guestos" == "true" ]; then
 compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
-if [ "$verify_hostos_setupos" == "true" ]; then
+fi
+if [ "$verify_hostos" == "true" ]; then
 compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
+fi
+if [ "$verify_setupos" == "true" ]; then
 compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
 fi
 
