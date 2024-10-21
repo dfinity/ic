@@ -342,9 +342,9 @@ pub struct SandboxProcess {
 impl Drop for SandboxProcess {
     fn drop(&mut self) {
         self.history.record("Terminate()".to_string());
-        self.sandbox_service
-            .terminate(protocol::sbxsvc::TerminateRequest {})
-            .on_completion(|_| {});
+        //self.sandbox_service
+        //    .terminate(protocol::sbxsvc::TerminateRequest {});
+        //.on_completion(|_| {});
     }
 }
 
@@ -609,7 +609,6 @@ impl PausedWasmExecution for PausedSandboxExecution {
             .on_completion(|_| {});
     }
 }
-
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
@@ -1244,6 +1243,7 @@ impl SandboxedExecutionController {
     }
 
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
+        let time_beginning = std::time::Instant::now();
         let mut guard = self.backends.lock().unwrap();
 
         if let Some(backend) = (*guard).get_mut(&canister_id) {
@@ -1279,6 +1279,7 @@ impl SandboxedExecutionController {
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
         if guard.len() > self.max_sandbox_count {
             let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+            let time_now = std::time::Instant::now();
             let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
             evict_sandbox_processes(
                 &mut guard,
@@ -1286,6 +1287,7 @@ impl SandboxedExecutionController {
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
             );
+            println!("Evictions took {:?}", time_now.elapsed());
         }
 
         // No sandbox process found for this canister. Start a new one and register it.
@@ -1313,6 +1315,8 @@ impl SandboxedExecutionController {
             stats: SandboxProcessStats { last_used: now },
         };
         (*guard).insert(canister_id, backend);
+
+        println!("[get_sandbox_process] took {:?}", time_beginning.elapsed());
 
         sandbox_process
     }
