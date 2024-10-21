@@ -1278,7 +1278,8 @@ impl SandboxedExecutionController {
             }
 
             if guard.len() > self.max_sandbox_count {
-                let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+                // let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+                let to_evict = 10;
                 let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
                 evict_sandbox_processes(
                     &mut guard,
