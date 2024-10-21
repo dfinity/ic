@@ -171,7 +171,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["@btc_canister//file"],
-    deps = MIGRATED_DEPENDENCIES + ["//rs/tests/ckbtc:ckbtc"],
+    deps = MIGRATED_DEPENDENCIES,
 )
 
 system_test(
