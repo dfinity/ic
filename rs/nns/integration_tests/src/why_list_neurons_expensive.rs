@@ -7,7 +7,8 @@ use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::ListNeurons;
 use ic_nns_test_utils::state_test_helpers::{
-    list_neurons, get_profiling, unwrap_wasm_result
+    list_neurons, primitive_get_profiling, unwrap_wasm_result, IcWasmTraceEvent,
+    IcWasmTraceEventType, PrimitiveIcWasmTraceEvent,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use pretty_assertions::assert_eq;
@@ -199,7 +200,7 @@ fn test_why_list_neurons_expensive() {
         */
 
         // Fetch measurement.
-        let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
+        let profiling = primitive_get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
 
         // Visualize where instructions get consumed.
         let title = format!(
@@ -255,6 +256,11 @@ fn render_profiling(
     filename: PathBuf,
 ) -> anyhow::Result<CostValue> {
     use inferno::flamegraph::{from_reader, Options};
+    // Convert to inferno's "folded" format.
+
+    let (inferno_trace, refactored_cost) =
+        convert_trace_from_ic_wasm_to_inferno(input.clone(), names)?;
+
     let mut stack = Vec::new();
     let mut prefix = Vec::new();
     let mut result = Vec::new();
@@ -306,6 +312,32 @@ fn render_profiling(
     };
     //println!("Cost: {} Wasm instructions", total);
 
+    {
+        let refactored_result = inferno_trace
+            .iter()
+            .map(|(stack_trace, size)| format!("{} {}", stack_trace.join(";"), size))
+            .collect::<Vec<_>>();
+        let mut result = result.clone();
+        result.reverse();
+        /*
+        fn head_and_tail(lst: &Vec<String>) -> Vec<String> {
+            let mut result = vec![];
+            let len = lst.len();
+
+            result.extend_from_slice(&lst[0..10]);
+            result.extend_from_slice(&lst[(len - 10)..len]);
+
+            result
+        }
+        assert_eq!(
+            head_and_tail(&refactored_result),
+            head_and_tail(&result),
+        );
+        */
+        assert_eq!(refactored_result, result,);
+    }
+    assert_eq!(refactored_cost, cost,);
+
     // Use the inferno library to visualize of where instructions were spent.
     let mut opt = Options::default();
     opt.count_name = "instructions".to_string();
@@ -318,14 +350,143 @@ fn render_profiling(
     // opt.image_width = Some(1024);
     opt.flame_chart = true;
     opt.no_sort = true;
-    // Reserve result order to make flamegraph from left to right.
-    // See https://github.com/jonhoo/inferno/issues/236
-    result.reverse();
-    let logs = result.join("\n");
-    let reader = std::io::Cursor::new(logs);
+    let inferno_trace = inferno_trace
+        .into_iter()
+        .map(|(stack_trace, size)| format!("{} {}", stack_trace.join(";"), size))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let inferno_trace = std::io::Cursor::new(inferno_trace);
     let mut writer = std::fs::File::create(&filename)?;
-    from_reader(&mut opt, reader, &mut writer)?;
+    from_reader(&mut opt, inferno_trace, &mut writer)?;
     // println!("Flamegraph written to {}", filename.display());
 
     Ok(cost)
+}
+
+type InfernoTrace = Vec<(
+    /* call stack */ Vec</* function name */ String>,
+    /* size */ i64,
+)>;
+
+fn convert_trace_from_ic_wasm_to_inferno(
+    trace: Vec<PrimitiveIcWasmTraceEvent>,
+    function_id_to_name: &BTreeMap<
+        // Very confusingly, the type here is different from the type in
+        // IcWasmTraceEvent. Nevertheless, rest assured that this ALSO is a
+        // function ID.
+        u16,
+        String,
+    >,
+) -> anyhow::Result<(InfernoTrace, CostValue)> {
+    let trace = trace
+        .into_iter()
+        .map(IcWasmTraceEvent::from)
+        .collect::<Vec<_>>();
+
+    let mut inferno_trace = Vec::new();
+
+    /// Call that we have not yet seen the end of yet (as we scan through
+    /// trace).
+    struct OpenCall {
+        function_id: i32,
+        function_name: String,
+        timestamp_instructions: i64,
+        instructions_consumed_by_callees: i64,
+    }
+
+    let mut open_calls = Vec::<OpenCall>::new();
+    let mut total_instructions = 0;
+    let start_timestamp_instructions = trace.first().map(|event| event.timestamp_instructions);
+    let mut previous_stack_trace = None;
+    for event in trace {
+        let IcWasmTraceEvent {
+            type_,
+            function_id,
+            timestamp_instructions,
+        } = event;
+
+        let function_name = match function_id_to_name.get(&(function_id as u16)) {
+            Some(name) => name.clone(),
+            None => format!("func_{}", function_id),
+        };
+
+        match type_ {
+            IcWasmTraceEventType::Call => {
+                open_calls.push(OpenCall {
+                    function_id,
+                    function_name,
+                    timestamp_instructions,
+                    instructions_consumed_by_callees: 0,
+                });
+                continue;
+            }
+
+            // Handled in the remainder of this loop iteration.
+            IcWasmTraceEventType::Return => (),
+        }
+
+        let current_stack_trace = open_calls
+            .iter()
+            .map(|open_call| open_call.function_name.clone())
+            .collect::<Vec<String>>();
+
+        let call_being_closed = match open_calls.pop() {
+            Some(ok) => ok,
+            None => bail!(
+                "Malformed trace: returning from a call to {}, but there are no open function calls.",
+                function_name,
+            ),
+        };
+
+        // Return Err if there is a mismatch between this (function return)
+        // event, and the original function call event.
+        if call_being_closed.function_id != function_id {
+            bail!(
+                "Malformed trace: returning from a call to {}, \
+                 but the most recent open function call is to a {}!?",
+                function_name,
+                call_being_closed.function_name,
+            );
+        }
+
+        // Here, inclusive refers to the fact that instructions consumed by callees is also counted.
+        let call_inclusive_instructions =
+            timestamp_instructions - call_being_closed.timestamp_instructions;
+
+        // Update instructions_consumed_by_callees of caller.
+        if let Some(caller_open_call) = open_calls.last_mut() {
+            caller_open_call.instructions_consumed_by_callees += call_inclusive_instructions;
+        } else {
+            total_instructions += call_inclusive_instructions as u64;
+        }
+
+        // Add an empty spacer to avoid collapsing adjacent same-named calls
+        // See https://github.com/jonhoo/inferno/issues/185#issuecomment-671393504
+        if previous_stack_trace.as_ref() == Some(&current_stack_trace) {
+            let mut spacer = current_stack_trace.clone();
+            spacer.pop();
+            spacer.push("spacer".to_string());
+            inferno_trace.push((spacer, 0));
+        }
+        previous_stack_trace = Some(current_stack_trace.clone());
+
+        inferno_trace.push((
+            current_stack_trace,
+            call_inclusive_instructions - call_being_closed.instructions_consumed_by_callees,
+        ));
+    }
+    // Done calculating populating `inferno_trace` Vec.
+
+    let cost = if !open_calls.is_empty() {
+        eprintln!("A trap occured or trace is too large");
+        CostValue::StartCost(start_timestamp_instructions.unwrap() as u64)
+    } else {
+        CostValue::Complete(total_instructions)
+    };
+
+    // Reserve result order to make flamegraph from left to right.
+    // See https://github.com/jonhoo/inferno/issues/236
+    inferno_trace.reverse();
+
+    Ok((inferno_trace, cost))
 }

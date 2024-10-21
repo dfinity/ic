@@ -2073,19 +2073,83 @@ pub fn get_average_icp_xdr_conversion_rate(
     Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
 }
 
-/// Returns data that can be turned into a flame graph.
+/// Returned by the __get_profiling canister method.
 ///
-/// That is a pretty vague description, but it is the best I can give.
+/// More precisely, a Vec of these is returned.
 ///
-/// This is modeled after the following piece of code that someone shared with
-/// me about generating flame graphs:
+/// Because types (esp primitive types) do not convey the meaning/significance
+/// of the data they bear (e.g. the components of this type), you should really
+/// convert this to IcWasmTraceEvent. (Hence, "Primitive" is in the name of
+/// this.)
+pub type PrimitiveIcWasmTraceEvent = (
+    // function_id. Positive function_id indicates that the function was
+    // called. Negative indicates -function_id returned. Like paren, these must
+    // match in order for a trace to be well-formed. (If they don't,
+    // convert_trace_format_from_ic_wasm_to_inferno returns Err.)
+    i32,
+
+    // See the IcWasmTraceEvent::timestamp_instructions field.
+    i64,
+);
+
+pub enum IcWasmTraceEventType {
+    Call,
+    Return,
+}
+
+/// There are two kinds of events: function call, and return.
+pub struct IcWasmTraceEvent {
+    pub type_: IcWasmTraceEventType,
+
+    pub function_id: i32,
+
+    /// "When" this event occurred. The "clock" starts running from 0 when the
+    /// current request came in, stops when the canister awaits calls to other
+    /// canisters, and resumes when the await resumes. (And the the units is
+    /// instructions.)
+    pub timestamp_instructions: i64,
+}
+
+impl From<PrimitiveIcWasmTraceEvent> for IcWasmTraceEvent {
+    fn from(event: PrimitiveIcWasmTraceEvent) -> Self {
+        let (function_id, timestamp_instructions) = event;
+
+        let type_ = if function_id < 0 {
+            IcWasmTraceEventType::Return
+        } else {
+            IcWasmTraceEventType::Call
+        };
+
+        let function_id = function_id.abs();
+
+        Self {
+            type_,
+            function_id,
+            timestamp_instructions,
+        }
+    }
+}
+
+/// Returns the trace of the latest request that was executed (possibly, still in flight).
+///
+/// More precisely, a trace is a list of call and return events.
+///
+/// This implementation is based on
 ///
 ///     https://github.com/dfinity/ic-repl/blob/746bea25ddd4cc98709f6b9eaa283f32a21ac30d/src/profiling.rs#L46
 ///
-/// Basically, this de-paginates the __get_profiling (Candid) method of the
-/// callee canister. __get_profiling is a method that you can add to any WASM by
-/// calling ic_wasm::instrumentation::instrument.
-pub fn get_profiling(state_machine: &StateMachine, callee: CanisterId) -> Vec<(i32, i64)> {
+/// Basically, this de-paginates the __get_profiling canister method.
+/// __get_profiling is a method that you can add to any WASM by calling
+/// ic_wasm::instrumentation::instrument.
+pub fn get_profiling(state_machine: &StateMachine, callee: CanisterId) -> Vec<IcWasmTraceEvent> {
+    primitive_get_profiling(state_machine, callee)
+        .into_iter()
+        .map(IcWasmTraceEvent::from)
+        .collect()
+}
+
+// DO NOT MERGE: Get rid of this.
+pub fn primitive_get_profiling(state_machine: &StateMachine, callee: CanisterId) -> Vec<PrimitiveIcWasmTraceEvent> {
     let mut result = vec![];
     let mut current_index = 0;
     loop {
