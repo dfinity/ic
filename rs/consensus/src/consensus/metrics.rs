@@ -468,8 +468,6 @@ pub struct ValidatorMetrics {
     // Used to sum the values within a single validator run
     dkg_time_per_validator_run: RwLock<f64>,
     pub(crate) idkg_validation_duration: HistogramVec,
-    pub(crate) validation_random_tape_shares_count: IntGauge,
-    pub(crate) validation_random_beacon_shares_count: IntGauge,
     pub(crate) validation_share_batch_size: HistogramVec,
     // Payload metrics
     pub(crate) ingress_messages: Histogram,
@@ -518,14 +516,6 @@ impl ValidatorMetrics {
                 // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
                 decimal_buckets(-4, 2),
                 &["type"],
-            ),
-            validation_random_tape_shares_count: metrics_registry.int_gauge(
-                "consensus_validation_tape_shares",
-                "Number of random tape shares being validated every block",
-            ),
-            validation_random_beacon_shares_count: metrics_registry.int_gauge(
-                "consensus_validation_beacon_shares",
-                "Number of random beacon shares being validated every block",
             ),
             validation_share_batch_size: metrics_registry.histogram_vec(
                 "consensus_validation_share_batch_size",
