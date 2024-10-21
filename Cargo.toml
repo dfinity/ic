@@ -172,6 +172,7 @@ members = [
     "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
+    "rs/nervous_system/instruction_stats",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
