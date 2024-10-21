@@ -1,4 +1,5 @@
 use crate::{
+    checkpoint::validate_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest, release_lock_and_persist_metadata,
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -122,10 +123,8 @@ pub(crate) enum TipRequest {
     },
     /// Validate the checkpointed state is valid and identical to the execution state.
     /// Crash if diverges.
-    #[cfg(debug_assertions)]
     ValidateReplicatedState {
-        checkpointed_state: Box<ReplicatedState>,
-        execution_state: Box<ReplicatedState>,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
     },
     /// Wait for the message to be executed and notify back via sender.
     /// State: *
@@ -449,17 +448,18 @@ pub(crate) fn spawn_tip_thread(
                             have_latest_manifest = true;
                         }
 
-                        #[cfg(debug_assertions)]
-                        TipRequest::ValidateReplicatedState {
-                            checkpointed_state,
-                            execution_state,
-                        } => {
-                            debug_assert!(
-                                checkpointed_state == execution_state,
-                                "Divergence: checkpointed {:#?}, \nexecution: {:#?}",
-                                checkpointed_state,
-                                execution_state,
-                            );
+                        TipRequest::ValidateReplicatedState { checkpoint_layout } => {
+                            if let Err(err) = validate_checkpoint_and_remove_unverified_marker(
+                                &checkpoint_layout,
+                                Some(&mut thread_pool),
+                            ) {
+                                fatal!(
+                                    &log,
+                                    "Checkpoint validation for {} has failed: {:#}",
+                                    checkpoint_layout.raw_path().display(),
+                                    err
+                                )
+                            }
                         }
 
                         TipRequest::Noop => {}
