@@ -19,7 +19,7 @@ libtool
 libevent-dev
 libboost-dev
 
-# GitLab CI
+# GitHub CI
 sudo
 gosu
 jq
