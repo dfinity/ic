@@ -12804,6 +12804,7 @@ dependencies = [
 name = "ic-tests-ckbtc"
 version = "0.9.0"
 dependencies = [
+ "anyhow",
  "assert_matches",
  "bitcoincore-rpc",
  "candid",
@@ -12834,7 +12835,12 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
+ "k256",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "registry-canister",
+ "serde",
+ "serde_bytes",
  "slog",
  "tokio",
 ]

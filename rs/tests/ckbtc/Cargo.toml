@@ -7,6 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 assert_matches = { workspace = true }
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
@@ -37,7 +38,12 @@ ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/t
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+k256 = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
