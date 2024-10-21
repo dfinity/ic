@@ -1,0 +1,20 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_library(
+    name = "xnet_slo_test_lib",
+    testonly = True,
+    srcs = ["xnet_slo_test_lib.rs"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/xnet_test",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/common:systest_message_routing_common",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
