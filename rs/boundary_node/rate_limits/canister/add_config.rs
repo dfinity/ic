@@ -90,7 +90,6 @@ impl<R, A> ConfigAdder<R, A> {
 // - Deactivated rules cannot be resubmitted (DeactivatedRuleResubmission error)
 // - New rules cannot be linked to an already disclosed incident (LinkingRuleToDisclosedIncident error)
 
-
 impl<R: Repository, A: ResolveAccessLevel> AddsConfig for ConfigAdder<R, A> {
     fn add_config(&self, config: InputConfig) -> Result<(), AddConfigError> {
         // Only privileged users can perform this operation
