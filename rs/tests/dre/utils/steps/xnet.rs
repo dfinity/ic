@@ -1,12 +1,10 @@
+use super::Step;
 use ic_system_test_driver::{
     driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     util::runtime_from_url,
 };
 use itertools::Itertools;
-
-use ic_tests::message_routing::xnet_slo_test::{test_async_impl, Config};
-
-use super::Step;
+use xnet_slo_test_lib::{test_async_impl, Config};
 
 #[derive(Clone)]
 pub struct XNet {

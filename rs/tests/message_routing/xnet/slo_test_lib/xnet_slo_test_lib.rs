@@ -24,7 +24,6 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 
 end::catalog[] */
 
-use super::common::{install_canisters, parallel_async, start_all_canisters};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
@@ -40,6 +39,7 @@ use ic_system_test_driver::util::{block_on, runtime_from_url};
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
+use systest_message_routing_common::{install_canisters, parallel_async, start_all_canisters};
 use xnet_test::Metrics;
 
 // Constants for all xnet tests.
@@ -200,7 +200,7 @@ pub async fn test_async(env: TestEnv, config: Config) {
 /// # Panics
 /// - If the endpoints provided in `endpoint_runtimes` are incompatible with `config`.
 /// - On failure of one of the operations.
-pub(crate) async fn deploy_and_start<'a, 'b>(
+pub async fn deploy_and_start<'a, 'b>(
     env: TestEnv,
     endpoints_runtimes: &'a [Runtime],
     config: &'b Config,
@@ -250,10 +250,7 @@ pub(crate) async fn deploy_and_start<'a, 'b>(
 ///
 /// # Panics
 /// - On failure of one of the operations.
-pub(crate) async fn tear_down(
-    canisters: &[Vec<Canister<'_>>],
-    logger: &slog::Logger,
-) -> Vec<Metrics> {
+pub async fn tear_down(canisters: &[Vec<Canister<'_>>], logger: &slog::Logger) -> Vec<Metrics> {
     stop_all_canister(canisters).await;
     // Collect metrics from all canisters (via query `metrics` call).
     info!(logger, "Collecting metrics from all canisters...");
@@ -318,7 +315,7 @@ pub(crate) async fn tear_down(
 /// outcome of each check.
 ///
 /// Returns `true` on success, `false` otherwise.
-pub(crate) fn check_success(
+pub fn check_success(
     aggregated_metrics: Vec<Metrics>,
     config: &Config,
     logger: &slog::Logger,
