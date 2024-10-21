@@ -74,10 +74,10 @@ thread_local! {
     static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
 }
 
-/// This guarantees that timers cannot be restarted more often than once every 300 intervals.
+/// This guarantees that timers cannot be restarted more often than once every 120 intervals.
 const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(600);
 
-const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(2);
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Returns an immutable reference to the governance's global state.
 ///
