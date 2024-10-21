@@ -8,7 +8,7 @@ use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm};
+use ic_management_canister_types::{EcdsaCurve, MasterPublicKeyId, SchnorrAlgorithm, VetKdCurve};
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::ChainKeyConfig;
@@ -443,18 +443,9 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
             SchnorrAlgorithm::Bip340Secp256k1 => AlgorithmId::ThresholdSchnorrBip340,
             SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
         },
-        MasterPublicKeyId::VetKd(_vetkd_key_id) => {
-            todo!(
-                "how to behave here: it seems `algorithm_for_key_id` is only
-                called once in production by fn update_next_key_transcript in
-                the iDKG payload builder. Seemingly all other of the many
-                usages usages are in test code.
-                "
-            )
-            // match vetkd_key_id.curve {
-            //     VetKdCurve::Bls12_381 => AlgorithmId::ThresBls12_381,
-            // },
-        }
+        MasterPublicKeyId::VetKd(vetkd_key_id) => match vetkd_key_id.curve {
+            VetKdCurve::Bls12_381 => AlgorithmId::ThresBls12_381,
+        },
     }
 }
 
