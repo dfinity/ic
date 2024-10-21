@@ -1,5 +1,5 @@
 {
-  "checksum": "1d5b57e26a07347c52bb44c2ef30f0463dd0b922e2f6513eccb2ae736ab3315b",
+  "checksum": "003ccf40e731b0fc05c64d5a2d5d40120730cbb9d4d3f1b27d16f1ffddf253e7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4101,7 +4101,7 @@
               "target": "log"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types"
             },
             {
@@ -4598,7 +4598,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -5237,7 +5237,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -18014,7 +18014,7 @@
               "target": "humantime_serde"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -18544,7 +18544,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -23731,11 +23731,11 @@
               "target": "futures_io"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -27358,14 +27358,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "hyper 1.4.1": {
+    "hyper 1.5.0": {
       "name": "hyper",
-      "version": "1.4.1",
+      "version": "1.5.0",
       "package_url": "https://github.com/hyperium/hyper",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.4.1/download",
-          "sha256": "50dfd22e0e76d0f662d429a5f80fcaf3855009297eab6a0a9f8543834744ba05"
+          "url": "https://static.crates.io/crates/hyper/1.5.0/download",
+          "sha256": "bbbff0a806a4728c99295b254c8838933b5b082d75e3cb70c8dab21fdfbcfa9a"
         }
       },
       "targets": [
@@ -27456,7 +27456,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.4.1"
+        "version": "1.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -27512,7 +27512,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -27828,7 +27828,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -27840,7 +27840,7 @@
               "target": "log"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -27848,7 +27848,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -27922,7 +27922,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -27986,7 +27986,7 @@
         "deps": {
           "common": [
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -28086,7 +28086,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -28357,7 +28357,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -28598,7 +28598,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -28634,7 +28634,7 @@
               "target": "reqwest"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -33269,7 +33269,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -33285,7 +33285,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types"
             },
             {
@@ -34758,7 +34758,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -34790,7 +34790,7 @@
               "target": "pem"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -38730,7 +38730,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -50420,7 +50420,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -50508,7 +50508,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
@@ -52109,7 +52109,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -53284,7 +53284,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.4.1",
+                "id": "hyper 1.5.0",
                 "target": "hyper"
               },
               {
@@ -53320,7 +53320,7 @@
                 "target": "pin_project_lite"
               },
               {
-                "id": "rustls 0.23.14",
+                "id": "rustls 0.23.15",
                 "target": "rustls"
               },
               {
@@ -53332,7 +53332,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "rustls-pki-types 1.9.0",
+                "id": "rustls-pki-types 1.10.0",
                 "target": "rustls_pki_types"
               },
               {
@@ -55595,7 +55595,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -55639,14 +55639,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "rustls 0.23.14": {
+    "rustls 0.23.15": {
       "name": "rustls",
-      "version": "0.23.14",
+      "version": "0.23.15",
       "package_url": "https://github.com/rustls/rustls",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls/0.23.14/download",
-          "sha256": "415d9944693cb90382053259f89fbb077ea730ad7273047ec63b19bc9b160ba8"
+          "url": "https://static.crates.io/crates/rustls/0.23.15/download",
+          "sha256": "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
         }
       },
       "targets": [
@@ -55714,11 +55714,11 @@
               "target": "ring"
             },
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "build_script_build"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -55738,7 +55738,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.23.14"
+        "version": "0.23.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -55994,7 +55994,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -56067,7 +56067,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -56196,7 +56196,7 @@
               "target": "base64"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -56214,14 +56214,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rustls-pki-types 1.9.0": {
+    "rustls-pki-types 1.10.0": {
       "name": "rustls-pki-types",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "package_url": "https://github.com/rustls/pki-types",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.9.0/download",
-          "sha256": "0e696e35370c65c9c541198af4543ccd580cf17fc25d8e05c5a242b202488c55"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.10.0/download",
+          "sha256": "16f1201b3c9a7ee8039bcadc17b7e605e2945b27eee7631788c1bd2b0643674b"
         }
       },
       "targets": [
@@ -56252,7 +56252,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.9.0"
+        "version": "1.10.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -56461,7 +56461,7 @@
               "target": "ring"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -66052,7 +66052,7 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -66113,11 +66113,11 @@
         "deps": {
           "common": [
             {
-              "id": "rustls 0.23.14",
+              "id": "rustls 0.23.15",
               "target": "rustls"
             },
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             },
@@ -66815,7 +66815,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.4.1",
+              "id": "hyper 1.5.0",
               "target": "hyper"
             },
             {
@@ -73155,7 +73155,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pki-types 1.9.0",
+              "id": "rustls-pki-types 1.10.0",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -78777,7 +78777,7 @@
     "http-body-util 0.1.2",
     "humantime 2.1.0",
     "humantime-serde 1.1.1",
-    "hyper 1.4.1",
+    "hyper 1.5.0",
     "hyper-rustls 0.27.3",
     "hyper-socks2 0.9.1",
     "hyper-util 0.1.9",
@@ -78915,7 +78915,7 @@
     "rust_decimal_macros 1.32.0",
     "rustc-demangle 0.1.23",
     "rustc-hash 1.1.0",
-    "rustls 0.23.14",
+    "rustls 0.23.15",
     "rustls-pemfile 2.1.2",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
