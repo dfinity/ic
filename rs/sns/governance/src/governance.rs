@@ -734,7 +734,7 @@ impl UpgradeTaskInstance {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum UpgradeLockState {
+enum UpgradeLock {
     /// A new lock is in Released state but does not have `released_by`.
     Released {
         released_by: Option<UpgradeTaskInstance>,
@@ -742,37 +742,32 @@ enum UpgradeLockState {
     },
     Locked {
         acquired_by: UpgradeTaskInstance,
-        acuqired_at_timestamp_seconds: u64,
+        acquired_at_timestamp_seconds: u64,
     },
-}
-
-struct UpgradeLock {
-    upgrade_lock_state: UpgradeLockState,
 }
 
 impl UpgradeLock {
     pub fn new() -> Self {
-        let upgrade_lock_state = UpgradeLockState::Released {
+        UpgradeLock::Released {
             released_by: None,
             released_at_timestamp_seconds: 0,
-        };
-        Self { upgrade_lock_state }
+        }
     }
 
     /// Returns `true` if and only if the upgrade lock has been acquired by this task instance.
     fn try_acquire_upgrade_lock(&mut self, now: u64, task_instance: UpgradeTaskInstance) -> bool {
-        if let UpgradeLockState::Locked {
-            acuqired_at_timestamp_seconds,
+        if let UpgradeLock::Locked {
+            acquired_at_timestamp_seconds,
             ..
-        } = self.upgrade_lock_state
+        } = self
         {
-            let elapsed_timestamp_seconds = now.saturating_sub(acuqired_at_timestamp_seconds);
+            let elapsed_timestamp_seconds = now.saturating_sub(*acquired_at_timestamp_seconds);
             if elapsed_timestamp_seconds < UPGRADE_TASK_LOCK_TIMEOUT_SECONDS {
                 return false;
             }
         }
-        self.upgrade_lock_state = UpgradeLockState::Locked {
-            acuqired_at_timestamp_seconds: now,
+        *self = UpgradeLock::Locked {
+            acquired_at_timestamp_seconds: now,
             acquired_by: task_instance,
         };
 
@@ -781,8 +776,8 @@ impl UpgradeLock {
 
     fn release_upgrade_lock(&mut self, now: u64, task_instance: UpgradeTaskInstance) {
         // Log potentially interesting locking events, even those that should never occur.
-        match self.upgrade_lock_state {
-            UpgradeLockState::Released {
+        match self {
+            UpgradeLock::Released {
                 released_by,
                 released_at_timestamp_seconds,
             } => {
@@ -792,19 +787,19 @@ impl UpgradeLock {
                     task_instance, now, released_by, released_at_timestamp_seconds,
                 );
             }
-            UpgradeLockState::Locked {
+            UpgradeLock::Locked {
                 acquired_by,
-                acuqired_at_timestamp_seconds,
+                acquired_at_timestamp_seconds,
             } => {
-                if acquired_by != task_instance {
+                if *acquired_by != task_instance {
                     log!(
                         ERROR,
                         "When {:?} completed at {}, the upgrade lock has still been acquired by {:?} at {}.",
-                        task_instance, now, acquired_by, acuqired_at_timestamp_seconds,
+                        task_instance, now, acquired_by, acquired_at_timestamp_seconds,
                     );
                 } else {
                     let elapsed_timestamp_seconds =
-                        now.saturating_sub(acuqired_at_timestamp_seconds);
+                        now.saturating_sub(*acquired_at_timestamp_seconds);
                     if elapsed_timestamp_seconds > UPGRADE_TASK_LOCK_TIMEOUT_SECONDS {
                         log!(
                             INFO,
@@ -817,7 +812,7 @@ impl UpgradeLock {
             }
         };
 
-        self.upgrade_lock_state = UpgradeLockState::Released {
+        *self = UpgradeLock::Released {
             released_by: Some(task_instance),
             released_at_timestamp_seconds: now,
         };
@@ -835,7 +830,7 @@ impl UpgradeLock {
         if self.try_acquire_upgrade_lock(now_fn(), task_instance) {
             // Run the task instance.
             task().await;
-    
+
             self.release_upgrade_lock(now_fn(), task_instance);
         }
     }
