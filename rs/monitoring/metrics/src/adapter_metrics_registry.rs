@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::buckets::{add_bucket, decimal_buckets};
 use futures::future::join_all;
 use futures::future::FutureExt;

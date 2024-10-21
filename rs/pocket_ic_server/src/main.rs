@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use aide::{
     axum::{
         routing::{get, post},
