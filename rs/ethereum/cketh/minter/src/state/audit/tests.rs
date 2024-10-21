@@ -1,7 +1,7 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::events::{Event as CandidEvent, EventPayload, UnsignedTransaction};
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{ReceivedErc20Event, ReceivedEthEvent};
+use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
@@ -257,7 +257,7 @@ impl GetEventsFile {
                     from_address: from_address.parse().unwrap(),
                     value: value.try_into().unwrap(),
                     principal,
-                    subaccount: subaccount.map(|s| s.parse().unwrap()),
+                    subaccount: subaccount.map(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::AcceptedErc20Deposit {
                     transaction_hash,
@@ -276,7 +276,7 @@ impl GetEventsFile {
                     value: value.try_into().unwrap(),
                     principal,
                     erc20_contract_address: erc20_contract_address.parse().unwrap(),
-                    subaccount: subaccount.map(|s| s.parse().unwrap()),
+                    subaccount: subaccount.map(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::InvalidDeposit {
                     event_source,

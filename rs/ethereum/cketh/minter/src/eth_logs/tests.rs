@@ -130,14 +130,5 @@ mod subaccount {
 
             prop_assert_eq!(bytes, actual_bytes);
         }
-
-        #[test]
-        fn should_decode_string_representation(bytes in uniform32(any::<u8>())) {
-            let subaccount = LedgerSubaccount::from_bytes(bytes);
-            let hex_subaccount = subaccount.to_string();
-            let decoded_subaccount = hex_subaccount.parse::<LedgerSubaccount>().unwrap();
-
-            prop_assert_eq!(subaccount, decoded_subaccount);
-        }
     }
 }

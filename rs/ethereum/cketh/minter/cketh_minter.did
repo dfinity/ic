@@ -5,6 +5,8 @@ type EthereumNetwork = variant {
     Sepolia;
 };
 
+type Subaccount = blob;
+
 type CanisterStatusResponse = record {
   query_stats : QueryStats;
   status : CanisterStatusType;
@@ -427,6 +429,7 @@ type Event = record {
             from_address : text;
             value : nat;
             "principal" : principal;
+            subaccount : opt Subaccount;
         };
         InvalidDeposit : record {
             event_source : EventSource;
@@ -498,6 +501,7 @@ type Event = record {
             value : nat;
             "principal" : principal;
             erc20_contract_address : text;
+            subaccount : opt Subaccount;
         };
         AcceptedErc20WithdrawalRequest : record {
             max_transaction_fee : nat;

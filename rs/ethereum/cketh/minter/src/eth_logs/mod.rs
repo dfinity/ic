@@ -12,9 +12,6 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::fmt;
-use std::fmt::{Display, Formatter};
-use std::num::ParseIntError;
-use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
@@ -453,19 +450,5 @@ impl LedgerSubaccount {
 
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_be_bytes()
-    }
-}
-
-impl Display for LedgerSubaccount {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}", self.0)
-    }
-}
-
-impl FromStr for LedgerSubaccount {
-    type Err = ParseIntError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        InternalLedgerSubaccount::from_str_hex(s).map(LedgerSubaccount)
     }
 }
