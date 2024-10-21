@@ -26,7 +26,6 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-rustls = { workspace = true }
 tonic = { workspace = true }
 tower = { workspace = true }
 
@@ -39,6 +38,7 @@ rustls = { workspace = true }
 rustls-pemfile = "2.1.2"
 rstest = { workspace = true }
 tempfile = { workspace = true }
+tokio-rustls = { workspace = true }
 uuid = { workspace = true }
 warp = { version = "0.3.7", features = ["tls"] }
 
