@@ -249,6 +249,7 @@ impl GetEventsFile {
                     from_address,
                     value,
                     principal,
+                    subaccount,
                 } => ET::AcceptedDeposit(ReceivedEthEvent {
                     transaction_hash: transaction_hash.parse().unwrap(),
                     block_number: block_number.try_into().unwrap(),
@@ -256,6 +257,7 @@ impl GetEventsFile {
                     from_address: from_address.parse().unwrap(),
                     value: value.try_into().unwrap(),
                     principal,
+                    subaccount: subaccount.map(|s| s.parse().unwrap()),
                 }),
                 EventPayload::AcceptedErc20Deposit {
                     transaction_hash,
@@ -265,6 +267,7 @@ impl GetEventsFile {
                     value,
                     principal,
                     erc20_contract_address,
+                    subaccount,
                 } => ET::AcceptedErc20Deposit(ReceivedErc20Event {
                     transaction_hash: transaction_hash.parse().unwrap(),
                     block_number: block_number.try_into().unwrap(),
@@ -273,6 +276,7 @@ impl GetEventsFile {
                     value: value.try_into().unwrap(),
                     principal,
                     erc20_contract_address: erc20_contract_address.parse().unwrap(),
+                    subaccount: subaccount.map(|s| s.parse().unwrap()),
                 }),
                 EventPayload::InvalidDeposit {
                     event_source,

@@ -136,6 +136,7 @@ mod eth_get_logs {
                 .unwrap(),
             value: Wei::from(10_000_000_000_000_000_u128),
             principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+            subaccount: None,
         }
         .into();
 
@@ -179,6 +180,7 @@ mod eth_get_logs {
             erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
                 .parse()
                 .unwrap(),
+            subaccount: None,
         }
         .into();
 

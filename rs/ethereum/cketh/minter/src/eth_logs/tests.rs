@@ -119,16 +119,25 @@ mod parse_principal_from_slice {
 }
 
 mod subaccount {
-    use crate::eth_logs::Subaccount;
+    use crate::eth_logs::LedgerSubaccount;
     use proptest::{array::uniform32, prelude::any, prop_assert_eq, proptest};
 
     proptest! {
         #[test]
         fn should_preserve_bytes_representation(bytes in uniform32(any::<u8>())) {
-            let subaccount = Subaccount::from_bytes(bytes);
+            let subaccount = LedgerSubaccount::from_bytes(bytes);
             let actual_bytes = subaccount.to_bytes();
 
             prop_assert_eq!(bytes, actual_bytes);
+        }
+
+        #[test]
+        fn should_decode_string_representation(bytes in uniform32(any::<u8>())) {
+            let subaccount = LedgerSubaccount::from_bytes(bytes);
+            let hex_subaccount = subaccount.to_string();
+            let decoded_subaccount = hex_subaccount.parse::<LedgerSubaccount>().unwrap();
+
+            prop_assert_eq!(subaccount, decoded_subaccount);
         }
     }
 }

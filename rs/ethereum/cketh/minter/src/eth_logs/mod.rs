@@ -12,6 +12,9 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::num::ParseIntError;
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
@@ -28,6 +31,8 @@ pub struct ReceivedEthEvent {
     pub value: Wei,
     #[cbor(n(5), with = "crate::cbor::principal")]
     pub principal: Principal,
+    #[n(6)]
+    pub subaccount: Option<LedgerSubaccount>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
@@ -46,6 +51,8 @@ pub struct ReceivedErc20Event {
     pub principal: Principal,
     #[n(6)]
     pub erc20_contract_address: Address,
+    #[n(7)]
+    pub subaccount: Option<LedgerSubaccount>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -308,6 +315,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
             })
         };
 
+        // TODO XC-219: adapt based on event topic, add subaccounts variants.
         // We have only one non-indexed data field for both ETH and ERC20 events.
         let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
             ReceivedEventError::InvalidEventSource {
@@ -341,6 +349,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                     from_address,
                     value: Wei::from_be_bytes(value_bytes),
                     principal,
+                    subaccount: None,
                 }
                 .into())
             }
@@ -365,6 +374,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                     value: Erc20Value::from_be_bytes(value_bytes),
                     principal,
                     erc20_contract_address,
+                    subaccount: None,
                 }
                 .into())
             }
@@ -426,22 +436,36 @@ fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
     Principal::try_from_slice(principal_bytes).map_err(|err| err.to_string())
 }
 
-enum InternalSubaccountTag {}
-type InternalSubaccount = CheckedAmountOf<InternalSubaccountTag>;
+enum InternalLedgerSubaccountTag {}
+type InternalLedgerSubaccount = CheckedAmountOf<InternalLedgerSubaccountTag>;
 
 /// Ledger subaccount.
 ///
 /// Internally represented as a u256 to optimize cbor encoding for low values,
 /// which can be represented as a u32 or a u64.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
-pub struct Subaccount(#[n(0)] InternalSubaccount);
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
+pub struct LedgerSubaccount(#[n(0)] InternalLedgerSubaccount);
 
-impl Subaccount {
+impl LedgerSubaccount {
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(InternalSubaccount::from_be_bytes(bytes))
+        Self(InternalLedgerSubaccount::from_be_bytes(bytes))
     }
 
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_be_bytes()
+    }
+}
+
+impl Display for LedgerSubaccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x}", self.0)
+    }
+}
+
+impl FromStr for LedgerSubaccount {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        InternalLedgerSubaccount::from_str_hex(s).map(LedgerSubaccount)
     }
 }

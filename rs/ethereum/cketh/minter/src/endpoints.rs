@@ -366,6 +366,7 @@ pub mod events {
             from_address: String,
             value: Nat,
             principal: Principal,
+            subaccount: Option<String>,
         },
         AcceptedErc20Deposit {
             transaction_hash: String,
@@ -375,6 +376,7 @@ pub mod events {
             value: Nat,
             principal: Principal,
             erc20_contract_address: String,
+            subaccount: Option<String>,
         },
         InvalidDeposit {
             event_source: EventSource,
