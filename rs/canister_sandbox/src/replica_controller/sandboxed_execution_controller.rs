@@ -1276,16 +1276,16 @@ impl SandboxedExecutionController {
             }
         }
 
-        // if guard.len() > self.max_sandbox_count {
-        //     let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-        //     let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
-        //     evict_sandbox_processes(
-        //         &mut guard,
-        //         self.min_sandbox_count,
-        //         max_active_sandboxes,
-        //         self.max_sandbox_idle_time,
-        //     );
-        // }
+        if guard.len() > self.max_sandbox_count {
+            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+            evict_sandbox_processes(
+                &mut guard,
+                self.min_sandbox_count,
+                max_active_sandboxes,
+                self.max_sandbox_idle_time,
+            );
+        }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
         // No sandbox process found for this canister. Start a new one and register it.
