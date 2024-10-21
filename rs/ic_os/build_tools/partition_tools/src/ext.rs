@@ -26,6 +26,11 @@ pub struct ExtPartition {
 impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
     async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
+        if !Path::new("/usr/sbin/debugfs").exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .context("/usr/sbin/debugfs is needed to open ext4 partitions");
+        }
+
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
@@ -74,6 +79,10 @@ impl Partition for ExtPartition {
 
     /// Copy a file into place
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
+        if !Path::new("/usr/bin/faketime").exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .context("/usr/bin/faketime is needed to fix metadata in files");
+        }
         let mut cmd = Command::new("/usr/bin/faketime")
             .args([
                 "-f",
@@ -88,7 +97,7 @@ impl Partition for ExtPartition {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
-            .context("failed to run debugfs")?;
+            .context("failed to write file using debugfs")?;
 
         cmd.stdin
             .as_mut()
@@ -111,7 +120,7 @@ impl Partition for ExtPartition {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .context("failed to run debugfs")?;
+            .context("failed to read file using debugfs")?;
 
         let mut stdin = cmd.stdin.as_mut().unwrap();
         io::copy(
@@ -149,6 +158,10 @@ impl ExtPartition {
         mode: usize,
         context: Option<&str>,
     ) -> Result<()> {
+        if !Path::new("/usr/bin/faketime").exists() {
+            return Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+                .context("/usr/bin/faketime is needed to fix metadata in files");
+        }
         let mut cmd = Command::new("/usr/bin/faketime")
             .args([
                 "-f",
