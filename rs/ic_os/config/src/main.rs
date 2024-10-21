@@ -1,5 +1,5 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
@@ -7,9 +7,11 @@ use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
 use config::types::*;
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub enum Commands {
     /// Creates SetupOSConfig object
     CreateSetuposConfig {
@@ -47,6 +49,8 @@ pub enum Commands {
         #[arg(long, value_name = "ipv6_address")]
         guestos_ipv6_address: String,
     },
+    /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs
+    GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
 }
 
 #[derive(Parser)]
@@ -54,6 +58,76 @@ pub enum Commands {
 struct ConfigArgs {
     #[command(subcommand)]
     command: Option<Commands>,
+}
+
+#[derive(Args)]
+pub struct GenerateTestnetConfigClapArgs {
+    #[arg(long)]
+    pub ipv6_config_type: Option<String>, // "Deterministic", "Fixed", "RouterAdvertisement"
+    #[arg(long)]
+    pub deterministic_prefix: Option<String>,
+    #[arg(long)]
+    pub deterministic_prefix_length: Option<u8>,
+    #[arg(long)]
+    pub deterministic_gateway: Option<String>,
+    #[arg(long)]
+    pub fixed_address: Option<String>,
+    #[arg(long)]
+    pub fixed_gateway: Option<String>,
+    #[arg(long)]
+    pub ipv4_address: Option<String>,
+    #[arg(long)]
+    pub ipv4_gateway: Option<String>,
+    #[arg(long)]
+    pub ipv4_prefix_length: Option<u8>,
+    #[arg(long)]
+    pub ipv4_domain: Option<String>,
+
+    // ICOSSettings arguments
+    #[arg(long)]
+    pub mgmt_mac: Option<String>,
+    #[arg(long)]
+    pub deployment_environment: Option<String>,
+    #[arg(long)]
+    pub elasticsearch_hosts: Option<String>,
+    #[arg(long)]
+    pub elasticsearch_tags: Option<String>,
+    #[arg(long)]
+    pub nns_public_key_path: Option<PathBuf>,
+    #[arg(long)]
+    pub nns_urls: Option<Vec<String>>,
+    #[arg(long)]
+    pub node_operator_private_key_path: Option<PathBuf>,
+    #[arg(long)]
+    pub ssh_authorized_keys_path: Option<PathBuf>,
+
+    // GuestOSSettings arguments
+    #[arg(long)]
+    pub ic_crypto_path: Option<PathBuf>,
+    #[arg(long)]
+    pub ic_state_path: Option<PathBuf>,
+    #[arg(long)]
+    pub ic_registry_local_store_path: Option<PathBuf>,
+
+    // GuestOSDevSettings arguments
+    #[arg(long)]
+    pub backup_retention_time_seconds: Option<u64>,
+    #[arg(long)]
+    pub backup_purging_interval_seconds: Option<u64>,
+    #[arg(long)]
+    pub malicious_behavior: Option<String>,
+    #[arg(long)]
+    pub query_stats_epoch_length: Option<u64>,
+    #[arg(long)]
+    pub bitcoind_addr: Option<String>,
+    #[arg(long)]
+    pub jaeger_addr: Option<String>,
+    #[arg(long)]
+    pub socks_proxy: Option<String>,
+
+    // Output path
+    #[arg(long)]
+    pub guestos_config_json_path: PathBuf,
 }
 
 pub fn main() -> Result<()> {
@@ -263,6 +337,45 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        None => Ok(()),
+        Some(Commands::GenerateTestnetConfig(clap_args)) => {
+            // Convert `clap_args` into `GenerateTestnetConfigArgs`
+            let args = GenerateTestnetConfigArgs {
+                ipv6_config_type: clap_args.ipv6_config_type,
+                deterministic_prefix: clap_args.deterministic_prefix,
+                deterministic_prefix_length: clap_args.deterministic_prefix_length,
+                deterministic_gateway: clap_args.deterministic_gateway,
+                fixed_address: clap_args.fixed_address,
+                fixed_gateway: clap_args.fixed_gateway,
+                ipv4_address: clap_args.ipv4_address,
+                ipv4_gateway: clap_args.ipv4_gateway,
+                ipv4_prefix_length: clap_args.ipv4_prefix_length,
+                ipv4_domain: clap_args.ipv4_domain,
+                mgmt_mac: clap_args.mgmt_mac,
+                deployment_environment: clap_args.deployment_environment,
+                elasticsearch_hosts: clap_args.elasticsearch_hosts,
+                elasticsearch_tags: clap_args.elasticsearch_tags,
+                nns_public_key_path: clap_args.nns_public_key_path,
+                nns_urls: clap_args.nns_urls,
+                node_operator_private_key_path: clap_args.node_operator_private_key_path,
+                ssh_authorized_keys_path: clap_args.ssh_authorized_keys_path,
+                ic_crypto_path: clap_args.ic_crypto_path,
+                ic_state_path: clap_args.ic_state_path,
+                ic_registry_local_store_path: clap_args.ic_registry_local_store_path,
+                backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
+                backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
+                malicious_behavior: clap_args.malicious_behavior,
+                query_stats_epoch_length: clap_args.query_stats_epoch_length,
+                bitcoind_addr: clap_args.bitcoind_addr,
+                jaeger_addr: clap_args.jaeger_addr,
+                socks_proxy: clap_args.socks_proxy,
+                guestos_config_json_path: clap_args.guestos_config_json_path,
+            };
+
+            generate_testnet_config(args)
+        }
+        None => {
+            println!("No command provided. Use --help for usage information.");
+            Ok(())
+        }
     }
 }
