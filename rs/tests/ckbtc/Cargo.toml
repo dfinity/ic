@@ -40,3 +40,27 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 registry-canister = { path = "../../registry/canister" }
 slog = { workspace = true }
 tokio = { workspace = true }
+
+[[bin]]
+name = "ic-systest-ckbtc-minter-basics-test"
+path = "ckbtc_minter_basics_test.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-batching"
+path = "ckbtc_minter_batching.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-heartbeat"
+path = "ckbtc_minter_heartbeat.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-retrieve-btc"
+path = "ckbtc_minter_retrieve_btc.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-kyt"
+path = "ckbtc_minter_kyt.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-update-balance"
+path = "ckbtc_minter_update_balance.rs"

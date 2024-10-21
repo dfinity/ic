@@ -19975,7 +19975,6 @@ dependencies = [
  "ic-cdk 0.16.0",
  "ic-certification 0.9.0",
  "ic-ckbtc-agent",
- "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
  "ic-config",
  "ic-crypto-sha2",

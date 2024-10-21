@@ -39,7 +39,6 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
 ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
-ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }
@@ -237,26 +236,6 @@ path = "financial_integrations/rosetta/rosetta_neuron_staking_test.rs"
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-minter-basics-test"
-path = "ckbtc/ckbtc_minter_basics_test.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-batching"
-path = "ckbtc/ckbtc_minter_batching.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-heartbeat"
-path = "ckbtc/ckbtc_minter_heartbeat.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-retrieve-btc"
-path = "ckbtc/ckbtc_minter_retrieve_btc.rs"
-
-[[bin]]
-name = "ic-systest-ckbtc-update-balance"
-path = "ckbtc/ckbtc_minter_update_balance.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"
