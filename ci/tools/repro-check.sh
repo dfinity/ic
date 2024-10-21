@@ -73,6 +73,7 @@ print_usage() {
     -p      proposal id to check - the proposal has to be for an Elect Replica proposal
     -c	    git revision/commit to use - the commit has to exist on master branch of
             the IC repository on GitHub
+    -x      verify HostOS and SetupOS images as well (default is to verify only GuestOS)
     <empty> no option - uses the commit at the tip of the branch this is run on
 USAGE
 }
@@ -119,6 +120,7 @@ if [ "${DEBUG:-}" == "2" ]; then
     set -x
 fi
 
+verify_hostos_setupos=""
 proposal_id=""
 git_commit=""
 no_option=""
@@ -126,10 +128,11 @@ SECONDS=0
 pwd="$(pwd)"
 
 # Parse arguments
-while getopts ':i:h:c:p:d:' flag; do
+while getopts ':i:h:c:p:d:x:' flag; do
     case "${flag}" in
         c) git_commit="${OPTARG}" ;;
         p) proposal_id="${OPTARG}" ;;
+        x) verify_hostos_setupos="true" ;;
         *)
             print_usage
             exit 1
@@ -160,8 +163,8 @@ else
     log_warning "Please run this script on Ubuntu version 22.04 or higher"
 fi
 
-if [[ "$(cat /proc/meminfo | grep MemTotal | awk '{ print int($2/1024**2) }')" -ge 15 ]]; then
-    log_success "More than 16GB of RAM detected"
+if [[ "$(free -g | awk '/Mem:/ { print $2 }')" -ge 16 ]]; then
+    log_success "16GB or more RAM detected"
 else
     log_warning "You need at least 16GB of RAM on this machine"
 fi
@@ -298,8 +301,10 @@ download_ci_files() {
 }
 
 download_ci_files "guest-os" "$ci_out/guestos"
+if [ "$verify_hostos_setupos" == "true" ]; then
 download_ci_files "host-os" "$ci_out/hostos"
 download_ci_files "setup-os" "$ci_out/setupos"
+fi
 
 check_ci_hash() {
     local os_dir="$1"
@@ -321,8 +326,10 @@ check_ci_hash() {
 log "Validating that uploaded image hashes match the provided proposal hashes"
 
 check_ci_hash "guestos" "update-img.tar.zst" "ci_package_guestos_sha256_hex"
+if [ "$verify_hostos_setupos" == "true" ]; then
 check_ci_hash "hostos" "update-img.tar.zst" "ci_package_hostos_sha256_hex"
 check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
+fi
 
 log_success "The CI's artifacts and hash match"
 
@@ -336,12 +343,13 @@ if [ -n "$proposal_id" ]; then
             log_success "The guestos shasum from the proposal and CDN match"
         fi
     else
-        if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
-            error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
-        else
-            log_success "The guestos shasum from the proposal and CDN match"
+        if [ "$verify_hostos_setupos" == "true" ]; then
+            if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
+                error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
+            else
+                log_success "The guestos shasum from the proposal and CDN match"
+            fi
         fi
-
     fi
 fi
 
@@ -377,8 +385,10 @@ log "Build IC-OS"
 log_success "Built IC-OS successfully"
 
 mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
+if [ "$verify_hostos_setupos" == "true" ]; then
 mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
 mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
+fi
 
 compute_dev_hash() {
     local os_dir="$1"
@@ -393,8 +403,10 @@ compute_dev_hash() {
 }
 
 compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
+if [ "$verify_hostos_setupos" == "true" ]; then
 compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
 compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
+fi
 
 compare_hashes() {
     local local_hash_var="$1"
@@ -415,8 +427,10 @@ compare_hashes() {
 log "Check hash of locally built artifact matches the one fetched from the proposal/CDN"
 
 compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
+if [ "$verify_hostos_setupos" == "true" ]; then
 compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
 compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
+fi
 
 log "Total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
 
