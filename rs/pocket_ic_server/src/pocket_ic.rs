@@ -1,5 +1,5 @@
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
+use crate::{async_trait, copy_dir, BlobStore, InstanceId, OpId, Operation};
 use askama::Template;
 use axum::{
     extract::State,
@@ -69,6 +69,8 @@ use pocket_ic::common::rest::{
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -229,10 +231,10 @@ pub struct PocketIc {
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
     topology: TopologyInternal,
-    // The initial state hash used for computing the state label
-    // to distinguish PocketIC instances with different initial configs.
-    initial_state_hash: [u8; 32],
-    // The following fields are used to create a new subnet.
+    /// Used for choosing a random state label for this instance.
+    /// This value is seeded for the sake of reproducibility.
+    randomness: StdRng,
+    state_label: StateLabel,
     range_gen: RangeGen,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     runtime: Arc<Runtime>,
@@ -386,6 +388,7 @@ impl PocketIc {
 
     pub(crate) fn new(
         runtime: Arc<Runtime>,
+        instance_id: InstanceId,
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
@@ -653,15 +656,6 @@ impl PocketIc {
             subnet.execute_round();
         }
 
-        let mut hasher = Sha256::new();
-        let subnet_configs_string = format!("{:?}", subnet_configs);
-        hasher.write(subnet_configs_string.as_bytes());
-        let initial_state_hash = compute_state_label(
-            &hasher.finish(),
-            subnets.read().unwrap().values().cloned().collect(),
-        )
-        .0;
-
         let canister_http_adapters = Arc::new(TokioMutex::new(
             subnets
                 .read()
@@ -696,13 +690,17 @@ impl PocketIc {
             default_effective_canister_id,
         };
 
+        let mut randomness = StdRng::seed_from_u64(instance_id as u64);
+        let state_label = StateLabel::new(&mut randomness);
+
         Self {
             state_dir,
             subnets,
             canister_http_adapters,
             routing_table,
             topology,
-            initial_state_hash,
+            state_label,
+            randomness,
             range_gen,
             registry_data_provider,
             runtime,
@@ -711,6 +709,10 @@ impl PocketIc {
             bitcoind_addr,
             _bitcoin_adapter_parts,
         }
+    }
+
+    pub(crate) fn refresh_state_label(&mut self) {
+        self.state_label = StateLabel::new(&mut self.randomness);
     }
 
     fn try_route_canister(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -762,6 +764,7 @@ impl Default for PocketIc {
     fn default() -> Self {
         Self::new(
             Runtime::new().unwrap().into(),
+            0,
             ExtendedSubnetConfigSet {
                 application: vec![SubnetSpec::default()],
                 ..Default::default()
@@ -774,31 +777,9 @@ impl Default for PocketIc {
     }
 }
 
-fn compute_state_label(
-    initial_state_hash: &[u8; 32],
-    subnets: Vec<Arc<StateMachine>>,
-) -> StateLabel {
-    let mut hasher = Sha256::new();
-    hasher.write(initial_state_hash);
-    for subnet in subnets {
-        let subnet_state_hash = subnet
-            .state_manager
-            .latest_state_certification_hash()
-            .map(|(_, h)| h.0)
-            .unwrap_or_else(|| [0u8; 32].to_vec());
-        let nanos = systemtime_to_unix_epoch_nanos(subnet.time());
-        hasher.write(&subnet_state_hash[..]);
-        hasher.write(&nanos.to_be_bytes());
-    }
-    StateLabel(hasher.finish())
-}
-
 impl HasStateLabel for PocketIc {
     fn get_state_label(&self) -> StateLabel {
-        compute_state_label(
-            &self.initial_state_hash,
-            self.subnets.read().unwrap().values().cloned().collect(),
-        )
+        self.state_label.clone()
     }
 }
 
@@ -2606,29 +2587,6 @@ mod tests {
         assert_ne!(state0, state1);
         assert_ne!(state1, state2);
         assert_ne!(state0, state2);
-
-        // Empyt IC.
-        let pic = PocketIc::default();
-        let state1 = pic.get_state_label();
-        let pic = PocketIc::default();
-        let state2 = pic.get_state_label();
-
-        assert_eq!(state1, state2);
-
-        // Two ICs with the same state.
-        let pic = PocketIc::default();
-        let cid = pic.any_subnet().create_canister(None);
-        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
-        pic.any_subnet().stop_canister(cid).unwrap();
-        let state3 = pic.get_state_label();
-
-        let pic = PocketIc::default();
-        let cid = pic.any_subnet().create_canister(None);
-        pic.any_subnet().add_cycles(cid, 2_000_000_000_000);
-        pic.any_subnet().stop_canister(cid).unwrap();
-        let state4 = pic.get_state_label();
-
-        assert_eq!(state3, state4);
     }
 
     #[test]
@@ -2751,6 +2709,7 @@ mod tests {
     fn new_pic_counter_installed_system_subnet() -> (PocketIc, CanisterId) {
         let mut pic = PocketIc::new(
             Runtime::new().unwrap().into(),
+            0,
             ExtendedSubnetConfigSet {
                 ii: Some(SubnetSpec::default()),
                 ..Default::default()

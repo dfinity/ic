@@ -50,6 +50,8 @@ use pocket_ic::common::rest::{
     HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
+use rand::rngs::StdRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
@@ -78,6 +80,14 @@ pub const STATE_LABEL_HASH_SIZE: usize = 32;
 /// Uniquely identifies a state.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
+
+impl StateLabel {
+    pub fn new(rng: &mut StdRng) -> Self {
+        let mut state_label = [42; STATE_LABEL_HASH_SIZE];
+        rng.fill_bytes(&mut state_label);
+        Self(state_label)
+    }
+}
 
 // The only error condition is if the vector has the wrong size.
 pub struct InvalidSize;
@@ -705,15 +715,22 @@ impl ApiState {
         self.graph.clone()
     }
 
-    pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
+    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    where
+        F: FnOnce(InstanceId) -> PocketIc + std::marker::Send + 'static,
+    {
         let mut instances = self.instances.write().await;
         let mut canister_http_adapters = self.canister_http_adapters.write().await;
         let mut progress_threads = self.progress_threads.write().await;
         let instance_id = instances.len();
+        let instance = tokio::task::spawn_blocking(move || f(instance_id))
+            .await
+            .expect("Failed to create PocketIC instance");
+        let topology = instance.topology();
         canister_http_adapters.insert(instance_id, instance.canister_http_adapters().clone());
         instances.push(Mutex::new(InstanceState::Available(instance)));
         progress_threads.push(Mutex::new(None));
-        instance_id
+        (instance_id, topology)
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
@@ -1391,6 +1408,7 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.refresh_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
@@ -1408,8 +1426,7 @@ impl ApiState {
                                 *instance_state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-                            // also return old_state_label so we can prune graph if we return quickly
-                            (result, old_state_label)
+                            result
                         }
                     };
 
@@ -1442,7 +1459,7 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok((op_out, _old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
