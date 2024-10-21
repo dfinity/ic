@@ -1287,6 +1287,7 @@ impl SandboxedExecutionController {
                 self.max_sandbox_idle_time,
             );
         }
+        drop(guard);
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
@@ -1312,6 +1313,7 @@ impl SandboxedExecutionController {
             sandbox_process: Arc::clone(&sandbox_process),
             stats: SandboxProcessStats { last_used: now },
         };
+        let mut guard = self.backends.lock().unwrap();
         (*guard).insert(canister_id, backend);
 
         sandbox_process
