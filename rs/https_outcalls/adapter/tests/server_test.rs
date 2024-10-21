@@ -466,8 +466,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
     #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec(), b"http/1.1".to_vec()])]
     #[case(hyper::Version::HTTP_2, vec![b"h2".to_vec()])]
     #[case(hyper::Version::HTTP_11, vec![b"http/1.1".to_vec()])]
+    /// Tests that the outcalls adapter enables HTTP/2 and HTTP/1.1. The test spawns a server that
+    /// responds with OK if the HTTP protocol corresponds to the negotiated ALPN protocol.
     fn test_http_protocols_are_supported_and_alpn_header_is_set(
-        #[case] expected_alpn_protocol: hyper::Version,
+        #[case] expected_negotiated_http_protocol: hyper::Version,
         #[case] server_advertised_alpn_protocols: Vec<Vec<u8>>,
     ) {
         tokio::runtime::Builder::new_current_thread()
@@ -481,7 +483,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
                 let listener = socket.listen(1024).unwrap();
 
-                // let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
                 let addr = listener.local_addr().unwrap();
 
                 let server_config = {
@@ -489,13 +490,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     let cert_path = cert_path(cert_dir);
                     let key_path = key_path(cert_dir);
 
-                    // Load public certificate.
                     let cert_file = tokio::fs::read(cert_path).await.unwrap();
                     let certs = rustls_pemfile::certs(&mut cert_file.as_ref())
                         .collect::<Result<Vec<_>, _>>()
                         .unwrap();
 
-                    // Load private key.
                     let key_file = tokio::fs::read(key_path).await.unwrap();
                     let key = rustls_pemfile::private_key(&mut key_file.as_ref())
                         .unwrap()
@@ -511,11 +510,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     server_config
                 };
 
-                // spawn thread that listens for incoming connections and responds with ALPN protocol
+                // Spawn a server that responds with OK if the HTTP protocol corresponds to the negotiated
+                // ALPN protocol.
                 tokio::spawn(async move {
                     let service = hyper::service::service_fn(
                         |req: Request<hyper::body::Incoming>| async move {
-                            let status = if req.version() == expected_alpn_protocol {
+                            let status = if req.version() == expected_negotiated_http_protocol {
                                 hyper::StatusCode::OK
                             } else {
                                 hyper::StatusCode::BAD_REQUEST
@@ -545,7 +545,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                         .await
                 });
 
-                // Create an HTTP/2 client
                 let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
                 let server_config = Config {
                     incoming_source: IncomingSource::Path(path.into()),
@@ -561,12 +560,8 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     max_response_size_bytes: 512,
                     socks_proxy_allowed: false,
                 });
-                let response = tokio::time::timeout(
-                    std::time::Duration::from_secs(2),
-                    client.https_outcall(request),
-                )
-                .await
-                .unwrap();
+
+                let response = client.https_outcall(request).await;
 
                 let http_response = response.unwrap().into_inner();
                 assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
