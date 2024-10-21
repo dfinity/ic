@@ -644,23 +644,25 @@ async fn claim_or_refresh_neuron_from_account(
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
-/// What "principal P 'has' neuron N" means precisely is that P is either a
-/// controller of N, a hotkey (or both).
+/// A principal P is associated with a neuron N iff P is the controller of N, or P is a hotkey of N (or both).
 use std::collections::HashMap;
 #[update]
-fn principal_id_to_neuron_count() // DO NOT MERGE
-    -> Vec<(PrincipalId, (/* heap_neuron_count */ u64, /* stable_memory_neuron_count */ u64))>
-{
+fn principal_id_to_neuron_count() -> Vec<(
+    PrincipalId,
+    (
+        /* heap_neuron_count */ u64,
+        /* stable_memory_neuron_count */ u64,
+    ),
+)> {
     use ic_nns_governance::storage::with_stable_neuron_indexes;
 
     let mut result = HashMap::<PrincipalId, (u64, u64)>::new();
 
     with_stable_neuron_indexes(|neuron_indexes| {
-        for ((principal_id, neuron_id), ()) in
-            neuron_indexes
-                .principal()
-                .principal_and_neuron_id_set
-                .iter()
+        for ((principal_id, neuron_id), ()) in neuron_indexes
+            .principal()
+            .principal_and_neuron_id_set
+            .iter()
         {
             let principal_id = PrincipalId::from(principal_id);
             let counts = result.entry(principal_id).or_default();
@@ -672,7 +674,8 @@ fn principal_id_to_neuron_count() // DO NOT MERGE
                 .active_neurons_range(neuron_id..)
                 .next()
                 .unwrap()
-                .id() == neuron_id;
+                .id()
+                == neuron_id;
             let count = if is_in_heap {
                 &mut counts.0
             } else {
@@ -692,8 +695,7 @@ fn principal_id_to_neuron_count() // DO NOT MERGE
     let mut random = rand::rngs::StdRng::seed_from_u64(42);
     use rand::seq::IteratorRandom;
     let mut new_tail = vec![(PrincipalId::new_user_test_id(0), (0, 0)); 1000];
-    tail
-        .into_iter()
+    tail.into_iter()
         .choose_multiple_fill(&mut random, &mut new_tail);
     let mut tail = new_tail;
     tail.sort_by_key(|(_principal_id, (a, b))| a + b);

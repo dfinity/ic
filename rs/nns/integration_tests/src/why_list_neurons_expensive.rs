@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
@@ -6,8 +6,11 @@ use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::pb::v1::ListNeurons;
-use ic_nns_test_utils::state_test_helpers::{get_profiling, list_neurons, unwrap_wasm_result};
+use ic_nns_test_utils::state_test_helpers::{
+    list_neurons, get_profiling, unwrap_wasm_result
+};
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+use pretty_assertions::assert_eq;
 use std::{
     collections::BTreeMap,
     io::Read, // For flate2.
@@ -93,12 +96,13 @@ fn test_why_list_neurons_expensive() {
     // precisely, these principals either control or are a hotkey of some
     // (nonzero number of) neurons. These will later be used as callers of the
     // list_neurons method.
-    let principal_id_to_neuron_count = state_machine.execute_ingress(
-        GOVERNANCE_CANISTER_ID,
-        "principal_id_to_neuron_count",
-        Encode!().unwrap(),
-    )
-    .unwrap();
+    let principal_id_to_neuron_count = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "principal_id_to_neuron_count",
+            Encode!().unwrap(),
+        )
+        .unwrap();
     let principal_id_to_neuron_count = match principal_id_to_neuron_count {
         ic_types::ingress::WasmResult::Reply(ok) => ok,
         doh => panic!("{:?}", doh),
@@ -108,17 +112,16 @@ fn test_why_list_neurons_expensive() {
         Vec<(PrincipalId, (u64, u64))>
     )
     .unwrap();
-    {
-        let len = principal_id_to_neuron_count.len();
-        println!("");
-        println!("principal_id_to_neuron_count:");
-        println!("{:#?}", &principal_id_to_neuron_count[0..7]);
-        println!("...");
-        println!("{:#?}", &principal_id_to_neuron_count[(len - 7)..len]);
-        println!("");
-    }
+    println!("");
+    println!("principal_id_to_neuron_count:");
+    println!(
+        "{}",
+        clamp_debug_len(&principal_id_to_neuron_count, 1 << 10)
+    );
+    println!("");
 
-    // DO NOT MERGE: THIS IS A HACK
+    // DO NOT MERGE: This is a hack that makes us use a only around half of the
+    // stable memory that was allocated for tracing/profiling.
     let page_limit = page_limit / 2;
 
     // Enable profiling of the governance canister.
@@ -166,6 +169,7 @@ fn test_why_list_neurons_expensive() {
 
     // Measure a variety of list_neuron calls.
     for (caller, (heap_neuron_count, stable_memory_neuron_count)) in principal_id_to_neuron_count {
+        // Skip super heavy principals, because list_neurons does not even work for them.
         let is_principal_too_heavy = [
             PrincipalId::from_str("dies2-up6x4-i42et-avcop-xvl3v-it2mm-hqeuj-j4hyu-vz7wl-ewndz-dae").unwrap(),
             PrincipalId::from_str("renrk-eyaaa-aaaaa-aaada-cai").unwrap(),
@@ -175,7 +179,8 @@ fn test_why_list_neurons_expensive() {
         }
 
         // Call code being measured.
-        let _result = list_neurons(
+        #[allow(unused)] // DO NOT MERGE
+        let result = list_neurons(
             &state_machine,
             caller,
             ListNeurons {
@@ -185,17 +190,27 @@ fn test_why_list_neurons_expensive() {
                 neuron_ids: vec![],
             },
         );
+        /*
+        println!("");
+        println!("");
+        println!("list_neurons result:\n{:#?}", result);
+        println!("");
+        println!("");
+        */
 
         // Fetch measurement.
         let profiling = get_profiling(&state_machine, GOVERNANCE_CANISTER_ID);
 
         // Visualize where instructions get consumed.
         let title = format!(
-            "{}/{} neurons ({})",
+            "{}/{} neurons\n\
+             {}\n\
+             Candid cache primed
+             no width",
             heap_neuron_count, stable_memory_neuron_count, caller,
         );
         let destination = format!(
-            "list_neurons_{:0>4}_heap_neurons_{:0>4}_stable_memory_neurons_{}.svg",
+            "list_neurons_no_width_{:0>4}_heap_neurons_{:0>4}_stable_memory_neurons_{}.svg",
             heap_neuron_count, stable_memory_neuron_count, caller,
         );
         let cost = render_profiling( // DO NOT MERGE
@@ -208,8 +223,11 @@ fn test_why_list_neurons_expensive() {
 
         // Print data that can be copied into a spreadsheet for further analysis.
         println!(
-            "{},{},{},{}",
-            caller, heap_neuron_count, stable_memory_neuron_count, unwrap_cost(cost),
+            "CSV:{},{},{},{}",
+            caller,
+            heap_neuron_count,
+            stable_memory_neuron_count,
+            unwrap_cost(cost),
         );
     }
 }
@@ -223,7 +241,7 @@ fn unwrap_cost(cost: CostValue) -> u64 {
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum CostValue {
     Complete(u64),
     StartCost(u64),
@@ -287,6 +305,8 @@ fn render_profiling(
         CostValue::Complete(total)
     };
     //println!("Cost: {} Wasm instructions", total);
+
+    // Use the inferno library to visualize of where instructions were spent.
     let mut opt = Options::default();
     opt.count_name = "instructions".to_string();
     let title = if matches!(cost, CostValue::StartCost(_)) {
@@ -295,7 +315,7 @@ fn render_profiling(
         title.to_string()
     };
     opt.title = title;
-    opt.image_width = Some(1024);
+    // opt.image_width = Some(1024);
     opt.flame_chart = true;
     opt.no_sort = true;
     // Reserve result order to make flamegraph from left to right.
@@ -306,5 +326,6 @@ fn render_profiling(
     let mut writer = std::fs::File::create(&filename)?;
     from_reader(&mut opt, reader, &mut writer)?;
     // println!("Flamegraph written to {}", filename.display());
+
     Ok(cost)
 }

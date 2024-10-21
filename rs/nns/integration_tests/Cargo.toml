@@ -63,6 +63,7 @@ icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 inferno = { workspace = true}
 lazy_static = { workspace = true }
 lifeline = { path = "../handlers/lifeline/impl" }
+pretty_assertions = { workspace = true }
 prometheus-parse = { workspace = true }
 prost = { workspace = true }
 strum = { workspace = true }
