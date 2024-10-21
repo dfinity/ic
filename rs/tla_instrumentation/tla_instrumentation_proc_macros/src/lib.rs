@@ -228,7 +228,7 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     handler_state.context.call_function();
                 }
            }).unwrap_or_else(|e|
-               // TODO: fail if there's an error and if we're in some kind of strict mode?
+               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
                ()
            );
 
@@ -240,7 +240,7 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     handler_state.context.return_from_function();
                 }
            }).unwrap_or_else(|e|
-               // TODO: fail if there's an error and if we're in some kind of strict mode?
+               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
                ()
            );
            res
