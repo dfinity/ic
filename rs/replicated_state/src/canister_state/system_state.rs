@@ -343,7 +343,8 @@ impl TaskQueue {
 
     pub fn pop_front(&mut self) -> Option<ExecutionTask> {
         self.paused_or_aborted_task.take().or_else(|| {
-            if self.on_low_wasm_memory_hook_status.execute_if_ready() {
+            if self.on_low_wasm_memory_hook_status.is_ready() {
+                self.on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
                 Some(ExecutionTask::OnLowWasmMemory)
             } else {
                 self.queue.pop_front()
@@ -700,15 +701,6 @@ impl OnLowWasmMemoryHookStatus {
 
     fn is_ready(&self) -> bool {
         *self == Self::Ready
-    }
-
-    fn execute_if_ready(&mut self) -> bool {
-        if self.is_ready() {
-            *self = Self::Executed;
-            return true;
-        }
-
-        false
     }
 }
 
