@@ -1027,18 +1027,8 @@ mod tests {
                 for (dkg_id, _) in summary.dkg.configs.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(
-                    summary
-                        .dkg
-                        .transcripts_for_new_subnets_with_callback_ids
-                        .len(),
-                    2
-                );
-                for (dkg_id, _, result) in summary
-                    .dkg
-                    .transcripts_for_new_subnets_with_callback_ids
-                    .iter()
-                {
+                assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 2);
+                for (dkg_id, _, result) in summary.dkg.transcripts_for_remote_subnets.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(result.is_err());
                 }
@@ -1664,7 +1654,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dkg_payload_has_transcripts_for_new_subnets() {
+    fn test_dkg_payload_has_transcripts_for_remote_subnets() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
@@ -1714,9 +1704,7 @@ mod tests {
                         .count(),
                     2
                 );
-                assert!(dkg_summary
-                    .transcripts_for_new_subnets_with_callback_ids
-                    .is_empty());
+                assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -1747,7 +1735,7 @@ mod tests {
                 );
                 assert_eq!(
                     dkg_summary
-                        .transcripts_for_new_subnets_with_callback_ids
+                        .transcripts_for_remote_subnets
                         .iter()
                         .filter(
                             |(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)

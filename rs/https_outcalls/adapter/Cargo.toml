@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 byte-unit = "4.0.14"
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }
@@ -31,9 +31,14 @@ tower = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
+bytes = { workspace = true }
 once_cell = "1.13.1"
 rand = { workspace = true }
+rustls = { workspace = true }
+rustls-pemfile = "2.1.2"
+rstest = { workspace = true }
 tempfile = { workspace = true }
+tokio-rustls = { workspace = true }
 uuid = { workspace = true }
 warp = { version = "0.3.7", features = ["tls"] }
 

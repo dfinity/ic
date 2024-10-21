@@ -27,8 +27,8 @@ use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, GovernanceError, MintTokensRequest,
-    MintTokensResponse, Neuron,
+    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse, GovernanceError, MintTokensRequest, MintTokensResponse, Neuron,
 };
 use ic_sns_governance::{
     governance::{
@@ -580,26 +580,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, which means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation.
-#[cfg(not(feature = "test"))]
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    include_str!("governance.did").to_string()
-}
-
-#[cfg(feature = "test")]
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    include_str!("governance_test.did").to_string()
-}
-
 /// Adds maturity to a neuron for testing
 #[cfg(feature = "test")]
 #[update]
@@ -618,6 +598,14 @@ fn get_upgrade_journal(arg: GetUpgradeJournalRequest) -> GetUpgradeJournalRespon
 #[update]
 async fn mint_tokens(request: MintTokensRequest) -> MintTokensResponse {
     governance_mut().mint_tokens(request).await
+}
+
+// Test-only API that advances the target version of the SNS.
+#[cfg(feature = "test")]
+#[update]
+fn advance_target_version(request: AdvanceTargetVersionRequest) -> AdvanceTargetVersionResponse {
+    governance_mut().proto.target_version = request.target_version;
+    AdvanceTargetVersionResponse {}
 }
 
 fn main() {

@@ -1966,7 +1966,8 @@ fn execute_canisters_on_thread(
             let measurement_scope = MeasurementScope::nested(
                 &metrics.round_inner_iteration_thread_message,
                 &measurement_scope,
-            );
+            )
+            .dont_record_zeros();
             let timer = metrics.msg_execution_duration.start_timer();
 
             let instructions_before = round_limits.instructions;
@@ -1994,8 +1995,16 @@ fn execute_canisters_on_thread(
             ingress_results.extend(ingress_status);
             let round_instructions_executed =
                 as_num_instructions(instructions_before - round_limits.instructions);
-            let messages = NumMessages::from(instructions_used.map(|_| 1).unwrap_or(0));
-            measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
+            let messages = NumMessages::from(
+                instructions_used
+                    .map(|n| if n.get() > 0 { 1 } else { 0 })
+                    .unwrap_or(0),
+            );
+            measurement_scope.add(
+                round_instructions_executed,
+                NumSlices::from(messages.get()),
+                messages,
+            );
             if let Some(instructions_used) = instructions_used {
                 total_messages_executed.inc_assign();
                 observe_instructions_consumed_per_message(
@@ -2014,16 +2023,21 @@ fn execute_canisters_on_thread(
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
             }
-            let msg_execution_duration = timer.stop_and_record();
-            if msg_execution_duration > config.max_message_duration_before_warn_in_seconds {
-                warn!(
-                    logger,
-                    "Finished executing message type {:?} on canister {:?} after {:?} seconds",
-                    description.unwrap_or_default(),
-                    canister.canister_id(),
-                    msg_execution_duration;
-                    messaging.canister_id => canister.canister_id().to_string(),
-                );
+            if messages.get() > 0 {
+                let msg_execution_duration = timer.stop_and_record();
+                if msg_execution_duration > config.max_message_duration_before_warn_in_seconds {
+                    warn!(
+                        logger,
+                        "Finished executing message type {:?} on canister {:?} after {:?} seconds",
+                        description.unwrap_or_default(),
+                        canister.canister_id(),
+                        msg_execution_duration;
+                        messaging.canister_id => canister.canister_id().to_string(),
+                    );
+                }
+            } else {
+                timer.stop_and_discard();
+                metrics.zero_instruction_messages.inc();
             }
             if total_heap_delta >= config.max_heap_delta_per_iteration {
                 break;

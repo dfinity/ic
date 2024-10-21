@@ -3,7 +3,7 @@ use crate::secret_key_store::SecretKeyStore;
 use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     create_ecdsa_signature_share as tecdsa_sign_share, IDkgTranscriptInternal,
     ThresholdEcdsaSigShareInternal,
 };

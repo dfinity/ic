@@ -10,6 +10,7 @@ members = [
     "packages/ic-ledger-hash-of",
     "packages/ic-signature-verification",
     "packages/pocket-ic",
+    "packages/pocket-ic/test_canister",
     "packages/ic-vetkd-utils",
     "rs/artifact_pool",
     "rs/async_utils",
@@ -74,8 +75,8 @@ members = [
     "rs/crypto/secp256k1",
     "rs/crypto/secrets_containers",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-    "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
-    "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
+    "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
+    "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/test_utils",
     "rs/crypto/internal/crypto_lib/tls",
     "rs/crypto/internal/crypto_lib/types",
     "rs/crypto/internal/crypto_service_provider",
@@ -349,18 +350,30 @@ members = [
     "rs/test_utilities/types",
     "rs/test_utilities/tmpdir",
     "rs/tests",
+    "rs/tests/boundary_nodes",
+    "rs/tests/boundary_nodes/custom_domains",
+    "rs/tests/boundary_nodes/integration_test_common",
+    "rs/tests/boundary_nodes/performance_test_common",
+    "rs/tests/boundary_nodes/utils",
+    "rs/tests/ckbtc",
     "rs/tests/consensus",
+    "rs/tests/consensus/backup",
     "rs/tests/consensus/orchestrator",
     "rs/tests/consensus/subnet_recovery",
     "rs/tests/consensus/tecdsa",
     "rs/tests/consensus/upgrade",
     "rs/tests/consensus/utils",
+    "rs/tests/crypto",
     "rs/tests/driver",
+    "rs/tests/execution",
+    "rs/tests/message_routing",
+    "rs/tests/message_routing/rejoin_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",
     "rs/tests/networking/canister_http",
     "rs/tests/nested",
+    "rs/tests/nns",
     "rs/tests/nns/sns",
     "rs/tests/nns/ic_mainnet_nns_recovery",
     "rs/tests/nns/nns_dapp",
@@ -454,17 +467,17 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
+actix-web = "4.9.0"
+actix-rt = "2.10.0"
 anyhow = "^1"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
-actix-web = "4.9.0"
-actix-rt = "2.10.0"
 askama = { version = "0.12.1", features = ["serde-json"] }
+assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
-async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-stream = "0.3.5"
-async-trait = "0.1.81"
+async-stream = "0.3.6"
+async-trait = "0.1.83"
 axum = "0.7.7"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
@@ -487,9 +500,7 @@ clap = { version = "4.5.18", features = ["derive", "string"] }
 # see:
 # - https://github.com/cloudflare/cloudflare-rs/issues/222
 # - https://github.com/cloudflare/cloudflare-rs/issues/236
-cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false, feature = [
-    "rustls-tls",
-] }
+cloudflare = { git = "https://github.com/dfinity/cloudflare-rs.git", rev = "a6538a036926bd756986c9c0a5de356daef48881", default-features = false }
 criterion = { version = "0.5.1", features = ["html_reports", "async_tokio"] }
 crossbeam-channel = "0.5.13"
 curve25519-dalek = { version = "4.1.3", features = [
@@ -509,7 +520,6 @@ ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.31"
 futures = "0.3.30"
 futures-util = "0.3.30"
-ic-sha3 = "1.0.0"
 hex = { version = "0.4.3", features = ["serde"] }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -524,7 +534,7 @@ hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "tls12",
 ] }
 hyper-socks2 = { version = "0.9.1", default-features = false }
-hyper-util = { version = "0.1.8", features = ["full"] }
+hyper-util = { version = "0.1.9", features = ["full"] }
 ic-agent = { version = "0.37.1", features = [
     "experimental_sync_call",
     "hyper",
@@ -533,7 +543,6 @@ ic-agent = { version = "0.37.1", features = [
 ] }
 ic-btc-interface = "0.2.2"
 ic-btc-test-utils = "0.1.0"
-ic-btc-validation = "0.1.0"
 ic-cbor = "2.6.0"
 ic-cdk = "0.16.0"
 ic-cdk-macros = "0.9.0"
@@ -542,10 +551,11 @@ ic-certificate-verification = "2.6.0"
 ic-certification = "2.6.0"
 ic-http-certification = "2.6.0"
 ic-response-verification = "2.6.0"
+ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.5"
 ic-transport-types = { version = "0.37.1" }
 ic-utils = { version = "0.37.0", features = ["raw"] }
-ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
+ic_bls12_381 = { version = "0.10.0", default-features = false, features = [
     "groups",
     "pairings",
     "alloc",
@@ -555,7 +565,7 @@ ic_bls12_381 = { version = "=0.10.0", default-features = false, features = [
 ic_principal = { version = "0.1.1", default-features = false }
 idna = "1.0.2"
 itertools = "0.12.0"
-k256 = { version = "0.13.3", default-features = false, features = [
+k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
     "pem",
@@ -579,18 +589,18 @@ nftables = "0.4"
 nix = "0.24.3"
 num-bigint = "0.4.6"
 num-traits = { version = "0.2.12", features = ["libm"] }
-opentelemetry = { version = "0.23.0", features = ["metrics", "trace"] }
-opentelemetry-otlp = { version = "0.16.0", features = ["grpc-tonic"] }
-opentelemetry-prometheus = "0.16.0"
-opentelemetry_sdk = { version = "0.23.0", features = ["trace", "rt-tokio"] }
+opentelemetry = { version = "0.26.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = { version = "0.26.0", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.26.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
     "arithmetic",
     "ecdsa",
     "pem",
     "pkcs8",
 ] }
-pairing = "=0.23"
+pairing = "0.23"
 parking_lot = "0.12.3"
+paste = "1.0.15"
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.13.0", default-features = false, features = [
@@ -598,7 +608,9 @@ pprof = { version = "0.13.0", default-features = false, features = [
     "flamegraph",
     "prost-codec",
 ] }
+predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+proc-macro2 = "1.0.88"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
@@ -606,6 +618,7 @@ proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
+quote = "1.0.37"
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -629,6 +642,7 @@ reqwest = { version = "0.12.7", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
+rsa = { version = "0.9.6", features = [ "sha2" ] }
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.14", default-features = false, features = [
@@ -656,11 +670,12 @@ slog-scope = "4.4.0"
 slog-term = "2.9.1"
 socket2 = { version = "0.5.7", features = ["all"] }
 static_assertions = "1.1.0"
-strum = { version = "0.26.3", default-features = false }
+strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
+subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sync_wrapper = "1.0.1"
-tar = "=0.4.39"
+tar = "0.4.39"
 tempfile = "3.12.0"
 thiserror = "1.0.62"
 threadpool = "1.8.1"
@@ -670,6 +685,7 @@ tokio-metrics = "0.3.1"
 tokio-rustls = { version = "0.26.0", default-features = false, features = [
     "ring",
 ] }
+tokio-test = "0.4.4"
 tokio-util = { version = "0.7.12", features = ["full"] }
 tonic = "0.12.3"
 tonic-build = "0.12.3"
@@ -685,7 +701,7 @@ tower-http = { version = "0.5.2", features = [
 ] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-opentelemetry = "0.24.0"
+tracing-opentelemetry = "0.27.0"
 tracing-subscriber = { version = "0.3.18", features = [
     "env-filter",
     "fmt",
@@ -694,13 +710,13 @@ tracing-subscriber = { version = "0.3.18", features = [
 turmoil = "0.6.3"
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
-walkdir = "=2.3.3"
+walkdir = "2.3.3"
 walrus = "0.21.1"
 wasm-encoder = { version = "0.217.0", features = ["wasmparser"] }
 wasmparser = "0.217.0"
 wasmprinter = "0.217.0"
 wast = "212.0.0"
-wat = "=1.212.0"
+wat = "1.212.0"
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

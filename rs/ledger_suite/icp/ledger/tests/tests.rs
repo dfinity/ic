@@ -4,14 +4,14 @@ use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_agent::identity::Identity;
 use ic_base_types::CanisterId;
-use ic_icrc1_ledger_sm_tests::{
+use ic_icrc1_test_utils::minter_identity;
+use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::{block::BlockType, Tokens};
+use ic_ledger_suite_state_machine_tests::{
     balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
     get_allowance, send_approval, send_transfer_from, setup, supported_standards, total_supply,
     transfer, FEE, MINTER,
 };
-use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, ArchiveOptions, ArchivedBlocksRange, Block, CandidBlock,
@@ -62,7 +62,9 @@ fn ledger_wasm_allowance_getter() -> Vec<u8> {
     )
 }
 
-fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterInitPayload {
+fn encode_init_args(
+    args: ic_ledger_suite_state_machine_tests::InitArgs,
+) -> LedgerCanisterInitPayload {
     let initial_values = args
         .initial_balances
         .into_iter()
@@ -190,22 +192,22 @@ fn account_identifier(env: &StateMachine, ledger: CanisterId, account: Account) 
 
 #[test]
 fn test_balance_of() {
-    ic_icrc1_ledger_sm_tests::test_balance_of(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_balance_of(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_metadata() {
-    ic_icrc1_ledger_sm_tests::test_metadata_icp_ledger(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_metadata_icp_ledger(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_total_supply() {
-    ic_icrc1_ledger_sm_tests::test_total_supply(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_total_supply(ledger_wasm(), encode_init_args)
 }
 
 #[test]
 fn test_minting_account() {
-    ic_icrc1_ledger_sm_tests::test_minting_account(ledger_wasm(), encode_init_args)
+    ic_ledger_suite_state_machine_tests::test_minting_account(ledger_wasm(), encode_init_args)
 }
 
 #[test]
@@ -427,55 +429,58 @@ fn test_get_icp_approval() {
 
 #[test]
 fn test_single_transfer() {
-    ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_single_transfer(ledger_wasm(), encode_init_args);
 }
 
 #[ignore = "requires fix for FI-541"]
 #[test]
 fn test_tx_deduplication() {
-    ic_icrc1_ledger_sm_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_mint_burn() {
-    ic_icrc1_ledger_sm_tests::test_mint_burn(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_mint_burn(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_account_canonicalization() {
-    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_account_canonicalization(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
 fn test_tx_time_bounds() {
-    ic_icrc1_ledger_sm_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    ic_icrc1_ledger_sm_tests::transaction_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::transaction_hashes_are_unique();
 }
 
 #[test]
 fn block_hashes_are_unique() {
-    ic_icrc1_ledger_sm_tests::block_hashes_are_unique();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_unique();
 }
 
 // Generate random blocks and check that the block hash is stable.
 #[test]
 fn block_hashes_are_stable() {
-    ic_icrc1_ledger_sm_tests::block_hashes_are_stable();
+    ic_ledger_suite_state_machine_tests::block_hashes_are_stable();
 }
 
 #[test]
 fn check_transfer_model() {
-    ic_icrc1_ledger_sm_tests::check_transfer_model(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::check_transfer_model(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_ledger_http_request_decoding_quota() {
-    ic_icrc1_ledger_sm_tests::test_ledger_http_request_decoding_quota(
+    ic_ledger_suite_state_machine_tests::test_ledger_http_request_decoding_quota(
         ledger_wasm(),
         encode_init_args,
     );
@@ -1232,7 +1237,7 @@ fn test_upgrade_serialization() {
 
     let init_args = CandidOne(payload).into_bytes().unwrap();
     let upgrade_args = Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap();
-    ic_icrc1_ledger_sm_tests::test_upgrade_serialization(
+    ic_ledger_suite_state_machine_tests::test_upgrade_serialization(
         ledger_wasm_mainnet,
         ledger_wasm_current,
         Some(ledger_wasm_upgrade_to_memory_manager()),
@@ -1240,7 +1245,10 @@ fn test_upgrade_serialization() {
         upgrade_args,
         minter,
         false,
-        false,
+        // With the ICP mainnet canister being at V1, and the tip-of-master also being V1,
+        // downgrading the ledger canister to the mainnet version from the tip-of-master version
+        // should succeed.
+        true,
     );
 }
 
@@ -1332,42 +1340,45 @@ fn test_upgrade_serialization_fixed_tx() {
 
 #[test]
 fn test_approve_smoke() {
-    ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_expiration() {
-    ic_icrc1_ledger_sm_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_self() {
-    ic_icrc1_ledger_sm_tests::test_approve_self(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_self(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_expected_allowance() {
-    ic_icrc1_ledger_sm_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_expected_allowance(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
 fn test_approve_cant_pay_fee() {
-    ic_icrc1_ledger_sm_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_cap() {
-    ic_icrc1_ledger_sm_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_cap(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_pruning() {
-    ic_icrc1_ledger_sm_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approve_from_minter() {
-    ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -1469,32 +1480,32 @@ fn test_feature_flags() {
 
 #[test]
 fn test_transfer_from_smoke() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_self() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_minter() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_transfer_from_burn() {
-    ic_icrc1_ledger_sm_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_balances_overflow() {
-    ic_icrc1_ledger_sm_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_approval_trimming() {
-    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
 #[test]
@@ -1690,18 +1701,18 @@ fn test_query_archived_blocks() {
 
 #[test]
 fn test_icrc21_standard() {
-    ic_icrc1_ledger_sm_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::test_icrc21_standard(ledger_wasm(), encode_init_args);
 }
 
 mod metrics {
     use crate::{
         encode_init_args, encode_upgrade_args, ledger_wasm, ledger_wasm_upgrade_to_memory_manager,
     };
-    use ic_icrc1_ledger_sm_tests::metrics::LedgerSuiteType;
+    use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;
 
     #[test]
     fn should_export_num_archives_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_num_archives_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_num_archives_metric(
             ledger_wasm(),
             encode_init_args,
         );
@@ -1709,7 +1720,7 @@ mod metrics {
 
     #[test]
     fn should_export_total_memory_usage_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_memory_bytes_metric(
             ledger_wasm(),
             encode_init_args,
         );
@@ -1717,7 +1728,7 @@ mod metrics {
 
     #[test]
     fn should_export_ledger_total_blocks_metrics() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
+        ic_ledger_suite_state_machine_tests::metrics::assert_existence_of_ledger_total_transactions_metric(
             ledger_wasm(),
             encode_init_args,
             LedgerSuiteType::ICP,
@@ -1726,7 +1737,7 @@ mod metrics {
 
     #[test]
     fn should_set_ledger_upgrade_instructions_consumed_metric() {
-        ic_icrc1_ledger_sm_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
+        ic_ledger_suite_state_machine_tests::metrics::assert_ledger_upgrade_instructions_consumed_metric_set(
             ledger_wasm(),
             Some(ledger_wasm_upgrade_to_memory_manager()),
             encode_init_args,
