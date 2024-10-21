@@ -99,9 +99,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
             key_id,
             message: Arc::new(vec![1; 48]),
         }),
-        MasterPublicKeyId::VetKd(_) => {
-            todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-        }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1157,9 +1155,7 @@ pub(crate) fn create_sig_inputs_with_args(
         MasterPublicKeyId::Schnorr(key_id) => {
             create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
-        MasterPublicKeyId::VetKd(_) => {
-            todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-        }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1364,9 +1360,7 @@ pub(crate) fn create_signature_share_with_nonce(
                 sig_share_raw: vec![nonce],
             },
         }),
-        MasterPublicKeyId::VetKd(_) => {
-            todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-        }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1678,13 +1672,6 @@ pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPubli
             AlgorithmId::ThresholdEd25519 => {
                 Some(fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519))
             }
-            ///////////////////////////////////
-            // TODO: Likely an algorihm for vetKD shall be added here, but
-            // first CRP-XXXX (Properly handle vetKD master key id in
-            // consensus tests) must be addressed.
-            //
-            // AlgorithmId::ThresBls12_381 => Some(fake_vetkd_master_public_key_id()),
-            ///////////////////////////////////
             _ => None,
         })
         .collect()

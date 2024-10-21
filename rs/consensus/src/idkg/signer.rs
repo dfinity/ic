@@ -1101,9 +1101,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => {
-                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-            }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
 
         // Set up the signature requests
@@ -1291,9 +1289,7 @@ mod tests {
                 let expected_complaints_count = match key_id {
                     MasterPublicKeyId::Ecdsa(_) => requested_signatures_count * 5,
                     MasterPublicKeyId::Schnorr(_) => requested_signatures_count * 2,
-                    MasterPublicKeyId::VetKd(_) => {
-                        todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-                    }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let complaints = transcript_loader.returned_complaints();
                 assert_eq!(change_set.len(), complaints.len());
@@ -1374,9 +1370,7 @@ mod tests {
                             ThresholdSigInputs::Schnorr(inputs),
                         )
                     }
-                    MasterPublicKeyId::VetKd(_) => {
-                        todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-                    }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 };
                 let crypto = env
                     .nodes

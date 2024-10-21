@@ -500,9 +500,7 @@ pub(super) mod test_utils {
                     blinder_config_ref,
                 ))
             }
-            MasterPublicKeyId::VetKd(_) => {
-                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-            }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let configs = pre_signature
             .iter_transcript_configs_in_creation()
@@ -717,9 +715,7 @@ pub(super) mod tests {
         let expected_transcript_ids = match key_id {
             MasterPublicKeyId::Ecdsa(_) => 2 * expected_pre_signatures_in_creation,
             MasterPublicKeyId::Schnorr(_) => expected_pre_signatures_in_creation,
-            MasterPublicKeyId::VetKd(_) => {
-                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-            }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         assert_eq!(transcript_ids.len(), expected_transcript_ids);
         assert_eq!(

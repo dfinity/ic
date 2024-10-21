@@ -860,9 +860,7 @@ mod tests {
             MasterPublicKeyId::Schnorr(key_id) => {
                 PreSignatureRef::Schnorr(fake_schnorr_transcript(id, key_id.clone()))
             }
-            MasterPublicKeyId::VetKd(_) => {
-                todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-            }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         }
     }
 
@@ -883,9 +881,7 @@ mod tests {
                         key_id: key_id.clone(),
                     })
                 }
-                MasterPublicKeyId::VetKd(_) => {
-                    todo!("CRP-XXXX Properly handle vetKD master key id in consensus tests")
-                }
+                MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
             },
             derivation_path: vec![],
             pseudo_random_id: [0; 32],
