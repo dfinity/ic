@@ -12804,6 +12804,8 @@ dependencies = [
 name = "ic-tests-ckbtc"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
+ "bitcoincore-rpc",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -12811,6 +12813,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-interface",
  "ic-canister-client",
+ "ic-ckbtc-agent",
  "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
  "ic-config",
@@ -12826,10 +12829,14 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic-types-test-utils",
+ "ic-universal-canister",
  "ic_consensus_threshold_sig_system_test_utils",
  "icp-ledger",
+ "icrc-ledger-agent",
+ "icrc-ledger-types",
  "registry-canister",
  "slog",
+ "tokio",
 ]
 
 [[package]]

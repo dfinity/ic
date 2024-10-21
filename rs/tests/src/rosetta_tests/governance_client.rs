@@ -1,4 +1,3 @@
-use crate::ckbtc::lib::subnet_sys;
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -10,16 +9,24 @@ use ic_nns_governance_api::{
     },
     proposal_submission_helpers::create_make_proposal_payload,
 };
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, IcNodeContainer},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
     },
     util::{assert_create_agent, block_on},
 };
 use slog::{debug, Logger};
 
 use super::lib::NeuronDetails;
+
+pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
+    env.topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::System)
+        .unwrap()
+}
 
 pub struct GovernanceClient {
     agent: Agent,

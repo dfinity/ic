@@ -2,20 +2,6 @@
 
 use anyhow::Result;
 
-use crate::ckbtc::{
-    lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-        install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
-        BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
-    },
-    minter::utils::{
-        assert_account_balance, assert_burn_transaction, assert_mint_transaction,
-        assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
-        get_btc_client, send_to_btc_address, start_canister, stop_canister, upgrade_canister,
-        wait_for_bitcoin_balance, wait_for_ledger_balance, wait_for_mempool_change,
-        BTC_BLOCK_REWARD,
-    },
-};
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -35,7 +21,18 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
-use ic_tests::ckbtc;
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
+    utils::{
+        assert_account_balance, assert_burn_transaction, assert_mint_transaction,
+        assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
+        get_btc_client, send_to_btc_address, start_canister, stop_canister, upgrade_canister,
+        wait_for_bitcoin_balance, wait_for_ledger_balance, wait_for_mempool_change,
+        BTC_BLOCK_REWARD,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use slog::debug;
@@ -401,7 +398,7 @@ pub fn test_kyt(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(ckbtc::lib::config)
+        .with_setup(config)
         .add_test(systest!(test_kyt))
         .execute_from_args()?;
     Ok(())

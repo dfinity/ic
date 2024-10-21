@@ -2,19 +2,6 @@
 
 use anyhow::Result;
 
-use crate::ckbtc::{
-    lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-        install_ledger, install_minter, set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS,
-        KYT_FEE, TEST_KEY_LOCAL,
-    },
-    minter::utils::{
-        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
-        get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
-        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
-    },
-};
 use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
@@ -37,7 +24,17 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
-use ic_tests::ckbtc;
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys,
+    utils::{
+        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
+        assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
+        get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
+        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use k256::elliptic_curve::SecretKey;
@@ -324,7 +321,7 @@ pub fn test_update_balance(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(ckbtc::lib::config)
+        .with_setup(config)
         .add_test(systest!(test_update_balance))
         .execute_from_args()?;
     Ok(())

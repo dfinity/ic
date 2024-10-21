@@ -19,7 +19,6 @@ end::catalog[] */
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use crate::ckbtc::lib::install_bitcoin_canister;
 use anyhow::bail;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
@@ -36,6 +35,7 @@ use ic_system_test_driver::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
 };
+use ic_tests_ckbtc::install_bitcoin_canister;
 use ic_types::Height;
 use ic_universal_canister::{management, wasm};
 use slog::info;

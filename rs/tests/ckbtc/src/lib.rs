@@ -58,6 +58,8 @@ use std::{
     time::Duration,
 };
 
+pub mod utils;
+
 pub const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
 pub const ADDRESS_LENGTH: usize = 44;

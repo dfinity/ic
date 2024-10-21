@@ -2,16 +2,6 @@
 
 use anyhow::Result;
 
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE,
-    TEST_KEY_LOCAL, TRANSFER_FEE,
-};
-use crate::ckbtc::minter::utils::{
-    ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
-    send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
-    wait_for_update_balance,
-};
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
@@ -30,7 +20,16 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url},
 };
-use ic_tests::ckbtc;
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, config, create_canister_at_id, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys,
+    utils::{
+        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
+        send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
+        wait_for_update_balance,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use serde::Serialize;
@@ -333,7 +332,7 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(ckbtc::lib::config)
+        .with_setup(config)
         .add_test(systest!(test_batching))
         .execute_from_args()?;
     Ok(())

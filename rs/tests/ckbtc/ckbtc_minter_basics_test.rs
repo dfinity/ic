@@ -2,11 +2,6 @@
 
 use anyhow::Result;
 
-use crate::ckbtc::lib::install_bitcoin_canister;
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, create_canister, install_kyt, install_ledger, install_minter,
-    set_kyt_api_key, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
-};
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
@@ -23,7 +18,10 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url},
 };
-use ic_tests::ckbtc;
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
 
@@ -231,7 +229,7 @@ async fn test_update_balance(agent: &CkBtcMinterAgent) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(ckbtc::lib::config)
+        .with_setup(config)
         .add_test(systest!(test_ckbtc_addresses))
         .add_test(systest!(test_ckbtc_minter_agent))
         .execute_from_args()?;
