@@ -29,7 +29,7 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/ckbtc:ckbtc"],
+    deps = DEPENDENCIES + ["//rs/tests/ckbtc"],
 )
 
 system_test(
