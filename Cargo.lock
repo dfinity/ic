@@ -9754,7 +9754,7 @@ name = "ic-nervous-system-instruction-stats-update-attribute"
 version = "0.0.1"
 dependencies = [
  "candid",
- "ic-cdk 0.13.5",
+ "ic-cdk 0.16.0",
  "quote",
  "syn 1.0.109",
 ]
