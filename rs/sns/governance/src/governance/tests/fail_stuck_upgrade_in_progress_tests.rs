@@ -79,7 +79,7 @@ lazy_static! {
                 target_version: Some(SNS_VERSION_2.clone()),
                 mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
                 checking_upgrade_lock: 10,
-                proposal_id: UPGRADE_PROPOSAL_ID,
+                proposal_id: Some(UPGRADE_PROPOSAL_ID),
             }),
             // we make a proposal that is already decided so that it won't execute again because
             // proposals to upgrade SNS's cannot execute if there's no deployed_version set on Governance state
@@ -173,7 +173,7 @@ fn test_does_nothing_if_upgrade_attempt_not_expired() {
         target_version: Some(SNS_VERSION_2.clone()),
         mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
         checking_upgrade_lock: 10,
-        proposal_id: UPGRADE_PROPOSAL_ID,
+        proposal_id: Some(UPGRADE_PROPOSAL_ID),
     };
     assert_eq!(
         governance.proto.pending_version.clone().unwrap(),
@@ -252,7 +252,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
             target_version: Some(SNS_VERSION_2.clone()),
             mark_failed_at_seconds: UPGRADE_DEADLINE_TIMESTAMP_SECONDS,
             checking_upgrade_lock: 10,
-            proposal_id: UPGRADE_PROPOSAL_ID,
+            proposal_id: Some(UPGRADE_PROPOSAL_ID),
         }
     );
     assert_eq!(
