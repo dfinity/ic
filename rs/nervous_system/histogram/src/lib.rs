@@ -15,61 +15,10 @@
 //! this by picking a sufficiently small unit.
 
 use ic_metrics_encoder::LabeledHistogramBuilder;
-use itertools::Itertools;
-use lazy_static::lazy_static;
 use std::collections::BTreeMap;
 
 #[cfg(test)]
 mod tests;
-
-lazy_static! {
-    /// Suitable for passing to Histogram::new.
-    ///
-    /// The value of this is vec![1,2,3, ... 10, 20, 30, ... 100, 125, 150, 175,
-    /// 200, 225, 250, 275, ...] and goes as high as i64 allows.
-    pub static ref STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS: Vec<i64> = {
-        let units = (1..=9).collect::<Vec<i64>>();
-
-        let max_e = i64::MAX.ilog10();
-        let powers_of_ten = (0..=max_e).map(|e| 10_i64.pow(e)).collect::<Vec<i64>>();
-
-        let mut result = powers_of_ten
-            .iter()
-            .cartesian_product(units.iter())
-            .filter_map(|(power_of_ten, unit)| power_of_ten.checked_mul(*unit))
-            .unique()
-            .collect::<Vec<i64>>();
-
-        // result now looks like [1, 2, 3, ... 10, 20, 30, ... 100, 200, 300, ...]
-        // Next, we further "subdivide" elements >= 100 into quarters. So for,
-        // example 200 expands to 200, 225, 250, 275.
-
-        let tail = result.split_off(18);
-        debug_assert_eq!(result[result.len() - 1], 90);
-        debug_assert_eq!(tail[0], 100);
-
-        let minors = [0, 25, 50, 75];
-        let mut tail = tail
-            .iter()
-            .cartesian_product(minors.iter())
-            .filter_map(|(major, minor)| {
-                let e = major.ilog10();
-
-                10_i64.pow(e.saturating_sub(2))
-                    .saturating_mul(*minor)
-                    .checked_add(*major)
-            })
-            .collect::<Vec<i64>>();
-
-        // Concatenate tail back onto result.
-        result.append(&mut tail);
-
-        // A sanity check. Looks like we generated 634 upper bounds.
-        debug_assert!(result.len() < 1000, "{:#?}", result);
-
-        result
-    };
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Histogram {

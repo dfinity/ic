@@ -6,40 +6,6 @@ use prometheus_parse::{HistogramCount, Scrape, Value};
 use std::collections::HashMap;
 
 #[test]
-fn test_standard_positive_bin_inclusive_upper_bounds() {
-    let x = STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS.clone();
-    assert!(x.len() > 100, "{:#?} (len = {})", x, x.len());
-    assert!(x.len() < 1000, "{:#?} (len = {})", x, x.len());
-
-    assert_eq!(
-        x[0..27],
-        [
-            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 125, 150, 175, 200,
-            225, 250, 275, 300
-        ],
-    );
-
-    assert_eq!(
-        x[(x.len() - 9)..],
-        [
-            7_000_000_000_000_000_000,
-            7_250_000_000_000_000_000,
-            7_500_000_000_000_000_000,
-            7_750_000_000_000_000_000,
-            8_000_000_000_000_000_000,
-            8_250_000_000_000_000_000,
-            8_500_000_000_000_000_000,
-            8_750_000_000_000_000_000,
-            9_000_000_000_000_000_000,
-        ]
-    );
-
-    let mut sorted = x.clone();
-    sorted.sort();
-    assert_eq!(x, sorted, "{:#?} (len = {})", x, x.len());
-}
-
-#[test]
 fn test_add_event() {
     let mut histogram = Histogram::new(vec![10, 15, 20]);
 
