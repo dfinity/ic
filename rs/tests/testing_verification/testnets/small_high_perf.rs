@@ -1,5 +1,5 @@
 // Set up a testnet containing:
-//   one 1-node System and one 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
+//   one 1-node System and one 1-node Application subnets, single boundary node, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480 GiB of RAM, and 2'000 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
@@ -68,7 +68,6 @@ pub fn setup(env: TestEnv) {
         })
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
     install_nns_with_customizations_and_check_progress(

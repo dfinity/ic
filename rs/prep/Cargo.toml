@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 base64 = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 fs_extra = "1.2.0"
 ic-config = { path = "../config" }
 ic-limits = { path = "../limits" }

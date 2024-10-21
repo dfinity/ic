@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The type `Topology` becomes a struct with two fields: `subnet_configs` contains an association of subnet ids to their configurations
   and `default_effective_canister_id` contains a default effective canister id for canister creation.
+- Management canister types are defined in a new `management_canister` module to avoid a dependency on `ic-cdk`.
 
 
 

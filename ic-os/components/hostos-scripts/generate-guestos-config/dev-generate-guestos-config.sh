@@ -91,7 +91,7 @@ function assemble_config_media() {
         cmd+=(--domain "${domain}")
     fi
     cmd+=(--hostname "guest-$(/opt/ic/bin/hostos_tool fetch-mac-address | sed 's/://g')")
-    cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
+    cmd+=(--nns_urls "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
     if [ -f "/boot/config/node_operator_private_key.pem" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi

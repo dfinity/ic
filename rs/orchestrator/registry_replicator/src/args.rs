@@ -27,7 +27,7 @@ pub struct RegistryReplicatorArgs {
     pub log_as_text: bool,
 
     /// The path to the NNS public key file
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub nns_pub_key_pem: PathBuf,
 
     /// Comma separated list of NNS URLs
@@ -35,7 +35,7 @@ pub struct RegistryReplicatorArgs {
     pub nns_url: String,
 
     /// The registry local store path to be populated
-    #[clap(long, parse(from_os_str))]
+    #[clap(long)]
     pub local_store_path: PathBuf,
 
     /// If not set, the default listen addr (0.0.0.0:9092)
