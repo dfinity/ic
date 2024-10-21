@@ -4,7 +4,7 @@ load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 
-DEPENDENCIES = [
+LIB_DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
@@ -39,7 +39,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_tests_ckbtc",
-    deps = DEPENDENCIES,
+    deps = LIB_DEPENDENCIES,
 )
 
 CKBTC_RUNTIME_DEPS = [
