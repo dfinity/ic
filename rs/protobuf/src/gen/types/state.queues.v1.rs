@@ -177,10 +177,6 @@ pub mod message_pool {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueue {
-    /// \[Deprecated\] FIFO queue of references into the pool and reject response
-    /// markers.
-    #[prost(message, repeated, tag = "1")]
-    pub deprecated_queue: ::prost::alloc::vec::Vec<canister_queue::QueueItem>,
     /// FIFO queue of references into the pool or the compact reject response maps.
     #[prost(uint64, repeated, tag = "4")]
     pub queue: ::prost::alloc::vec::Vec<u64>,
@@ -190,23 +186,6 @@ pub struct CanisterQueue {
     /// Number of slots used by or reserved for responses.
     #[prost(uint64, tag = "3")]
     pub response_slots: u64,
-}
-/// Nested message and enum types in `CanisterQueue`.
-pub mod canister_queue {
-    #[derive(Clone, Copy, PartialEq, ::prost::Message)]
-    pub struct QueueItem {
-        #[prost(oneof = "queue_item::R", tags = "1")]
-        pub r: ::core::option::Option<queue_item::R>,
-    }
-    /// Nested message and enum types in `QueueItem`.
-    pub mod queue_item {
-        #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
-        pub enum R {
-            /// A reference into the message pool (a pool assigned ID).
-            #[prost(uint64, tag = "1")]
-            Reference(u64),
-        }
-    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterQueues {

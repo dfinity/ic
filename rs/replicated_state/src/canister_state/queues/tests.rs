@@ -2018,7 +2018,6 @@ fn decode_with_duplicate_reference() {
     // Replace the reference to the second response with a duplicate reference to
     // the third.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue[1] = input_queue.deprecated_queue.get(2).cloned().unwrap();
     input_queue.queue[1] = input_queue.queue[2];
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2085,7 +2084,6 @@ fn decode_with_unreferenced_inbound_response() {
 
     // Remove the reference to the second response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue.remove(1);
     input_queue.queue.remove(1);
 
     let metrics = CountingMetrics(RefCell::new(0));
@@ -2103,7 +2101,6 @@ fn decode_with_unreferenced_shed_response() {
 
     // Remove the reference to the third (shed) response.
     let input_queue = encoded.canister_queues[0].input_queue.as_mut().unwrap();
-    input_queue.deprecated_queue.remove(2);
     input_queue.queue.remove(2);
 
     assert_matches!(
