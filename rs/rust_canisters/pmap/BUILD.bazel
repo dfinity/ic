@@ -13,7 +13,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/canister_test",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
 ]
 
 MACRO_DEPENDENCIES = [

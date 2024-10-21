@@ -19,7 +19,7 @@ rust_library(
         "//rs/rust_canisters/canister_log",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
-        "//rs/utils",
+        "//rs/utils:ic_utils",
         "@crate_index//:candid",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

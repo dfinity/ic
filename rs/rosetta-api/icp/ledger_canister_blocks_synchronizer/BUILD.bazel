@@ -32,7 +32,7 @@ PROC_MACRO_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils",
+    "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer/test_utils:ic_ledger_canister_blocks_synchronizer_test_utils",
     "@crate_index//:actix-rt",
     "@crate_index//:proptest",
 ]

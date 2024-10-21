@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/ledger_suite/icp:icp_ledger",
-    "//rs/ledger_suite/icrc1/test_utils",
+    "//rs/ledger_suite/icrc1/test_utils:ic_icrc1_test_utils",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp:ic-rosetta-api",
     "//rs/rosetta-api/icp:rosetta-api",
@@ -37,20 +37,19 @@ ALIASES = {
 }
 
 rust_library(
-    name = "test_utils",
+    name = "ic_rosetta_test_utils",
     testonly = True,
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_rosetta_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "test_utils_test",
+    name = "ic_rosetta_test_utils_test",
     aliases = ALIASES,
-    crate = ":test_utils",
+    crate = ":ic_rosetta_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

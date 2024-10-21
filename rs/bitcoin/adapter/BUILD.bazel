@@ -36,7 +36,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/bitcoin/adapter/test_utils",
+    "//rs/bitcoin/adapter/test_utils:ic_btc_adapter_test_utils",
     "//rs/bitcoin/client",
     "//rs/bitcoin/replica_types",
     "//rs/interfaces/adapter_client",

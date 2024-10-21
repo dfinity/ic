@@ -24,7 +24,7 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
-        "//rs/utils",
+        "//rs/utils:ic_utils",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",

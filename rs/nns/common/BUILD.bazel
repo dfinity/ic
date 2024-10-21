@@ -11,7 +11,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/sha2",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/keys",
@@ -39,17 +39,16 @@ DEV_DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "common",
+    name = "ic_nns_common",
     srcs = glob([
         "src/**/*.rs",
     ]),
-    crate_name = "ic_nns_common",
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_library(
-    name = "common--test_feature",
+    name = "ic_nns_common--test_feature",
     srcs = glob([
         "src/**/*.rs",
     ]),
@@ -71,7 +70,7 @@ generated_files_check(
 )
 
 rust_test(
-    name = "common_test",
-    crate = ":common",
+    name = "ic_nns_common_test",
+    crate = ":ic_nns_common",
     deps = DEV_DEPENDENCIES,
 )

@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/config",
-    "//rs/consensus/utils",
+    "//rs/consensus/utils:ic_consensus_utils",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/crypto/tls_interfaces",
     "//rs/cycles_account_manager",

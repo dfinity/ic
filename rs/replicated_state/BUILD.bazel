@@ -24,7 +24,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "//rs/utils/validate_eq",
     "@crate_index//:bit-vec",
     "@crate_index//:cvt",
