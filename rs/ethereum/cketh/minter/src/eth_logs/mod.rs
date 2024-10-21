@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::checked_amount::CheckedAmountOf;
-use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
+use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
@@ -333,15 +333,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 };
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
-                let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
-                    ReceivedEventError::InvalidEventSource {
-                        source: event_source,
-                        error: EventSourceError::InvalidEvent(format!(
-                            "Invalid data length; expected 32-byte value, got {}",
-                            hex::encode(data)
-                        )),
-                    }
-                })?;
+                let [value_bytes] = parse_data_into_32_bytes_words(entry.data, event_source)?;
                 Ok(ReceivedEthEvent {
                     transaction_hash,
                     block_number,
@@ -366,18 +358,10 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 };
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
-                let data = entry.data.0;
-                if data.len() != 64 {
-                    return Err(ReceivedEventError::InvalidEventSource {
-                        source: event_source,
-                        error: EventSourceError::InvalidEvent(format!(
-                            "Expected 64 bytes for (value,subaccount), got {}",
-                            data.len()
-                        )),
-                    });
-                };
-                let value = Wei::from_be_bytes(data[..32].try_into().unwrap());
-                let subaccount = LedgerSubaccount::from_bytes(data[32..].try_into().unwrap());
+                let [value_bytes, subaccount_bytes] =
+                    parse_data_into_32_bytes_words(entry.data, event_source)?;
+                let value = Wei::from_be_bytes(value_bytes);
+                let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
                 Ok(ReceivedEthEvent {
                     transaction_hash,
                     block_number,
@@ -403,15 +387,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let erc20_contract_address = parse_address(&entry.topics[1])?;
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
-                let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
-                    ReceivedEventError::InvalidEventSource {
-                        source: event_source,
-                        error: EventSourceError::InvalidEvent(format!(
-                            "Invalid data length; expected 32-byte value, got {}",
-                            hex::encode(data)
-                        )),
-                    }
-                })?;
+                let [value_bytes] = parse_data_into_32_bytes_words(entry.data, event_source)?;
                 Ok(ReceivedErc20Event {
                     transaction_hash,
                     block_number,
@@ -438,18 +414,10 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let erc20_contract_address = parse_address(&entry.topics[1])?;
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
-                let data = entry.data.0;
-                if data.len() != 64 {
-                    return Err(ReceivedEventError::InvalidEventSource {
-                        source: event_source,
-                        error: EventSourceError::InvalidEvent(format!(
-                            "Expected 64 bytes for (value,subaccount), got {}",
-                            data.len()
-                        )),
-                    });
-                };
-                let value = Erc20Value::from_be_bytes(data[..32].try_into().unwrap());
-                let subaccount = LedgerSubaccount::from_bytes(data[32..].try_into().unwrap());
+                let [value_bytes, subaccount_bytes] =
+                    parse_data_into_32_bytes_words(entry.data, event_source)?;
+                let value = Erc20Value::from_be_bytes(value_bytes);
+                let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
                 Ok(ReceivedErc20Event {
                     transaction_hash,
                     block_number,
@@ -471,6 +439,30 @@ impl TryFrom<LogEntry> for ReceivedEvent {
             }),
         }
     }
+}
+
+fn parse_data_into_32_bytes_words<const N: usize>(
+    data: Data,
+    event_source: EventSource,
+) -> Result<[[u8; 32]; N], ReceivedEventError> {
+    let data = data.0;
+    if data.len() != 32 * N {
+        return Err(ReceivedEventError::InvalidEventSource {
+            source: event_source,
+            error: EventSourceError::InvalidEvent(format!(
+                "Expected {} bytes, got {}",
+                32 * N,
+                data.len()
+            )),
+        });
+    }
+    let mut result = Vec::with_capacity(N);
+    for chunk in data.chunks_exact(32) {
+        let mut word = [0; 32];
+        word.copy_from_slice(chunk);
+        result.push(word);
+    }
+    Ok(result.try_into().unwrap())
 }
 
 /// Decode a candid::Principal from a slice of at most 32 bytes
