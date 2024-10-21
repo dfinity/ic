@@ -3,6 +3,7 @@ use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_replicated_state::NumWasmPages;
@@ -1002,6 +1003,84 @@ fn on_low_wasm_memory_is_executed_once() {
     assert_eq!(
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(17)
+    );
+}
+
+#[test]
+fn on_low_wasm_memory_runs_after_dts_execution() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(1_000)
+        .with_manual_execution()
+        .build();
+
+    let wat = r#"(module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (func $grow_mem
+            (drop (memory.grow (i32.const 7)))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (memory.fill (i32.const 0) (i32.const 34) (i32.const 1000))
+            (call $msg_reply)
+        )
+        (export "canister_update grow_mem" (func $grow_mem))
+        (func (export "canister_on_low_wasm_memory")
+            (drop (memory.grow (i32.const 5)))
+        )
+        (memory 1 20)
+    )"#;
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        canister_id,
+        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+    )
+    .unwrap();
+
+    // Here we have:
+    // wasm_capacity = wasm_memory_limit = 20 Wasm Pages
+    // wasm_memory_threshold = 15 Wasm Pages
+
+    // Initially wasm_memory.size = 1
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
+    );
+
+    test.ingress_raw(canister_id, "grow_mem", vec![]);
+    test.execute_slice(canister_id);
+
+    // Ensure that we have ongoing dts execution.
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+
+    // Finish dts execution.
+    while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
+        test.execute_slice(canister_id);
+    }
+
+    // After dts execution we should have the following:
+    // wasm_memory.size = 1 + 7 = 8
+    // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold
+    // hence hook will be executed.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(8)
+    );
+
+    // Execute hook.
+    test.execute_slice(canister_id);
+
+    // After hook execution we have:
+    // wasm_memory.size = 8 + 5 = 13.
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(13)
     );
 }
 
