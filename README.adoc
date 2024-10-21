@@ -106,10 +106,14 @@ If you have the repository already cloned, you can just run:
 
     $ ./ci/tools/repro-check.sh -c <git revision>
 
-Verifying build reproducibility of GuestOS is sufficient for the `Revise Elected GuestOS Versions` NNS proposals.
-For the `Revise Elected HostOS Versions` NNS proposals, you should also verify the build reproducibility of HostOS or SetupOS images in addition to the regular GuestOS, and for that you can use the following command:
+You can also verify only specific components, by specifying --guestos, --hostos, or --setupos flags:
 
-    $ ./ci/tools/repro-check.sh -x -c <git revision>
+    $ ./ci/tools/repro-check.sh -c <git revision> --guestos
+
+Verifying build reproducibility of GuestOS is sufficient for the `Revise Elected GuestOS Versions` NNS proposals.
+
+For the `Revise Elected HostOS Versions` NNS proposals, you should verify the build reproducibility of HostOS images.
+The default behavior of the script is to verify the build reproducibility of all components.
 
 == Contributing
 
