@@ -94,6 +94,7 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
         block: _,
     } = input_fn;
 
+    let original_name = sig.ident.to_string();
     let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
     modified_fn.sig.ident = mangled_name.clone();
 
@@ -125,14 +126,16 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let raw_ptr = self as *const _;
                 let snapshotter = Rc::new(move || { unsafe { tla_get_globals!(&*raw_ptr) } });
                 let update = #attr2;
+                let start_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("Start of {}", #original_name) };
+                let end_location = tla_instrumentation::SourceLocation { file: "Unknown file".to_string(), line: format!("End of {}", #original_name) };
                 let mut pinned = Box::pin(TLA_INSTRUMENTATION_STATE.scope(
-                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter),
+                    tla_instrumentation::InstrumentationState::new(update.clone(), globals, snapshotter, start_location),
                     async move {
                         let res = self.#mangled_name(#(#args),*).await;
                         let globals = tla_get_globals!(self);
                         let state: InstrumentationState = TLA_INSTRUMENTATION_STATE.get();
                         let mut handler_state = state.handler_state.borrow_mut();
-                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals);
+                        let state_pair = tla_instrumentation::log_method_return(&mut handler_state, globals, end_location);
                         let mut state_pairs = state.state_pairs.borrow_mut();
                         state_pairs.push(state_pair);
                         res
@@ -168,6 +171,79 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 tla_instrumentation::tla_log_method_return!(globals);
                 res
             }
+        }
+    };
+
+    output.into()
+}
+
+#[proc_macro_attribute]
+pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse the input tokens of the attribute and the function
+    let input_fn = parse_macro_input!(item as ItemFn);
+
+    let mut modified_fn = input_fn.clone();
+
+    // Deconstruct the function elements
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block: _,
+    } = input_fn;
+
+    let mangled_name = syn::Ident::new(&format!("_tla_impl_{}", sig.ident), sig.ident.span());
+    modified_fn.sig.ident = mangled_name.clone();
+
+    let has_receiver = sig.inputs.iter().any(|arg| match arg {
+        syn::FnArg::Receiver(_) => true,
+        syn::FnArg::Typed(_) => false,
+    });
+    // Creating the modified original function which calls f_impl
+    let args: Vec<_> = sig
+        .inputs
+        .iter()
+        .filter_map(|arg| match arg {
+            syn::FnArg::Receiver(_) => None,
+            syn::FnArg::Typed(pat_type) => Some(&*pat_type.pat),
+        })
+        .collect();
+
+    let asyncness = sig.asyncness;
+
+    let call = match (asyncness.is_some(), has_receiver) {
+        (true, true) => quote! { self.#mangled_name(#(#args),*).await },
+        (true, false) => quote! { #mangled_name(#(#args),*).await },
+        (false, true) => quote! { self.#mangled_name(#(#args),*) },
+        (false, false) => quote! { #mangled_name(#(#args),*) },
+    };
+
+    let output = quote! {
+        #modified_fn
+
+        #(#attrs)* #vis #sig {
+           TLA_INSTRUMENTATION_STATE.try_with(|state| {
+                {
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    handler_state.context.call_function();
+                }
+           }).unwrap_or_else(|e|
+               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
+               ()
+           );
+
+
+           let res = #call;
+           TLA_INSTRUMENTATION_STATE.try_with(|state| {
+                {
+                    let mut handler_state = state.handler_state.borrow_mut();
+                    handler_state.context.return_from_function();
+                }
+           }).unwrap_or_else(|e|
+               // TODO(RES-152): fail if there's an error and if we're in some kind of strict mode?
+               ()
+           );
+           res
         }
     };
 

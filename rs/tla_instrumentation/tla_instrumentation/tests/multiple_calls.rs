@@ -6,11 +6,11 @@ use std::{
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
-    tla_log_locals, tla_log_request, tla_log_response,
+    tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
-use tla_instrumentation_proc_macros::tla_update_method;
+use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
 mod common;
 use common::check_tla_trace;
@@ -23,7 +23,7 @@ mod tla_stuff {
 
     use candid::Nat;
 
-    pub const PID: &str = "Counter";
+    pub const PID: &str = "Multiple_Calls";
     pub const CAN_NAME: &str = "mycan";
 
     use local_key::task_local;
@@ -118,7 +118,8 @@ struct StructCanister {
 
 static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
-fn call_maker() {
+#[tla_function]
+async fn call_maker() {
     tla_log_request!(
         "WaitForResponse",
         Destination::new("othercan"),
@@ -140,7 +141,13 @@ impl StructCanister {
         self.counter += 1;
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
-        call_maker();
+        tla_log_label!("Phase1");
+        call_maker().await;
+        self.counter += 1;
+        my_local = self.counter;
+        tla_log_locals! {my_local: my_local};
+        tla_log_label!("Phase2");
+        call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         // Note that this would not be necessary (and would be an error) if
@@ -150,7 +157,7 @@ impl StructCanister {
 }
 
 #[test]
-fn struct_test() {
+fn multiple_calls_test() {
     unsafe {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
@@ -158,7 +165,7 @@ fn struct_test() {
     let trace = &TLA_TRACES.read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
-        Some(&2_u64.to_string())
+        Some(&3_u64.to_string())
     );
     let pairs = &trace.state_pairs;
     println!("----------------");
@@ -168,7 +175,7 @@ fn struct_test() {
         println!("{:?}", pair.end);
     }
     println!("----------------");
-    assert_eq!(pairs.len(), 2);
+    assert_eq!(pairs.len(), 3);
     let first = &pairs[0];
     assert_eq!(first.start.get("counter"), Some(&0_u64.to_tla_value()));
     assert_eq!(first.end.get("counter"), Some(&1_u64.to_tla_value()));
@@ -258,6 +265,62 @@ fn struct_test() {
     );
     assert_eq!(
         second.end.get(outgoing),
+        Some(
+            &vec![TlaValue::Record(BTreeMap::from([
+                ("caller".to_string(), PID.to_tla_value()),
+                (
+                    "method_and_args".to_string(),
+                    TlaValue::Variant {
+                        tag: "Target_Method".to_string(),
+                        value: Box::new(2_u64.to_tla_value())
+                    }
+                )
+            ]))]
+            .to_tla_value()
+        )
+    );
+
+    let third = &pairs[2];
+
+    assert_eq!(third.start.get("counter"), Some(&2_u64.to_tla_value()));
+    assert_eq!(third.end.get("counter"), Some(&3_u64.to_tla_value()));
+
+    assert_eq!(
+        third.start.get("my_local"),
+        Some(BTreeMap::from([(PID, 2_u64)]).to_tla_value()).as_ref()
+    );
+    assert_eq!(
+        third.end.get("my_local"),
+        Some(BTreeMap::from([(PID, 3_u64)]).to_tla_value()).as_ref()
+    );
+
+    assert_eq!(
+        third.start.get(incoming),
+        Some(
+            &BTreeSet::from([TlaValue::Record(BTreeMap::from([
+                ("caller".to_string(), PID.to_tla_value()),
+                (
+                    "response".to_string(),
+                    TlaValue::Variant {
+                        tag: "Ok".to_string(),
+                        value: Box::new(3_u64.to_tla_value())
+                    }
+                )
+            ]))])
+            .to_tla_value()
+        )
+    );
+    assert_eq!(
+        third.end.get(incoming),
+        Some(&BTreeSet::<TlaValue>::new().to_tla_value())
+    );
+
+    assert_eq!(
+        third.start.get(outgoing),
+        Some(&Vec::<TlaValue>::new().to_tla_value())
+    );
+    assert_eq!(
+        third.end.get(outgoing),
         Some(&Vec::<TlaValue>::new().to_tla_value())
     );
 
