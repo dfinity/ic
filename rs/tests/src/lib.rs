@@ -1,5 +1,4 @@
 pub mod api_test;
-pub mod btc_integration;
 pub mod icrc1_agent_test;
 pub mod ledger_tests;
 pub mod message_routing;
