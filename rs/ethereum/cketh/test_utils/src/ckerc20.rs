@@ -484,6 +484,7 @@ impl CkErc20DepositFlow {
                         ),
                         value: amount.into(),
                         principal: self.params.recipient,
+                        subaccount: None,
                     },
                     EventPayload::MintedCkEth {
                         event_source: EventSource {
@@ -505,6 +506,7 @@ impl CkErc20DepositFlow {
                 value: self.params.ckerc20_amount.into(),
                 principal: self.params.recipient,
                 erc20_contract_address: self.params.token.erc20_contract_address.clone(),
+                subaccount: None,
             },
             EventPayload::MintedCkErc20 {
                 event_source: EventSource {

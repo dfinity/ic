@@ -1,5 +1,7 @@
 use crate::endpoints::CandidBlockTag;
-use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+use crate::eth_logs::{
+    EventSource, LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent,
+};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
@@ -266,6 +268,7 @@ fn received_eth_event() -> ReceivedEthEvent {
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
@@ -287,6 +290,7 @@ fn received_erc20_event() -> ReceivedErc20Event {
         erc20_contract_address: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
             .parse()
             .unwrap(),
+        subaccount: None,
     }
 }
 
@@ -531,6 +535,10 @@ fn arb_principal() -> impl Strategy<Value = Principal> {
     pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
 }
 
+fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
+    uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
+}
+
 fn arb_u256() -> impl Strategy<Value = u256> {
     uniform32(any::<u8>()).prop_map(u256::from_be_bytes)
 }
@@ -626,6 +634,7 @@ prop_compose! {
         from_address in arb_address(),
         value in arb_checked_amount_of(),
         principal in arb_principal(),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedEthEvent {
         ReceivedEthEvent {
             transaction_hash,
@@ -634,6 +643,7 @@ prop_compose! {
             from_address,
             value,
             principal,
+            subaccount
         }
     }
 }
@@ -647,6 +657,7 @@ prop_compose! {
         value in arb_checked_amount_of(),
         principal in arb_principal(),
         erc20_contract_address in arb_address(),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedErc20Event {
         ReceivedErc20Event {
             transaction_hash,
@@ -656,6 +667,7 @@ prop_compose! {
             value,
             principal,
             erc20_contract_address,
+            subaccount
         }
     }
 }
@@ -1013,6 +1025,7 @@ fn state_equivalence() {
                 from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                 value: Wei::new(500_000_000_000_000_000),
                 principal: "lsywz-sl5vm-m6tct-7fhwt-6gdrw-4uzsg-ibknl-44d6d-a2oyt-c2cxu-7ae".parse().unwrap(),
+                subaccount: None,
             }.into()
         },
         minted_events: btreemap! {
@@ -1024,6 +1037,7 @@ fn state_equivalence() {
                     from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                     value: Wei::new(10_000_000_000_000_000),
                     principal: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
+                    subaccount: None,
                 }.into(),
                 mint_block_index: LedgerMintIndex::new(1),
                 erc20_contract_address: None,

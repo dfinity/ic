@@ -116,6 +116,7 @@ impl DepositFlow {
                 from_address: self.params.from_address.to_string(),
                 value: Nat::from(self.params.amount),
                 principal: self.params.recipient,
+                subaccount: None,
             },
         );
         assert_contains_unique_event(
