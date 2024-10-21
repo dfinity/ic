@@ -226,6 +226,7 @@ async fn get_minter_info() -> MinterInfo {
             last_eth_scraped_block_number: Some(s.last_scraped_block_number.into()),
             last_erc20_scraped_block_number: Some(s.last_erc20_scraped_block_number.into()),
             cketh_ledger_id: Some(s.cketh_ledger_id),
+            evm_rpc_id: s.evm_rpc_id,
         }
     })
 }
