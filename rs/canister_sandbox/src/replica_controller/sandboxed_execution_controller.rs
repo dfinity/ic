@@ -342,9 +342,9 @@ pub struct SandboxProcess {
 impl Drop for SandboxProcess {
     fn drop(&mut self) {
         self.history.record("Terminate()".to_string());
-        self.sandbox_service
-            .terminate(protocol::sbxsvc::TerminateRequest {})
-            .on_completion(|_| {});
+        // self.sandbox_service
+        //     .terminate(protocol::sbxsvc::TerminateRequest {})
+        //     .on_completion(|_| {});
     }
 }
 
