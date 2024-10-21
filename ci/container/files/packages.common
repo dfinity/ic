@@ -40,19 +40,19 @@ libunwind-dev
 libusb-1.0-0-dev
 libsqlite3-dev
 zlib1g-dev
-libclang-10-dev
+libclang-18-dev
 protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
 
 # Haskell
-libtinfo5
 libtinfo-dev
 libffi-dev
 libgmp-dev
 
 # IC-OS
+fdisk
 cryptsetup-bin
 dosfstools
 fakeroot
