@@ -1244,51 +1244,48 @@ impl SandboxedExecutionController {
     }
 
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
-        {
-            let mut guard = self.backends.lock().unwrap();
+        let mut guard = self.backends.lock().unwrap();
 
-            if let Some(backend) = (*guard).get_mut(&canister_id) {
-                let old = std::mem::replace(backend, Backend::Empty);
-                let sandbox_process_and_stats = match old {
-                    Backend::Active {
-                        sandbox_process,
-                        stats,
-                    } => Some((sandbox_process, stats)),
-                    Backend::Evicted {
-                        sandbox_process,
-                        stats,
-                    } => sandbox_process.upgrade().map(|p| (p, stats)),
-                    Backend::Empty => None,
-                };
-                if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
-                    let now = std::time::Instant::now();
-                    if self.max_sandbox_count > 0 {
-                        *backend = Backend::Active {
-                            sandbox_process: Arc::clone(&sandbox_process),
-                            stats: SandboxProcessStats { last_used: now },
-                        };
-                    } else {
-                        *backend = Backend::Evicted {
-                            sandbox_process: Arc::downgrade(&sandbox_process),
-                            stats: SandboxProcessStats { last_used: now },
-                        };
-                    }
-                    return sandbox_process;
+        if let Some(backend) = (*guard).get_mut(&canister_id) {
+            let old = std::mem::replace(backend, Backend::Empty);
+            let sandbox_process_and_stats = match old {
+                Backend::Active {
+                    sandbox_process,
+                    stats,
+                } => Some((sandbox_process, stats)),
+                Backend::Evicted {
+                    sandbox_process,
+                    stats,
+                } => sandbox_process.upgrade().map(|p| (p, stats)),
+                Backend::Empty => None,
+            };
+            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
+                let now = std::time::Instant::now();
+                if self.max_sandbox_count > 0 {
+                    *backend = Backend::Active {
+                        sandbox_process: Arc::clone(&sandbox_process),
+                        stats: SandboxProcessStats { last_used: now },
+                    };
+                } else {
+                    *backend = Backend::Evicted {
+                        sandbox_process: Arc::downgrade(&sandbox_process),
+                        stats: SandboxProcessStats { last_used: now },
+                    };
                 }
+                return sandbox_process;
             }
-
-            // if guard.len() > self.max_sandbox_count {
-            //     let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            //     let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
-            //     evict_sandbox_processes(
-            //         &mut guard,
-            //         self.min_sandbox_count,
-            //         max_active_sandboxes,
-            //         self.max_sandbox_idle_time,
-            //     );
-            // }
-            drop(guard);
         }
+
+        // if guard.len() > self.max_sandbox_count {
+        //     let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+        //     let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+        //     evict_sandbox_processes(
+        //         &mut guard,
+        //         self.min_sandbox_count,
+        //         max_active_sandboxes,
+        //         self.max_sandbox_idle_time,
+        //     );
+        // }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
         // No sandbox process found for this canister. Start a new one and register it.
@@ -1315,12 +1312,7 @@ impl SandboxedExecutionController {
             sandbox_process: Arc::clone(&sandbox_process),
             stats: SandboxProcessStats { last_used: now },
         };
-
-        {
-            let mut guard = self.backends.lock().unwrap();
-            (*guard).insert(canister_id, backend);
-            drop(guard);
-        }
+        (*guard).insert(canister_id, backend);
 
         sandbox_process
     }
