@@ -147,4 +147,10 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+
+    # redeploy
+    Label("redeploy/redeploy-restore.service"): "/etc/systemd/system/redeploy-restore.service",
+    Label("redeploy/redeploy-restore.sh"): "/opt/ic/bin/redeploy-restore.sh",
+    Label("redeploy/redeploy.service"): "/etc/systemd/system/redeploy.service",
+    Label("redeploy/redeploy.sh"): "/opt/ic/bin/redeploy.sh",
 }
