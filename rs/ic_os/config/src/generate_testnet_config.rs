@@ -170,21 +170,14 @@ pub fn generate_testnet_config(args: GenerateTestnetConfigArgs) -> Result<()> {
     };
 
     let nns_public_key_path =
-        nns_public_key_path.unwrap_or_else(|| PathBuf::from("/path/to/nns_public_key.pem"));
+        nns_public_key_path.unwrap_or_else(|| PathBuf::from("/boot/config/nns_public_key.pem"));
 
     let nns_urls = match nns_urls {
-        Some(urls) => {
-            let parsed_urls = urls
-                .iter()
-                .map(|s| Url::parse(s))
-                .collect::<Result<Vec<Url>, _>>()?;
-            if parsed_urls.is_empty() {
-                vec![Url::parse("http://localhost")?]
-            } else {
-                parsed_urls
-            }
-        }
-        None => vec![Url::parse("http://localhost")?],
+        Some(urls) => urls
+            .iter()
+            .map(|s| Url::parse(s))
+            .collect::<Result<Vec<Url>, _>>()?,
+        None => vec![Url::parse("https://wiki.internetcomputer.org")?],
     };
 
     let icos_settings = ICOSSettings {
