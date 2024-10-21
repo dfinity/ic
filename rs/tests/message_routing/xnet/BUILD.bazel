@@ -132,10 +132,10 @@ system_test_nns(
         GRAFANA_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = [
-        ":slo_test_lib",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
