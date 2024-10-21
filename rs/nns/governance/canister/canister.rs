@@ -529,6 +529,10 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     println!("{}Executing post upgrade", LOG_PREFIX);
 
+    // This primes some caches in Candid. I do not expect this to help us very much, tbh.
+    use candid::CandidType;
+    ListNeuronsResponse::ty();
+
     allocate_ic_wasm_instrument_memory_once();
 
     let restored_state = with_upgrades_memory(|memory| {
