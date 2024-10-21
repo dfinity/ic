@@ -145,7 +145,6 @@ DEPENDENCIES = [
     "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:rsa",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde_bytes",
@@ -326,11 +325,6 @@ COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-CUSTOM_DOMAINS_RUNTIME_DEPS = [
-    "//rs/tests:custom_domains_uvm_config_image",
-    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]

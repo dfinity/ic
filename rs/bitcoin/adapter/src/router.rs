@@ -11,13 +11,10 @@ use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{
-    sync::{
-        mpsc::{channel, Receiver},
-        Mutex,
-    },
+    sync::mpsc::{channel, Receiver},
     time::{interval, sleep},
 };
 
@@ -56,7 +53,7 @@ pub fn start_main_event_loop(
             let sleep_idle_interval = Duration::from_millis(100);
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
-                blockchain_manager.make_idle().await;
+                blockchain_manager.make_idle();
                 // TODO: instead of sleeping here add some async synchronization.
                 sleep(sleep_idle_interval).await;
                 continue;
@@ -83,7 +80,7 @@ pub fn start_main_event_loop(
                         connection_manager.discard(&address);
                     }
 
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message).await {
+                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
                         connection_manager.discard(&address);
                     }
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
@@ -94,10 +91,10 @@ pub fn start_main_event_loop(
                     let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
                     match command {
                         BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
-                            blockchain_manager.enqueue_new_blocks_to_download(next_headers).await;
+                            blockchain_manager.enqueue_new_blocks_to_download(next_headers);
                         }
                         BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
-                            blockchain_manager.prune_blocks(anchor, processed_block_hashes).await;
+                            blockchain_manager.prune_blocks(anchor, processed_block_hashes);
                         }
                     };
                 }
@@ -109,9 +106,8 @@ pub fn start_main_event_loop(
                 _ = tick_interval.tick() => {
                     // After an event is dispatched, the managers `tick` method is called to process possible
                     // outgoing messages.
-                    connection_manager.tick(blockchain_manager.get_height().await, handle_stream);
-                    blockchain_manager
-                        .tick(&mut connection_manager).await;
+                    connection_manager.tick(blockchain_manager.get_height(), handle_stream);
+                    blockchain_manager.tick(&mut connection_manager);
                     transaction_manager.advertise_txids(&mut connection_manager);
                 }
             };

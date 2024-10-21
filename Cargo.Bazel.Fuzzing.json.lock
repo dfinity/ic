@@ -1,5 +1,5 @@
 {
-  "checksum": "eb5054aa3ae10324a873e8c5c2a6a851637b0ce1f31c15a73235218a47830b4f",
+  "checksum": "1d5b57e26a07347c52bb44c2ef30f0463dd0b922e2f6513eccb2ae736ab3315b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -458,7 +458,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -758,7 +758,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -1068,11 +1068,11 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -2698,11 +2698,11 @@
               "target": "mime_guess"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -2941,11 +2941,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -3001,11 +3001,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -3136,7 +3136,7 @@
               "target": "doc_comment"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -3678,11 +3678,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -3909,11 +3909,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -4010,11 +4010,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -4261,11 +4261,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -5058,11 +5058,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -6329,11 +6329,11 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -6460,11 +6460,11 @@
               "target": "lazycell"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -6620,11 +6620,11 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -6721,7 +6721,7 @@
               "target": "sha2"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -8222,7 +8222,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
@@ -8273,11 +8273,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -8328,11 +8328,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -9089,11 +9089,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -9432,11 +9432,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -10017,11 +10017,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -10361,11 +10361,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -10492,7 +10492,7 @@
               "target": "candid_derive"
             },
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -10564,11 +10564,11 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -12154,11 +12154,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -12220,11 +12220,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -12828,11 +12828,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -12888,11 +12888,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -15449,7 +15449,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -15633,7 +15633,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -15904,7 +15904,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -16000,11 +16000,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16378,11 +16378,11 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16452,11 +16452,11 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16526,11 +16526,11 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16589,7 +16589,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16644,7 +16644,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -16699,7 +16699,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -17108,11 +17108,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -17231,11 +17231,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -17286,11 +17286,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -17377,11 +17377,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -17590,7 +17590,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -17838,11 +17838,6 @@
               "target": "cidr"
             },
             {
-              "id": "clap 3.2.25",
-              "target": "clap",
-              "alias": "clap_3_2_25"
-            },
-            {
               "id": "clap 4.5.18",
               "target": "clap"
             },
@@ -17927,7 +17922,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 1.1.0",
+              "id": "evm_rpc_types 1.2.0",
               "target": "evm_rpc_types"
             },
             {
@@ -17973,10 +17968,6 @@
             {
               "id": "getrandom 0.2.10",
               "target": "getrandom"
-            },
-            {
-              "id": "glob 0.3.1",
-              "target": "glob"
             },
             {
               "id": "group 0.13.0",
@@ -18364,10 +18355,6 @@
               "target": "parking_lot"
             },
             {
-              "id": "pathdiff 0.2.1",
-              "target": "pathdiff"
-            },
-            {
               "id": "pcre2 0.2.6",
               "target": "pcre2"
             },
@@ -18396,7 +18383,7 @@
               "target": "pprof"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -18412,7 +18399,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
@@ -18465,7 +18452,7 @@
               "target": "quinn_udp"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -18483,10 +18470,6 @@
             {
               "id": "rand_pcg 0.3.1",
               "target": "rand_pcg"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "randomkit"
             },
             {
               "id": "ratelimit 0.9.1",
@@ -18533,7 +18516,7 @@
               "target": "rolling_file"
             },
             {
-              "id": "rsa 0.9.2",
+              "id": "rsa 0.9.6",
               "target": "rsa"
             },
             {
@@ -18693,11 +18676,7 @@
               "target": "stubborn_io"
             },
             {
-              "id": "substring 1.4.5",
-              "target": "substring"
-            },
-            {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -18777,7 +18756,7 @@
               "target": "tokio_socks"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -18975,7 +18954,7 @@
               "target": "minicbor_derive"
             },
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             },
             {
@@ -19274,11 +19253,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -19937,7 +19916,7 @@
               "target": "signature"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -20005,11 +19984,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -20208,7 +20187,7 @@
               "target": "sec1"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -20459,11 +20438,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -20519,11 +20498,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -20583,11 +20562,11 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -21822,14 +21801,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 1.1.0": {
+    "evm_rpc_types 1.2.0": {
       "name": "evm_rpc_types",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "package_url": "https://github.com/internet-computer-protocol/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/1.1.0/download",
-          "sha256": "e7ff4b02fde6e377b397b54fd011dccb41b16ebc606fc8e34a7885510fa408d6"
+          "url": "https://static.crates.io/crates/evm_rpc_types/1.2.0/download",
+          "sha256": "29ed9ee7b89726f4a343208e9a89e9ad22fe7b4518b0d722973cc83274e7bf7f"
         }
       },
       "targets": [
@@ -21889,7 +21868,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -22332,7 +22311,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -22390,7 +22369,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -23685,11 +23664,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -24803,7 +24782,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -26640,11 +26619,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -29360,11 +29339,11 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -29427,11 +29406,11 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -29494,11 +29473,11 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -29561,11 +29540,11 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -29628,11 +29607,11 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -31140,7 +31119,7 @@
               "target": "rand_core"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -31989,11 +31968,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -32613,11 +32592,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -36127,7 +36106,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -37485,11 +37464,11 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -39102,11 +39081,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -39550,7 +39529,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -39623,7 +39602,7 @@
               "target": "fragile"
             },
             {
-              "id": "predicates 3.0.4",
+              "id": "predicates 3.1.2",
               "target": "predicates"
             },
             {
@@ -39688,11 +39667,11 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -39764,11 +39743,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -40344,11 +40323,11 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -41921,11 +41900,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -42501,11 +42480,11 @@
               "target": "bytes"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -44460,11 +44439,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -44830,14 +44809,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "paste 1.0.14": {
+    "paste 1.0.15": {
       "name": "paste",
-      "version": "1.0.14",
+      "version": "1.0.15",
       "package_url": "https://github.com/dtolnay/paste",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/paste/1.0.14/download",
-          "sha256": "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+          "url": "https://static.crates.io/crates/paste/1.0.15/download",
+          "sha256": "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
         }
       },
       "targets": [
@@ -44874,14 +44853,14 @@
         "deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.14"
+        "version": "1.0.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44889,45 +44868,6 @@
         ]
       },
       "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "pathdiff 0.2.1": {
-      "name": "pathdiff",
-      "version": "0.2.1",
-      "package_url": "https://github.com/Manishearth/pathdiff",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pathdiff/0.2.1/download",
-          "sha256": "8835116a5c179084a830efb3adc117ab007512b535bc1a21c991d3b32a6b44dd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pathdiff",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pathdiff",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.2.1"
-      },
-      "license": "MIT/Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
@@ -45540,11 +45480,11 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -46038,11 +45978,11 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -46286,11 +46226,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -47504,14 +47444,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "predicates 3.0.4": {
+    "predicates 3.1.2": {
       "name": "predicates",
-      "version": "3.0.4",
+      "version": "3.1.2",
       "package_url": "https://github.com/assert-rs/predicates-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/predicates/3.0.4/download",
-          "sha256": "6dfc28575c2e3f19cb3c73b93af36460ae898d426eba6fc15b9bd2a5220758a0"
+          "url": "https://static.crates.io/crates/predicates/3.1.2/download",
+          "sha256": "7e9086cc7640c29a356d1a29fd134380bee9d8f79a17410aa76e7ad295f42c97"
         }
       },
       "targets": [
@@ -47559,10 +47499,6 @@
               "target": "float_cmp"
             },
             {
-              "id": "itertools 0.11.0",
-              "target": "itertools"
-            },
-            {
               "id": "normalize-line-endings 0.3.0",
               "target": "normalize_line_endings"
             },
@@ -47578,7 +47514,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.0.4"
+        "version": "3.1.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -47950,7 +47886,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
@@ -48353,11 +48289,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -48448,11 +48384,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             }
           ],
@@ -48547,14 +48483,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro2 1.0.85": {
+    "proc-macro2 1.0.88": {
       "name": "proc-macro2",
-      "version": "1.0.85",
+      "version": "1.0.88",
       "package_url": "https://github.com/dtolnay/proc-macro2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/proc-macro2/1.0.85/download",
-          "sha256": "22244ce15aa966053a896d1accb3a6e68469b97c7f33f284b99f0d576879fc23"
+          "url": "https://static.crates.io/crates/proc-macro2/1.0.88/download",
+          "sha256": "7c3a7fc5db1e57d5a779a352c8cdb57b29aa4c40cc69c3a68a7fedc815fbf2f9"
         }
       },
       "targets": [
@@ -48598,7 +48534,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "build_script_build"
             },
             {
@@ -48609,7 +48545,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.85"
+        "version": "1.0.88"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -49138,11 +49074,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -49541,11 +49477,11 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -49604,11 +49540,11 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -49984,11 +49920,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -50679,14 +50615,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quote 1.0.35": {
+    "quote 1.0.37": {
       "name": "quote",
-      "version": "1.0.35",
+      "version": "1.0.37",
       "package_url": "https://github.com/dtolnay/quote",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quote/1.0.35/download",
-          "sha256": "291ec9ab5efd934aaf503a6466c5d5251535d108ee747472c3977cc5acc868ef"
+          "url": "https://static.crates.io/crates/quote/1.0.37/download",
+          "sha256": "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
         }
       },
       "targets": [
@@ -50718,14 +50654,14 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.35"
+        "version": "1.0.37"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -51807,75 +51743,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "randomkit 0.1.1": {
-      "name": "randomkit",
-      "version": "0.1.1",
-      "package_url": "https://github.com/stygstra/rust-randomkit",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/randomkit/0.1.1/download",
-          "sha256": "278094e13a8eff59f106bf2a2040d966bd5cddb0c5b639e7447bbd9b1689c15c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "randomkit",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "randomkit",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.158",
-              "target": "libc"
-            },
-            {
-              "id": "randomkit 0.1.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.1.1"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT/BSD-3-Clause",
-      "license_ids": [
-        "BSD-3-Clause",
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "rangemap 1.4.0": {
       "name": "rangemap",
@@ -53624,7 +53491,7 @@
               "target": "hmac"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -54108,11 +53975,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -54272,11 +54139,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -54395,14 +54262,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rsa 0.9.2": {
+    "rsa 0.9.6": {
       "name": "rsa",
-      "version": "0.9.2",
+      "version": "0.9.6",
       "package_url": "https://github.com/RustCrypto/RSA",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rsa/0.9.2/download",
-          "sha256": "6ab43bb47d23c1a631b4b680199a45255dce26fa9ab2fa902581f624ff13e6a8"
+          "url": "https://static.crates.io/crates/rsa/0.9.6/download",
+          "sha256": "5d0e5124fcb30e76a7e79bfee683a2746db83784b86289f6251b54b7950a0dfc"
         }
       },
       "targets": [
@@ -54437,10 +54304,6 @@
         "deps": {
           "common": [
             {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
               "id": "const-oid 0.9.5",
               "target": "const_oid"
             },
@@ -54456,10 +54319,6 @@
             {
               "id": "num-integer 0.1.46",
               "target": "num_integer"
-            },
-            {
-              "id": "num-iter 0.1.43",
-              "target": "num_iter"
             },
             {
               "id": "num-traits 0.2.19",
@@ -54490,7 +54349,7 @@
               "target": "spki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -54501,7 +54360,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.2"
+        "version": "0.9.6"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -54636,11 +54495,11 @@
               "target": "glob"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -54967,7 +54826,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -55745,7 +55604,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -55868,7 +55727,7 @@
               "target": "webpki"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -56952,11 +56811,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -57154,11 +57013,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -57545,7 +57404,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             },
             {
@@ -58791,11 +58650,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -58847,11 +58706,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -59164,11 +59023,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -59220,7 +59079,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
@@ -59275,11 +59134,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -59534,11 +59393,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -59594,11 +59453,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -62417,11 +62276,11 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             }
           ],
@@ -62545,11 +62404,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -62610,11 +62469,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -62782,11 +62641,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -62850,11 +62709,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -62937,88 +62796,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "substring 1.4.5": {
-      "name": "substring",
-      "version": "1.4.5",
-      "package_url": "https://github.com/Anders429/substring",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/substring/1.4.5/download",
-          "sha256": "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "substring",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "substring",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "substring 1.4.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "1.4.5"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "autocfg 1.1.0",
-              "target": "autocfg"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "subtle 2.5.0": {
+    "subtle 2.6.1": {
       "name": "subtle",
-      "version": "2.5.0",
+      "version": "2.6.1",
       "package_url": "https://github.com/dalek-cryptography/subtle",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/subtle/2.5.0/download",
-          "sha256": "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
+          "url": "https://static.crates.io/crates/subtle/2.6.1/download",
+          "sha256": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
         }
       },
       "targets": [
@@ -63049,7 +62834,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.5.0"
+        "version": "2.6.1"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -63294,11 +63079,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -63375,11 +63160,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -63530,11 +63315,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -64099,11 +63884,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -64603,11 +64388,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -64882,11 +64667,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -65097,7 +64882,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             }
           ],
@@ -65830,11 +65615,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -66071,11 +65856,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -66568,14 +66353,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tokio-test 0.4.3": {
+    "tokio-test 0.4.4": {
       "name": "tokio-test",
-      "version": "0.4.3",
+      "version": "0.4.4",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-test/0.4.3/download",
-          "sha256": "e89b3cbabd3ae862100094ae433e1def582cf86451b4e9bf83aa7ac1d8a7d719"
+          "url": "https://static.crates.io/crates/tokio-test/0.4.4/download",
+          "sha256": "2468baabc3311435b55dd935f702f42cd1b8abb7e754fb7dfb16bd36aa88f9f7"
         }
       },
       "targets": [
@@ -66623,7 +66408,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.3"
+        "version": "0.4.4"
       },
       "license": "MIT",
       "license_ids": [
@@ -67147,7 +66932,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
@@ -67159,7 +66944,7 @@
               "target": "prost_types"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -67718,7 +67503,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -67989,11 +67774,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -69120,7 +68905,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-test 0.4.3",
+              "id": "tokio-test 0.4.4",
               "target": "tokio_test"
             },
             {
@@ -69843,7 +69628,7 @@
               "target": "crypto_common"
             },
             {
-              "id": "subtle 2.5.0",
+              "id": "subtle 2.6.1",
               "target": "subtle"
             }
           ],
@@ -70852,11 +70637,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -71253,11 +71038,11 @@
               "target": "once_cell"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -71382,7 +71167,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -71440,11 +71225,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -72246,7 +72031,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "paste 1.0.14",
+              "id": "paste 1.0.15",
               "target": "paste"
             },
             {
@@ -72408,11 +72193,11 @@
               "target": "anyhow"
             },
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -72940,11 +72725,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -77087,11 +76872,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -77201,11 +76986,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -77310,11 +77095,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -77424,11 +77209,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -77545,11 +77330,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.85",
+              "id": "proc-macro2 1.0.88",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.35",
+              "id": "quote 1.0.37",
               "target": "quote"
             },
             {
@@ -78947,7 +78732,6 @@
     "chrono 0.4.38",
     "ciborium 0.2.1",
     "cidr 0.2.3",
-    "clap 3.2.25",
     "clap 4.5.18",
     "cloudflare 0.12.0",
     "colored 2.0.4",
@@ -78970,7 +78754,7 @@
     "escargot 0.5.8",
     "ethers-core 2.0.10",
     "ethnum 1.4.0",
-    "evm_rpc_types 1.1.0",
+    "evm_rpc_types 1.2.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -78982,7 +78766,6 @@
     "futures-util 0.3.30",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
-    "glob 0.3.1",
     "group 0.13.0",
     "hashlink 0.8.4",
     "hex 0.4.3",
@@ -79082,8 +78865,7 @@
     "p256 0.13.2",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
-    "paste 1.0.14",
-    "pathdiff 0.2.1",
+    "paste 1.0.15",
     "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
@@ -79091,11 +78873,11 @@
     "pkcs8 0.10.2",
     "pkg-config 0.3.27",
     "pprof 0.13.0",
-    "predicates 3.0.4",
+    "predicates 3.1.2",
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
-    "proc-macro2 1.0.85",
+    "proc-macro2 1.0.88",
     "procfs 0.9.1",
     "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
@@ -79109,12 +78891,11 @@
     "quickcheck 1.0.3",
     "quinn 0.11.5",
     "quinn-udp 0.5.5",
-    "quote 1.0.35",
+    "quote 1.0.37",
     "rand 0.8.5",
     "rand_chacha 0.3.1",
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
-    "randomkit 0.1.1",
     "ratelimit 0.9.1",
     "rayon 1.10.0",
     "rcgen 0.13.1",
@@ -79126,7 +78907,7 @@
     "rlp 0.5.2",
     "rocksdb 0.22.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.2",
+    "rsa 0.9.6",
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.28.0",
@@ -79169,8 +78950,7 @@
     "strum 0.26.3",
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
-    "substring 1.4.5",
-    "subtle 2.5.0",
+    "subtle 2.6.1",
     "syn 1.0.109",
     "sync_wrapper 1.0.1",
     "tar 0.4.39",
@@ -79191,7 +78971,7 @@
     "tokio-rustls 0.26.0",
     "tokio-serde 0.8.0",
     "tokio-socks 0.5.1",
-    "tokio-test 0.4.3",
+    "tokio-test 0.4.4",
     "tokio-util 0.7.12",
     "toml 0.5.11",
     "tonic 0.12.3",

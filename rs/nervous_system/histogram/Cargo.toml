@@ -1,0 +1,11 @@
+[package]
+name = "ic-nervous-system-histogram"
+version = "0.0.1"
+edition = { workspace = true }
+
+[dependencies]
+ic-metrics-encoder = "1"
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+prometheus-parse = { workspace = true }
