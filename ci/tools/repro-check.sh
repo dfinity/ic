@@ -168,15 +168,6 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
-# Set default behavior if no flags are provided (verify all components)
-# OPTIND is a built-in variable in Bash that represents the index of the next argument to be processed by getopts during argument parsing.
-if [ "$OPTIND" -eq 1 ]; then
-    verify_guestos="true"
-    verify_hostos="true"
-    verify_setupos="true"
-    no_option="true"
-fi
-
 log "Check the environment"
 # either of those files should exist
 source /usr/lib/os-release 2>/dev/null
@@ -223,13 +214,18 @@ for pkg in git curl jq podman; do
     fi
 done
 
-# if no options have been chosen, we assume to check the latest commit of the
-# branch we are on.
+# Set default behavior if no flags are provided
+# OPTIND is a built-in variable in Bash that represents the index of the
+# next argument to be processed by getopts during argument parsing.
+# - check the latest commit of the branch we are on
+# - verify all OS components
 if [ "$OPTIND" -eq 1 ]; then
+    verify_guestos="true"
+    verify_hostos="true"
+    verify_setupos="true"
+    no_option="true"
     check_git_repo
     check_ic_repo
-
-    no_option="true"
 fi
 
 # set the `git_hash` from the `proposal_id` or from the environment
