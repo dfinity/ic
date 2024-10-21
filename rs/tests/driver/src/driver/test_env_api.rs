@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! # The Test Environment API
 //!
 //! The goal of this module is to provide the user with an extensible,
