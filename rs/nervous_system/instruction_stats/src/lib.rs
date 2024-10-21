@@ -16,7 +16,8 @@
 //!    `candid_call_instructions`.
 
 use ic_metrics_encoder::MetricsEncoder;
-use ic_nervous_system_histogram::{Histogram, STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS};
+use ic_nervous_system_histogram::{Histogram};
+use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::{cell::RefCell, collections::BTreeMap};
 
@@ -31,14 +32,22 @@ mod tests;
 lazy_static! {
     // Covers a wide range, yet is still fairly fine grained.
     static ref INSTRUCTIONS_BIN_INCLUSIVE_UPPER_BOUNDS: Vec<i64> = {
-        // Drop values that are too small and too big.
-        STANDARD_POSITIVE_BIN_INCLUSIVE_UPPER_BOUNDS
-            .clone()
+        let orders_of_magnitude = vec![
+            6, 7, 8,  // Millions
+            9, 10 // Billions
+        ];
+        let powers_of_ten = orders_of_magnitude
             .into_iter()
-            // For instructions consumed, only values in this range make sense.
-            // For the upper bound, 40 billion was obtained from this page:
-            // https://internetcomputer.org/docs/current/developer-docs/smart-contracts/maintain/resource-limits
-            .filter(|b| 100_000 <= *b && *b <= 40_000_000_000)
+            .map(|e| 10_i64.pow(e))
+            .collect::<Vec<_>>();
+
+        let units = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+        powers_of_ten
+            .iter()
+            .cartesian_product(units.iter())
+            .map(|(power_of_ten, unit)| unit *power_of_ten)
+            .filter(|bin_inclusive_uppder_bound| *bin_inclusive_uppder_bound <= 40_000_000_000)
             .collect()
     };
 }
