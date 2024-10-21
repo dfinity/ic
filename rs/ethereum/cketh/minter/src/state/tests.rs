@@ -26,7 +26,6 @@ use ethnum::u256;
 use ic_ethereum_types::Address;
 use proptest::array::uniform32;
 use proptest::collection::vec as pvec;
-use proptest::option;
 use proptest::prelude::*;
 use std::collections::BTreeMap;
 
@@ -536,7 +535,7 @@ fn arb_principal() -> impl Strategy<Value = Principal> {
     pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
 }
 
-fn arb_ledger_subaccount() -> impl Strategy<Value = LedgerSubaccount> {
+fn arb_ledger_subaccount() -> impl Strategy<Value = Option<LedgerSubaccount>> {
     uniform32(any::<u8>()).prop_map(LedgerSubaccount::from_bytes)
 }
 
@@ -635,7 +634,7 @@ prop_compose! {
         from_address in arb_address(),
         value in arb_checked_amount_of(),
         principal in arb_principal(),
-        subaccount in option::of(arb_ledger_subaccount()),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedEthEvent {
         ReceivedEthEvent {
             transaction_hash,
@@ -658,7 +657,7 @@ prop_compose! {
         value in arb_checked_amount_of(),
         principal in arb_principal(),
         erc20_contract_address in arb_address(),
-        subaccount in option::of(arb_ledger_subaccount()),
+        subaccount in arb_ledger_subaccount(),
     ) -> ReceivedErc20Event {
         ReceivedErc20Event {
             transaction_hash,

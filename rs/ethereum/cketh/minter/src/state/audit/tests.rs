@@ -257,7 +257,7 @@ impl GetEventsFile {
                     from_address: from_address.parse().unwrap(),
                     value: value.try_into().unwrap(),
                     principal,
-                    subaccount: subaccount.map(LedgerSubaccount::from_bytes),
+                    subaccount: subaccount.and_then(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::AcceptedErc20Deposit {
                     transaction_hash,
@@ -276,7 +276,7 @@ impl GetEventsFile {
                     value: value.try_into().unwrap(),
                     principal,
                     erc20_contract_address: erc20_contract_address.parse().unwrap(),
-                    subaccount: subaccount.map(LedgerSubaccount::from_bytes),
+                    subaccount: subaccount.and_then(LedgerSubaccount::from_bytes),
                 }),
                 EventPayload::InvalidDeposit {
                     event_source,

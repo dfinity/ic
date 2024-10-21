@@ -312,21 +312,15 @@ impl TryFrom<LogEntry> for ReceivedEvent {
             })
         };
 
-        // TODO XC-219: adapt based on event topic, add subaccounts variants.
-        // We have only one non-indexed data field for both ETH and ERC20 events.
-        let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
-            ReceivedEventError::InvalidEventSource {
+        if entry.topics.is_empty() {
+            return Err(ReceivedEventError::InvalidEventSource {
                 source: event_source,
-                error: EventSourceError::InvalidEvent(format!(
-                    "Invalid data length; expected 32-byte value, got {}",
-                    hex::encode(data)
-                )),
-            }
-        })?;
+                error: EventSourceError::InvalidEvent("Expected at least one topic".to_string()),
+            });
+        }
 
-        // We either have 3 indexed topics for ETH events: (hash, from_address, principal),
-        // or 4 indexed topics for ERC20 events: (hash, erc20_contract_address, from_address, principal)
         match entry.topics[0] {
+            // ReceivedEth (index_topic_1 address from, uint256 value, index_topic_2 bytes32 principal)
             FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_TOPIC) => {
                 if entry.topics.len() != 3 {
                     return Err(ReceivedEventError::InvalidEventSource {
@@ -339,6 +333,15 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 };
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
+                let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
+                    ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Invalid data length; expected 32-byte value, got {}",
+                            hex::encode(data)
+                        )),
+                    }
+                })?;
                 Ok(ReceivedEthEvent {
                     transaction_hash,
                     block_number,
@@ -350,6 +353,43 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 }
                 .into())
             }
+            // ReceivedEth (index_topic_1 address from, uint256 value, index_topic_2 bytes32 principal, bytes32 subaccount)
+            FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_WITH_SUBACCOUNT_TOPIC) => {
+                if entry.topics.len() != 3 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 3 topics for ReceivedEth event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let from_address = parse_address(&entry.topics[1])?;
+                let principal = parse_principal(&entry.topics[2])?;
+                let data = entry.data.0;
+                if data.len() != 64 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 64 bytes for (value,subaccount), got {}",
+                            data.len()
+                        )),
+                    });
+                };
+                let value = Wei::from_be_bytes(data[..32].try_into().unwrap());
+                let subaccount = LedgerSubaccount::from_bytes(data[32..].try_into().unwrap());
+                Ok(ReceivedEthEvent {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    subaccount,
+                }
+                .into())
+            }
+            // ReceivedErc20 (index_topic_1 address erc20_contract_address, index_topic_2 address owner, uint256 amount, index_topic_3 bytes32 principal)
             FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_TOPIC) => {
                 if entry.topics.len() != 4 {
                     return Err(ReceivedEventError::InvalidEventSource {
@@ -363,6 +403,15 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let erc20_contract_address = parse_address(&entry.topics[1])?;
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
+                let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
+                    ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Invalid data length; expected 32-byte value, got {}",
+                            hex::encode(data)
+                        )),
+                    }
+                })?;
                 Ok(ReceivedErc20Event {
                     transaction_hash,
                     block_number,
@@ -372,6 +421,44 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                     principal,
                     erc20_contract_address,
                     subaccount: None,
+                }
+                .into())
+            }
+            // ReceivedErc20 (index_topic_1 address erc20ContractAddress, index_topic_2 address owner, uint256 amount, index_topic_3 bytes32 principal, bytes32 subaccount)
+            FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC) => {
+                if entry.topics.len() != 4 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 4 topics for ReceivedERC20 event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let erc20_contract_address = parse_address(&entry.topics[1])?;
+                let from_address = parse_address(&entry.topics[2])?;
+                let principal = parse_principal(&entry.topics[3])?;
+                let data = entry.data.0;
+                if data.len() != 64 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 64 bytes for (value,subaccount), got {}",
+                            data.len()
+                        )),
+                    });
+                };
+                let value = Erc20Value::from_be_bytes(data[..32].try_into().unwrap());
+                let subaccount = LedgerSubaccount::from_bytes(data[32..].try_into().unwrap());
+                Ok(ReceivedErc20Event {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    erc20_contract_address,
+                    subaccount,
                 }
                 .into())
             }
@@ -444,8 +531,12 @@ type InternalLedgerSubaccount = CheckedAmountOf<InternalLedgerSubaccountTag>;
 pub struct LedgerSubaccount(#[n(0)] InternalLedgerSubaccount);
 
 impl LedgerSubaccount {
-    pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(InternalLedgerSubaccount::from_be_bytes(bytes))
+    pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
+        const DEFAULT_SUBACCOUNT: [u8; 32] = [0; 32];
+        if bytes == DEFAULT_SUBACCOUNT {
+            return None;
+        }
+        Some(Self(InternalLedgerSubaccount::from_be_bytes(bytes)))
     }
 
     pub fn to_bytes(self) -> [u8; 32] {
