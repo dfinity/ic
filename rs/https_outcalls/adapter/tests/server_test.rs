@@ -156,11 +156,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             incoming_source: IncomingSource::Path(path.into()),
             ..Default::default()
         };
-        // let url = start_server(CERT_INIT.get_or_init(generate_certs));
+        let url = start_server(CERT_INIT.get_or_init(generate_certs));
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://vg.no"),
+            url: format!("https://{}/get", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -170,6 +170,35 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let response = client.https_outcall(request).await;
         let http_response = response.unwrap().into_inner();
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[test]
+    fn test_canister_http_server_explicit_runtime() {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+                let server_config = Config {
+                    incoming_source: IncomingSource::Path(path.into()),
+                    ..Default::default()
+                };
+                let url = start_server(CERT_INIT.get_or_init(generate_certs));
+                let mut client = spawn_grpc_server(server_config);
+
+                let request = tonic::Request::new(HttpsOutcallRequest {
+                    url: format!("https://{}/get", &url),
+                    headers: Vec::new(),
+                    method: HttpMethod::Get as i32,
+                    body: "hello".to_string().as_bytes().to_vec(),
+                    max_response_size_bytes: 512,
+                    socks_proxy_allowed: false,
+                });
+                let response = client.https_outcall(request).await;
+                let http_response = response.unwrap().into_inner();
+                assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+            });
     }
 
     #[cfg(not(feature = "http"))]
@@ -531,7 +560,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
                 println!("Listening on {:?}", addr);
 
-                let jh = tokio::spawn(async move {
+                tokio::spawn(async move {
                     let service = hyper::service::service_fn(
                         |req: Request<hyper::body::Incoming>| async move {
                             let status = if req.version() == expected_alpn_protocol {
@@ -567,10 +596,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                         .serve_connection_with_upgrades(stream, service)
                         .await
                 });
-
-                // connect with tcp stream
-                // let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-                // println!("Connected to {:?}", addr);
 
                 // Create an HTTP/2 client
                 let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
@@ -645,7 +670,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         println!("Listening on {:?}", addr);
 
-        let jh = tokio::spawn(async move {
+        tokio::spawn(async move {
             let service =
                 hyper::service::service_fn(|req: Request<hyper::body::Incoming>| async move {
                     let status = if req.version() == expected_alpn_protocol {
@@ -680,10 +705,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                 .serve_connection_with_upgrades(stream, service)
                 .await
         });
-
-        // connect with tcp stream
-        // let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-        // println!("Connected to {:?}", addr);
 
         // Create an HTTP/2 client
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
