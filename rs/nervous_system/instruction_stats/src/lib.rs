@@ -16,7 +16,7 @@
 //!    `candid_call_instructions`.
 
 use ic_metrics_encoder::MetricsEncoder;
-use ic_nervous_system_histogram::{Histogram};
+use ic_nervous_system_histogram::Histogram;
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::{cell::RefCell, collections::BTreeMap};
