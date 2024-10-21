@@ -1,5 +1,5 @@
 {
-  "checksum": "dee1c8591387e179356044d1973b6e3fc16e62ce42c6ac47fefd1f61ca9ad54d",
+  "checksum": "1d5b57e26a07347c52bb44c2ef30f0463dd0b922e2f6513eccb2ae736ab3315b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17836,11 +17836,6 @@
             {
               "id": "cidr 0.2.3",
               "target": "cidr"
-            },
-            {
-              "id": "clap 3.2.25",
-              "target": "clap",
-              "alias": "clap_3_2_25"
             },
             {
               "id": "clap 4.5.18",
@@ -78737,7 +78732,6 @@
     "chrono 0.4.38",
     "ciborium 0.2.1",
     "cidr 0.2.3",
-    "clap 3.2.25",
     "clap 4.5.18",
     "cloudflare 0.12.0",
     "colored 2.0.4",

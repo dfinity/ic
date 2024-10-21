@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "CUSTOM_DOMAINS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -176,24 +176,6 @@ system_test(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
-)
-
-system_test_nns(
-    name = "custom_domains_integration_test",
-    env = {
-        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
-    },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
-                   GUESTOS_RUNTIME_DEPS +
-                   UNIVERSAL_VM_RUNTIME_DEPS +
-                   CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS +
-                   CUSTOM_DOMAINS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test_nns(

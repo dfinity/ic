@@ -195,6 +195,10 @@ type MinterInfo = record {
 
     // Canister ID of the ckETH ledger.
     cketh_ledger_id: opt principal;
+
+    // Canister ID of the EVM RPC canister that handles the communication
+    // with the Ethereum blockchain.
+    evm_rpc_id : opt principal;
 };
 
 

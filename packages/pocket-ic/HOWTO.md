@@ -355,7 +355,7 @@ Here is a sketch of a test for a canister making canister HTTP outcalls in the l
 #[tokio::test]
 async fn test_canister_http_live() {
     use candid::{Decode, Encode, Principal};
-    use ic_cdk::api::management_canister::http_request::HttpResponse;
+    use pocket_ic::management_canister::HttpRequestResult;
     use ic_utils::interfaces::ManagementCanister;
 
     let mut pic = PocketIcBuilder::new()

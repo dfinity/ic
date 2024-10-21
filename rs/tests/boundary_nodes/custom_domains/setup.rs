@@ -1,4 +1,14 @@
+use anyhow::{anyhow, bail, Context, Error};
+use candid::{Encode, Principal};
 use certificate_orchestrator_interface::InitArg;
+use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
+use ic_agent::{identity::Secp256k1Identity, Identity};
+use ic_interfaces_registry::RegistryValue;
+use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
+use ic_registry_keys::make_routing_table_record_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_routing_table::RoutingTable;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         asset_canister::{DeployAssetCanister, UploadAssetRequest},
@@ -15,25 +25,13 @@ use ic_system_test_driver::{
     },
     util::{agent_observes_canister_module, block_on},
 };
-
-use serde_json::json;
-use std::{env, io::Read, net::SocketAddrV6, time::Duration};
-
-use anyhow::{anyhow, Context, Error};
-use candid::{Encode, Principal};
-use chacha20poly1305::{aead::OsRng as ChaChaOsRng, KeyInit, XChaCha20Poly1305};
-use ic_agent::{identity::Secp256k1Identity, Identity};
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
 use k256::{elliptic_curve::SecretKey, Secp256k1};
 use pem::Pem;
 use rand::{rngs::OsRng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use reqwest::{redirect::Policy, Client, ClientBuilder};
+use serde_json::json;
+use std::{env, io::Read, net::SocketAddrV6, time::Duration};
 use tokio::task::{self, JoinHandle};
 
 pub(crate) const CLOUDFLARE_API_PYTHON_PATH: &str = "/config/cloudflare_api.py";
@@ -218,7 +216,8 @@ async fn setup_remote_docker_host(
 ) -> Result<DeployedUniversalVm, Error> {
     UniversalVm::new(REMOTE_DOCKER_HOST_VM_ID.into())
         .with_config_img(get_dependency_path(
-            "rs/tests/custom_domains_uvm_config_image.zst",
+            env::var("CUSTOM_DOMAIN_UVM_CONFIG_PATH")
+                .expect("CUSTOM_DOMAIN_UVM_CONFIG_PATH not set"),
         ))
         .start(&env)
         .context("failed to setup universal VM")?;
@@ -1285,18 +1284,6 @@ pub async fn get_registration_status(
     }
 }
 
-fn get_service_status(vm: &dyn SshSession, service: &str) -> String {
-    vm.block_on_bash_script(&format!("systemctl is-active {service} 2>&1"))
-        .unwrap()
-}
-
-pub fn is_service_active(vm: &dyn SshSession, service: &str) -> bool {
-    let cmd_output = get_service_status(vm, service);
-    let result = get_service_status(vm, service) == "active";
-    println!("SERVICE-RJB: {service}: {cmd_output} - {result}");
-    result
-}
-
 pub fn get_service_errors(vm: &dyn SshSession, service: &str) -> String {
     vm.block_on_bash_script(&format!(
         r#"journalctl -u {service}.service --since "20 seconds ago" -p err | grep "No entries""#
@@ -1326,6 +1313,6 @@ pub async fn access_domain(bn_client: Client, domain_name: &str) -> Result<Strin
             .expect("failed to get the text from the response");
         Ok(response_text.to_string())
     } else {
-        panic!("boundary node returned an error: {:?}", response.status())
+        bail!("boundary node returned an error: {:?}", response.status())
     }
 }
