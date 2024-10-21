@@ -751,5 +751,5 @@ service : (Governance) -> {
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
   reset_timers : (record {}) -> (record {});
-  get_timers : (record {}) -> (GetTimersResponse);
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }

@@ -4,7 +4,6 @@ use ic_nns_test_utils::sns_wasm::build_governance_sns_wasm;
 use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1 as governance_pb};
 use ic_sns_swap::pb::v1::{
     self as swap_pb, GetStateRequest, Init, Lifecycle, NeuronBasketConstructionParameters,
-    ResetTimersRequest, ResetTimersResponse,
 };
 use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
 use ic_types::PrincipalId;
@@ -180,11 +179,11 @@ fn test_swap_reset_timers() {
 
     // Reset the timers.
     {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine
             .execute_ingress(canister_id, "reset_timers", payload)
             .expect("Unable to call reset_timers on the Swap canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+        Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap();
     }
 
     // Inspect the sate after resetting the timers.
@@ -273,11 +272,11 @@ fn test_governance_reset_timers() {
 
     // Reset the timers.
     {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine
             .execute_ingress(canister_id, "reset_timers", payload)
             .expect("Unable to call reset_timers on the Governance canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+        Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap();
     }
 
     // Inspect the sate after resetting the timers.
@@ -326,11 +325,11 @@ fn test_swap_reset_timers_cannot_be_spammed() {
         .unwrap();
 
     // Helpers.
-    let try_reset_timers = || -> Result<ResetTimersResponse, String> {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+    let try_reset_timers = || -> Result<swap_pb::ResetTimersResponse, String> {
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine.execute_ingress(canister_id, "reset_timers", payload);
         match response {
-            Ok(response) => Ok(Decode!(&response.bytes(), ResetTimersResponse).unwrap()),
+            Ok(response) => Ok(Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap()),
             Err(err) => Err(err.to_string()),
         }
     };
@@ -382,6 +381,87 @@ fn test_swap_reset_timers_cannot_be_spammed() {
 
     // Attempt to reset the timers again, after a small delay.
     try_reset_timers().expect("Unable to call reset_timers on the Swap canister");
+
+    let last_spawned_timestamp_seconds_3 = get_last_spawned_timestamp_seconds();
+
+    // Waited for 500 + 101 seconds after the last reset.
+    assert_eq!(
+        last_spawned_timestamp_seconds_3,
+        last_spawned_timestamp_seconds_2 + 601
+    );
+}
+
+#[test]
+fn test_governance_reset_timers_cannot_be_spammed() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    // Install the Governance canister.
+    let wasm = build_governance_sns_wasm().wasm;
+
+    let args = Encode!(&governance_proto()).unwrap();
+    let canister_id = state_machine
+        .install_canister(wasm.clone(), args, None)
+        .unwrap();
+
+    // Helpers.
+    let try_reset_timers = || -> Result<governance_pb::ResetTimersResponse, String> {
+        let payload = Encode!(&governance_pb::ResetTimersRequest {}).unwrap();
+        let response = state_machine.execute_ingress(canister_id, "reset_timers", payload);
+        match response {
+            Ok(response) => {
+                Ok(Decode!(&response.bytes(), governance_pb::ResetTimersResponse).unwrap())
+            }
+            Err(err) => Err(err.to_string()),
+        }
+    };
+
+    state_machine.advance_time(Duration::from_secs(600));
+    state_machine.tick();
+
+    let get_last_spawned_timestamp_seconds = || {
+        let timers = {
+            let payload = Encode!(&governance_pb::GetTimersRequest {}).unwrap();
+            let response = state_machine
+                .execute_ingress(canister_id, "get_timers", payload)
+                .expect("Unable to call get_state on the Governance canister");
+            let response = Decode!(&response.bytes(), governance_pb::GetTimersResponse).unwrap();
+            response.timers
+        };
+
+        let last_reset_timestamp_seconds = assert_matches!(timers, Some(governance_pb::Timers {
+            last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
+            ..
+        }) => last_reset_timestamp_seconds);
+
+        last_reset_timestamp_seconds
+    };
+
+    // Reset the timers.
+    try_reset_timers().expect("Unable to call reset_timers on the Governance canister");
+
+    let last_spawned_timestamp_seconds_1 = get_last_spawned_timestamp_seconds();
+
+    state_machine.advance_time(Duration::from_secs(500));
+    state_machine.tick();
+
+    // Attempt to reset the timers again, after a small delay.
+    {
+        let err_text = try_reset_timers().unwrap_err();
+        assert!(err_text.contains("Reset has already been called within the past 600 seconds"));
+    }
+
+    let last_spawned_timestamp_seconds_2 = get_last_spawned_timestamp_seconds();
+
+    assert_eq!(
+        last_spawned_timestamp_seconds_1,
+        last_spawned_timestamp_seconds_2
+    );
+
+    state_machine.advance_time(Duration::from_secs(101));
+    state_machine.tick();
+
+    // Attempt to reset the timers again, after a small delay.
+    try_reset_timers().expect("Unable to call reset_timers on the Governance canister");
 
     let last_spawned_timestamp_seconds_3 = get_last_spawned_timestamp_seconds();
 
