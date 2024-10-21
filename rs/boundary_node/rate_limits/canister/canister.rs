@@ -38,7 +38,7 @@ fn init(init_arg: InitArg) {
     periodically_poll_api_boundary_nodes(interval);
 }
 
-#[query(name = "get_config")]
+#[query]
 #[candid_method(query)]
 fn get_config(version: Option<Version>) -> GetConfigResponse {
     let caller_id = ic_cdk::api::caller();
@@ -52,7 +52,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
     Ok(response.into())
 }
 
-#[query(name = "get_rule_by_id")]
+#[query]
 #[candid_method(query)]
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
     let caller_id = ic_cdk::api::caller();
@@ -66,7 +66,7 @@ fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
     Ok(response.into())
 }
 
-#[update(name = "add_config")]
+#[update]
 #[candid_method(update)]
 fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
@@ -79,7 +79,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     Ok(())
 }
 
-#[update(name = "disclose_rules")]
+#[update]
 #[candid_method(update)]
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
