@@ -35,7 +35,7 @@ fn init(init_arg: InitArg) {
 
     let interval = std::time::Duration::from_secs(init_arg.registry_polling_period_secs);
 
-    periodically_fetch_api_boundary_nodes_set(interval);
+    periodically_poll_api_boundary_nodes(interval);
 }
 
 #[query(name = "get_config")]
@@ -90,7 +90,7 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     Ok(())
 }
 
-fn periodically_fetch_api_boundary_nodes_set(interval: Duration) {
+fn periodically_poll_api_boundary_nodes(interval: Duration) {
     ic_cdk_timers::set_timer_interval(interval, || {
         ic_cdk::spawn(async {
             if let Ok(canister_id) = Principal::from_text(REGISTRY_CANISTER_ID) {
@@ -101,10 +101,10 @@ fn periodically_fetch_api_boundary_nodes_set(interval: Duration) {
                 )
                 .await
                 {
-                    Ok((Ok(api_bns_count),)) => {
+                    Ok((Ok(api_bn_records),)) => {
                         API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
                             *cell.borrow_mut() =
-                                HashSet::from_iter(api_bns_count.into_iter().filter_map(|n| n.id))
+                                HashSet::from_iter(api_bn_records.into_iter().filter_map(|n| n.id))
                         });
                     }
                     Ok((Err(err),)) => {
