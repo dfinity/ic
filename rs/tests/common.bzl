@@ -87,7 +87,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/tests/ckbtc",
     "//rs/tests/consensus/utils",
     "//rs/tests/consensus/tecdsa/utils",
     "//rs/tests/driver:ic-system-test-driver",
