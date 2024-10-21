@@ -1483,6 +1483,11 @@ message Timers {
 message ResetTimersRequest {}
 message ResetTimersResponse {}
 
+message GetTimersRequest {}
+message GetTimersResponse {
+  optional Timers timers = 1;
+}
+
 // Request message for 'get_metadata'.
 message GetMetadataRequest {}
 

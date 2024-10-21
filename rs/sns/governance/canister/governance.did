@@ -299,6 +299,10 @@ type Timers = record {
   last_spawned_timestamp_seconds : opt nat64;
 };
 
+type GetTimersResponse = record {
+  timers : opt Timers;
+};
+
 type GovernanceCachedMetrics = record {
   not_dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
   garbage_collectable_neurons_count : nat64;
@@ -747,4 +751,5 @@ service : (Governance) -> {
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
   reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse);
 }

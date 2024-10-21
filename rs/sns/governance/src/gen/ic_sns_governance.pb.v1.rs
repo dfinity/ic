@@ -2031,6 +2031,29 @@ pub struct ResetTimersRequest {}
     ::prost::Message,
 )]
 pub struct ResetTimersResponse {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersResponse {
+    #[prost(message, optional, tag = "1")]
+    pub timers: ::core::option::Option<Timers>,
+}
 /// Request message for 'get_metadata'.
 #[derive(
     candid::CandidType,

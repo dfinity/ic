@@ -43,10 +43,11 @@ use ic_sns_governance::{
         GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
         GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-        GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceProto,
-        ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-        ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-        ResetTimersRequest, ResetTimersResponse, RewardEvent, SetMode, SetModeResponse,
+        GetTimersRequest, GetTimersResponse, GetUpgradeJournalRequest, GetUpgradeJournalResponse,
+        Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
+        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+        ManageNeuronResponse, NervousSystemParameters, ResetTimersRequest, ResetTimersResponse,
+        RewardEvent, SetMode, SetModeResponse, Timers,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -74,10 +75,10 @@ thread_local! {
     static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
 }
 
-/// This guarantees that timers cannot be restarted more often than once every 120 intervals.
+/// This guarantees that timers cannot be restarted more often than once every 60 intervals.
 const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(600);
 
-const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(5);
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(10);
 
 /// Returns an immutable reference to the governance's global state.
 ///
@@ -551,10 +552,18 @@ async fn run_periodic_tasks_now(_request: ()) {
     governance_mut().run_periodic_tasks().await;
 }
 
+#[query]
+fn get_timers(arg: GetTimersRequest) -> GetTimersResponse {
+    let GetTimersRequest {} = arg;
+    let timers = governance().proto.timers;
+    GetTimersResponse { timers }
+}
+
 fn init_timers() {
-    if let Some(ref mut timers) = governance_mut().proto.timers {
-        timers.last_reset_timestamp_seconds.replace(now_seconds());
-    };
+    governance_mut().proto.timers.replace(Timers {
+        last_reset_timestamp_seconds: Some(now_seconds()),
+        ..Default::default()
+    });
 
     let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
         ic_cdk::spawn(run_periodic_tasks())
