@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 bincode = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
+mockall = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
