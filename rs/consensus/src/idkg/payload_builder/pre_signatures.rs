@@ -359,7 +359,12 @@ fn make_new_pre_signatures_if_needed_helper(
     let Some(pre_signatures_to_create) = chain_key_config
         .key_configs
         .iter()
-        .filter(|key_config| !matches!(&key_config.key_id, MasterPublicKeyId::VetKd(_)))
+        .filter(|key_config| {
+            matches!(
+                &key_config.key_id,
+                MasterPublicKeyId::Ecdsa(_) | MasterPublicKeyId::Schnorr(_)
+            )
+        })
         .find(|key_config| &key_config.key_id == key_id)
         .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
     else {
