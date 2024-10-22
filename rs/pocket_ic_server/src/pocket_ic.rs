@@ -51,6 +51,7 @@ use ic_state_machine_tests::{
     StateMachineConfig, StateMachineStateDir, SubmitIngressError, Time,
 };
 use ic_test_utilities_registry::add_subnet_list_record;
+use ic_types::NumBytes;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{CanisterHttpReject, CanisterHttpRequestId, CanisterHttpResponseContent},
@@ -356,9 +357,10 @@ impl PocketIc {
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
         }
         // bound PocketIc resource consumption
-        hypervisor_config.embedders_config.min_sandbox_count = 0;
         hypervisor_config.embedders_config.max_sandbox_count = 64;
         hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
+        hypervisor_config.embedders_config.max_sandboxes_rss_size =
+            NumBytes::new(2 * 1024 * 1024 * 1024);
         // shorter query stats epoch length for faster query stats aggregation
         hypervisor_config.query_stats_epoch_length = 60;
         // enable canister debug prints

@@ -42,17 +42,17 @@ const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
 /// The number of rayon threads use for the parallel page copying optimization.
 const DEFAULT_PAGE_ALLOCATOR_THREADS: usize = 8;
 
-/// Sandbox process eviction does not activate if the number of sandbox
-/// processes is below this threshold.
-pub(crate) const DEFAULT_MIN_SANDBOX_COUNT: usize = 500;
-
 /// Sandbox process eviction ensures that the number of sandbox processes is
 /// always below this threshold.
-pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 5_000;
 
 /// A sandbox process may be evicted after it has been idle for this
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
+
+/// Sandbox processes may be evicted if their total RSS memory size
+/// exceeds 100 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOXES_RSS_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024 * 1024);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
@@ -197,10 +197,6 @@ pub struct Config {
     /// execution is allowed to produce.
     pub stable_memory_dirty_page_limit: StableMemoryPageLimit,
 
-    /// Sandbox process eviction does not activate if the number of sandbox
-    /// processes is below this threshold.
-    pub min_sandbox_count: usize,
-
     /// Sandbox process eviction ensures that the number of sandbox processes is
     /// always below this threshold.
     pub max_sandbox_count: usize,
@@ -208,6 +204,10 @@ pub struct Config {
     /// A sandbox process may be evicted after it has been idle for this
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
+
+    /// Sandbox processes may be evicted if their total RSS memory size
+    /// exceeds the specified amount in bytes.
+    pub max_sandboxes_rss_size: NumBytes,
 
     /// The type of the local subnet. The default value here should be replaced
     /// with the correct value at runtime when the hypervisor is created.
@@ -265,9 +265,9 @@ impl Config {
                 upgrade: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_UPGRADE,
                 query: STABLE_MEMORY_ACCESSED_PAGE_LIMIT_QUERY,
             },
-            min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
+            max_sandboxes_rss_size: DEFAULT_MAX_SANDBOXES_RSS_SIZE,
             subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,
