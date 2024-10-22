@@ -1,9 +1,9 @@
-use candid::{decode_one, encode_one, CandidType, Decode, Encode, Principal};
-use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-use ic_cdk::api::management_canister::http_request::HttpResponse;
-use ic_cdk::api::management_canister::main::{CanisterId, CanisterIdRecord, CanisterSettings};
-use ic_cdk::api::management_canister::provisional::ProvisionalCreateCanisterWithCyclesArgument;
+use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use pocket_ic::management_canister::{
+    CanisterId, CanisterIdRecord, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
+    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrPublicKeyArgsKeyId,
+    SchnorrPublicKeyResult,
+};
 use pocket_ic::{
     common::rest::{
         BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
@@ -12,13 +12,24 @@ use pocket_ic::{
     update_candid, DefaultEffectiveCanisterIdError, ErrorCode, PocketIc, PocketIcBuilder,
     WasmResult,
 };
+#[cfg(unix)]
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{io::Read, time::SystemTime};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+#[derive(CandidType, Deserialize, Debug)]
+enum RejectionCode {
+    NoError,
+    SysFatal,
+    SysTransient,
+    DestinationInvalid,
+    CanisterReject,
+    CanisterError,
+    Unknown,
+}
 
 #[test]
 fn test_counter_canister() {
@@ -852,26 +863,6 @@ fn test_canister_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-#[derive(CandidType, Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum SchnorrAlgorithm {
-    #[serde(rename = "bip340secp256k1")]
-    Bip340Secp256k1,
-    #[serde(rename = "ed25519")]
-    Ed25519,
-}
-
-#[derive(CandidType, Serialize, Deserialize, Debug, Clone)]
-struct SchnorrKeyId {
-    pub algorithm: SchnorrAlgorithm,
-    pub name: String,
-}
-
-#[derive(CandidType, Deserialize, Debug)]
-struct SchnorrPublicKeyResponse {
-    pub public_key: Vec<u8>,
-    pub chain_code: Vec<u8>,
-}
-
 #[test]
 fn test_schnorr() {
     // We create a PocketIC instance consisting of the NNS, II, and one application subnet.
@@ -896,17 +887,17 @@ fn test_schnorr() {
     // We define the message, derivation path, and ECDSA key ID to use in this test.
     let message = b"Hello, world!==================="; // must be of length 32 bytes for BIP340
     let derivation_path = vec!["my message".as_bytes().to_vec()];
-    for algorithm in [SchnorrAlgorithm::Bip340Secp256k1, SchnorrAlgorithm::Ed25519] {
+    for algorithm in [SchnorrAlgorithm::Bip340Secp256K1, SchnorrAlgorithm::Ed25519] {
         for name in ["key_1", "test_key_1", "dfx_test_key"] {
-            let key_id = SchnorrKeyId {
-                algorithm,
+            let key_id = SchnorrPublicKeyArgsKeyId {
+                algorithm: algorithm.clone(),
                 name: name.to_string(),
             };
 
             // We get the Schnorr public key and signature via update calls to the test canister.
             let schnorr_public_key = update_candid::<
                 (Option<Principal>, _, _),
-                (Result<SchnorrPublicKeyResponse, String>,),
+                (Result<SchnorrPublicKeyResult, String>,),
             >(
                 &pic,
                 canister,
@@ -928,7 +919,7 @@ fn test_schnorr() {
 
             // We verify the Schnorr signature.
             match key_id.algorithm {
-                SchnorrAlgorithm::Bip340Secp256k1 => {
+                SchnorrAlgorithm::Bip340Secp256K1 => {
                     use k256::ecdsa::signature::hazmat::PrehashVerifier;
                     use k256::schnorr::{Signature, VerifyingKey};
                     let vk = VerifyingKey::from_bytes(&schnorr_public_key.public_key[1..]).unwrap();
@@ -983,7 +974,7 @@ fn test_ecdsa() {
         // We get the ECDSA public key and signature via update calls to the test canister.
         let ecsda_public_key = update_candid::<
             (Option<Principal>, Vec<Vec<u8>>, String),
-            (Result<EcdsaPublicKeyResponse, String>,),
+            (Result<EcdsaPublicKeyResult, String>,),
         >(
             &pic,
             canister,
@@ -1043,7 +1034,7 @@ fn test_ecdsa_disabled() {
     // We attempt to get the ECDSA public key and signature via update calls to the test canister.
     let ecsda_public_key_error = update_candid::<
         (Option<Principal>, Vec<Vec<u8>>, String),
-        (Result<EcdsaPublicKeyResponse, String>,),
+        (Result<EcdsaPublicKeyResult, String>,),
     >(
         &pic,
         canister,
@@ -1119,7 +1110,7 @@ fn test_canister_http() {
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
                 decode_one(&data).unwrap();
             assert_eq!(http_response.unwrap().body, body);
         }
@@ -1181,7 +1172,7 @@ fn test_canister_http_with_transform() {
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: HttpResponse = decode_one(&data).unwrap();
+            let http_response: HttpRequestResult = decode_one(&data).unwrap();
             // http response headers are cleared by the transform function
             assert!(http_response.headers.is_empty());
             // mocked non-empty response body is transformed to the transform context
@@ -1248,10 +1239,10 @@ fn test_canister_http_with_diverging_responses() {
     let reply = pic.await_call(call_id).unwrap();
     match reply {
         WasmResult::Reply(data) => {
-            let http_response: Result<HttpResponse, (RejectionCode, String)> =
+            let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
                 decode_one(&data).unwrap();
             let (reject_code, err) = http_response.unwrap_err();
-            assert_eq!(reject_code, RejectionCode::SysTransient);
+            assert!(matches!(reject_code, RejectionCode::SysTransient));
             let expected = "No consensus could be reached. Replicas had different responses. Details: request_id: 0, timeout: 1620328930000000005, hashes: [98387cc077af9cff2ef439132854e91cb074035bb76e2afb266960d8e3beaf11: 2], [6a2fa8e54fb4bbe62cde29f7531223d9fcf52c21c03500c1060a5f893ed32d2e: 2], [3e9ec98abf56ef680bebb14309858ede38f6fde771cd4c04cda8f066dc2810db: 2], [2c14e77f18cd990676ae6ce0d7eb89c0af9e1a66e17294b5f0efa68422bba4cb: 2], [2843e4133f673571ff919808d3ca542cc54aaf288c702944e291f0e4fafffc69: 2], [1c4ad84926c36f1fbc634a0dc0535709706f7c48f0c6ebd814fe514022b90671: 2], [7bf80e2f02011ab0a7836b526546e75203b94e856d767c9df4cb0c19baf34059: 1]";
             assert_eq!(err, expected);
         }
@@ -1354,6 +1345,7 @@ fn subnet_metrics() {
     assert!((1 << 16) < metrics.canister_state_bytes && metrics.canister_state_bytes < (1 << 17));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_raw_gateway() {
     // We create a PocketIC instance consisting of the NNS and one application subnet.
@@ -1410,9 +1402,11 @@ fn create_canister_with_effective_canister_id(
         RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec()),
         Principal::anonymous(),
         "provisional_create_canister_with_cycles",
-        (ProvisionalCreateCanisterWithCyclesArgument {
+        (ProvisionalCreateCanisterWithCyclesArgs {
             settings: None,
+            specified_id: None,
             amount: None,
+            sender_canister_version: None,
         },),
     )
     .map(|(x,)| x)
@@ -1430,9 +1424,11 @@ async fn create_canister_with_effective_canister_id_nonblocking(
         RawEffectivePrincipal::CanisterId(effective_canister_id.as_slice().to_vec()),
         Principal::anonymous(),
         "provisional_create_canister_with_cycles",
-        (ProvisionalCreateCanisterWithCyclesArgument {
+        (ProvisionalCreateCanisterWithCyclesArgs {
             settings: None,
+            specified_id: None,
             amount: None,
+            sender_canister_version: None,
         },),
     )
     .await

@@ -332,15 +332,24 @@ impl TaskQueue {
     }
 
     pub fn front(&self) -> Option<&ExecutionTask> {
-        self.paused_or_aborted_task
-            .as_ref()
-            .or_else(|| self.queue.front())
+        self.paused_or_aborted_task.as_ref().or_else(|| {
+            if self.on_low_wasm_memory_hook_status.is_ready() {
+                Some(&ExecutionTask::OnLowWasmMemory)
+            } else {
+                self.queue.front()
+            }
+        })
     }
 
     pub fn pop_front(&mut self) -> Option<ExecutionTask> {
-        self.paused_or_aborted_task
-            .take()
-            .or_else(|| self.queue.pop_front())
+        self.paused_or_aborted_task.take().or_else(|| {
+            if self.on_low_wasm_memory_hook_status.is_ready() {
+                self.on_low_wasm_memory_hook_status = OnLowWasmMemoryHookStatus::Executed;
+                Some(ExecutionTask::OnLowWasmMemory)
+            } else {
+                self.queue.pop_front()
+            }
+        })
     }
 
     pub fn remove(&mut self, task: ExecutionTask) {
@@ -354,7 +363,7 @@ impl TaskQueue {
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => unreachable!(
-                "Removal of task from TaskQueue is only supported for OnLowWasmMemory type."
+                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.", task
             ),
         };
     }
@@ -376,11 +385,19 @@ impl TaskQueue {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.paused_or_aborted_task.is_none() && self.queue.is_empty()
+        self.paused_or_aborted_task.is_none()
+            && !self.on_low_wasm_memory_hook_status.is_ready()
+            && self.queue.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.paused_or_aborted_task.as_ref().map_or(0, |_| 1) + self.queue.len()
+        self.queue.len()
+            + self.paused_or_aborted_task.as_ref().map_or(0, |_| 1)
+            + if self.on_low_wasm_memory_hook_status.is_ready() {
+                1
+            } else {
+                0
+            }
     }
 
     /// peek_hook_status will be removed in the follow-up EXC-1752.
@@ -517,7 +534,7 @@ impl TaskQueue {
                     self.paused_or_aborted_task,
                     Some(ExecutionTask::PausedExecution { .. })
                 ),
-                "Received aborted task {:?} which is not compatible with paused task {:?}.",
+                "Received aborted task {:?} is not compatible with paused task {:?}.",
                 aborted_task,
                 self.paused_or_aborted_task
             ),
@@ -526,7 +543,7 @@ impl TaskQueue {
                     self.paused_or_aborted_task,
                     Some(ExecutionTask::PausedInstallCode(_))
                 ),
-                "Received aborted task {:?} which is not compatible with paused task {:?}.",
+                "Received aborted task {:?} is not compatible with paused task {:?}.",
                 aborted_task,
                 self.paused_or_aborted_task
             ),
@@ -680,6 +697,10 @@ impl OnLowWasmMemoryHookStatus {
         } else {
             Self::ConditionNotSatisfied
         };
+    }
+
+    fn is_ready(&self) -> bool {
+        *self == Self::Ready
     }
 }
 
@@ -855,6 +876,20 @@ pub enum ExecutionTask {
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
+}
+
+impl ExecutionTask {
+    pub fn is_hook(&self) -> bool {
+        match self {
+            Self::OnLowWasmMemory => true,
+            Self::Heartbeat
+            | Self::GlobalTimer
+            | Self::PausedExecution { .. }
+            | Self::PausedInstallCode(_)
+            | Self::AbortedExecution { .. }
+            | Self::AbortedInstallCode { .. } => false,
+        }
+    }
 }
 
 impl From<&ExecutionTask> for pb::ExecutionTask {
@@ -2663,5 +2698,139 @@ mod tests {
         };
 
         task_queue.replace_paused_with_aborted_task(aborted_install_code);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_heartbeat() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.remove(ExecutionTask::Heartbeat);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_global_timer() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.remove(ExecutionTask::GlobalTimer);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_paused_install_code() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.remove(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_paused_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.remove(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_aborted_install_code() {
+        let mut task_queue = TaskQueue::default();
+
+        let ingress = Arc::new(IngressBuilder::new().method_name("test_ingress").build());
+
+        task_queue.remove(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Ingress(Arc::clone(&ingress)),
+            prepaid_execution_cycles: Cycles::new(1),
+            call_id: InstallCodeCallId::new(0),
+        });
+    }
+
+    #[test]
+    #[should_panic(expected = "Unsuccessful removal of the task")]
+    fn test_task_queue_remove_aborted_execution() {
+        let mut task_queue = TaskQueue::default();
+        task_queue.remove(ExecutionTask::AbortedExecution {
+            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+    }
+
+    #[test]
+    fn test_task_queue_remove_on_low_wasm_memory_hook() {
+        let mut task_queue = TaskQueue::default();
+        assert!(task_queue.is_empty());
+
+        // Queue is empty, so remove should be no_op.
+        task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        assert!(task_queue.is_empty());
+
+        // ExecutionTask::OnLowWasmMemory is added to queue.
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        assert_eq!(task_queue.len(), 1);
+        assert_eq!(task_queue.front(), Some(&ExecutionTask::OnLowWasmMemory));
+
+        // After removing queue is empty.
+        task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        assert!(task_queue.is_empty());
+
+        // ExecutionTask::OnLowWasmMemory can be added to the queue again.
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        assert_eq!(task_queue.len(), 1);
+        assert_eq!(task_queue.front(), Some(&ExecutionTask::OnLowWasmMemory));
+    }
+
+    #[test]
+    fn test_task_queue_pop_front_on_low_wasm_memory() {
+        let mut task_queue = TaskQueue::default();
+
+        // `ExecutionTask::OnLowWasmMemory` is added to queue.
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        assert_eq!(task_queue.len(), 1);
+
+        assert_eq!(task_queue.pop_front(), Some(ExecutionTask::OnLowWasmMemory));
+        assert!(task_queue.is_empty());
+
+        // After `pop` of `OnLowWasmMemory` from queue `OnLowWasmMemoryHookStatus`
+        // will be `Executed` so `enqueue` of `OnLowWasmMemory` is no-op.
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        assert!(task_queue.is_empty());
+
+        // After removing `OnLowWasmMemory` from queue `OnLowWasmMemoryHookStatus`
+        // will become `ConditionNotSatisfied`.
+        task_queue.remove(ExecutionTask::OnLowWasmMemory);
+        assert!(task_queue.is_empty());
+
+        // So now `enqueue` of `OnLowWasmMemory` will set `OnLowWasmMemoryHookStatus`
+        // to `Ready`.
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+        assert_eq!(task_queue.len(), 1);
+
+        assert_eq!(task_queue.pop_front(), Some(ExecutionTask::OnLowWasmMemory));
+    }
+
+    #[test]
+    fn test_task_queue_test_enqueue() {
+        let mut task_queue = TaskQueue::default();
+        assert!(task_queue.is_empty());
+
+        task_queue.enqueue(ExecutionTask::Heartbeat);
+        task_queue.enqueue(ExecutionTask::PausedInstallCode(PausedExecutionId(0)));
+        task_queue.enqueue(ExecutionTask::GlobalTimer);
+        task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
+
+        assert!(!task_queue.is_empty());
+        assert_eq!(task_queue.len(), 4);
+
+        // Disregarding order of `enqueue` operations, if there is
+        // paused task, it should be returned the first.
+        assert_eq!(
+            task_queue.pop_front(),
+            Some(ExecutionTask::PausedInstallCode(PausedExecutionId(0)))
+        );
+
+        // Disregarding order of `enqueue` operations, if there is OnLowWasmMemory
+        // task, it should be returned right after paused or aborted task if there is one.
+        assert_eq!(task_queue.pop_front(), Some(ExecutionTask::OnLowWasmMemory));
+
+        // The rest of the tasks should be returned in the LIFO order.
+        assert_eq!(task_queue.pop_front(), Some(ExecutionTask::GlobalTimer));
+        assert_eq!(task_queue.pop_front(), Some(ExecutionTask::Heartbeat));
     }
 }
