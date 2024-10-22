@@ -212,6 +212,7 @@ impl LedgerSuiteOrchestrator {
         new_ledger_suite_orchestrator_wasm: Vec<u8>,
         upgrade_arg: UpgradeArg,
     ) -> Self {
+        let now = std::time::SystemTime::now();
         self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
         let new_embedded_ledger_wasm_hash = upgrade_arg
             .ledger_compressed_wasm_hash
@@ -235,14 +236,18 @@ impl LedgerSuiteOrchestrator {
                 Encode!(&OrchestratorArg::UpgradeArg(upgrade_arg)).unwrap(),
             )
             .expect("Failed to upgrade ERC20");
-        Self {
+        let res = Self {
             env: self.env,
             ledger_suite_orchestrator_id: self.ledger_suite_orchestrator_id,
             ledger_suite_orchestrator_wasm: new_ledger_suite_orchestrator_wasm,
             embedded_ledger_wasm_hash: new_embedded_ledger_wasm_hash,
             embedded_index_wasm_hash: new_embedded_index_wasm_hash,
             embedded_archive_wasm_hash: new_embedded_archive_wasm_hash,
+        };
+        if let Some(d) = now.elapsed().ok() {
+            println!("upgrade_ledger_suite_orchestrator finished in {}ms", d.as_millis());
         }
+        res
     }
 
     pub fn call_orchestrator_canister_ids(

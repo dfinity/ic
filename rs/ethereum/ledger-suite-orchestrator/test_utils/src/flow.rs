@@ -176,12 +176,19 @@ impl ManagedCanistersAssert {
         caller: &UniversalCanister,
         predicate: P,
     ) -> Self {
+        let now = std::time::SystemTime::now();
         let canister_info = caller.canister_info(self.ledger_canister_id());
         assert!(
             predicate(&canister_info),
             "BUG: ledger canister info does not satisfy predicate. Canister info: {:?}",
             canister_info
         );
+        if let Some(d) = now.elapsed().ok() {
+            println!(
+                "assert_ledger_canister_info_satisfy finished in {}ms",
+                d.as_millis()
+            )
+        }
         self
     }
 
@@ -242,6 +249,7 @@ impl ManagedCanistersAssert {
         controller: T,
         wasm: LedgerWasm,
     ) -> Self {
+        let now = std::time::SystemTime::now();
         out_of_band_upgrade(
             &self,
             controller.into(),
@@ -249,6 +257,9 @@ impl ManagedCanistersAssert {
             wasm.to_bytes(),
         )
         .expect("failed to upgrade ledger canister");
+        if let Some(d) = now.elapsed().ok() {
+            println!("ledger_out_of_band_upgrade finished in {}ms", d.as_millis())
+        }
         self
     }
 
@@ -356,11 +367,18 @@ impl ManagedCanistersAssert {
     }
 
     pub fn assert_ledger_has_wasm_hash<T: AsRef<[u8]>>(self, expected: T) -> Self {
+        let now = std::time::SystemTime::now();
         assert_eq!(
             self.ledger_canister_status().module_hash(),
             Some(expected.as_ref().to_vec()),
             "BUG: unexpected wasm hash for ledger canister"
         );
+        if let Some(d) = now.elapsed().ok() {
+            println!(
+                "assert_ledger_has_wasm_hash finished in {}ms",
+                d.as_millis()
+            )
+        }
         self
     }
 
