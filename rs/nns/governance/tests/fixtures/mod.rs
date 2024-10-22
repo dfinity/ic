@@ -734,7 +734,7 @@ impl NNS {
             .ledger
             .accounts
             .clone();
-        let governance_proto = self.governance.clone_proto();
+        let governance_proto = self.governance.__get_state_for_test();
         NNSState {
             now: self.now(),
             accounts,
