@@ -16,9 +16,8 @@ Following that are the options specifying the configuration to write. Each of
 option takes a value given as next argument, and any number of the following
 options may be specified:
 
-  --ipv6_address a:b::c/n
-    The IPv6 address to assign. Must include netmask in bits (e.g.
-    dead:beef::1/64). Overrides all other generation for testing.
+  --guestos_config path
+    The serialized GuestOS config object.
 
   --ic_crypto path
     Injected crypto state. Should point to a directory containing material
@@ -56,10 +55,9 @@ function build_ic_bootstrap_tar() {
     local OUT_FILE="$1"
     shift
 
-    local IPV6_ADDRESS
+    local GUESTOS_CONFIG
+    local NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY ACCOUNTS_SSH_AUTHORIZED_KEYS
     local IC_CRYPTO IC_STATE IC_REGISTRY_LOCAL_STORE
-    local NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
-    local ACCOUNTS_SSH_AUTHORIZED_KEYS
 
     while true; do
         if [ $# == 0 ]; then
@@ -67,8 +65,17 @@ function build_ic_bootstrap_tar() {
         fi
         case "$1" in
 
-            --ipv6_address)
-                IPV6_ADDRESS="$2"
+            --guestos_config)
+                GUESTOS_CONFIG="$2"
+                ;;
+            --nns_public_key)
+                NNS_PUBLIC_KEY="$2"
+                ;;
+            --node_operator_private_key)
+                NODE_OPERATOR_PRIVATE_KEY="$2"
+                ;;
+            --accounts_ssh_authorized_keys)
+                ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
             --ic_crypto)
                 IC_CRYPTO="$2"
@@ -78,15 +85,6 @@ function build_ic_bootstrap_tar() {
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
-                ;;
-            --nns_public_key)
-                NNS_PUBLIC_KEY="$2"
-                ;;
-            --accounts_ssh_authorized_keys)
-                ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
-                ;;
-            --node_operator_private_key)
-                NODE_OPERATOR_PRIVATE_KEY="$2"
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -100,7 +98,10 @@ function build_ic_bootstrap_tar() {
 
     local BOOTSTRAP_TMPDIR=$(mktemp -d)
 
-    # todo: switch nns_public_key.pem, node_operator_private_key.pem. and accounts_ssh to use config object
+    if [ "${GUESTOS_CONFIG}" != "" ]; then
+        cp "${GUESTOS_CONFIG}" "${BOOTSTRAP_TMPDIR}/config.json"
+    fi
+
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
     fi
@@ -111,7 +112,6 @@ function build_ic_bootstrap_tar() {
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
     fi
 
-    # todo: investigate what to do for...
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
     fi
@@ -121,12 +121,6 @@ function build_ic_bootstrap_tar() {
     if [ "${IC_REGISTRY_LOCAL_STORE}" != "" ]; then
         cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
     fi
-
-    # Create guestos config.json
-    echo "* Generating 'config-guestos.json'..."
-    /opt/ic/bin/config generate-guestos-config --guestos-ipv6-address "$IPV6_ADDRESS"
-    echo "* Copying 'config-guestos.json' to GuestOS config partition..."
-    cp /boot/config/config-guestos.json "${BOOTSTRAP_TMPDIR}/config.json"
 
     tar cf "${OUT_FILE}" \
         --sort=name \
