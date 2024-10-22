@@ -5,7 +5,7 @@ Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initia
 In production, configuration is propagated from a partition on the USB installer through each of SetupOS, HostOS and GuestOS.
 This process is controlled by the (link:../../rs/ic_os/config/README.md[ic-os config tool]) and an assortment of bash scripts.
 
-All access to the config partition should be done through the ic-os config tool.
+All access to the config partition should be done through the ic-os config tool and config object.
 
 == User-facing configuration files
 
