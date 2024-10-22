@@ -1,4 +1,11 @@
-package(default_visibility = ["//ic-os:__subpackages__"])
+package(default_visibility = ["//ic-os/components:__subpackages__"])
+
+exports_files(glob(
+    ["*"],
+    exclude = [
+        "BUILD.bazel",
+    ],
+))
 
 genrule(
     name = "test-kernel-cmdline-function-runner",
