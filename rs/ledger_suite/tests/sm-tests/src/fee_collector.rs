@@ -5,6 +5,7 @@ use crate::{
 };
 use candid::{CandidType, Encode};
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 
@@ -126,8 +127,16 @@ where
         .unwrap();
 }
 
-pub fn test_fee_collector_blocks<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
+pub enum BlockRetrieval {
+    Legacy,
+    Icrc3,
+}
+
+pub fn test_fee_collector_blocks<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+    block_retrieval: BlockRetrieval,
+) where
     T: CandidType,
 {
     fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
@@ -214,7 +223,14 @@ where
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform the transfer");
 
-                let blocks = get_blocks(&env, ledger_id.get().0, 0, 4).blocks;
+                let blocks = match block_retrieval {
+                    BlockRetrieval::Legacy => get_blocks(&env, ledger_id.get().0, 0, 4).blocks,
+                    BlockRetrieval::Icrc3 => icrc3_get_blocks(&env, ledger_id, 0, 4)
+                        .blocks
+                        .into_iter()
+                        .map(|b| GenericBlock::from(b.block))
+                        .collect(),
+                };
 
                 // The first block must have the fee collector explicitly defined.
                 assert_eq!(
@@ -251,7 +267,16 @@ where
                     .expect("Unable to perform the transfer");
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform the transfer");
-                let blocks = get_blocks(&env, ledger_id.get().0, block_id, 3).blocks;
+                let blocks = match block_retrieval {
+                    BlockRetrieval::Legacy => {
+                        get_blocks(&env, ledger_id.get().0, block_id, 3).blocks
+                    }
+                    BlockRetrieval::Icrc3 => icrc3_get_blocks(&env, ledger_id, block_id, 3)
+                        .blocks
+                        .into_iter()
+                        .map(|b| GenericBlock::from(b.block))
+                        .collect(),
+                };
                 assert_eq!(
                     fee_collector_from_block(blocks.first().unwrap().clone()),
                     (Some(account_from), None)

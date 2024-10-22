@@ -10,6 +10,7 @@ use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
 use ic_ledger_suite_state_machine_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
@@ -284,7 +285,10 @@ fn check_transfer_model() {
 
 #[test]
 fn check_fee_collector() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -292,6 +296,16 @@ fn check_fee_collector_blocks() {
     ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
         ledger_wasm(),
         encode_init_args,
+        BlockRetrieval::Legacy,
+    );
+}
+
+#[test]
+fn check_fee_collector_icrc3_blocks() {
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
+        ledger_wasm(),
+        encode_init_args,
+        BlockRetrieval::Icrc3,
     );
 }
 

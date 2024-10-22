@@ -478,6 +478,29 @@ fn get_archive_blocks(
     get_transactions_as(env, archive, start, length, "get_blocks".to_string())
 }
 
+fn icrc3_get_blocks(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> GetBlocksResult {
+    Decode!(
+        &env.query(
+            canister_id,
+            "icrc3_get_blocks",
+            Encode!(&vec![GetTransactionsRequest {
+                start: Nat::from(start),
+                length: Nat::from(length)
+            }])
+            .unwrap()
+        )
+        .expect("failed to query ledger blocks")
+        .bytes(),
+        GetBlocksResult
+    )
+    .expect("failed to decode icrc3_get_blocks response")
+}
+
 fn get_phash(block: &IcrcBlock) -> Result<Option<Hash>, String> {
     match block {
         IcrcBlock::Map(map) => {
