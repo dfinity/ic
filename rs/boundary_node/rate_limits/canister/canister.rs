@@ -33,7 +33,7 @@ fn init(init_arg: InitArg) {
     // Initialize an empty config with version=1
     init_version_and_config(1);
 
-    let interval = std::time::Duration::from_secs(init_arg.registry_polling_period_secs);
+    let interval = Duration::from_secs(init_arg.registry_polling_period_secs);
 
     periodically_poll_api_boundary_nodes(interval);
 }
