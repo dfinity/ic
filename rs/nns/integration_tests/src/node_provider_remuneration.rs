@@ -764,7 +764,6 @@ fn set_icp_xdr_conversion_rate(
         state_machine,
         CYCLES_MINTING_CANISTER_ID,
         "set_icp_xdr_conversion_rate",
-        candid_one,
         payload,
         GOVERNANCE_CANISTER_ID.get(),
     )

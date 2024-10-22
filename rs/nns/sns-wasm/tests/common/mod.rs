@@ -52,7 +52,6 @@ pub fn get_deployed_sns_by_proposal_id(
         machine,
         SNS_WASM_CANISTER_ID,
         "get_deployed_sns_by_proposal_id",
-        candid_one,
         GetDeployedSnsByProposalIdRequest { proposal_id },
         PrincipalId::new_anonymous(),
     )

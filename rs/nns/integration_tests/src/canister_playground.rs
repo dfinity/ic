@@ -20,7 +20,6 @@ fn test_canister_playground() {
         &state_machine,
         playground_id,
         "test",
-        candid_one,
         (),
         PrincipalId::new_anonymous(),
     )

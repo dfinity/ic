@@ -63,7 +63,6 @@ fn test_canisters_are_created_and_installed() {
         &state_machine,
         CanisterId::unchecked_from_principal(root_canister_id),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },
@@ -386,7 +385,6 @@ fn test_deploy_sns_and_transfer_dapps() {
         &machine,
         CanisterId::unchecked_from_principal(root_canister_principal),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },

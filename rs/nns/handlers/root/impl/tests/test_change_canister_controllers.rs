@@ -99,7 +99,6 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )
@@ -115,7 +114,6 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "change_canister_controllers",
-        candid_one::<ChangeCanisterControllersRequest, _>,
         ChangeCanisterControllersRequest {
             target_canister_id: universal.get(),
             new_controllers: vec![ROOT_CANISTER_ID.get(), test_canister_id.get()],
@@ -130,7 +128,6 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "change_canister_controllers",
-        candid_one,
         ChangeCanisterControllersRequest {
             target_canister_id: universal.get(),
             new_controllers: vec![ROOT_CANISTER_ID.get(), test_canister_id.get()],
@@ -151,7 +148,6 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )

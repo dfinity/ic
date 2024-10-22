@@ -341,8 +341,19 @@ where
         self.main.len().min(usize::MAX as u64) as usize
     }
 
-    /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
+    where
+        R: RangeBounds<NeuronId> + Clone,
+    {
+        self.range_neurons_sections(range, NeuronSections::all())
+    }
+
+    /// Returns the next neuron_id equal to or higher than the provided neuron_id
+    pub fn range_neurons_sections<R>(
+        &self,
+        range: R,
+        sections: NeuronSections,
+    ) -> impl Iterator<Item = Neuron> + '_
     where
         R: RangeBounds<NeuronId> + Clone,
     {
@@ -377,42 +388,62 @@ where
         main_range.map(move |(main_neuron_id, abridged_neuron)| {
             // We'll collect data from all relevant maps for this neuron_id
 
-            let hot_keys = collect_values_for_neuron_from_peekable_range(
-                &mut hot_keys_iter,
-                main_neuron_id,
-                |((neuron_id, _), _)| *neuron_id,
-                |((_, _), principal)| PrincipalId::from(principal),
-            );
+            let hot_keys = if sections.hot_keys {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut hot_keys_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), principal)| PrincipalId::from(principal),
+                )
+            } else {
+                vec![]
+            };
 
-            let ballots = collect_values_for_neuron_from_peekable_range(
-                &mut recent_ballots_iter,
-                main_neuron_id,
-                |((neuron_id, _), _)| *neuron_id,
-                |((_, _), ballot_info)| ballot_info,
-            );
+            let ballots = if sections.recent_ballots {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut recent_ballots_iter,
+                    main_neuron_id,
+                    |((neuron_id, _), _)| *neuron_id,
+                    |((_, _), ballot_info)| ballot_info,
+                )
+            } else {
+                vec![]
+            };
 
-            let followees = collect_values_for_neuron_from_peekable_range(
-                &mut followees_iter,
-                main_neuron_id,
-                |(followees_key, _)| followees_key.follower_id,
-                |x| x,
-            );
+            let followees = if sections.followees {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut followees_iter,
+                    main_neuron_id,
+                    |(followees_key, _)| followees_key.follower_id,
+                    |x| x,
+                )
+            } else {
+                vec![]
+            };
 
-            let current_known_neuron_data = collect_values_for_neuron_from_peekable_range(
-                &mut known_neuron_data_iter,
-                main_neuron_id,
-                |(neuron_id, _)| *neuron_id,
-                |(_, known_neuron_data)| known_neuron_data,
-            )
-            .pop();
+            let current_known_neuron_data = if sections.known_neuron_data {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut known_neuron_data_iter,
+                    main_neuron_id,
+                    |(neuron_id, _)| *neuron_id,
+                    |(_, known_neuron_data)| known_neuron_data,
+                )
+                .pop()
+            } else {
+                None
+            };
 
-            let current_transfer = collect_values_for_neuron_from_peekable_range(
-                &mut transfer_iter,
-                main_neuron_id,
-                |(neuron_id, _)| *neuron_id,
-                |(_, transfer)| transfer,
-            )
-            .pop();
+            let current_transfer = if sections.transfer {
+                collect_values_for_neuron_from_peekable_range(
+                    &mut transfer_iter,
+                    main_neuron_id,
+                    |(neuron_id, _)| *neuron_id,
+                    |(_, transfer)| transfer,
+                )
+                .pop()
+            } else {
+                None
+            };
 
             Neuron::from(DecomposedNeuron {
                 id: main_neuron_id,
