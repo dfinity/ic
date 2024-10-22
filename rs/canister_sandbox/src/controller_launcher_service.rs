@@ -5,6 +5,9 @@ use crate::rpc::{Call, DemuxServer};
 pub trait ControllerLauncherService: Send + Sync {
     /// Triggered when a sandbox process has unexpectedly exited.
     fn sandbox_exited(&self, req: SandboxExitedRequest) -> Call<SandboxExitedReply>;
+
+    /// Called when spawning a sandbox has completed.
+    fn sandbox_created(&self, req: SandboxCreatedRequest) -> Call<SandboxCreatedReply>;
 }
 
 impl<Svc: ControllerLauncherService + Send + Sync> DemuxServer<Request, Reply> for Svc {
@@ -14,6 +17,9 @@ impl<Svc: ControllerLauncherService + Send + Sync> DemuxServer<Request, Reply> f
         match req {
             Request::SandboxExited(req) => {
                 Call::new_wrap(self.sandbox_exited(req), Reply::SandboxExited)
+            }
+            Request::SandboxCreated(req) => {
+                Call::new_wrap(self.sandbox_created(req), Reply::SandboxCreated)
             }
         }
     }

@@ -13,7 +13,7 @@ use crate::{
     process::spawn_socketed_process,
     protocol::{
         self,
-        ctllaunchersvc::SandboxExitedRequest,
+        ctllaunchersvc::{SandboxCreatedRequest, SandboxExitedRequest},
         launchersvc::{
             LaunchCompilerReply, LaunchCompilerRequest, LaunchSandboxReply, LaunchSandboxRequest,
             TerminateReply, TerminateRequest,
@@ -96,6 +96,8 @@ pub struct LauncherServer {
     pid_to_process_info: Arc<Mutex<HashMap<Pid, ProcessInfo>>>,
     has_children: Arc<Condvar>,
     embedder_config_arg: String,
+    controller: ControllerLauncherClientStub,
+    workers: threadpool::ThreadPool,
 }
 
 impl LauncherServer {
@@ -104,6 +106,7 @@ impl LauncherServer {
         let has_children = Arc::new(Condvar::new());
         let watcher_process_info_map = Arc::clone(&pid_to_process_info);
         let watcher_has_children = Arc::clone(&has_children);
+        let controller_copy = controller.clone();
         thread::spawn(move || loop {
             // Explicitly drop the lock on the id map before waiting on children
             // (to avoid a deadlock with the `launch_sandbox`).
@@ -145,7 +148,7 @@ impl LauncherServer {
                         if should_panic {
                             // If we have a canister id, tell the replica process to print its history.
                             if let Some(canister_id) = process_info.and_then(|x| x.canister_id) {
-                                controller
+                                controller_copy
                                     .sandbox_exited(SandboxExitedRequest { canister_id })
                                     .sync()
                                     .unwrap();
@@ -160,6 +163,8 @@ impl LauncherServer {
             pid_to_process_info,
             has_children,
             embedder_config_arg,
+            controller,
+            workers: threadpool::ThreadPool::new(6),
         }
     }
 }
@@ -174,36 +179,51 @@ impl LauncherService for LauncherServer {
             socket,
         }: LaunchSandboxRequest,
     ) -> rpc::Call<LaunchSandboxReply> {
-        match spawn_socketed_process(&sandbox_exec_path, &argv, socket) {
-            Ok(child_handle) => {
-                // Ensure the launcher closes its end of the socket.
-                drop(unsafe { UnixStream::from_raw_fd(socket) });
+        let controller = self.controller.clone();
+        let pid_to_process_info = Arc::clone(&self.pid_to_process_info);
+        let has_children = Arc::clone(&self.has_children);
+        self.workers.execute(move || {
+            match spawn_socketed_process(&sandbox_exec_path, &argv, socket) {
+                Ok(child_handle) => {
+                    // Ensure the launcher closes its end of the socket.
+                    drop(unsafe { UnixStream::from_raw_fd(socket) });
 
-                let mut info_map = self.pid_to_process_info.lock().unwrap();
+                    let mut info_map = pid_to_process_info.lock().unwrap();
 
-                // If there were no children before, then notify the waiting
-                // thread that we have children.
-                if info_map.is_empty() {
-                    self.has_children.notify_one();
+                    // If there were no children before, then notify the waiting
+                    // thread that we have children.
+                    if info_map.is_empty() {
+                        has_children.notify_one();
+                    }
+
+                    // Record the canister id associated with this process.
+                    let pid = child_handle.id();
+                    info_map.insert(
+                        Pid::from_raw(pid as i32),
+                        ProcessInfo {
+                            canister_id: Some(canister_id),
+                            panic_on_failure: true,
+                        },
+                    );
+                    controller
+                        .sandbox_created(SandboxCreatedRequest {
+                            canister_id,
+                            pid: Some(pid),
+                        })
+                        .on_completion(|_| ());
                 }
-
-                // Record the canister id associated with this process.
-                let pid = child_handle.id();
-                info_map.insert(
-                    Pid::from_raw(pid as i32),
-                    ProcessInfo {
-                        canister_id: Some(canister_id),
-                        panic_on_failure: true,
-                    },
-                );
-
-                rpc::Call::new_resolved(Ok(LaunchSandboxReply { pid }))
+                Err(err) => {
+                    eprintln!("Error spawning sandbox process: {}", err);
+                    controller
+                        .sandbox_created(SandboxCreatedRequest {
+                            canister_id,
+                            pid: None,
+                        })
+                        .on_completion(|_| ());
+                }
             }
-            Err(err) => {
-                eprintln!("Error spawning sandbox process: {}", err);
-                rpc::Call::new_resolved(Err(rpc::Error::ServerError))
-            }
-        }
+        });
+        rpc::Call::new_resolved(Ok(LaunchSandboxReply { success: true }))
     }
 
     fn launch_compiler(

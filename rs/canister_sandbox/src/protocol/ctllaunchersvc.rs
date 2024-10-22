@@ -10,13 +10,17 @@ pub struct SandboxExitedRequest {
     pub canister_id: CanisterId,
 }
 
-impl EnumerateInnerFileDescriptors for SandboxExitedRequest {
-    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
+#[derive(Clone, Deserialize, Serialize)]
+pub struct SandboxCreatedRequest {
+    pub canister_id: CanisterId,
+    /// None indicates failure to spawn.
+    pub pid: Option<u32>,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Request {
     SandboxExited(SandboxExitedRequest),
+    SandboxCreated(SandboxCreatedRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
@@ -26,14 +30,14 @@ impl EnumerateInnerFileDescriptors for Request {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SandboxExitedReply;
 
-impl EnumerateInnerFileDescriptors for SandboxExitedReply {
-    fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {}
-}
+#[derive(Clone, Deserialize, Serialize)]
+pub struct SandboxCreatedReply;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Deserialize, Serialize)]
 pub enum Reply {
     SandboxExited(SandboxExitedReply),
+    SandboxCreated(SandboxCreatedReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {

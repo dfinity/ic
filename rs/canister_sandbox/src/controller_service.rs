@@ -2,7 +2,7 @@ use crate::protocol::ctlsvc::*;
 use crate::protocol::logging::LogRequest;
 use crate::rpc::{Call, DemuxServer};
 
-/// RPC interface exposed by sandbox process.
+/// RPC interface exposed by replica to sandbox process.
 pub trait ControllerService: Send + Sync {
     /// Triggered when wasm code execution finishes. Results of execution
     /// (if successful) are transferred through this call.

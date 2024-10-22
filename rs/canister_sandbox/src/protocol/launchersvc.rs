@@ -25,7 +25,7 @@ impl EnumerateInnerFileDescriptors for LaunchSandboxRequest {
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct LaunchSandboxReply {
-    pub pid: u32,
+    pub success: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

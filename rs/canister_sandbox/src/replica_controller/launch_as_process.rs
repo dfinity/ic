@@ -83,7 +83,7 @@ pub fn spawn_canister_sandbox_process(
     canister_id: CanisterId,
     controller_service: Arc<super::controller_service_impl::ControllerServiceImpl>,
     launcher: &dyn LauncherService,
-) -> std::io::Result<(Arc<dyn SandboxService>, u32, std::thread::JoinHandle<()>)> {
+) -> std::io::Result<(Arc<dyn SandboxService>, std::thread::JoinHandle<()>)> {
     let (sock_controller, sock_sandbox) = std::os::unix::net::UnixStream::pair()?;
     let request = LaunchSandboxRequest {
         sandbox_exec_path: exec_path.to_string(),
@@ -91,7 +91,7 @@ pub fn spawn_canister_sandbox_process(
         canister_id,
         socket: sock_sandbox.as_raw_fd(),
     };
-    let LaunchSandboxReply { pid } = launcher.launch_sandbox(request).sync()?;
+    let LaunchSandboxReply { success: _ } = launcher.launch_sandbox(request).sync()?;
 
     let socket = Arc::new(sock_controller);
 
@@ -131,7 +131,7 @@ pub fn spawn_canister_sandbox_process(
         out.stop();
     });
 
-    Ok((svc, pid, thread_handle))
+    Ok((svc, thread_handle))
 }
 
 /// Spawns a sandbox process for the given canister.
@@ -140,11 +140,11 @@ pub fn create_sandbox_process(
     launcher_service: &dyn LauncherService,
     canister_id: CanisterId,
     mut argv: Vec<String>,
-) -> std::io::Result<(Arc<dyn SandboxService>, u32)> {
+) -> std::io::Result<Arc<dyn SandboxService>> {
     assert!(!argv.is_empty());
     argv.push(canister_id.to_string());
 
-    let (sandbox_handle, pid, _recv_thread_handle) = spawn_canister_sandbox_process(
+    let (sandbox_handle, _recv_thread_handle) = spawn_canister_sandbox_process(
         &argv[0],
         &argv[1..],
         canister_id,
@@ -152,5 +152,5 @@ pub fn create_sandbox_process(
         launcher_service,
     )
     .expect("Failed to start sandbox process");
-    Ok((sandbox_handle, pid))
+    Ok(sandbox_handle)
 }

@@ -637,6 +637,7 @@ pub struct SandboxedExecutionController {
     /// - An entry is removed from the registry only if it is in the `evicted`
     ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    waiting_threads: Arc<Mutex<HashMap<CanisterId, Vec<std::sync::mpsc::Sender<Option<u32>>>>>>,
     min_sandbox_count: usize,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
@@ -1067,6 +1068,7 @@ impl SandboxedExecutionController {
         let sandbox_exec_argv =
             create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
         let backends = Arc::new(Mutex::new(HashMap::new()));
+        let waiting_threads = Arc::new(Mutex::new(HashMap::new()));
         let metrics = Arc::new(SandboxedExecutionMetrics::new(metrics_registry));
 
         let backends_copy = Arc::clone(&backends);
@@ -1089,6 +1091,7 @@ impl SandboxedExecutionController {
         let exit_watcher = Arc::new(ExitWatcher {
             logger: logger.clone(),
             backends: Arc::clone(&backends),
+            waiting_threads: Arc::clone(&waiting_threads),
         });
 
         let (launcher_service, mut child) = spawn_launcher_process(
@@ -1108,6 +1111,7 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
+            waiting_threads,
             min_sandbox_count,
             max_sandbox_count,
             max_sandbox_idle_time,
@@ -1244,61 +1248,71 @@ impl SandboxedExecutionController {
     }
 
     fn get_sandbox_process(&self, canister_id: CanisterId) -> Arc<SandboxProcess> {
-        let mut guard = self.backends.lock().unwrap();
+        {
+            let mut guard = self.backends.lock().unwrap();
 
-        if let Some(backend) = (*guard).get_mut(&canister_id) {
-            let old = std::mem::replace(backend, Backend::Empty);
-            let sandbox_process_and_stats = match old {
-                Backend::Active {
-                    sandbox_process,
-                    stats,
-                } => Some((sandbox_process, stats)),
-                Backend::Evicted {
-                    sandbox_process,
-                    stats,
-                } => sandbox_process.upgrade().map(|p| (p, stats)),
-                Backend::Empty => None,
-            };
-            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
-                let now = std::time::Instant::now();
-                if self.max_sandbox_count > 0 {
-                    *backend = Backend::Active {
-                        sandbox_process: Arc::clone(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
-                    };
-                } else {
-                    *backend = Backend::Evicted {
-                        sandbox_process: Arc::downgrade(&sandbox_process),
-                        stats: SandboxProcessStats { last_used: now },
-                    };
+            if let Some(backend) = (*guard).get_mut(&canister_id) {
+                let old = std::mem::replace(backend, Backend::Empty);
+                let sandbox_process_and_stats = match old {
+                    Backend::Active {
+                        sandbox_process,
+                        stats,
+                    } => Some((sandbox_process, stats)),
+                    Backend::Evicted {
+                        sandbox_process,
+                        stats,
+                    } => sandbox_process.upgrade().map(|p| (p, stats)),
+                    Backend::Empty => None,
+                };
+                if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
+                    let now = std::time::Instant::now();
+                    if self.max_sandbox_count > 0 {
+                        *backend = Backend::Active {
+                            sandbox_process: Arc::clone(&sandbox_process),
+                            stats: SandboxProcessStats { last_used: now },
+                        };
+                    } else {
+                        *backend = Backend::Evicted {
+                            sandbox_process: Arc::downgrade(&sandbox_process),
+                            stats: SandboxProcessStats { last_used: now },
+                        };
+                    }
+                    return sandbox_process;
                 }
-                return sandbox_process;
+            }
+            if guard.len() > self.max_sandbox_count {
+                let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+                let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+                evict_sandbox_processes(
+                    &mut guard,
+                    self.min_sandbox_count,
+                    max_active_sandboxes,
+                    self.max_sandbox_idle_time,
+                );
             }
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        if guard.len() > self.max_sandbox_count {
-            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
-            evict_sandbox_processes(
-                &mut guard,
-                self.min_sandbox_count,
-                max_active_sandboxes,
-                self.max_sandbox_idle_time,
-            );
-        }
 
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
         let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
 
-        let (sandbox_service, pid) = create_sandbox_process(
+        let (tx, rx) = std::sync::mpsc::channel();
+        {
+            let mut guard = self.waiting_threads.lock().unwrap();
+            let waiting = guard.entry(canister_id).or_insert(vec![]);
+            waiting.push(tx);
+        }
+
+        let sandbox_service = create_sandbox_process(
             controller_service,
             &*self.launcher_service,
             canister_id,
             self.sandbox_exec_argv.clone(),
         )
         .unwrap();
+        let pid = rx.recv().unwrap().unwrap();
 
         let sandbox_process = Arc::new(SandboxProcess {
             execution_states: reg,
@@ -1312,7 +1326,7 @@ impl SandboxedExecutionController {
             sandbox_process: Arc::clone(&sandbox_process),
             stats: SandboxProcessStats { last_used: now },
         };
-        (*guard).insert(canister_id, backend);
+        self.backends.lock().unwrap().insert(canister_id, backend);
 
         sandbox_process
     }
@@ -1772,6 +1786,7 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
 struct ExitWatcher {
     logger: ReplicaLogger,
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    waiting_threads: Arc<Mutex<HashMap<CanisterId, Vec<std::sync::mpsc::Sender<Option<u32>>>>>>,
 }
 
 impl ControllerLauncherService for ExitWatcher {
@@ -1798,6 +1813,23 @@ impl ControllerLauncherService for ExitWatcher {
             .replay(&self.logger, req.canister_id, sandbox_process.pid);
         rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
     }
+
+    fn sandbox_created(
+        &self,
+        req: protocol::ctllaunchersvc::SandboxCreatedRequest,
+    ) -> rpc::Call<protocol::ctllaunchersvc::SandboxCreatedReply> {
+        if let Some(waiting) = {
+            let mut guard = self.waiting_threads.lock().unwrap();
+            guard.remove(&req.canister_id)
+        } {
+            for channel in waiting {
+                channel.send(req.pid).unwrap();
+            }
+            rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxCreatedReply))
+        } else {
+            rpc::Call::new_resolved(Err(rpc::Error::ServerError))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1820,6 +1852,7 @@ mod tests {
         let exit_watcher = Arc::new(ExitWatcher {
             logger: no_op_logger(),
             backends: Arc::new(Mutex::new(HashMap::new())),
+            waiting_threads: Arc::new(Mutex::new(HashMap::new())),
         });
 
         let (_launcher_service, mut child) = spawn_launcher_process(
