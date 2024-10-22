@@ -146,14 +146,9 @@ impl Firewall {
         }
     }
 
-    fn get_node_whitelisting_rules(
-        &mut self,
-        registry_version: RegistryVersion,
-    ) -> (FirewallRule, FirewallRule, FirewallRule) {
-        // First, get all the registry versions between the latest CUP and the latest version
-        // in the registry inclusive.
-        let registry_versions: Vec<RegistryVersion> = self
-            .catchup_package_provider
+    // Get all the registry versions between the latest CUP and the latest version in the registry (inclusive)
+    fn get_registry_versions(&mut self, registry_version: RegistryVersion) -> Vec<RegistryVersion> {
+        self.catchup_package_provider
             .get_local_cup()
             .map(|latest_cup| {
                 let cup_registry_version = latest_cup.get_oldest_registry_version_in_use();
@@ -174,7 +169,16 @@ impl Firewall {
 
                 registry_version_range.map(RegistryVersion::from).collect()
             })
-            .unwrap_or_else(|| vec![registry_version]);
+            .unwrap_or_else(|| vec![registry_version])
+    }
+
+    fn get_node_whitelisting_rules(
+        &mut self,
+        registry_version: RegistryVersion,
+    ) -> (FirewallRule, FirewallRule, FirewallRule) {
+        // First, get all the registry versions between the latest CUP and the latest version
+        // in the registry inclusive.
+        let registry_versions: Vec<RegistryVersion> = self.get_registry_versions(registry_version);
 
         // Get the union of all the node IP addresses from the registry
         let node_whitelist_ips: BTreeSet<IpAddr> = registry_versions
@@ -193,20 +197,11 @@ impl Firewall {
             .collect();
 
         // Then split it to v4 and v6 separately
-        let node_ipv4s: Vec<String> = node_whitelist_ips
-            .iter()
-            .filter(|ip| ip.is_ipv4())
-            .map(|ip| ip.to_string())
-            .collect();
-        let node_ipv6s: Vec<String> = node_whitelist_ips
-            .iter()
-            .filter(|ip| ip.is_ipv6())
-            .map(|ip| ip.to_string())
-            .collect();
+        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(node_whitelist_ips);
+
         info!(
             self.logger,
-            "Whitelisting {} node IP addresses ({} v4 and {} v6) on the firewall",
-            node_whitelist_ips.len(),
+            "Whitelisting node IP addresses ({} v4 and {} v6) on the firewall",
             node_ipv4s.len(),
             node_ipv6s.len()
         );
@@ -255,6 +250,51 @@ impl Firewall {
             udp_node_whitelisting_rule,
             ic_http_adapter_rule,
         )
+    }
+
+    fn get_socks_proxy_whitelisting_rules(
+        &mut self,
+        registry_version: RegistryVersion,
+    ) -> FirewallRule {
+        // First, get all the registry versions between the latest CUP and the latest version
+        // in the registry inclusive.
+        let registry_versions: Vec<RegistryVersion> = self.get_registry_versions(registry_version);
+
+        // Get hte IPs of all nodes on system subnets
+        let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
+            .into_iter()
+            .flat_map(|registry_version| {
+                self.registry
+                    .get_system_subnet_nodes_ip_addresses(registry_version)
+                    .inspect_err(|err| {
+                        warn!(
+                        every_n_seconds => 30,
+                        self.logger,
+                        "Failed to get the IPs of system subnet nodes in the registry: {}", err)
+                    })
+                    .unwrap_or_default()
+            })
+            .collect();
+
+        // Then split it to v4 and v6 separately
+        let (system_subnet_node_ipv4s, system_subnet_node_ipv6s) =
+            split_ips_by_address_family(system_subnet_node_ips);
+        info!(
+            self.logger,
+            "Whitelisting system subnet node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
+            system_subnet_node_ipv4s.len(),
+            system_subnet_node_ipv6s.len()
+        );
+
+        FirewallRule {
+            ipv4_prefixes: system_subnet_node_ipv4s.clone(),
+            ipv6_prefixes: system_subnet_node_ipv6s.clone(),
+            ports: self.replica_config.tcp_ports_for_node_whitelist.clone(),
+            action: FirewallAction::Allow as i32,
+            comment: "system subnet nodes for SOCKS proxy".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
+        }
     }
 
     /// Checks for the firewall configuration that applies to this node
@@ -340,7 +380,13 @@ impl Firewall {
 
                 self.replica_config.insert_rules(tcp_rules, udp_rules)
             }
-            Role::BoundaryNode => self.boundary_node_config.insert_rules(tcp_rules, udp_rules),
+            Role::BoundaryNode => {
+                let socks_proxy_whitelisting_rules =
+                    self.get_socks_proxy_whitelisting_rules(registry_version);
+                // Insert the whitelisting rules at the top of the list (highest priority)
+                tcp_rules.insert(0, socks_proxy_whitelisting_rules);
+                self.boundary_node_config.insert_rules(tcp_rules, udp_rules)
+            }
         };
 
         let changed = content.ne(&self.compiled_config);
@@ -614,6 +660,21 @@ fn action_to_nftables_action(action: Option<FirewallAction>) -> String {
     } else {
         default
     }
+}
+
+/// takes a list of IP address and returns a list containing only IPv4 and one only IPv6 addresses
+fn split_ips_by_address_family(ips: BTreeSet<IpAddr>) -> (Vec<String>, Vec<String>) {
+    let ipv4s: Vec<String> = ips
+        .iter()
+        .filter(|ip| ip.is_ipv4())
+        .map(|ip| ip.to_string())
+        .collect();
+    let ipv6s: Vec<String> = ips
+        .iter()
+        .filter(|ip| ip.is_ipv6())
+        .map(|ip| ip.to_string())
+        .collect();
+    (ipv4s, ipv6s)
 }
 
 #[cfg(test)]
