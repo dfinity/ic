@@ -3502,8 +3502,7 @@ pub mod upgrade_journal_entry {
         UpgradeCompleted(UpgradeCompleted),
     }
 }
-/// Needed to cause prost to generate a type isomorphic to
-/// Option<Vec<UpgradeJournalEntry>>.
+/// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
