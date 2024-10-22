@@ -24,6 +24,7 @@ use tempfile::tempdir;
 use url::Url;
 
 use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
+use ic_types::malicious_behaviour::MaliciousBehaviour;
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
@@ -236,16 +237,8 @@ fn main() {
             guestos_config_json_path: guestos_config_json_path.clone(),
         };
 
-        match generate_testnet_config(args) {
-            Ok(()) => {
-                let contents = std::fs::read_to_string(&guestos_config_json_path)
-                    .expect("Failed to read the file");
-                println!("{}", contents);
-            }
-            Err(e) => {
-                println!("Failed to generate testnet config: {:?}", e);
-            }
-        }
+        // populate guestos_config_json_path with serialized guestos config object
+        let _ = generate_testnet_config(args);
 
         // Build config image
         let filename = "config.tar.gz";
