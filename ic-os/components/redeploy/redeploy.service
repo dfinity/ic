@@ -1,0 +1,14 @@
+[Unit]
+Description=Prep node for in place redeployment
+DefaultDependencies=no
+After=boot-config.mount
+Requires=boot-config.mount
+Before=setup-encryption.service
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/redeploy.sh
