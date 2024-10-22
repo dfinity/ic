@@ -50,10 +50,10 @@ struct Handlers<'a> {
 impl<'a> Handlers<'a> {
     fn new(env: &'a TestEnv) -> Handlers<'a> {
         let logger = env.logger();
-        let subnet_size = get_node_snapshots(&env).count();
+        let subnet_size = get_node_snapshots(env).count();
 
         let runtime = {
-            let mut nodes = get_node_snapshots(&env);
+            let mut nodes = get_node_snapshots(env);
             let node = nodes.next().expect("there is no application node");
             get_runtime_from_node(&node)
         };
