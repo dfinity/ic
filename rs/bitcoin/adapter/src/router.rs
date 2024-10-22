@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{
     sync::mpsc::{channel, Receiver},
-    time::{interval, sleep},
+    time::interval,
 };
 
 /// The function starts a Tokio task that awaits messages from the ConnectionManager.
@@ -49,13 +49,12 @@ pub fn start_main_event_loop(
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
+        let adapter_notifier = adapter_state.notifier();
         loop {
-            let sleep_idle_interval = Duration::from_millis(100);
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
                 blockchain_manager.make_idle();
-                // TODO: instead of sleeping here add some async synchronization.
-                sleep(sleep_idle_interval).await;
+                adapter_notifier.notified().await;
                 continue;
             }
 

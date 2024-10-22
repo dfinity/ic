@@ -13,7 +13,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::mpsc::channel;
+use tokio::sync::{Notify, mpsc::channel};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -154,6 +154,8 @@ pub struct AdapterState {
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
+    ///
+    notify: Arc<Notify>,
 }
 
 impl AdapterState {
@@ -162,6 +164,7 @@ impl AdapterState {
         Self {
             last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
+            notify: Arc::new(Notify::new()),
         }
     }
 
@@ -178,6 +181,12 @@ impl AdapterState {
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
+        self.notify.notify_waiters();
+    }
+
+    /// Returns a clone of the notify handle.
+    pub fn notifier(&self) -> Arc<Notify> {
+        self.notify.clone()
     }
 }
 
