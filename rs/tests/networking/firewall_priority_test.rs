@@ -66,7 +66,7 @@ enum Proposal<T: CandidType> {
     Update(T, NnsFunction),
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast(SubnetType::System, 1))
         .add_subnet(Subnet::fast(SubnetType::Application, 2))
@@ -479,7 +479,7 @@ fn await_rule_execution_with_backoff(
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(override_firewall_rules_with_priority))
         .execute_from_args()?;
 

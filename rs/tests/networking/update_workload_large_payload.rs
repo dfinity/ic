@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_networking_subnet_update_workload::{config, test};
+use ic_networking_subnet_update_workload::{setup, test};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 
@@ -20,7 +20,7 @@ const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(5 * 60);
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let config = |env| config(env, SMALL_APP_SUBNET_MAX_SIZE, USE_BOUNDARY_NODE, None);
+    let setup  = |env| setup(env, SMALL_APP_SUBNET_MAX_SIZE, USE_BOUNDARY_NODE, None);
     let test = |env| {
         test(
             env,
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.

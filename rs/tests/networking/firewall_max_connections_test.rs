@@ -42,7 +42,7 @@ const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 const TCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 
-fn config(env: TestEnv) {
+fn setup(env: TestEnv) {
     let log = env.logger();
 
     info!(log, "Starting new universal VM");
@@ -177,7 +177,7 @@ async fn create_tcp_connection(ip_addr: IpAddr, port: u16) -> Result<TcpStream, 
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(connection_count_test))
         .execute_from_args()?;
     Ok(())

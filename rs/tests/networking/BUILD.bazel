@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -12,7 +12,6 @@ CANISTER_HTTP_BASE_DEPS = [
     # Keep sorted.
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/proxy_canister:lib",
-    "//rs/tests",
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/tests/networking/canister_http:canister_http",
     "//rs/types/management_canister_types",
@@ -40,7 +39,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -59,7 +57,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
         #"system_test_hourly",
@@ -85,7 +82,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -110,7 +106,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -136,7 +131,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -152,7 +146,6 @@ system_test_nns(
 system_test_nns(
     name = "firewall_max_connections_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
@@ -167,7 +160,6 @@ system_test_nns(
 system_test_nns(
     name = "firewall_priority_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],
@@ -189,7 +181,6 @@ system_test_nns(
     name = "network_large_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_nightly",
@@ -208,7 +199,6 @@ system_test_nns(
     name = "network_reliability_test",
     extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_nightly",
@@ -225,7 +215,6 @@ system_test_nns(
 system_test_nns(
     name = "p2p_performance_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "manual",
@@ -243,7 +232,6 @@ system_test_nns(
 system_test_nns(
     name = "query_workload_long_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "system_test_hourly",
@@ -259,7 +247,6 @@ system_test_nns(
 system_test_nns(
     name = "update_workload_large_payload",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
     ],

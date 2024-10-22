@@ -52,7 +52,7 @@ const JAEGER_VM_NAME: &str = "jaeger-vm";
 // 5 minutes
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
 
-pub fn config(
+pub fn setup(
     env: TestEnv,
     nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
@@ -278,8 +278,8 @@ fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent>
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
-    let config = |env| {
-        config(
+    let setup = |env| {
+        setup(
             env,
             NNS_SUBNET_MAX_SIZE,
             APP_SUBNET_MAX_SIZE,
@@ -297,7 +297,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.

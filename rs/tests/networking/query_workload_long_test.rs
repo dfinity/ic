@@ -20,7 +20,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_networking_subnet_update_workload::config;
+use ic_networking_subnet_update_workload::setup;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
@@ -144,8 +144,8 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let config = |env| {
-        config(
+    let setup = |env| {
+        setup(
             env,
             SMALL_APP_SUBNET_MAX_SIZE,
             USE_BOUNDARY_NODE,
@@ -156,7 +156,7 @@ fn main() -> Result<()> {
     };
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
