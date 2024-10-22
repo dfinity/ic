@@ -1,8 +1,45 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/bitcoin/ckbtc/agent",
+    "//rs/bitcoin/ckbtc/kyt",
+    "//rs/bitcoin/ckbtc/minter",
+    "//rs/canister_client",
+    "//rs/config",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/test_utils",
+    "//rs/registry/canister",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/tests/consensus/tecdsa/utils",
+    "//rs/tests/driver:ic-system-test-driver",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "//rs/universal_canister/lib",
+    "@crate_index//:assert_matches",
+    "@crate_index//:bitcoincore-rpc",
+    "@crate_index//:candid",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-btc-interface",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
 
 rust_library(
     name = "ckbtc",
@@ -30,29 +67,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":ckbtc"],
-)
-
-system_test_nns(
-    name = "ckbtc_minter_batching",
-    env = {
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
-        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
-        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
-    },
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -74,7 +88,6 @@ system_test_nns(
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -97,7 +110,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -120,7 +132,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
@@ -143,7 +154,6 @@ system_test_nns(
     },
     extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.
