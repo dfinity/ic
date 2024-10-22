@@ -46,7 +46,7 @@ pub fn start_main_event_loop(
         network_message_sender,
         router_metrics.clone(),
     );
-    let adapter_notifier = adapter_state.notifier();
+    let adapter_awake_notifier = adapter_state.awake_notifier();
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
@@ -54,7 +54,7 @@ pub fn start_main_event_loop(
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
                 blockchain_manager.make_idle();
-                adapter_notifier.notified().await;
+                adapter_awake_notifier.notified().await;
                 continue;
             }
 

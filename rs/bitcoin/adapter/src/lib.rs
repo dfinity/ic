@@ -155,7 +155,7 @@ pub struct AdapterState {
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
     /// The field contains a notify handle to notify waiters when the adapter is no longer idle.
-    notify: Arc<Notify>,
+    awake_notify: Arc<Notify>,
 }
 
 impl AdapterState {
@@ -164,7 +164,7 @@ impl AdapterState {
         Self {
             last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
-            notify: Arc::new(Notify::new()),
+            awake_notify: Arc::new(Notify::new()),
         }
     }
 
@@ -181,12 +181,12 @@ impl AdapterState {
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
-        self.notify.notify_waiters();
+        self.awake_notify.notify_waiters();
     }
 
     /// Returns a clone of the notify handle.
-    pub fn notifier(&self) -> Arc<Notify> {
-        self.notify.clone()
+    pub fn awake_notifier(&self) -> Arc<Notify> {
+        self.awake_notify.clone()
     }
 }
 
