@@ -17,7 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/index-ng",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
@@ -33,7 +33,7 @@ BASE_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:lazy_static",
@@ -46,11 +46,11 @@ BASE_DEPENDENCIES = [
 # Each target declared in this file may choose either these (release-ready)
 # dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
 DEPENDENCIES = BASE_DEPENDENCIES + [
-    "//rs/nns/test_utils",
+    "//rs/nns/test_utils:ic_nns_test_utils",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
-    "//rs/nns/test_utils:test_utils--test_feature",
+    "//rs/nns/test_utils:ic_nns_test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -65,18 +65,17 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {}
 
 rust_library(
-    name = "test_utils",
+    name = "ic_sns_test_utils",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )
 
 rust_library(
-    name = "test_utils--test_feature",
+    name = "ic_sns_test_utils--test_feature",
     testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
@@ -88,10 +87,10 @@ rust_library(
 )
 
 rust_test(
-    name = "test_utils_test",
+    name = "ic_sns_test_utils_test",
     testonly = True,
     aliases = ALIASES,
-    crate = ":test_utils",
+    crate = ":ic_sns_test_utils",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

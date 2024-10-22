@@ -10,7 +10,7 @@ IC_HS_RUNTIME_DEPS = [
 ]
 
 ALIASES = {
-    "//rs/utils": "utils",
+    "//rs/utils:ic_utils": "utils",
 }
 
 rust_binary(

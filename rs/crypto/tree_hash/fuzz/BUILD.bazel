@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/canonical_state/tree_hash/test_utils:ic_canonical_state_tree_hash_test_utils",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/fuzz/check_witness_equality_utils",
     "//rs/protobuf",

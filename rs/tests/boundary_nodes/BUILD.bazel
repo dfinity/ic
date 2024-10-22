@@ -31,7 +31,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -55,7 +55,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -122,7 +122,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
@@ -194,12 +194,12 @@ system_test_nns(
         "//rs/boundary_node/discower_bowndary:discower-bowndary",
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
-        "//rs/nns/common",
+        "//rs/nns/common:ic_nns_common",
         "//rs/nns/constants",
         "//rs/nns/governance/api",
-        "//rs/nns/test_utils",
+        "//rs/nns/test_utils:ic_nns_test_utils",
         "//rs/registry/canister",
-        "//rs/tests/boundary_nodes/utils",
+        "//rs/tests/boundary_nodes/utils:ic_boundary_nodes_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",

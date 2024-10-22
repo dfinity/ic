@@ -17,14 +17,13 @@ DEPENDENCIES = [
 ]
 
 rust_library(
-    name = "test-utils",
+    name = "ic_certification_test_utils",
     srcs = glob(["src/**"]),
-    crate_name = "ic_certification_test_utils",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_doc_test(
     name = "certification_test_utils_doc_test",
-    crate = ":test-utils",
+    crate = ":ic_certification_test_utils",
 )

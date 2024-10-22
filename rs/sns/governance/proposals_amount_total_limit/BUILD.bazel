@@ -17,7 +17,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",

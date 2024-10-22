@@ -11,7 +11,7 @@ rust_library(
     crate_name = "ic_consensus_system_test_catch_up_test_common",
     deps = [
         # Keep sorted.
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -220,7 +220,7 @@ system_test_nns(
         "//rs/recovery/subnet_splitting",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",
@@ -335,7 +335,7 @@ system_test_nns(
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "@crate_index//:anyhow",
@@ -365,7 +365,7 @@ system_test_nns(
         "//rs/registry/canister",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/base_types",
         "//rs/types/types",

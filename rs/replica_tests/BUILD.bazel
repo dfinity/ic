@@ -33,7 +33,7 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:prost",

@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
-    "//rs/utils",
+    "//rs/utils:ic_utils",
     "@crate_index//:bincode",
     "@crate_index//:bytes",
     "@crate_index//:lazy_static",

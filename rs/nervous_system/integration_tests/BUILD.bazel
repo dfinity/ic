@@ -13,10 +13,10 @@ BASE_DEPENDENCIES = [
     "//rs/ledger_suite/icrc1/tokens_u64",
     "//rs/nervous_system/agent",
     "//rs/nervous_system/clients",
-    "//rs/nervous_system/common",
+    "//rs/nervous_system/common:ic_nervous_system_common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
-    "//rs/nns/common",
+    "//rs/nns/common:ic_nns_common",
     "//rs/nns/governance/api",
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
@@ -62,9 +62,9 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
-        "//rs/nns/test_utils:test_utils--test_feature",
+        "//rs/nns/test_utils:ic_nns_test_utils--test_feature",
         "//rs/nns/gtc:gtc--test_feature",
-        "//rs/sns/test_utils:test_utils--test_feature",
+        "//rs/sns/test_utils:ic_sns_test_utils--test_feature",
     ],
 })
 

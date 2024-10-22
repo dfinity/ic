@@ -3,9 +3,8 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "utils",
+    name = "ic_utils",
     srcs = glob(["src/**"]),
-    crate_name = "ic_utils",
     version = "0.9.0",
     deps = [
         # Keep sorted.
@@ -17,8 +16,8 @@ rust_library(
 )
 
 rust_test(
-    name = "utils_test",
-    crate = ":utils",
+    name = "ic_utils_test",
+    crate = ":ic_utils",
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
@@ -28,6 +27,6 @@ rust_test(
 )
 
 rust_doc_test(
-    name = "utils_doc_test",
-    crate = ":utils",
+    name = "ic_utils_doc_test",
+    crate = ":ic_utils",
 )

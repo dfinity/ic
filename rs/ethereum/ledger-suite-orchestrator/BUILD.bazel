@@ -169,7 +169,7 @@ rust_ic_test(
         ":ledger_suite_orchestrator",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/test_utils/reproducible_rng",
-        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils:ic_ledger_suite_orchestrator_test_utils",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",

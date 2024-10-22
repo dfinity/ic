@@ -16,7 +16,7 @@ rust_library(
         "//rs/crypto/sha2",
         "//rs/sys",
         "//rs/types/types",
-        "//rs/utils",
+        "//rs/utils:ic_utils",
         "//rs/utils/validate_eq",
         "@crate_index//:serde",
     ],
