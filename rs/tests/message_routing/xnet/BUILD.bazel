@@ -133,7 +133,7 @@ system_test_nns(
         MAINNET_REVISION_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus/utils:ic_consensus_system_test_utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
         "//rs/types/types",
