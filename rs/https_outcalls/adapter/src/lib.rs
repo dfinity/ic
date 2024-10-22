@@ -15,6 +15,7 @@ pub use cli::Cli;
 pub use config::{Config, IncomingSource};
 pub use rpc_server::CanisterHttp;
 
+use futures::StreamExt;
 use ic_async_utils::{incoming_from_first_systemd_socket, incoming_from_path};
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_logger::ReplicaLogger;
@@ -30,25 +31,28 @@ pub fn start_server(
 ) {
     let log = log.clone();
     let metrics_registry = metrics_registry.clone();
+    let canister_http = CanisterHttp::new(config.clone(), log, &metrics_registry);
+
+    let server = Server::builder()
+        .timeout(Duration::from_secs(config.http_request_timeout_secs))
+        .add_service(HttpsOutcallsServiceServer::new(canister_http));
+
+    let incoming = match config.incoming_source {
+        IncomingSource::Path(uds_path) => incoming_from_path(uds_path).boxed(),
+
+        IncomingSource::Systemd =>
+        // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
+        // Additionally, this is the only call to connect with the systemd socket and
+        // therefore we are sole owner.
+        {
+            unsafe { incoming_from_first_systemd_socket() }.boxed()
+        }
+    };
+
     rt_handle.spawn(async move {
-        let canister_http = CanisterHttp::new(config.clone(), log, &metrics_registry);
-
-        let server = Server::builder()
-            .timeout(Duration::from_secs(config.http_request_timeout_secs))
-            .add_service(HttpsOutcallsServiceServer::new(canister_http));
-
-        match config.incoming_source {
-            IncomingSource::Path(uds_path) => server
-                .serve_with_incoming(incoming_from_path(uds_path))
-                .await
-                .expect("gRPC server crashed"),
-            IncomingSource::Systemd => server
-                // SAFETY: We are manged by systemd that is configured to pass socket as FD(3).
-                // Additionally, this is the only call to connect with the systemd socket and
-                // therefore we are sole owner.
-                .serve_with_incoming(unsafe { incoming_from_first_systemd_socket() })
-                .await
-                .expect("gRPC server crashed"),
-        };
+        server
+            .serve_with_incoming(incoming)
+            .await
+            .expect("gRPC server crashed")
     });
 }

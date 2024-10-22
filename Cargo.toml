@@ -169,8 +169,11 @@ members = [
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
     "rs/nervous_system/common/validation",
+    "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
+    "rs/nervous_system/instruction_stats",
+    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -351,6 +354,7 @@ members = [
     "rs/test_utilities/tmpdir",
     "rs/tests",
     "rs/tests/boundary_nodes",
+    "rs/tests/boundary_nodes/custom_domains",
     "rs/tests/boundary_nodes/integration_test_common",
     "rs/tests/boundary_nodes/performance_test_common",
     "rs/tests/boundary_nodes/utils",
@@ -366,7 +370,10 @@ members = [
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/message_routing",
+    "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
+    "rs/tests/message_routing/xnet",
+    "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",
@@ -524,7 +531,7 @@ http = "1.1.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
-hyper = { version = "1.4.1", features = ["full"] }
+hyper = { version = "1.5.0", features = ["full"] }
 hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
@@ -630,7 +637,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
-reqwest = { version = "0.12.7", default-features = false, features = [
+reqwest = { version = "0.12.8", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -641,10 +648,10 @@ reqwest = { version = "0.12.7", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = [ "sha2" ] }
+rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.14", default-features = false, features = [
+rustls = { version = "0.23.15", default-features = false, features = [
     "ring",
     "std",
     "brotli",
