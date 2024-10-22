@@ -8,7 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 k256 = { version = "0.13.1", features = ["pem"] }
-rate-limits-api = { path = "../api" }
 ic-agent = { workspace = true }
-tokio = { workspace = true }
 candid = { workspace = true }
+rate-limits-api = { path = "../api" }
+regex = { workspace = true }
+tokio = { workspace = true }

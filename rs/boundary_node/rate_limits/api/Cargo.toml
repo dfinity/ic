@@ -8,7 +8,9 @@ documentation.workspace = true
 
 [dependencies]
 candid = {workspace = true}
+regex = { workspace = true }
 serde = {workspace = true}
+serde_json = { workspace = true }
 
 [lib]
 path = "src/lib.rs"

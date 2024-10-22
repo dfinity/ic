@@ -4,11 +4,11 @@ use ic_agent::{
     Agent, Identity,
 };
 use rate_limits_api::{
-    AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse,
-    GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
+    v1::RateLimitRule, AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse, GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version
 };
+use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "zkfwe-6yaaa-aaaab-qacca-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "w6dgu-3iaaa-aaaab-qadha-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -51,7 +51,7 @@ async fn main() {
     add_config_2(&agent_full_access, canister_id).await;
 
     println!("Call 7. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
-    let rule_id = "bc652fa8460f9456edb068ef4b8dd4761ebcf298478d00dac8ba3d4e491bf2ff".to_string();
+    let rule_id = "5329ff47530283097e983b18f74eb390324fc2dfd08a37db14760c709b341436".to_string();
     read_rule(&agent_restricted_read, rule_id, canister_id).await;
 }
 
@@ -68,31 +68,59 @@ async fn create_agent<I: Identity + 'static>(identity: I) -> Agent {
 async fn add_config_1(agent: &Agent, canister_id: Principal) {
     // Note two rules (indices = [0, 2]) are linked to the same incident_id_1
     // RuleIds are generated on the server side based on the hash(rule_raw + description)
+    let rule_1 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_1)$").unwrap(),
+        limit: "1req/s".to_string(),
+    };
+
+    let rule_2 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_2)$").unwrap(),
+        limit: "2req/s".to_string(),
+    };
+
+    let rule_3 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_3)$").unwrap(),
+        limit: "3req/s".to_string(),
+    };
+
+    let rule_4 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_4)$").unwrap(),
+        limit: "4req/s".to_string(),
+    };
+
     let args = Encode!(&InputConfig {
         schema_version: 1,
         rules: vec![
             InputRule {
                 incident_id: "incident_id_1".to_string(),
-                rule_raw: b"{\"canister_id\": \"abcd-efgh\",\"limit\": \"10req/s\"}".to_vec(),
+                rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
                 incident_id: "incident_id_2".to_string(),
-                rule_raw: b"{\"subnet_id\": \"kjahd-zcsd\",\"limit\": \"5/s\"}".to_vec(),
+                rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
             InputRule {
                 incident_id: "incident_id_1".to_string(),
-                rule_raw: b"{\"canister_id\": \"klmo-pqfs\",\"limit\": \"20req/s\"}".to_vec(),
+                rule_raw: rule_3.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
                 incident_id: "incident_id_3".to_string(),
-                rule_raw: b"{\"canister_id\": \"oiaus-zmnxb\",\"limit\": \"20req/s\"}".to_vec(),
+                rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },
         ],
@@ -112,32 +140,60 @@ async fn add_config_1(agent: &Agent, canister_id: Principal) {
 }
 
 async fn add_config_2(agent: &Agent, canister_id: Principal) {
-    // This config differs from config 1 by one rule at index = 2, see comment below.
+    // This config differs from config 1 by rule_3 at index = 2, see comment below.
+    let rule_1 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_1)$").unwrap(),
+        limit: "1req/s".to_string(),
+    };
+
+    let rule_2 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_2)$").unwrap(),
+        limit: "2req/s".to_string(),
+    };
+
+    let rule_3 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_3)$").unwrap(),
+        limit: "3req/s".to_string(),
+    };
+
+    let rule_4 = RateLimitRule {
+        canister_id: Some(canister_id),
+        subnet_id: None,
+        methods: Regex::new(r"^(method_4)$").unwrap(),
+        limit: "4req/s".to_string(),
+    };
+
     let args = Encode!(&InputConfig {
         schema_version: 1,
         rules: vec![
             InputRule {
                 incident_id: "incident_id_1".to_string(),
-                rule_raw: b"{\"canister_id\": \"abcd-efgh\",\"limit\": \"10req/s\"}".to_vec(),
+                rule_raw: rule_1.to_bytes_json().unwrap(),
                 description:
                     "Some vulnerability #1 discovered, temporarily rate-limiting the canister calls"
                         .to_string(),
             },
             InputRule {
                 incident_id: "incident_id_2".to_string(),
-                rule_raw: b"{\"subnet_id\": \"kjahd-zcsd\",\"limit\": \"5/s\"}".to_vec(),
+                rule_raw: rule_2.to_bytes_json().unwrap(),
                 description: "Some vulnerability #2 discovered".to_string(),
             },
             // Only this rule is different from config 1.
             // It means that the old rule is removed (not mutated) and this new rule is applied instead.
             InputRule {
                 incident_id: "incident_id_4".to_string(),
-                rule_raw: b"{\"canister_id\": \"aaaa-bbbb\",\"limit\": \"50req/s\"}".to_vec(),
+                rule_raw: rule_3.to_bytes_json().unwrap(),
                 description: "Some vulnerability #4 discovered".to_string(),
             },
             InputRule {
                 incident_id: "incident_id_3".to_string(),
-                rule_raw: b"{\"canister_id\": \"oiaus-zmnxb\",\"limit\": \"20req/s\"}".to_vec(),
+                rule_raw: rule_4.to_bytes_json().unwrap(),
                 description: "Some vulnerability #3 discovered".to_string(),
             },
         ],
@@ -168,7 +224,7 @@ async fn read_config(agent: &Agent, version: Version, canister_id: Principal) {
 
     let decoded = Decode!(&response, GetConfigResponse).expect("failed to decode candid response");
 
-    println!("Response to get_config() call: {decoded:#?}");
+    println!("Response to get_config() call: {}", decoded.unwrap());
 }
 
 async fn disclose_incident(agent: &Agent, incident_id: IncidentId, canister_id: Principal) {
@@ -197,7 +253,7 @@ async fn read_rule(agent: &Agent, rule_id: RuleId, canister_id: Principal) {
         .await
         .expect("update call failed");
 
-    let decoded = Decode!(&response, GetRuleByIdResponse).unwrap();
+    let decoded = Decode!(&response, GetRuleByIdResponse).unwrap().unwrap();
 
-    println!("Response to get_rule_by_id() call: {decoded:#?}");
+    println!("Response to get_rule_by_id() call: {decoded}");
 }

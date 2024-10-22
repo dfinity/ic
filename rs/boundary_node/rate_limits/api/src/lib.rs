@@ -1,6 +1,11 @@
 use candid::CandidType;
 use candid::Principal;
+use schema_versions::v1::RateLimitRule;
 use serde::{Deserialize, Serialize};
+
+mod schema_versions;
+pub use schema_versions::v1;
+
 pub type Version = u64;
 pub type Timestamp = u64;
 pub type RuleId = String;
@@ -73,4 +78,66 @@ pub struct GetApiBoundaryNodeIdsRequest {}
 #[derive(CandidType, Serialize, Deserialize, Clone, PartialEq, Debug, Eq)]
 pub struct ApiBoundaryNodeIdRecord {
     pub id: Option<Principal>,
+}
+
+const INDENT: &str = "  ";
+const DOUBLE_INDENT: &str = "    ";
+
+impl std::fmt::Display for ConfigResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "\nConfiguration details:")?;
+        writeln!(f, "{INDENT}Version: {}", self.version)?;
+        writeln!(f, "{INDENT}Active Since: {}", self.active_since)?;
+        writeln!(f, "{INDENT}{}", self.config)?;
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for OutputConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Schema version: {}", self.schema_version)?;
+        for (i, rule) in self.rules.iter().enumerate() {
+            writeln!(f, "{DOUBLE_INDENT}Rule {}:", i + 1)?;
+            writeln!(f, "{DOUBLE_INDENT}ID: {}", rule.id)?;
+            writeln!(f, "{DOUBLE_INDENT}Incident ID: {}", rule.incident_id)?;
+            if let Some(ref description) = rule.description {
+                writeln!(f, "{DOUBLE_INDENT}Description: {description}")?;
+            }
+            if let Some(ref rule_raw) = rule.rule_raw {
+                let decoded_rule = RateLimitRule::from_bytes_json(rule_raw.as_slice()).unwrap();
+                writeln!(f, "{DOUBLE_INDENT}Rate-limit rule:\n{decoded_rule}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Display for OutputRuleMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "\nOutputRuleMetadata")?;
+        writeln!(f, "{INDENT}ID: {}", self.id)?;
+        writeln!(
+            f,
+            "{INDENT}Disclosed at: {}",
+            self.disclosed_at
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string())
+        )?;
+        writeln!(f, "{INDENT}Added in version: {}", self.added_in_version)?;
+        writeln!(
+            f,
+            "{INDENT}Removed in version: {}",
+            self.removed_in_version
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "None".to_string())
+        )?;
+        if let Some(ref description) = self.description {
+            writeln!(f, "{INDENT}Description: {description}")?;
+        }
+        if let Some(ref rule_raw) = self.rule_raw {
+            let decoded_rule = RateLimitRule::from_bytes_json(rule_raw.as_slice()).unwrap();
+            writeln!(f, "{INDENT}Rate-limit rule:\n{decoded_rule}")?;
+        }
+        Ok(())
+    }
 }
