@@ -3,6 +3,7 @@ use crate::common::{
     utils::{get_test_agent, list_neurons, test_identity},
 };
 use ic_agent::{identity::BasicIdentity, Identity};
+use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::{RosettaCreateNeuronArgs, RosettaSetNeuronDissolveDelayArgs};
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
@@ -286,5 +287,105 @@ fn test_start_and_stop_neuron_dissolve() {
             neuron.dissolve_state.unwrap(),
             DissolveState::DissolveDelaySeconds(_)
         ));
+    });
+}
+
+#[test]
+fn test_change_auto_stake_maturity() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 100_000_000u64;
+        let neuron_index = 0;
+        let from_subaccount = [0; 32];
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+        env.pocket_ic.tick().await;
+
+        // See if the neuron was created successfully
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        // The neuron should not have auto stake maturity set
+        assert!(neuron.auto_stake_maturity.is_none());
+
+        // Change the auto stake maturity to true
+        let change_auto_stake_maturity_response = TransactionOperationResults::try_from(
+            env.rosetta_client
+                .change_auto_stake_maturity(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    RosettaChangeAutoStakeMaturityArgs::builder(true)
+                        .with_neuron_index(neuron_index)
+                        .build(),
+                )
+                .await
+                .unwrap()
+                .metadata,
+        )
+        .unwrap();
+        env.pocket_ic.tick().await;
+
+        assert_eq!(
+            change_auto_stake_maturity_response
+                .operations
+                .first()
+                .unwrap()
+                .status,
+            Some("COMPLETED".to_owned())
+        );
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert!(neuron.auto_stake_maturity.unwrap());
+
+        // Change the auto stake maturity to false
+        let change_auto_stake_maturity_response = TransactionOperationResults::try_from(
+            env.rosetta_client
+                .change_auto_stake_maturity(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    RosettaChangeAutoStakeMaturityArgs::builder(false)
+                        .with_neuron_index(neuron_index)
+                        .build(),
+                )
+                .await
+                .unwrap()
+                .metadata,
+        )
+        .unwrap();
+        env.pocket_ic.tick().await;
+
+        assert_eq!(
+            change_auto_stake_maturity_response
+                .operations
+                .first()
+                .unwrap()
+                .status,
+            Some("COMPLETED".to_owned())
+        );
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert!(neuron.auto_stake_maturity.is_none());
     });
 }
