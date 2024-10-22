@@ -27,7 +27,7 @@ function read_config_variables() {
 }
 
 function configure_ipv6() {
-    ipv6_config_type=$(get_config_value '.network_settings.ipv6_config | keys[]')
+    ipv6_config_type=$(get_config_value '.network_settings.ipv6_config | if type=="object" then keys[] else . end')
     case "$ipv6_config_type" in
         "Deterministic")
             echo "GuestOS IPv6 configuration should not be 'Deterministic'."
@@ -46,7 +46,7 @@ function configure_ipv6() {
             ;;
     esac
 
-    if [ "${IPV6_ADDRESS}" == "" ]; then
+    if [ -z "${IPV6_ADDRESS}" ]; then
         echo "Cannot determine an IPv6 address, aborting"
         exit 1
     fi
