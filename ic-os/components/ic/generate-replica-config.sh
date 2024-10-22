@@ -112,6 +112,26 @@ function set_default_config_values() {
     NODE_INDEX="0"
 }
 
+# If the URL is of the form "https://[IPv6]/" then we extract the IPv6 address.
+# Otherwise, we copy over the whole URL to ic.json5
+# If a URL is of the form "http://[IPv6_address]/" or "https://[IPv6_address]/", 
+# it extracts just the IPv6 address.
+# For all other URLs, it leaves them unchanged.
+function process_nns_urls() {
+    local processed_urls=()
+    IFS=',' read -ra URLS <<< "$NNS_URLS"
+    for url in "${URLS[@]}"; do
+        if [[ $url =~ ^https?://\[([0-9a-fA-F:]+)\](:[0-9]+)?(/.*)?$ ]]; then
+            ipv6_addr="${BASH_REMATCH[1]}"
+            processed_urls+=("$ipv6_addr")
+        else
+            # Keep the URL as is
+            processed_urls+=("$url")
+        fi
+    done
+    NNS_URLS=$(IFS=','; echo "${processed_urls[*]}")
+}
+
 while getopts "i:o:" OPT; do
     case "${OPT}" in
         i)
@@ -137,6 +157,7 @@ configure_ipv4
 
 read_config_variables
 set_default_config_values
+process_nns_urls
 
 sed -e "s@{{ ipv6_address }}@${IPV6_ADDRESS}@" \
     -e "s@{{ ipv4_address }}@${IPV4_ADDRESS}@" \
