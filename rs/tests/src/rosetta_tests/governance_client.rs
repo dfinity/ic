@@ -9,24 +9,16 @@ use ic_nns_governance_api::{
     },
     proposal_submission_helpers::create_make_proposal_payload,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot},
+        test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     util::{assert_create_agent, block_on},
 };
 use slog::{debug, Logger};
 
 use super::lib::NeuronDetails;
-
-pub fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
-    env.topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::System)
-        .unwrap()
-}
 
 pub struct GovernanceClient {
     agent: Agent,
@@ -37,7 +29,7 @@ pub struct GovernanceClient {
 ///  Create an agent to interact with the ledger.
 fn create_agent(env: &TestEnv) -> Agent {
     block_on(async {
-        let subnet_sys = subnet_sys(env);
+        let subnet_sys = super::setup::subnet_sys(env);
         let node = subnet_sys.nodes().next().expect("No node in sys subnet.");
         assert_create_agent(node.get_public_url().as_str()).await
     })
