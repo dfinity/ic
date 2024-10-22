@@ -16,7 +16,7 @@ use crate::certified_slice_pool::{
 use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{Request, StatusCode, Uri};
-use hyper_util::client::legacy::Client;
+use hyper_util::{client::legacy::Client, rt::TokioTimer};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     messaging::{
@@ -1549,6 +1549,7 @@ impl XNetClientImpl {
         let http_client: Client<TlsConnector, Request<XNetRequestBody>> =
             Client::builder(hyper_util::rt::TokioExecutor::new())
                 .http2_only(true)
+                .pool_timer(TokioTimer::new())
                 .pool_idle_timeout(Some(Duration::from_secs(600)))
                 .pool_max_idle_per_host(1)
                 .build(https);
