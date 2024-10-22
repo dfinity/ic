@@ -289,7 +289,10 @@ fn check_fee_collector() {
 
 #[test]
 fn check_fee_collector_blocks() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_blocks(ledger_wasm(), encode_init_args);
+    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
