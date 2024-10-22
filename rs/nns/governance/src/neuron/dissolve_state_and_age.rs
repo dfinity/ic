@@ -35,7 +35,6 @@ impl DissolveStateAndAge {
                     original, validated_dissolve_state_and_age
                 ));
         }
-
         Ok(self)
     }
     /// Returns the current state given the current time. Mainly for differentiating between
