@@ -202,7 +202,7 @@ fn canister_type_and_wasm_hash_for_upgrade(
 /// Get the current version of the SNS this SNS is using.  This may not include
 /// the archive version (as there may not be a running archive).  It will reflect
 /// the current state of Root's knowledge about which canisters exist.
-pub(crate) async fn get_running_version(
+pub async fn get_running_version(
     env: &dyn Environment,
     root_canister_id: CanisterId,
 ) -> Result<Version, String> {
@@ -416,6 +416,7 @@ impl Version {
 
         differences
     }
+
     pub(crate) fn version_has_expected_hashes(
         &self,
         expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],

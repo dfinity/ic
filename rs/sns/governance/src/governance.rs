@@ -157,8 +157,12 @@ pub fn log_prefix() -> String {
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
-// How frequently the canister should attempt to refresh the cached_upgrade_steps
+/// How frequently the canister should attempt to refresh the cached_upgrade_steps
 pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
+
+/// The maximum duration for which the upgrade periodic task lock may be held.
+/// Past this duration, the lock will be automatically released.
+const UPGRADE_TASK_LOCK_TIMEOUT_SECONDS: u64 = 600;
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -696,11 +700,140 @@ pub struct Governance {
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
 
+    /// Global lock for all periodic tasks that relate to upgrades - this guarantees
+    /// that they don't interleave with one another.
+    /// `None` means that the lock is not currently held by any task.
+    /// `Some(x)` means that a task is has been holding the lock since timestamp `x`.
+    upgrade_periodic_task_lock: UpgradeLock,
+
     /// Whether test features are enabled.
     /// Test features should not be exposed in production. But, code that should
     /// not run in production can be gated behind a check for this flag as an
     /// extra layer of protection.
     pub test_features_enabled: bool,
+}
+
+/// An upgrade task instance is characterized by its kind (either `CheckUpgradeStatus` or
+/// `RefreshCachedUpgradeSteps`) and an ID.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UpgradeTaskInstance {
+    CheckUpgradeStatus(u64),
+    RefreshCachedUpgradeSteps(u64),
+}
+
+impl UpgradeTaskInstance {
+    pub fn check_upgrade_status() -> Self {
+        // TODO: Use a globally incrementing ID.
+        UpgradeTaskInstance::CheckUpgradeStatus(0)
+    }
+
+    pub fn refresh_cached_upgrade_steps() -> Self {
+        // TODO: Use a globally incrementing ID.
+        UpgradeTaskInstance::RefreshCachedUpgradeSteps(0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UpgradeLock {
+    /// A new lock is in Released state but does not have `released_by`.
+    Released {
+        released_by: Option<UpgradeTaskInstance>,
+        released_at_timestamp_seconds: u64,
+    },
+    Locked {
+        acquired_by: UpgradeTaskInstance,
+        acquired_at_timestamp_seconds: u64,
+    },
+}
+
+impl UpgradeLock {
+    pub fn new() -> Self {
+        UpgradeLock::Released {
+            released_by: None,
+            released_at_timestamp_seconds: 0,
+        }
+    }
+
+    /// Returns `true` if and only if the upgrade lock has been acquired by this task instance.
+    fn try_acquire_upgrade_lock(&mut self, now: u64, task_instance: UpgradeTaskInstance) -> bool {
+        if let UpgradeLock::Locked {
+            acquired_at_timestamp_seconds,
+            ..
+        } = self
+        {
+            let elapsed_timestamp_seconds = now.saturating_sub(*acquired_at_timestamp_seconds);
+            if elapsed_timestamp_seconds < UPGRADE_TASK_LOCK_TIMEOUT_SECONDS {
+                return false;
+            }
+        }
+        *self = UpgradeLock::Locked {
+            acquired_at_timestamp_seconds: now,
+            acquired_by: task_instance,
+        };
+
+        true
+    }
+
+    fn release_upgrade_lock(&mut self, now: u64, task_instance: UpgradeTaskInstance) {
+        // Log potentially interesting locking events, even those that should never occur.
+        match self {
+            UpgradeLock::Released {
+                released_by,
+                released_at_timestamp_seconds,
+            } => {
+                log!(
+                    ERROR,
+                    "When {:?} completed at {}, the upgrade lock has already been released by {:?} at {}.",
+                    task_instance, now, released_by, released_at_timestamp_seconds,
+                );
+            }
+            UpgradeLock::Locked {
+                acquired_by,
+                acquired_at_timestamp_seconds,
+            } => {
+                if *acquired_by != task_instance {
+                    log!(
+                        ERROR,
+                        "When {:?} completed at {}, the upgrade lock has still been acquired by {:?} at {}.",
+                        task_instance, now, acquired_by, acquired_at_timestamp_seconds,
+                    );
+                } else {
+                    let elapsed_timestamp_seconds =
+                        now.saturating_sub(*acquired_at_timestamp_seconds);
+                    if elapsed_timestamp_seconds > UPGRADE_TASK_LOCK_TIMEOUT_SECONDS {
+                        log!(
+                            INFO,
+                            "{:?} completed taking more time than expected ({} seconds).",
+                            task_instance,
+                            elapsed_timestamp_seconds,
+                        );
+                    }
+                }
+            }
+        };
+
+        *self = UpgradeLock::Released {
+            released_by: Some(task_instance),
+            released_at_timestamp_seconds: now,
+        };
+    }
+
+    pub async fn try_run_isolated_upgrade_task<F, Fut>(
+        &mut self,
+        task_instance: UpgradeTaskInstance,
+        task: F,
+        now_fn: fn() -> u64,
+    ) where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = ()>,
+    {
+        if self.try_acquire_upgrade_lock(now_fn(), task_instance) {
+            // Run the task instance.
+            task().await;
+
+            self.release_upgrade_lock(now_fn(), task_instance);
+        }
+    }
 }
 
 /// This function is used to spawn a future in a way that is compatible with both the WASM and
@@ -777,6 +910,7 @@ impl Governance {
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
+            upgrade_periodic_task_lock: UpgradeLock::new(),
             test_features_enabled: false,
         };
 
@@ -4624,7 +4758,29 @@ impl Governance {
         self.process_proposals();
 
         if self.should_check_upgrade_status() {
-            self.check_upgrade_status().await;
+            self.upgrade_periodic_task_lock
+                .try_run_isolated_upgrade_task(
+                    UpgradeTaskInstance::check_upgrade_status(),
+                    || async {
+                        // Governance::check_upgrade_status()
+                        println!("DO NOT MERGE; self.proto = {:?}", self.proto);
+                    },
+                    ic_cdk::api::time,
+                )
+                .await;
+        }
+
+        if self.should_refresh_cached_upgrade_steps() {
+            self.upgrade_periodic_task_lock
+                .try_run_isolated_upgrade_task(
+                    UpgradeTaskInstance::refresh_cached_upgrade_steps(),
+                    || async {
+                        // Governance::refresh_cached_upgrade_steps,
+                        println!("DO NOT MERGE; self.proto = {:?}", self.proto);
+                    },
+                    ic_cdk::api::time,
+                )
+                .await;
         }
 
         let should_distribute_rewards = self.should_distribute_rewards();
@@ -4656,11 +4812,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        if self.should_refresh_cached_upgrade_steps() {
-            self.temporarily_lock_refresh_cached_upgrade_steps();
-            self.refresh_cached_upgrade_steps().await;
-        }
     }
 
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
@@ -4691,13 +4842,14 @@ impl Governance {
 
     /// Refreshes the cached_upgrade_steps field
     pub async fn refresh_cached_upgrade_steps(&mut self) {
-        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+        let Some(deployed_version) = self.proto.deployed_version.clone() else {
             log!(
                 ERROR,
                 "Cannot refresh cached_upgrade_steps: deployed_version not set."
             );
             return;
         };
+        self.temporarily_lock_refresh_cached_upgrade_steps();
         let sns_governance_canister_id = self.env.canister_id().get();
 
         let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
