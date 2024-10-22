@@ -7,6 +7,9 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::{Memory, StableBTreeMap};
 use icp_ledger::Subaccount;
 
+#[cfg(feature = "test")]
+use ic_stable_structures::btreemap::Iter as SBTIter;
+
 /// An index to make it easy to lookup neuron id by subaccount.
 pub struct NeuronSubaccountIndex<M: Memory> {
     subaccount_to_id: StableBTreeMap<[u8; 32], NeuronId, M>,
@@ -97,6 +100,13 @@ impl<M: Memory> NeuronSubaccountIndex<M> {
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
         validate_stable_btree_map(&self.subaccount_to_id);
+    }
+
+    // Dead code while the TLA test is temporarily being disabled.
+    #[allow(dead_code)]
+    #[cfg(feature = "test")]
+    pub fn iter(&self) -> SBTIter<[u8; 32], NeuronId, M> {
+        self.subaccount_to_id.iter()
     }
 }
 

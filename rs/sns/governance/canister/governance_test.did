@@ -273,6 +273,12 @@ type GetSnsInitializationParametersResponse = record {
   sns_initialization_parameters : text;
 };
 
+type CachedUpgradeSteps = record {
+  upgrade_steps : opt Versions;
+  requested_timestamp_seconds : opt nat64;
+  response_timestamp_seconds : opt nat64;
+};
+
 type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
@@ -282,6 +288,7 @@ type Governance = record {
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
+  cached_upgrade_steps : opt CachedUpgradeSteps;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
   pending_version : opt UpgradeInProgress;
@@ -292,6 +299,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  target_version: opt Version;
 };
 
 type GovernanceCachedMetrics = record {
@@ -701,6 +709,8 @@ type Version = record {
   index_wasm_hash : blob;
 };
 
+type Versions = record { versions : vec Version };
+
 type VotingRewardsParameters = record {
   final_reward_rate_basis_points : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
@@ -711,6 +721,17 @@ type VotingRewardsParameters = record {
 type WaitForQuietState = record {
   current_deadline_timestamp_seconds : nat64;
 };
+
+type GetUpgradeJournalRequest = record {};
+
+type GetUpgradeJournalResponse = record {
+  upgrade_steps : opt Versions;
+  response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
+};
+
+type AdvanceTargetVersionRequest = record { target_version : opt Version; };
+type AdvanceTargetVersionResponse = record {};
 
 service : (Governance) -> {
   add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
@@ -729,6 +750,7 @@ service : (Governance) -> {
   get_sns_initialization_parameters : (record {}) -> (
       GetSnsInitializationParametersResponse,
     ) query;
+  get_upgrade_journal : (GetUpgradeJournalRequest) -> (GetUpgradeJournalResponse) query;
   list_nervous_system_functions : () -> (
       ListNervousSystemFunctionsResponse,
     ) query;
@@ -738,4 +760,5 @@ service : (Governance) -> {
   mint_tokens : (MintTokensRequest) -> (record {});
   set_mode : (SetMode) -> (record {});
   update_neuron : (Neuron) -> (opt GovernanceError);
+  advance_target_version : (AdvanceTargetVersionRequest) -> (AdvanceTargetVersionResponse);
 }

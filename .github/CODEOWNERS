@@ -16,14 +16,15 @@
 /bin/fuzzing_coverage.sh  @dfinity/product-security
 
 # [Bazel]
-/bazel/                   @dfinity/idx
-/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
-/third_party/             @dfinity/idx
-/WORKSPACE.bazel          @dfinity/idx
-/mainnet-canisters.bzl    @dfinity/idx @dfinity/nns-team
-/BUILD.bazel              @dfinity/idx
 .bazelrc                  @dfinity/idx
 .bazelversion             @dfinity/idx
+/bazel/                   @dfinity/idx
+/bazel/fuzz_testing.bzl   @dfinity/idx @dfinity/product-security
+/BUILD.bazel              @dfinity/idx
+/third_party/             @dfinity/idx
+/mainnet-canisters.json   @dfinity/idx @dfinity/nns-team
+/MODULE.bazel             @dfinity/idx
+/WORKSPACE.bazel          @dfinity/idx
 
 # [Rust Lang]
 rust-toolchain.toml       @dfinity/networking
@@ -229,6 +230,8 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
+/rs/tests/dashboards/IC/execution-metrics.json          @dfinity/execution @dfinity/idx
+/rs/tests/dashboards/IC/bitcoin.json                    @dfinity/execution @dfinity/idx
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
@@ -236,7 +239,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
 /rs/tests/execution/                                    @dfinity/execution @dfinity/idx
 /rs/tests/financial_integrations/                       @dfinity/finint @dfinity/idx
-/rs/tests/gix/                                          @dfinity/idx
 /rs/tests/message_routing/                              @dfinity/ic-message-routing-owners @dfinity/idx
 /rs/tests/networking/                                   @dfinity/networking @dfinity/idx
 /rs/tests/nns/                                          @dfinity/nns-team @dfinity/idx
@@ -244,7 +246,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
 /rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/boundary_nodes/                           @dfinity/boundary-node @dfinity/idx
 /rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
 /rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx

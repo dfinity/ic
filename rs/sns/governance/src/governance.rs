@@ -20,7 +20,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
+                CachedUpgradeSteps, MaturityModulation, NeuronInFlightCommand, SnsMetadata,
+                UpgradeInProgress, Version, Versions,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -44,15 +45,16 @@ use crate::{
             GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
             GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
             GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, WaitForQuietState,
+            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
     proposal::{
@@ -71,10 +73,13 @@ use crate::{
     },
 };
 use candid::{Decode, Encode};
-use dfn_core::api::{spawn, CanisterId};
-use ic_base_types::PrincipalId;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -111,6 +116,7 @@ use std::{
         HashMap, HashSet,
     },
     convert::{TryFrom, TryInto},
+    future::Future,
     ops::Bound::{Excluded, Unbounded},
     str::FromStr,
     string::ToString,
@@ -150,6 +156,9 @@ pub fn log_prefix() -> String {
 }
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
+
+// How frequently the canister should attempt to refresh the cached_upgrade_steps
+pub const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; // 1 hour
 
 /// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
 pub fn bytes_to_subaccount(
@@ -694,6 +703,24 @@ pub struct Governance {
     pub test_features_enabled: bool,
 }
 
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
 impl Governance {
     pub fn new(
         proto: ValidGovernanceProto,
@@ -911,15 +938,11 @@ impl Governance {
 
     /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
-        match self.proto.in_flight_commands.remove(id) {
-            None => {
-                log!(ERROR,
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case...
-            Some(_) => (),
+        if self.proto.in_flight_commands.remove(id).is_none() {
+            log!(ERROR,
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
@@ -2008,7 +2031,7 @@ impl Governance {
         // - in prod, "self" is a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(proposal_id, action));
+        spawn_in_canister_env(governance.perform_action(proposal_id, action));
     }
 
     /// For a given proposal (given by its ID), selects and performs the right 'action',
@@ -4260,7 +4283,7 @@ impl Governance {
                 .remove_neuron_permissions(&neuron_id, caller, r)
                 .map(|_| ManageNeuronResponse::remove_neuron_permissions_response()),
             C::ClaimOrRefresh(claim_or_refresh) => self
-                .claim_or_refresh_neuron(&neuron_id, claim_or_refresh)
+                .claim_or_refresh_neuron(&neuron_id, caller, claim_or_refresh)
                 .await
                 .map(|_| ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id)),
         }
@@ -4318,10 +4341,10 @@ impl Governance {
         }
     }
 
-    /// Calls dfn_core::api::caller.
     async fn claim_or_refresh_neuron(
         &mut self,
         neuron_id: &NeuronId,
+        caller: &PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<(), GovernanceError> {
         let locator = &claim_or_refresh.by.as_ref().ok_or_else(|| {
@@ -4333,11 +4356,8 @@ impl Governance {
 
         match locator {
             By::MemoAndController(memo_and_controller) => {
-                self.claim_or_refresh_neuron_by_memo_and_controller(
-                    &dfn_core::api::caller(),
-                    memo_and_controller,
-                )
-                .await
+                self.claim_or_refresh_neuron_by_memo_and_controller(caller, memo_and_controller)
+                    .await
             }
 
             By::NeuronId(_) => self.refresh_neuron(neuron_id).await,
@@ -4597,6 +4617,8 @@ impl Governance {
 
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn heartbeat(&mut self) {
+        use ic_cdk::println;
+
         self.process_proposals();
 
         if self.should_check_upgrade_status() {
@@ -4632,6 +4654,104 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
+
+        if self.should_refresh_cached_upgrade_steps() {
+            self.temporarily_lock_refresh_cached_upgrade_steps();
+            self.refresh_cached_upgrade_steps().await;
+        }
+    }
+
+    pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
+        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            cached_upgrade_steps.requested_timestamp_seconds = Some(self.env.now());
+        } else {
+            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                requested_timestamp_seconds: Some(self.env.now()),
+                ..Default::default()
+            });
+        }
+    }
+
+    pub fn should_refresh_cached_upgrade_steps(&mut self) -> bool {
+        let now = self.env.now();
+
+        if let Some(ref cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            let requested_timestamp_seconds = cached_upgrade_steps
+                .requested_timestamp_seconds
+                .unwrap_or(0);
+            if now - requested_timestamp_seconds < UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Refreshes the cached_upgrade_steps field
+    pub async fn refresh_cached_upgrade_steps(&mut self) {
+        let Some(deployed_version) = self.proto.deployed_version.as_ref() else {
+            log!(
+                ERROR,
+                "Cannot refresh cached_upgrade_steps: deployed_version not set."
+            );
+            return;
+        };
+        let sns_governance_canister_id = self.env.canister_id().get();
+
+        let upgrade_steps = crate::sns_upgrade::get_upgrade_steps(
+            &*self.env,
+            deployed_version.clone(),
+            sns_governance_canister_id,
+        )
+        .await;
+
+        let upgrade_steps = match upgrade_steps {
+            Ok(upgrade_steps) => upgrade_steps,
+            Err(err) => {
+                log!(
+                    ERROR,
+                    "Cannot refresh cached_upgrade_steps: call to SNS-W failed: {}",
+                    err
+                );
+                return;
+            }
+        };
+        let upgrade_steps = Versions {
+            versions: upgrade_steps,
+        };
+
+        // The following code must remain after the async call.
+        if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
+            cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
+            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
+        }
+        // It's unlikely that cached_upgrade_steps is None, the caller is
+        // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
+        // and that requires cached_upgrade_steps != None.
+        // However, we handle it just in case.
+        else {
+            self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
+                response_timestamp_seconds: Some(self.env.now()),
+                upgrade_steps: Some(upgrade_steps),
+                ..Default::default()
+            });
+        }
+    }
+
+    pub fn get_upgrade_journal(&self) -> GetUpgradeJournalResponse {
+        let cached_upgrade_steps = self.proto.cached_upgrade_steps.clone();
+        match cached_upgrade_steps {
+            Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
+                upgrade_steps: cached_upgrade_steps.upgrade_steps,
+                response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
+            },
+            None => GetUpgradeJournalResponse {
+                upgrade_steps: None,
+                response_timestamp_seconds: None,
+                target_version: None,
+            },
+        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {

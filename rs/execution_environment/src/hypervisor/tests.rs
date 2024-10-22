@@ -10,7 +10,7 @@ use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_management_canister_types::{
-    CanisterChange, CanisterHttpResponsePayload, CanisterUpgradeOptions,
+    CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -20,13 +20,13 @@ use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
-use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
+use ic_replicated_state::{NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
+    get_reply, wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_vec_stats, metric_vec, HistogramStats};
@@ -3490,11 +3490,8 @@ fn cannot_execute_update_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3511,8 +3508,8 @@ fn cannot_execute_update_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -3528,11 +3525,8 @@ fn cannot_execute_query_on_stopping_canister() {
     let canister_id = test.universal_canister().unwrap();
     test.stop_canister(canister_id);
     assert_matches!(
-        test.canister_state(canister_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(canister_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
@@ -3549,8 +3543,8 @@ fn cannot_execute_query_on_stopped_canister() {
     test.stop_canister(canister_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(canister_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(canister_id).system_state.status()
     );
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
@@ -4916,11 +4910,8 @@ fn cannot_send_request_to_stopping_canister() {
     // Move canister B to a stopping state before calling it.
     test.stop_canister(b_id);
     assert_matches!(
-        test.canister_state(b_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(b_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Send a message to canister A which will call canister B.
@@ -4959,8 +4950,8 @@ fn cannot_send_request_to_stopped_canister() {
     test.stop_canister(b_id);
     test.process_stopping_canisters();
     assert_eq!(
-        CanisterStatus::Stopped,
-        test.canister_state(b_id).system_state.status
+        CanisterStatusType::Stopped,
+        test.canister_state(b_id).system_state.status()
     );
 
     // Send a message to canister A which will call canister B.
@@ -5013,11 +5004,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Canister A cannot transition to the stopped state because it has an open
     // call context.
     assert_matches!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopping {
-            call_context_manager: _,
-            stop_contexts: _
-        }
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopping
     );
 
     // Execute the call in canister B.
@@ -5033,8 +5021,8 @@ fn cannot_stop_canister_with_open_call_context() {
     // Now it should be possible to stop canister A.
     test.process_stopping_canisters();
     assert_eq!(
-        test.canister_state(a_id).system_state.status,
-        CanisterStatus::Stopped
+        test.canister_state(a_id).system_state.status(),
+        CanisterStatusType::Stopped
     );
 }
 
@@ -6613,106 +6601,111 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
 
 #[test]
 fn stable_memory_grow_reserves_cycles() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 1_000_000_000;
-    const THRESHOLD: u64 = 500_000_000;
-    const WASM_PAGE_SIZE: u64 = 65_536;
-    // 7500 of stable memory pages is close to 500MB, but still leaves some room
-    // for Wasm memory of the universal canister.
-    const NUM_PAGES: u64 = 7_500;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+        const CAPACITY: u64 = 1_000_000_000;
+        const THRESHOLD: u64 = 500_000_000;
+        const WASM_PAGE_SIZE: u64 = 65_536;
+        // 7500 of stable memory pages is close to 500MB, but still leaves some room
+        // for Wasm memory of the universal canister.
+        const NUM_PAGES: u64 = 7_500;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .with_subnet_memory_reservation(0)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_memory_reservation(0)
+            .build();
 
-    let canister_id = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
-        .unwrap();
+        let canister_id = test
+            .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+            .unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
-        .unwrap();
-    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
-        .unwrap();
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+            .unwrap();
+        test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+            .unwrap();
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm()
-                .stable64_grow(NUM_PAGES)
-                // Access the last byte to make sure that growing succeeded.
-                .stable64_read(NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
-                .push_bytes(&[])
-                .append_and_reply()
-                .build(),
-        )
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test
+            .ingress(
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_grow(NUM_PAGES)
+                    // Access the last byte to make sure that growing succeeded.
+                    .stable64_read(NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
+                    .push_bytes(&[])
+                    .append_and_reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(
-        test.canister_state(canister_id)
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::zero()
+        );
+        // Message execution fee is an order of a few million cycles.
+        assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test
+            .ingress(
+                canister_id,
+                "update",
+                wasm()
+                    .stable64_grow(NUM_PAGES)
+                    // Access the last byte to make sure that growing succeeded.
+                    .stable64_read(2 * NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
+                    .push_bytes(&[])
+                    .append_and_reply()
+                    .build(),
+            )
+            .unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+
+        let reserved_cycles = test
+            .canister_state(canister_id)
             .system_state
-            .reserved_balance(),
-        Cycles::zero()
-    );
-    // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+            .reserved_balance();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm()
-                .stable64_grow(NUM_PAGES)
-                // Access the last byte to make sure that growing succeeded.
-                .stable64_read(2 * NUM_PAGES * WASM_PAGE_SIZE - 1, 1)
-                .push_bytes(&[])
-                .append_and_reply()
-                .build(),
-        )
-        .unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert!(balance_before - balance_after > reserved_cycles);
+        assert!(balance_before - balance_after > reserved_cycles);
+    });
 }
 
 #[test]
 fn wasm_memory_grow_reserves_cycles() {
-    const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
-    const CAPACITY: u64 = 1_000_000_000;
-    const THRESHOLD: u64 = 500_000_000;
+    cycles_reserved_for_app_and_verified_app_subnets(|subnet_type| {
+        const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
+        const CAPACITY: u64 = 1_000_000_000;
+        const THRESHOLD: u64 = 500_000_000;
 
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(CAPACITY as i64)
-        .with_subnet_memory_threshold(THRESHOLD as i64)
-        .with_subnet_memory_reservation(0)
-        .build();
+        let mut test = ExecutionTestBuilder::new()
+            .with_subnet_type(subnet_type)
+            .with_subnet_execution_memory(CAPACITY as i64)
+            .with_subnet_memory_threshold(THRESHOLD as i64)
+            .with_subnet_memory_reservation(0)
+            .build();
 
-    let wat = r#"
+        let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
             (import "ic0" "msg_reply_data_append"
@@ -6728,53 +6721,54 @@ fn wasm_memory_grow_reserves_cycles() {
             (export "canister_update update" (func $update))
         )"#;
 
-    let wasm = wat::parse_str(wat).unwrap();
+        let wasm = wat::parse_str(wat).unwrap();
 
-    let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
+        let canister_id = test.canister_from_cycles_and_binary(CYCLES, wasm).unwrap();
 
-    test.update_freezing_threshold(canister_id, NumSeconds::new(0))
-        .unwrap();
-    test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
-        .unwrap();
+        test.update_freezing_threshold(canister_id, NumSeconds::new(0))
+            .unwrap();
+        test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
+            .unwrap();
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test.ingress(canister_id, "update", vec![]).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test.ingress(canister_id, "update", vec![]).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
 
-    assert_eq!(
-        test.canister_state(canister_id)
+        assert_eq!(
+            test.canister_state(canister_id)
+                .system_state
+                .reserved_balance(),
+            Cycles::zero()
+        );
+        // Message execution fee is an order of a few million cycles.
+        assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+
+        let subnet_memory_usage =
+            CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
+        let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
+        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let result = test.ingress(canister_id, "update", vec![]).unwrap();
+        assert_eq!(result, WasmResult::Reply(vec![]));
+        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+
+        let reserved_cycles = test
+            .canister_state(canister_id)
             .system_state
-            .reserved_balance(),
-        Cycles::zero()
-    );
-    // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+            .reserved_balance();
 
-    let subnet_memory_usage =
-        CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
-    let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
-    let result = test.ingress(canister_id, "update", vec![]).unwrap();
-    assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
-    let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
+        assert_eq!(
+            reserved_cycles,
+            test.cycles_account_manager().storage_reservation_cycles(
+                memory_usage_after - memory_usage_before,
+                &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
+                test.subnet_size(),
+            )
+        );
 
-    let reserved_cycles = test
-        .canister_state(canister_id)
-        .system_state
-        .reserved_balance();
-
-    assert_eq!(
-        reserved_cycles,
-        test.cycles_account_manager().storage_reservation_cycles(
-            memory_usage_after - memory_usage_before,
-            &ResourceSaturation::new(subnet_memory_usage, THRESHOLD, CAPACITY),
-            test.subnet_size(),
-        )
-    );
-
-    assert!(balance_before - balance_after > reserved_cycles);
+        assert!(balance_before - balance_after > reserved_cycles);
+    });
 }
 
 #[test]

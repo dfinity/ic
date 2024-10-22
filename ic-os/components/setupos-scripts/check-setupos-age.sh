@@ -9,9 +9,9 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 source /opt/ic/bin/functions.sh
 
 function check_setupos_age() {
-    if [ -f "/build-time" ]; then
+    if [ -f "/commit-time" ]; then
         six_weeks_ago=$(date -u -d '6 weeks ago' +%s)
-        build_time=$(cat /build-time)
+        build_time=$(cat /commit-time)
         if [[ ${build_time} -lt ${six_weeks_ago} ]]; then
             echo -e "\n\n\n\n\n\n"
             echo -e "\033[1;31mWARNING: IC-OS installation image is more than six weeks out of date!\033[0m"

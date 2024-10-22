@@ -128,6 +128,16 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[macro_use]
+pub mod tla_macros;
+#[cfg(feature = "tla")]
+pub mod tla;
+#[cfg(feature = "tla")]
+pub use tla::{
+    claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+};
+
 // 70 KB (for executing NNS functions that are not canister upgrades)
 const PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX: usize = 70000;
 
@@ -146,6 +156,9 @@ pub const WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS: u64 = 2 * ONE_DAY_SECONDS;
 pub const EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 1000;
 // 10 KB
 pub const PROPOSAL_MOTION_TEXT_BYTES_MAX: usize = 10000;
+
+// The minimum neuron dissolve delay (set when a neuron is first claimed)
+pub const INITIAL_NEURON_DISSOLVE_DELAY: u64 = 7 * ONE_DAY_SECONDS;
 
 // The maximum dissolve delay allowed for a neuron.
 pub const MAX_DISSOLVE_DELAY_SECONDS: u64 = 8 * ONE_YEAR_SECONDS;
@@ -175,6 +188,13 @@ pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
 pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
+
+// Spawning is exempted from rate limiting, so we don't need large of a limit here.
+pub const MAX_SUSTAINED_NEURONS_PER_HOUR: u64 = 15;
+
+pub const MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE: u64 = 3600 / MAX_SUSTAINED_NEURONS_PER_HOUR;
+
+pub const MAX_NEURON_CREATION_SPIKE: u64 = MAX_SUSTAINED_NEURONS_PER_HOUR * 8;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -1566,6 +1586,23 @@ impl LedgerUpdateLock {
     }
 }
 
+struct NeuronRateLimits {
+    /// The number of neurons that can be created.
+    available_allowances: u64,
+    /// The last time the number of neurons that can be created was increased.
+    last_allowance_increase: u64,
+}
+
+impl Default for NeuronRateLimits {
+    fn default() -> Self {
+        Self {
+            // Post-upgrade, we reset to max neurons per hour
+            available_allowances: MAX_NEURON_CREATION_SPIKE,
+            last_allowance_increase: 0,
+        }
+    }
+}
+
 /// The `Governance` canister implements the full public interface of the
 /// IC's governance system.
 pub struct Governance {
@@ -1602,6 +1639,9 @@ pub struct Governance {
 
     /// Scope guard for minting node provider rewards.
     minting_node_provider_rewards: bool,
+
+    /// Current neurons available to create
+    neuron_rate_limits: NeuronRateLimits,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1817,6 +1857,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
+            neuron_rate_limits: NeuronRateLimits::default(),
         }
     }
 
@@ -1847,6 +1888,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
+            neuron_rate_limits: NeuronRateLimits::default(),
         }
     }
 
@@ -2047,15 +2089,11 @@ impl Governance {
 
     /// Unlocks a given neuron.
     fn unlock_neuron(&mut self, id: u64) {
-        match self.heap_data.in_flight_commands.remove(&id) {
-            None => {
-                println!(
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case.
-            Some(_) => (),
+        if self.heap_data.in_flight_commands.remove(&id).is_none() {
+            println!(
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
@@ -2087,7 +2125,12 @@ impl Governance {
     /// - the maximum number of neurons has been reached, or
     /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
     /// - the neuron's controller `PrincipalId` is not self-authenticating.
-    fn add_neuron(&mut self, neuron_id: u64, neuron: Neuron) -> Result<(), GovernanceError> {
+    fn add_neuron(
+        &mut self,
+        neuron_id: u64,
+        neuron: Neuron,
+        with_rate_limits: bool,
+    ) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -2126,7 +2169,22 @@ impl Governance {
             ));
         }
 
+        if with_rate_limits && self.neuron_rate_limits.available_allowances < 1 {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Reached maximum number of neurons that can be created in this hour. \
+                    Please wait and try again later.",
+            ));
+        }
+
         self.neuron_store.add_neuron(neuron)?;
+
+        if with_rate_limits {
+            self.neuron_rate_limits.available_allowances = self
+                .neuron_rate_limits
+                .available_allowances
+                .saturating_sub(1);
+        }
 
         Ok(())
     }
@@ -2147,6 +2205,7 @@ impl Governance {
             ));
         }
         self.neuron_store.remove_neuron(&neuron_id);
+        self.neuron_rate_limits.available_allowances += 1;
 
         Ok(())
     }
@@ -2593,6 +2652,7 @@ impl Governance {
     ///   stake.
     /// - The amount to split minus the transfer fee is more than the minimum
     ///   stake.
+    #[cfg_attr(feature = "tla", tla_update_method(split_neuron_desc()))]
     pub async fn split_neuron(
         &mut self,
         id: &NeuronId,
@@ -2712,7 +2772,7 @@ impl Governance {
         // acquiring the lock. Indeed, in case there is already a pending
         // command, we return without state rollback. If we had already created
         // the embryo, it would not be garbage collected.
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron(child_nid.id, child_neuron.clone(), true)?;
 
         // Do the transfer for the parent first, to avoid double spending.
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
@@ -2723,6 +2783,7 @@ impl Governance {
         })?;
 
         let now = self.env.now();
+        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -3112,7 +3173,7 @@ impl Governance {
         .build();
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
-        self.add_neuron(child_nid.id, child_neuron)?;
+        self.add_neuron(child_nid.id, child_neuron, false)?;
 
         // Get the parent neuron again, but this time mutable references.
         self.with_neuron_mut(id, |parent_neuron| {
@@ -3400,7 +3461,7 @@ impl Governance {
         .with_kyc_verified(parent_neuron.kyc_verified)
         .build();
 
-        self.add_neuron(child_nid.id, child_neuron.clone())?;
+        self.add_neuron(child_nid.id, child_neuron.clone(), true)?;
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
@@ -4160,7 +4221,7 @@ impl Governance {
                 .with_kyc_verified(true)
                 .build();
 
-                self.add_neuron(nid.id, neuron)
+                self.add_neuron(nid.id, neuron, false)
             }
             Some(RewardMode::RewardToAccount(reward_to_account)) => {
                 // We are not creating a neuron, just transferring funds.
@@ -6145,6 +6206,7 @@ impl Governance {
     /// the neuron and lock it before we make the call, we know that any
     /// concurrent call to mutate the same neuron will need to wait for this
     /// one to finish before proceeding.
+    #[cfg_attr(feature = "tla", tla_update_method(claim_neuron_desc()))]
     async fn claim_neuron(
         &mut self,
         subaccount: Subaccount,
@@ -6157,8 +6219,9 @@ impl Governance {
             nid,
             subaccount,
             controller,
-            DissolveStateAndAge::DissolvingOrDissolved {
-                when_dissolved_timestamp_seconds: now,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: INITIAL_NEURON_DISSOLVE_DELAY,
+                aging_since_timestamp_seconds: now,
             },
             now,
         )
@@ -6167,7 +6230,7 @@ impl Governance {
         .build();
 
         // This also verifies that there are not too many neurons already.
-        self.add_neuron(nid.id, neuron.clone())?;
+        self.add_neuron(nid.id, neuron.clone(), true)?;
 
         let _neuron_lock = self.lock_neuron_for_command(
             nid.id,
@@ -6181,6 +6244,7 @@ impl Governance {
 
         // Get the balance of the neuron's subaccount from ledger canister.
         let account = neuron_subaccount(subaccount);
+        tla_log_locals! { account: tla::account_to_tla(account), neuron_id: nid.id };
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self.economics().neuron_minimum_stake_e8s;
         if balance.get_e8s() < min_stake {
@@ -6447,6 +6511,30 @@ impl Governance {
             .maybe_validate(self.env.now(), &self.neuron_store);
     }
 
+    /// Increment neuron allowances if enough time has passed.
+    fn maybe_increase_neuron_allowances(&mut self) {
+        // We  increase the allowance over the maximum per hour to account
+        // for natural variations in rates, but not leaving too much spare capacity.
+        if self.neuron_rate_limits.available_allowances < MAX_NEURON_CREATION_SPIKE {
+            let time_elapsed_since_last_allowance_increase = self
+                .env
+                .now()
+                .saturating_sub(self.neuron_rate_limits.last_allowance_increase);
+
+            // Heartbeats should run frequently enough that the allowances increase fairly close
+            // to what's intended.  However, some variation is acceptable.
+            if time_elapsed_since_last_allowance_increase
+                >= MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE
+            {
+                self.neuron_rate_limits.available_allowances = self
+                    .neuron_rate_limits
+                    .available_allowances
+                    .saturating_add(1);
+                self.neuron_rate_limits.last_allowance_increase = self.env.now();
+            }
+        }
+    }
+
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -6526,6 +6614,7 @@ impl Governance {
         self.maybe_gc();
         self.maybe_run_migrations();
         self.maybe_run_validations();
+        self.maybe_increase_neuron_allowances();
     }
 
     fn should_update_maturity_modulation(&self) -> bool {

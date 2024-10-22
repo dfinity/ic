@@ -5,10 +5,9 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-permissions: read-all
-
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  # only triggered on PR, so head_ref will always be set
+  group: ${{ github.workflow }}-${{ github.head_ref }}
   cancel-in-progress: true
 env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
@@ -18,7 +17,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:2c6fc0aa92ada647e42790cbdac3199b27a1407d9e90ff6e5a97a69acac24041
+    image: ghcr.io/dfinity/ic-build@sha256:ced9611af39119f62feedc8a5ad75a8fac478cb43d2d56b623023766f6ce8ca7
   dind-small-setup: &dind-small-setup
     timeout-minutes: 30
     runs-on:
@@ -144,6 +143,10 @@ jobs:
         with:
           fetch-depth: 256
       - <<: *before-script
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Setup python deps
         id: setup-python-deps
         shell: bash

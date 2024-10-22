@@ -161,6 +161,9 @@ rust_ic_test(
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/archive:archive_canister_u256.wasm.gz)",
     },
     proc_macro_deps = [],
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
     deps = [
         # Keep sorted.
         ":ledger_suite_orchestrator",

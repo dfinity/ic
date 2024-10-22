@@ -27,9 +27,13 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["k8s"],
+    tags = [
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -68,9 +72,13 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
+    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = ["k8s"],
+    tags = [
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -121,7 +129,6 @@ system_test_nns(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -137,7 +144,6 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
@@ -150,7 +156,6 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
@@ -159,6 +164,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -172,6 +178,7 @@ system_test_nns(
 
 system_test_nns(
     name = "network_large_test",
+    extra_head_nns_tags = ["manual"],  # only run this test with the mainnet NNS canisters.
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -191,7 +198,6 @@ system_test_nns(
     tags = [
         "k8s",
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -205,7 +211,6 @@ system_test_nns(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
-        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",

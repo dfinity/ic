@@ -23,13 +23,14 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
-dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
@@ -68,7 +69,7 @@ pretty_assertions = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
-tokio-test = "0.4.2"
+tokio-test = { workspace = true }
 
 [features]
 test = [

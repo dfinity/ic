@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
@@ -76,14 +75,14 @@ pub enum RequestType {
     Status,
     Query,
     Call,
-    CallV3,
+    SyncCall,
     ReadState,
     ReadStateSubnet,
 }
 
 impl RequestType {
     pub fn is_call(&self) -> bool {
-        matches!(self, Self::Call | Self::CallV3)
+        matches!(self, Self::Call | Self::SyncCall)
     }
 }
 
@@ -97,7 +96,8 @@ pub enum RateLimitCause {
 
 // Categorized possible causes for request processing failures
 // Not using Error as inner type since it's not cloneable
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Display)]
+#[strum(serialize_all = "snake_case")]
 pub enum ErrorCause {
     BodyTimedOut,
     UnableToReadBody(String),
@@ -109,6 +109,7 @@ pub enum ErrorCause {
     MalformedResponse(String),
     NoRoutingTable,
     SubnetNotFound,
+    CanisterNotFound,
     NoHealthyNodes,
     ReplicaErrorDNS(String),
     ReplicaErrorConnect,
@@ -116,35 +117,13 @@ pub enum ErrorCause {
     ReplicaTLSErrorOther(String),
     ReplicaTLSErrorCert(String),
     ReplicaErrorOther(String),
+    #[strum(serialize = "rate_limited_{0}")]
     RateLimited(RateLimitCause),
+    #[strum(serialize = "internal_server_error")]
     Other(String),
 }
 
 impl ErrorCause {
-    pub fn status_code(&self) -> StatusCode {
-        match self {
-            Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::BodyTimedOut => StatusCode::REQUEST_TIMEOUT,
-            Self::UnableToReadBody(_) => StatusCode::REQUEST_TIMEOUT,
-            Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
-            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
-            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
-            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
-            Self::MalformedResponse(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::NoRoutingTable => StatusCode::SERVICE_UNAVAILABLE,
-            Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
-            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorDNS(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorConnect => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaTimeout => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::ReplicaTLSErrorOther(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaTLSErrorCert(_) => StatusCode::SERVICE_UNAVAILABLE,
-            Self::ReplicaErrorOther(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            Self::RateLimited(_) => StatusCode::TOO_MANY_REQUESTS,
-        }
-    }
-
     pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
@@ -166,31 +145,29 @@ impl ErrorCause {
     pub fn retriable(&self) -> bool {
         !matches!(self, Self::PayloadTooLarge(_) | Self::MalformedResponse(_))
     }
-}
 
-// TODO use strum
-impl fmt::Display for ErrorCause {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn to_client_facing_error(&self) -> ErrorClientFacing {
         match self {
-            Self::Other(_) => write!(f, "general_error"),
-            Self::BodyTimedOut => write!(f, "body_timed_out"),
-            Self::UnableToReadBody(_) => write!(f, "unable_to_read_body"),
-            Self::PayloadTooLarge(_) => write!(f, "payload_too_large"),
-            Self::UnableToParseCBOR(_) => write!(f, "unable_to_parse_cbor"),
-            Self::UnableToParseHTTPArg(_) => write!(f, "unable_to_parse_http_arg"),
-            Self::LoadShed => write!(f, "load_shed"),
-            Self::MalformedRequest(_) => write!(f, "malformed_request"),
-            Self::MalformedResponse(_) => write!(f, "malformed_response"),
-            Self::NoRoutingTable => write!(f, "no_routing_table"),
-            Self::SubnetNotFound => write!(f, "subnet_not_found"),
-            Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
-            Self::ReplicaErrorDNS(_) => write!(f, "replica_error_dns"),
-            Self::ReplicaErrorConnect => write!(f, "replica_error_connect"),
-            Self::ReplicaTimeout => write!(f, "replica_timeout"),
-            Self::ReplicaTLSErrorOther(_) => write!(f, "replica_tls_error"),
-            Self::ReplicaTLSErrorCert(_) => write!(f, "replica_tls_error_cert"),
-            Self::ReplicaErrorOther(_) => write!(f, "replica_error_other"),
-            Self::RateLimited(x) => write!(f, "rate_limited_{x}"),
+            Self::Other(_) => ErrorClientFacing::Other,
+            Self::BodyTimedOut => ErrorClientFacing::BodyTimedOut,
+            Self::UnableToReadBody(_) => ErrorClientFacing::Other,
+            Self::PayloadTooLarge(x) => ErrorClientFacing::PayloadTooLarge(*x),
+            Self::UnableToParseCBOR(x) => ErrorClientFacing::UnableToParseCBOR(x.clone()),
+            Self::UnableToParseHTTPArg(x) => ErrorClientFacing::UnableToParseHTTPArg(x.clone()),
+            Self::LoadShed => ErrorClientFacing::LoadShed,
+            Self::MalformedRequest(x) => ErrorClientFacing::MalformedRequest(x.clone()),
+            Self::MalformedResponse(_) => ErrorClientFacing::ReplicaError,
+            Self::NoRoutingTable => ErrorClientFacing::ServiceUnavailable,
+            Self::SubnetNotFound => ErrorClientFacing::SubnetNotFound,
+            Self::CanisterNotFound => ErrorClientFacing::CanisterNotFound,
+            Self::NoHealthyNodes => ErrorClientFacing::NoHealthyNodes,
+            Self::ReplicaErrorDNS(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaErrorConnect => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTimeout => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTLSErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaTLSErrorCert(_) => ErrorClientFacing::ReplicaError,
+            Self::ReplicaErrorOther(_) => ErrorClientFacing::ReplicaError,
+            Self::RateLimited(_) => ErrorClientFacing::RateLimited,
         }
     }
 }
@@ -198,13 +175,77 @@ impl fmt::Display for ErrorCause {
 // Creates the response from ErrorCause and injects itself into extensions to be visible by middleware
 impl IntoResponse for ErrorCause {
     fn into_response(self) -> Response {
-        let mut body = self.to_string();
+        let client_facing_error = self.to_client_facing_error();
+        client_facing_error.into_response()
+    }
+}
 
-        if let Some(v) = self.details() {
-            body = format!("{body}: {v}");
+#[derive(Clone, Debug, Display, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum ErrorClientFacing {
+    BodyTimedOut,
+    CanisterNotFound,
+    LoadShed,
+    MalformedRequest(String),
+    NoHealthyNodes,
+    #[strum(serialize = "internal_server_error")]
+    Other,
+    PayloadTooLarge(usize),
+    RateLimited,
+    ReplicaError,
+    ServiceUnavailable,
+    SubnetNotFound,
+    UnableToParseCBOR(String),
+    UnableToParseHTTPArg(String),
+}
+
+impl ErrorClientFacing {
+    pub fn status_code(&self) -> StatusCode {
+        match self {
+            Self::BodyTimedOut => StatusCode::REQUEST_TIMEOUT,
+            Self::CanisterNotFound => StatusCode::BAD_REQUEST,
+            Self::LoadShed => StatusCode::TOO_MANY_REQUESTS,
+            Self::MalformedRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NoHealthyNodes => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Other => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::ReplicaError => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::SubnetNotFound => StatusCode::BAD_REQUEST,
+            Self::UnableToParseCBOR(_) => StatusCode::BAD_REQUEST,
+            Self::UnableToParseHTTPArg(_) => StatusCode::BAD_REQUEST,
         }
+    }
 
-        let mut resp = (self.status_code(), format!("{body}\n")).into_response();
+    pub fn details(&self) -> String {
+        match self {
+            Self::BodyTimedOut => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::CanisterNotFound => "The specified canister does not exist.".to_string(),
+            Self::LoadShed => "Reading the request body timed out due to data arriving too slowly.".to_string(),
+            Self::MalformedRequest(x) => x.clone(),
+            Self::NoHealthyNodes => "There are currently no healthy replica nodes available to handle the request. This may be due to an ongoing upgrade of the replica software in the subnet. Please try again later.".to_string(),
+            Self::Other => "Internal Server Error".to_string(),
+            Self::PayloadTooLarge(x) => format!("Payload is too large: maximum body size is {x} bytes."),
+            Self::RateLimited => "Rate limit exceeded. Please slow down requests and try again later.".to_string(),
+            Self::ReplicaError => "An unexpected error occurred while communicating with the upstream replica node. Please try again later.".to_string(),
+            Self::ServiceUnavailable => "The API boundary node is temporarily unable to process the request. Please try again later.".to_string(),
+            Self::SubnetNotFound => "The specified subnet cannot be found.".to_string(),
+            Self::UnableToParseCBOR(x) => format!("Failed to parse the CBOR request body: {x}"),
+            Self::UnableToParseHTTPArg(x) => format!("Unable to decode the arguments of the request to the http_request method: {x}"),
+        }
+    }
+}
+
+// Creates the response from ErrorClientFacing and injects itself into extensions to be visible by middleware
+impl IntoResponse for ErrorClientFacing {
+    fn into_response(self) -> Response {
+        let error_cause = self.to_string();
+
+        let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
+        let body = format!("error: {}\ndetails: {}", error_cause, self.details());
+
+        let mut resp = (self.status_code(), headers, body).into_response();
         resp.extensions_mut().insert(self);
         resp
     }
@@ -363,7 +404,7 @@ impl Lookup for ProxyRouter {
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_canister_id(canister_id.get_ref().0)
-            .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
+            .ok_or(ErrorCause::CanisterNotFound)?; // Requested canister route wasn't found
 
         Ok(subnet)
     }
@@ -472,7 +513,7 @@ pub async fn validate_canister_request(
     let request_type = match matched_path.as_str() {
         PATH_QUERY => RequestType::Query,
         PATH_CALL => RequestType::Call,
-        PATH_CALL_V3 => RequestType::CallV3,
+        PATH_CALL_V3 => RequestType::SyncCall,
         PATH_READ_STATE => RequestType::ReadState,
         _ => panic!("unknown path, should never happen"),
     };
@@ -533,7 +574,7 @@ pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoR
         if !is_valid_id {
             #[allow(clippy::borrow_interior_mutable_const)]
             return Err(ErrorCause::MalformedRequest(format!(
-                "value of '{X_REQUEST_ID}' header is not in UUID format"
+                "Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
             ))
             .into());
         }

@@ -3,6 +3,9 @@ Enumerate every component file dependency for SetupOS
 """
 
 component_files = {
+    # commit-time is checked in the setupOS installation to verify that images are not too old.
+    Label("//ic-os/components:commit_timestamp_txt"): "/commit-time",
+
     # setupos-scripts
     Label("setupos-scripts/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("setupos-scripts/config.sh"): "/opt/ic/bin/config.sh",
@@ -23,13 +26,15 @@ component_files = {
     Label("early-boot/fstab/fstab-setupos"): "/etc/fstab",
     Label("early-boot/locale"): "/etc/default/locale",
     Label("early-boot/initramfs-tools/setupos/initramfs.conf"): "/etc/initramfs-tools/initramfs.conf",
+    Label("early-boot/initramfs-tools/setupos/amd64-microcode"): "/etc/default/amd64-microcode",
+    Label("early-boot/initramfs-tools/setupos/intel-microcode"): "/etc/default/intel-microcode",
 
     # misc
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
-    Label("misc/serial-getty@/setupos/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
+    Label("misc/serial-getty@/setupos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
 
     # networking
