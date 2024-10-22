@@ -51,8 +51,6 @@ use pocket_ic::common::rest::{
     HttpGatewayDetails, HttpGatewayInfo, MockCanisterHttpResponse, Topology,
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
-use rand::rngs::StdRng;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
@@ -76,17 +74,23 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
-pub const STATE_LABEL_HASH_SIZE: usize = 32;
+pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
 
 impl StateLabel {
-    pub fn new(rng: &mut StdRng) -> Self {
-        let mut state_label = [42; STATE_LABEL_HASH_SIZE];
-        rng.fill_bytes(&mut state_label);
-        Self(state_label)
+    pub fn new(instance_id: InstanceId) -> Self {
+        let mut seq_no: u128 = instance_id.try_into().unwrap();
+        seq_no <<= 64;
+        Self(seq_no.to_le_bytes())
+    }
+
+    pub fn bump(&mut self) {
+        let mut seq_no: u128 = u128::from_le_bytes(self.0);
+        seq_no += 1;
+        self.0 = seq_no.to_le_bytes();
     }
 }
 
@@ -1409,7 +1413,7 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
-                            pocket_ic.refresh_state_label();
+                            pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();

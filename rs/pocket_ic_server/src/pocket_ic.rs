@@ -70,8 +70,6 @@ use pocket_ic::common::rest::{
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, SubnetSpec, Topology,
 };
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 use std::str::FromStr;
@@ -232,9 +230,6 @@ pub struct PocketIc {
     routing_table: RoutingTable,
     /// Created on initialization and updated if a new subnet is created.
     topology: TopologyInternal,
-    /// Used for choosing a random state label for this instance.
-    /// This value is seeded for the sake of reproducibility.
-    randomness: StdRng,
     state_label: StateLabel,
     range_gen: RangeGen,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -691,8 +686,7 @@ impl PocketIc {
             default_effective_canister_id,
         };
 
-        let mut randomness = StdRng::seed_from_u64(instance_id as u64);
-        let state_label = StateLabel::new(&mut randomness);
+        let state_label = StateLabel::new(instance_id);
 
         Self {
             state_dir,
@@ -701,7 +695,6 @@ impl PocketIc {
             routing_table,
             topology,
             state_label,
-            randomness,
             range_gen,
             registry_data_provider,
             runtime,
@@ -712,8 +705,8 @@ impl PocketIc {
         }
     }
 
-    pub(crate) fn refresh_state_label(&mut self) {
-        self.state_label = StateLabel::new(&mut self.randomness);
+    pub(crate) fn bump_state_label(&mut self) {
+        self.state_label.bump();
     }
 
     fn try_route_canister(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -2567,4 +2560,50 @@ fn new_canister_http_adapter(
     };
 
     CanisterHttp::new(config, log, metrics_registry)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_label_test() {
+        // State label changes.
+        let mut pic0 = PocketIc::new(
+            Runtime::new().unwrap().into(),
+            0,
+            ExtendedSubnetConfigSet {
+                application: vec![SubnetSpec::default()],
+                ..Default::default()
+            },
+            None,
+            false,
+            None,
+            None,
+        );
+        let mut pic1 = PocketIc::new(
+            Runtime::new().unwrap().into(),
+            1,
+            ExtendedSubnetConfigSet {
+                application: vec![SubnetSpec::default()],
+                ..Default::default()
+            },
+            None,
+            false,
+            None,
+            None,
+        );
+        assert_ne!(pic0.get_state_label(), pic1.get_state_label());
+
+        let pic0_state_label = pic0.get_state_label();
+        pic0.bump_state_label();
+        assert_ne!(pic0.get_state_label(), pic0_state_label);
+        assert_ne!(pic0.get_state_label(), pic1.get_state_label());
+
+        let pic1_state_label = pic1.get_state_label();
+        pic1.bump_state_label();
+        assert_ne!(pic1.get_state_label(), pic0_state_label);
+        assert_ne!(pic1.get_state_label(), pic1_state_label);
+        assert_ne!(pic1.get_state_label(), pic0.get_state_label());
+    }
 }
