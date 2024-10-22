@@ -473,15 +473,15 @@ pub(crate) fn validate_canister_settings(
     }
 
     let controllers = settings.controllers();
-    match &controllers {
-        Some(controllers) => {
-            if controllers.len() > max_controllers {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!("Invalid settings: 'controllers' length exceeds maximum size allowed of {}.", max_controllers),
-                });
-            }
+    if let Some(controllers) = &controllers {
+        if controllers.len() > max_controllers {
+            return Err(CanisterManagerError::InvalidSettings {
+                message: format!(
+                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
+                    max_controllers
+                ),
+            });
         }
-        None => {}
     }
 
     if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {

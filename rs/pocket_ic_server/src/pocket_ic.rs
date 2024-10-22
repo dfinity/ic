@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{async_trait, copy_dir, BlobStore, InstanceId, OpId, Operation};
 use askama::Template;
