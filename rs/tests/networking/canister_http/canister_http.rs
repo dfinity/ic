@@ -79,15 +79,11 @@ pub fn setup(env: TestEnv) {
     await_nodes_healthy(&env);
     install_nns_canisters(&env);
 
-    // install proxy
-    let logger = env.logger();
-
     // Get application subnet node to deploy canister to.
     let mut nodes = get_node_snapshots(&env);
     let node = nodes.next().expect("there is no application node");
     let runtime = get_runtime_from_node(&node);
     let _ = create_proxy_canister(&env, &runtime, &node);
-    let webserver_ipv6 = get_universal_vm_address(&env);
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
