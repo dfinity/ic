@@ -104,8 +104,6 @@ After all is done, it is advised to prepare a configuration for a single node an
 
 === Injecting external state
 
-TODO: update...
-
 *Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS. 
 
 However, the typical bootstrap process can be modified such that the node is initialized using externally generated private keys and an externally generated initial state. All "registration" to the target IC is assumed to have been performed by other means.
