@@ -14,6 +14,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 pub struct AddErc20TokenFlow {
     pub setup: LedgerSuiteOrchestrator,
@@ -27,6 +28,8 @@ impl AddErc20TokenFlow {
         let mut canister_ids = None;
         let mut counter = 0;
         while !is_live && counter < MAX_TICKS {
+            self.setup.env.tick();
+            self.setup.env.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
             canister_ids = self
                 .setup
@@ -113,8 +116,9 @@ impl ManagedCanistersAssert {
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
-        const ARCHIVE_TRIGGER_THRESHOLD: u64 = 2_000;
+        const ARCHIVE_TRIGGER_THRESHOLD: u64 = 20;
 
+        let now = std::time::SystemTime::now();
         let archive_ids_before: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()
@@ -150,14 +154,21 @@ impl ManagedCanistersAssert {
         );
         assert!(archive_ids_before.is_subset(&archive_ids_after));
 
-        Self {
+        let res = Self {
             setup: self.setup,
             canister_ids: ManagedCanisterIds {
                 ledger: self.canister_ids.ledger,
                 index: self.canister_ids.index,
                 archives: Vec::from_iter(archive_ids_after),
             },
+        };
+        if let Some(d) = now.elapsed().ok() {
+            println!(
+                "trigger_creation_of_archive finished in {}ms",
+                d.as_millis()
+            )
         }
+        res
     }
 
     pub fn assert_ledger_canister_info_satisfy<P: FnOnce(&CanisterInfoResponse) -> bool>(
