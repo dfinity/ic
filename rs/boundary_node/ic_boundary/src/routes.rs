@@ -60,9 +60,6 @@ pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
 pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
 pub const PATH_HEALTH: &str = "/health";
 
-// Will be moved to ic-bn-lib
-pub const X_ERROR_TAG: http::HeaderName = http::HeaderName::from_static("x-error-tag");
-
 lazy_static! {
     pub static ref UUID_REGEX: Regex =
         Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$").unwrap();
@@ -243,10 +240,10 @@ impl ErrorClientFacing {
 // Creates the response from ErrorClientFacing and injects itself into extensions to be visible by middleware
 impl IntoResponse for ErrorClientFacing {
     fn into_response(self) -> Response {
-        let error_tag = self.to_string();
+        let error_cause = self.to_string();
 
-        let headers = [(X_ERROR_TAG, error_tag.clone())];
-        let body = format!("error: {}\ndetails: {}", error_tag, self.details());
+        let headers = [(X_IC_ERROR_CAUSE, error_cause.clone())];
+        let body = format!("error: {}\ndetails: {}", error_cause, self.details());
 
         let mut resp = (self.status_code(), headers, body).into_response();
         resp.extensions_mut().insert(self);
