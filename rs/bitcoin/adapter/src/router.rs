@@ -46,10 +46,10 @@ pub fn start_main_event_loop(
         network_message_sender,
         router_metrics.clone(),
     );
+    let adapter_notifier = adapter_state.notifier();
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
-        let adapter_notifier = adapter_state.notifier();
         loop {
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
