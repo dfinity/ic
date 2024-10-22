@@ -4,7 +4,7 @@
 # If it's a proposal, we need to make sure that proposal_hash == CDN_hash == build_hash.
 # Otherwise, we only need to make sure that CDN_hash == build_hash.
 
-set -euo pipefail
+set -eEuo pipefail
 
 pushd() {
     command pushd "$@" >/dev/null
@@ -131,23 +131,33 @@ proposal_id=""
 git_commit=""
 no_option=""
 SECONDS=0
+
+# OPTIND is a built-in variable in Bash that represents the index of the
+# next argument to be processed by getopts during argument parsing.
+if [ "$OPTIND" -eq 1 ]; then
+    no_option="true"
+fi
+
 pwd="$(pwd)"
 
 # Parse arguments
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --guestos)
+            log "Verifying only build reproducibility of GuestOS"
             verify_hostos="false"
             verify_setupos="false"
-            ;; # Only verify build reproducibility of GuestOS
+            ;;
         --hostos)
+            log "Verifying only build reproducibility of HostOS"
             verify_guestos="false"
             verify_setupos="false"
-            ;; # Only verify build reproducibility of HostOS
+            ;;
         --setupos)
+            log "Verifying only build reproducibility of SetupOS"
             verify_guestos="false"
             verify_hostos="false"
-            ;; # Only verify build reproducibility of SetupOS
+            ;;
         -p)
             proposal_id="$2"
             shift
@@ -203,6 +213,14 @@ else
     log_warning "You need at least 100GB of free disk space on this machine"
 fi
 
+# Default action if no flags are provided
+# - check the latest commit of the branch we are on
+# - verify all OS components
+if [ "$no_option" == "true" ]; then
+    check_git_repo
+    check_ic_repo
+fi
+
 # Install dependencies if they are not available
 log "Check and install needed dependencies"
 for pkg in git curl jq podman; do
@@ -213,20 +231,6 @@ for pkg in git curl jq podman; do
         log_success "$pkg is already installed"
     fi
 done
-
-# Set default behavior if no flags are provided
-# OPTIND is a built-in variable in Bash that represents the index of the
-# next argument to be processed by getopts during argument parsing.
-# - check the latest commit of the branch we are on
-# - verify all OS components
-if [ "$OPTIND" -eq 1 ]; then
-    verify_guestos="true"
-    verify_hostos="true"
-    verify_setupos="true"
-    no_option="true"
-    check_git_repo
-    check_ic_repo
-fi
 
 # set the `git_hash` from the `proposal_id` or from the environment
 if [ -n "$proposal_id" ]; then
