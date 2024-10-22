@@ -112,8 +112,8 @@ struct ProgressThread {
 }
 
 struct Instance {
-    state: InstanceState,
     progress_thread: Option<ProgressThread>,
+    state: InstanceState,
 }
 
 impl std::fmt::Debug for Instance {
@@ -715,8 +715,8 @@ impl ApiState {
         let mut instances = self.instances.write().await;
         let instance_id = instances.len();
         instances.push(Mutex::new(Instance {
-            state: InstanceState::Available(instance),
             progress_thread: None,
+            state: InstanceState::Available(instance),
         }));
         instance_id
     }
@@ -1260,7 +1260,10 @@ impl ApiState {
     pub async fn stop_progress(&self, instance_id: InstanceId) {
         let instances = self.instances.read().await;
         let mut instance = instances[instance_id].lock().await;
-        if let Some(t) = instance.progress_thread.take() {
+        let progress_thread = instance.progress_thread.take();
+        drop(instance);
+        drop(instances);
+        if let Some(t) = progress_thread {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
         }
