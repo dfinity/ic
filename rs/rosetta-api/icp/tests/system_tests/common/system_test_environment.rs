@@ -3,12 +3,13 @@ use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
-};
+};use ic_nns_test_utils::common::build_registry_wasm;use ic_nns_test_utils::common::build_lifeline_wasm;
 use candid::{Encode, Principal};
 use ic_agent::Identity;
-use ic_icp_rosetta_client::RosettaClient;
+use ic_icp_rosetta_client::RosettaClient;use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
 use ic_icp_rosetta_client::RosettaTransferArgs;
-use ic_icp_rosetta_runner::RosettaOptions;
+use ic_icp_rosetta_runner::RosettaOptions;use ic_nns_constants::REGISTRY_CANISTER_ID;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
@@ -280,7 +281,9 @@ impl RosettaTestingEnvironmentBuilder {
                     Some(nns_root_canister_controller),
                 )
                 .await;
-
+            pocket_ic
+                .add_cycles(nns_root_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
             let governance_canister_wasm = build_governance_wasm();
             let governance_canister_id = Principal::from(GOVERNANCE_CANISTER_ID);
             let governance_canister_controller = ROOT_CANISTER_ID.get().0;
@@ -316,7 +319,64 @@ impl RosettaTestingEnvironmentBuilder {
                 .advance_time(std::time::Duration::from_secs(60))
                 .await;
             pocket_ic.tick().await;
-        }
+
+            let nns_lifeline_canister_wasm = build_lifeline_wasm();
+            let nns_lifeline_canister_id = Principal::from(LIFELINE_CANISTER_ID);
+            let nns_lifeline_canister_controller = ROOT_CANISTER_ID.get().0;
+            let nns_lifeline_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(nns_lifeline_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![nns_lifeline_canister_controller]),
+                        ..Default::default()
+                    }),
+                    nns_lifeline_canister_id,
+                )
+                .await
+                .expect("Unable to create the NNS Lifeline canister");
+
+            pocket_ic
+                .install_canister(
+                    nns_lifeline_canister,
+                    nns_lifeline_canister_wasm.bytes().to_vec(),
+                    Encode!(&LifelineCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Some(nns_lifeline_canister_controller),
+                )
+                .await;
+            pocket_ic
+                .add_cycles(nns_lifeline_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
+
+                let nns_registry_canister_wasm = build_registry_wasm();
+                let nns_registry_canister_id = Principal::from(REGISTRY_CANISTER_ID);
+                let nns_registry_canister_controller = ROOT_CANISTER_ID.get().0;
+                let nns_registry_canister = pocket_ic
+                    .create_canister_with_id(
+                        Some(nns_registry_canister_controller),
+                        Some(CanisterSettings {
+                            controllers: Some(vec![nns_registry_canister_controller]),
+                            ..Default::default()
+                        }),
+                        nns_registry_canister_id,
+                    )
+                    .await
+                    .expect("Unable to create the NNS Registry canister");
+    
+                pocket_ic
+                    .install_canister(
+                        nns_registry_canister,
+                        nns_registry_canister_wasm.bytes().to_vec(),
+                        Encode!(&RegistryCanisterInitPayloadBuilder::new().build()).unwrap(),
+                        Some(nns_registry_canister_controller),
+                    )
+                    .await;
+
+                            pocket_ic
+                .add_cycles(nns_registry_canister_id, STARTING_CYCLES_PER_CANISTER)
+                .await;
+            
+
+            }
 
         let replica_url = pocket_ic.make_live(None).await;
         let replica_port = replica_url.port().unwrap();

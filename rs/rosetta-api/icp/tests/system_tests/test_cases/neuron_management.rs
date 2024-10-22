@@ -1,17 +1,24 @@
+use crate::common::utils::query_encoded_blocks;
+use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
     utils::{get_test_agent, list_neurons, test_identity},
 };
 use ic_agent::{identity::BasicIdentity, Identity};
-use ic_icp_rosetta_client::{RosettaCreateNeuronArgs, RosettaSetNeuronDissolveDelayArgs};
+use ic_icp_rosetta_client::{
+    RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
+};
 use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
+use ic_rosetta_api::{
+    models::AccountBalanceRequest,
+    request::transaction_operation_results::TransactionOperationResults,
+};
 use ic_types::PrincipalId;
-use icp_ledger::AccountIdentifier;
+use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
 use std::{
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
 
@@ -286,5 +293,161 @@ fn test_start_and_stop_neuron_dissolve() {
             neuron.dissolve_state.unwrap(),
             DissolveState::DissolveDelaySeconds(_)
         ));
+    });
+}
+
+#[test]
+fn test_disburse_neuron() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = 100_000_000u64;
+        let neuron_index = 0;
+        let from_subaccount = [0; 32];
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        // See if the neuron was created successfully
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+
+        TransactionOperationResults::try_from(
+            env.rosetta_client
+                .start_dissolving_neuron(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    neuron_index,
+                )
+                .await
+                .unwrap()
+                .metadata,
+        )
+        .unwrap();
+
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
+            DissolveState::WhenDissolvedTimestampSeconds(d) => d,
+            k => panic!(
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
+                k
+            ),
+        };
+
+        // If we try to disburse the neuron when it is not yet DISSOLVE we expect an error
+        match env
+            .rosetta_client
+            .disburse_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaDisburseNeuronArgs::builder(neuron_index)
+                    .with_recipient(TEST_IDENTITY.sender().unwrap().into())
+                    .build(),
+            )
+            .await
+        {
+            Err(e) if e.to_string().contains(&format!("Could not disburse: PreconditionFailed: Neuron {} has NOT been dissolved. It is in state Dissolving",neuron.id.unwrap().id.to_string())) => (),
+            Err(e) => panic!("Unexpected error: {}", e),
+            Ok(_) => panic!("Expected an error but got success"),
+        }
+
+        // Advance time to the dissolve delay timestamp
+        env.pocket_ic
+            .advance_time(Duration::from_secs(dissolve_delay_timestamp))
+            .await;
+
+        let balance_before_disburse = env
+        .rosetta_client
+        .account_balance(
+            AccountBalanceRequest::builder(
+                env.network_identifier.clone(),
+                AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()).into(),
+            )
+            .build(),
+        )
+        .await
+        .unwrap()
+        .balances
+        .first()
+        .unwrap()
+        .clone()
+        .value.parse::<u64>().unwrap();
+
+        let tip_block_height = query_encoded_blocks(&agent, u64::MAX, u64::MAX).await.chain_length;
+
+        // Now we should be able to disbursed the neuron
+        env.rosetta_client
+            .disburse_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaDisburseNeuronArgs::builder(neuron_index)
+                    .with_recipient(TEST_IDENTITY.sender().unwrap().into())
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+        match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
+            DissolveState::WhenDissolvedTimestampSeconds (d) => {
+                // The neuron should now be in DISSOLVED state
+                assert!(d<now);
+            }
+            k => panic!(
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
+                k
+            ),
+        }
+
+        // Wait for the ledger to sync up to the block where the disbursement happened
+        wait_for_rosetta_to_sync_up_to_block(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            tip_block_height + 1,
+        )
+        .await
+        .unwrap();
+
+        // The recipient should have received the disbursed amount
+        let balance_after_disburse = env
+            .rosetta_client
+            .account_balance(
+                AccountBalanceRequest::builder(
+                    env.network_identifier.clone(),
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()).into(),
+                )
+                .build(),
+            )
+            .await
+            .unwrap()
+            .balances
+            .first()
+            .unwrap().clone()
+            .value.parse::<u64>().unwrap();
+
+        assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_tokens());
     });
 }

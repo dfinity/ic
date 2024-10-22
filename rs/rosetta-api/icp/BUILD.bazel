@@ -85,6 +85,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp/runner:ic-icp-rosetta-runner",
     "//rs/rosetta-api/icp/test_utils",
     "//rs/types/base_types",
+    "//rs/registry/canister",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
@@ -175,6 +176,9 @@ rust_test_suite_with_extra_srcs(
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
         "//rs/rosetta-api/icp:rosetta-api",
         "@mainnet_icp_ledger_canister//file",
+        "//rs/registry/canister:registry-canister",
+        "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+        "//rs/nns/cmc:cycles-minting-canister",
     ],
     env = {
         "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
@@ -186,6 +190,9 @@ rust_test_suite_with_extra_srcs(
         "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
         "GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     },
     extra_srcs = glob([
         "tests/system_tests/common/*.rs",
