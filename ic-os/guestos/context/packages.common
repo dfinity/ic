@@ -5,12 +5,8 @@
 # image only.
 
 # Need kernel to boot anything
+linux-image-virtual-hwe-24.04
 initramfs-tools
-
-# Resolve some dependencies manualy for 6.11
-kmod
-linux-base
-wireless-regdb
 
 # Need systemd for boot process
 systemd
