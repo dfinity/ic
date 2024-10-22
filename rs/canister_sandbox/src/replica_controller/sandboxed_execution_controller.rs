@@ -61,7 +61,7 @@ const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
-const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
+const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 50;
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -345,6 +345,7 @@ pub struct SandboxProcess {
 impl Drop for SandboxProcess {
     fn drop(&mut self) {
         self.history.record("Terminate()".to_string());
+        println!("we terminated sandbox {}", self.pid);
         self.sandbox_service
             .terminate(protocol::sbxsvc::TerminateRequest {})
             .on_completion(|_| {});
@@ -640,6 +641,7 @@ pub struct SandboxedExecutionController {
     /// - An entry is removed from the registry only if it is in the `evicted`
     ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    memory_usage: Arc<Mutex<u64>>,
     min_sandbox_count: usize,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
@@ -1077,8 +1079,12 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
+        let memory_usage = Arc::new(Mutex::new(0));
+        let memory_usage_copy = Arc::clone(&memory_usage);
+
         std::thread::spawn(move || {
             SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+                memory_usage_copy,
                 logger_copy,
                 backends_copy,
                 metrics_copy,
@@ -1111,6 +1117,7 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
+            memory_usage,
             min_sandbox_count,
             max_sandbox_count,
             max_sandbox_idle_time,
@@ -1128,6 +1135,7 @@ impl SandboxedExecutionController {
     // - evict inactive processes,
     // - update memory usage metrics.
     fn monitor_and_evict_sandbox_processes(
+        #[allow(unused_variables)] memory_usage: Arc<Mutex<u64>>,
         // `logger` isn't used on MacOS.
         #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
@@ -1189,6 +1197,9 @@ impl SandboxedExecutionController {
                     }
                 }
 
+                // Set memory usage for the other thread.
+                *memory_usage.lock().unwrap() = total_anon_rss;
+
                 metrics
                     .sandboxed_execution_subprocess_anon_rss_total
                     .set(total_anon_rss.try_into().unwrap());
@@ -1199,8 +1210,8 @@ impl SandboxedExecutionController {
 
                 println!("anon rss: {}", total_anon_rss);
 
-                // This is memory-usage based eviction. When the usage is over
-                // the limit, we evict half of the sandboxes between the min and max.
+                //This is memory-usage based eviction. When the usage is over
+                //the limit, we evict half of the sandboxes between the min and max.
                 if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
                     //let current_no_sandboxes = max_sandbox_count.min(sandbox_processes.len());
                     let mut guard = backends.lock().unwrap();
@@ -1280,12 +1291,24 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
+
+        let memory_usage = *self.memory_usage.lock().unwrap();
+        // Evict if we hit the memory limit or if we have too many sandboxes.
         if guard.len() > self.max_sandbox_count {
+            //|| memory_usage >= SANDBOX_PROCESSES_MAX_ANON_KIB {
             let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+            // We can reach the memory limit before we reach the sandbox limit.
+            let max_active_sandboxes = self
+                .max_sandbox_count
+                .min(guard.len())
+                .saturating_sub(to_evict);
+            // It can also be that we hit the memory limit with less than self.min_sandbox_count,
+            // although this should not happen unless in very degenerate cases.
+            let min_active_sandboxes = self.min_sandbox_count.min(max_active_sandboxes);
+
             evict_sandbox_processes(
                 &mut guard,
-                self.min_sandbox_count,
+                min_active_sandboxes,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
             );
