@@ -3,12 +3,6 @@ load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-BTC_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/tests:btc_uvm_config_image",
-    "@btc_canister//file",
-]
-
 LEDGER_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",

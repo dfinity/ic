@@ -1,5 +1,5 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -183,13 +183,18 @@ system_test(
     ],
 )
 
+BTC_RUNTIME_DEPS = [
+    # Keep sorted.
+    "//rs/tests:btc_uvm_config_image",
+    "@btc_canister//file",
+]
+
 system_test_nns(
     name = "btc_get_balance_test",
     env = {
         "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -198,5 +203,15 @@ system_test_nns(
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/ckbtc"],
+    deps = [
+        "//rs/tests/ckbtc",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:bitcoincore-rpc",
+        "@crate_index//:candid",
+        "@crate_index//:slog",
+    ],
 )
