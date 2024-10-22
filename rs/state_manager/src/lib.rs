@@ -2225,6 +2225,16 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
+        // Although `extra_inmemory_heights_to_keep` is intended only for preserving in-memory states,
+        // it is acceptable to include these heights in the `heights_to_keep` set, which keeps both
+        // in-memory states and checkpoints. This is safe for the following reasons:
+        //
+        // 1. If this inner function is invoked by `remove_inmemory_states_below`, no checkpoints are removed
+        //    regardless of their inclusion in `extra_inmemory_heights_to_keep`. Thus, including the extra in-memory heights
+        //    provides no overprotection or adverse effects.
+        //
+        // 2. If this inner function is invoked by `remove_states_below`, the `extra_inmemory_heights_to_keep`
+        //    will always be an empty set, meaning it has no influence on the final result.
         let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
@@ -2234,6 +2244,7 @@ impl StateManagerImpl {
             })
             .chain(std::iter::once(latest_certified_height))
             .chain(latest_manifest_height)
+            .chain(extra_inmemory_heights_to_keep.iter().copied())
             .collect();
 
         // Send object to deallocation thread if it has capacity.
@@ -3300,6 +3311,7 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
+        // The public API does not need to protect extra states, so we pass an empty set here.
         self.remove_states_below_impl(
             oldest_height_to_keep,
             oldest_checkpoint_to_keep,
