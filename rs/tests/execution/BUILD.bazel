@@ -204,8 +204,8 @@ system_test_nns(
         UNIVERSAL_VM_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
     deps = [
-        "//rs/tests/ckbtc",
         "//rs/registry/subnet_type",
+        "//rs/tests/ckbtc",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",
