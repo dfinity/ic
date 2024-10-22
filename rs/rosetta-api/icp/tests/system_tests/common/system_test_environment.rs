@@ -3,13 +3,12 @@ use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
-};use ic_nns_test_utils::common::build_registry_wasm;use ic_nns_test_utils::common::build_lifeline_wasm;
+};
 use candid::{Encode, Principal};
 use ic_agent::Identity;
-use ic_icp_rosetta_client::RosettaClient;use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
+use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_client::RosettaTransferArgs;
-use ic_icp_rosetta_runner::RosettaOptions;use ic_nns_constants::REGISTRY_CANISTER_ID;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use ic_icp_rosetta_runner::RosettaOptions;
 use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::ArgWithCaller;
@@ -17,12 +16,16 @@ use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_tokens_u256::U256;
 use ic_ledger_test_utils::build_ledger_wasm;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LIFELINE_CANISTER_ID;
+use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::common::build_governance_wasm;
+use ic_nns_test_utils::common::build_lifeline_wasm;
+use ic_nns_test_utils::common::build_registry_wasm;
 use ic_nns_test_utils::common::build_root_wasm;
 use ic_rosetta_test_utils::path_from_env;
 use ic_types::PrincipalId;
@@ -33,6 +36,7 @@ use num_traits::cast::ToPrimitive;
 use pocket_ic::CanisterSettings;
 use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use prost::Message;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -347,36 +351,34 @@ impl RosettaTestingEnvironmentBuilder {
                 .add_cycles(nns_lifeline_canister_id, STARTING_CYCLES_PER_CANISTER)
                 .await;
 
-                let nns_registry_canister_wasm = build_registry_wasm();
-                let nns_registry_canister_id = Principal::from(REGISTRY_CANISTER_ID);
-                let nns_registry_canister_controller = ROOT_CANISTER_ID.get().0;
-                let nns_registry_canister = pocket_ic
-                    .create_canister_with_id(
-                        Some(nns_registry_canister_controller),
-                        Some(CanisterSettings {
-                            controllers: Some(vec![nns_registry_canister_controller]),
-                            ..Default::default()
-                        }),
-                        nns_registry_canister_id,
-                    )
-                    .await
-                    .expect("Unable to create the NNS Registry canister");
-    
-                pocket_ic
-                    .install_canister(
-                        nns_registry_canister,
-                        nns_registry_canister_wasm.bytes().to_vec(),
-                        Encode!(&RegistryCanisterInitPayloadBuilder::new().build()).unwrap(),
-                        Some(nns_registry_canister_controller),
-                    )
-                    .await;
+            let nns_registry_canister_wasm = build_registry_wasm();
+            let nns_registry_canister_id = Principal::from(REGISTRY_CANISTER_ID);
+            let nns_registry_canister_controller = ROOT_CANISTER_ID.get().0;
+            let nns_registry_canister = pocket_ic
+                .create_canister_with_id(
+                    Some(nns_registry_canister_controller),
+                    Some(CanisterSettings {
+                        controllers: Some(vec![nns_registry_canister_controller]),
+                        ..Default::default()
+                    }),
+                    nns_registry_canister_id,
+                )
+                .await
+                .expect("Unable to create the NNS Registry canister");
 
-                            pocket_ic
+            pocket_ic
+                .install_canister(
+                    nns_registry_canister,
+                    nns_registry_canister_wasm.bytes().to_vec(),
+                    Encode!(&RegistryCanisterInitPayloadBuilder::new().build()).unwrap(),
+                    Some(nns_registry_canister_controller),
+                )
+                .await;
+
+            pocket_ic
                 .add_cycles(nns_registry_canister_id, STARTING_CYCLES_PER_CANISTER)
                 .await;
-            
-
-            }
+        }
 
         let replica_url = pocket_ic.make_live(None).await;
         let replica_port = replica_url.port().unwrap();
