@@ -24,7 +24,6 @@ use tempfile::tempdir;
 use url::Url;
 
 use config::generate_testnet_config::{generate_testnet_config, GenerateTestnetConfigArgs};
-use ic_types::malicious_behaviour::MaliciousBehaviour;
 
 const FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
