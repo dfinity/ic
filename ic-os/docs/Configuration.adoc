@@ -20,11 +20,10 @@ Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../compo
 
 == HostOS -> GuestOS
 
-TODO: update...
+HostOS creates a bootstrap config image containing a tar file with the GuestOS configuration files.
 
-HostOS builds the "bootstrap config image". Refer to link:../components/hostos-scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
+Refer to link:../components/hostos-scripts/generate-guestos-config.sh[generate-guestos-config.sh] and link:../components/hostos-scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh] for more details.
 
-The bootstrap config image contains a tar file with the GuestOS configuration files.
 When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../components/hostos-scripts/guestos/guestos.xml.template[guestos.xml.template]
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
