@@ -1,30 +1,31 @@
-use crate::rosetta_tests::ledger_client::LedgerClient;
-use crate::rosetta_tests::lib::{
-    assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
-    one_day_from_now_nanos, raw_construction, sign, to_public_key,
+use crate::rosetta_tests::{
+    ledger_client::LedgerClient,
+    lib::{
+        assert_canister_error, check_balance, create_ledger_client, do_multiple_txn,
+        make_user_ed25519, one_day_from_now_nanos, raw_construction, sign, to_public_key,
+    },
+    rosetta_client::RosettaApiClient,
+    setup::setup,
+    test_neurons::TestNeurons,
 };
-use crate::rosetta_tests::rosetta_client::RosettaApiClient;
-use crate::rosetta_tests::setup::setup;
-use crate::rosetta_tests::test_neurons::TestNeurons;
 use assert_json_diff::{assert_json_eq, assert_json_include};
-use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
-use ic_ledger_core::Tokens;
+use ic_ledger_core::{
+    tokens::{CheckedAdd, CheckedSub},
+    Tokens,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_rosetta_api::convert::{from_model_account_identifier, neuron_account_from_public_key};
-use ic_rosetta_api::models::seconds::Seconds;
-use ic_rosetta_api::models::NeuronInfoResponse;
-use ic_rosetta_api::models::NeuronState;
-use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{SetDissolveTimestamp, Stake, StartDissolve, StopDissolve};
+use ic_rosetta_api::{
+    convert::{from_model_account_identifier, neuron_account_from_public_key},
+    models::{seconds::Seconds, NeuronInfoResponse},
+    request::Request,
+    request_types::{SetDissolveTimestamp, Stake, StartDissolve, StopDissolve},
+};
 use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::util::block_on;
+use ic_system_test_driver::{driver::test_env::TestEnv, util::block_on};
 use icp_ledger::{AccountIdentifier, Operation, DEFAULT_TRANSFER_FEE};
 use serde_json::{json, Value};
 use slog::info;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, sync::Arc, time::UNIX_EPOCH};
 
 const PORT: u32 = 8103;
 const VM_NAME: &str = "neuron-staking";
@@ -126,7 +127,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
     // In this case the transfer to neuron_account.
     assert!(results.last_block_index().is_some());
 
-    let neuron_info: NeuronInfoResponse = client
+    let _neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, neuron_id, None, false)
         .await
         .unwrap()
@@ -134,9 +135,10 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    assert_eq!(neuron_info.state, NeuronState::Dissolved);
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
-    let neuron_info: NeuronInfoResponse = client
+    let _neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(
             neuron_account,
             None,
@@ -149,9 +151,10 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    assert_eq!(neuron_info.state, NeuronState::Dissolved);
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
-    let neuron_info: NeuronInfoResponse = client
+    let _neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, None, Some((dst_acc_pk, neuron_index)), true)
         .await
         .unwrap()
@@ -159,7 +162,8 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
         .metadata
         .try_into()
         .unwrap();
-    assert_eq!(neuron_info.state, NeuronState::Dissolved);
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     // Return staked account.
     (dst_acc, dst_acc_kp)
@@ -549,7 +553,7 @@ async fn test_staking_raw(client: &RosettaApiClient) -> (AccountIdentifier, Arc<
         .find_map(|r| r.get("metadata").and_then(|r| r.get("block_index")));
     assert!(last_block_idx.is_some());
 
-    let neuron_info: NeuronInfoResponse = client
+    let _neuron_info: NeuronInfoResponse = client
         .account_balance_neuron(neuron_account, neuron_id, None, false)
         .await
         .unwrap()
@@ -557,7 +561,8 @@ async fn test_staking_raw(client: &RosettaApiClient) -> (AccountIdentifier, Arc<
         .metadata
         .try_into()
         .unwrap();
-    assert_eq!(neuron_info.state, NeuronState::Dissolved);
+    // TODO(NNS1-3390) after https://github.com/dfinity/ic/pull/1982 is deployed, uncomment this line
+    // assert_eq!(neuron_info.state, NeuronState::NotDissolving);
 
     // Return staked account.
     (dst_acc, dst_acc_kp)

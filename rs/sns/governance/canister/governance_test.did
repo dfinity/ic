@@ -299,6 +299,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  target_version: opt Version;
 };
 
 type GovernanceCachedMetrics = record {
@@ -726,7 +727,11 @@ type GetUpgradeJournalRequest = record {};
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
 };
+
+type AdvanceTargetVersionRequest = record { target_version : opt Version; };
+type AdvanceTargetVersionResponse = record {};
 
 service : (Governance) -> {
   add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
@@ -755,4 +760,5 @@ service : (Governance) -> {
   mint_tokens : (MintTokensRequest) -> (record {});
   set_mode : (SetMode) -> (record {});
   update_neuron : (Neuron) -> (opt GovernanceError);
+  advance_target_version : (AdvanceTargetVersionRequest) -> (AdvanceTargetVersionResponse);
 }

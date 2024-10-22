@@ -144,7 +144,7 @@ pub async fn test_async(env: TestEnv) {
         // Given that there are a couple of subnet upgrades happening
         // while the long running test is running we are generous
         // with error thresholds.
-        50.0,
+        75.0,
         40,
     );
 

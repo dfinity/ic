@@ -11,9 +11,7 @@ anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 futures = { workspace = true }
-hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-backup = { path = "../../backup" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
@@ -29,7 +27,6 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 ic_consensus_system_test_catch_up_test_common = { path = "./catch_up_test_common" }
 ic_consensus_system_test_liveness_test_common = { path = "./liveness_test_common" }
 ic_consensus_system_test_utils = { path = "./utils" }
-ic_consensus_threshold_sig_system_test_utils = { path = "./tecdsa/utils" }
 k256 = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
@@ -94,10 +91,6 @@ path = "catch_up_loop_prevention_test.rs"
 [[bin]]
 name = "ic-systest-subnet-splitting"
 path = "subnet_splitting_test.rs"
-
-[[bin]]
-name = "ic-systest-backup-manager"
-path = "backup_manager_test.rs"
 
 [features]
 upload_perf_systest_results = []

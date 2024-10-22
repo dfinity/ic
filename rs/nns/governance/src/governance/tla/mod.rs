@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::thread;
 
 use super::Governance;
@@ -20,10 +20,13 @@ mod common;
 mod store;
 
 pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
+use common::{function_domain_union, governance_account_id};
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
 
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
+mod claim_neuron;
+pub use claim_neuron::claim_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
@@ -100,12 +103,104 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     state
 }
 
+fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
+    vec![
+        (
+            format!("{}_Process_Ids", pid),
+            BTreeSet::from([pid]).to_tla_value(),
+        ),
+        (
+            "Neuron_Ids".to_string(),
+            function_domain_union(trace, "neuron").to_tla_value(),
+        ),
+        (
+            "MIN_STAKE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("min_stake")
+                        .expect("min_stake not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        (
+            "TRANSACTION_FEE".to_string(),
+            trace
+                .first()
+                .map(|pair| {
+                    pair.start
+                        .get("transaction_fee")
+                        .expect("transaction_fee not recorded")
+                        .clone()
+                })
+                .unwrap_or(0_u64.to_tla_value()),
+        ),
+        ("Governance_Account_Ids".to_string(), {
+            let mut ids = function_domain_union(trace, "neuron_id_by_account");
+            ids.insert(governance_account_id());
+            ids.to_tla_value()
+        }),
+    ]
+}
+
+fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
+    for ResolvedStatePair {
+        ref mut start,
+        ref mut end,
+    } in trace
+    {
+        for state in &mut [start, end] {
+            state
+                .0
+                 .0
+                .remove("transaction_fee")
+                .expect("Didn't record the transaction fee");
+            state
+                .0
+                 .0
+                .remove("min_stake")
+                .expect("Didn't record the min stake");
+            if !state.0 .0.contains_key("governance_to_ledger") {
+                state.0 .0.insert(
+                    "governance_to_ledger".to_string(),
+                    TlaValue::Seq(Vec::new()),
+                );
+            }
+            if !state.0 .0.contains_key("ledger_to_governance") {
+                state.0 .0.insert(
+                    "ledger_to_governance".to_string(),
+                    TlaValue::Set(BTreeSet::new()),
+                );
+            }
+        }
+    }
+}
+
 // Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
 fn set_java_path() {
     let current_path = std::env::var("PATH").expect("PATH is not set");
     let bazel_java = std::env::var("JAVABASE")
         .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
     std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+}
+
+/// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)
+/// TLA modules are read from $TLA_MODULES (space-separated list)
+/// NOTE: this assumes unique basenames amongst the modules
+fn get_tla_module_path(module: &str) -> PathBuf {
+    let modules = std::env::var("TLA_MODULES").expect(
+        "environment variable 'TLA_MODULES' should be a space-separated list of TLA modules",
+    );
+
+    modules
+        .split(" ")
+        .map(|f| f.into()) /* str -> PathBuf */
+        .find(|f: &PathBuf| f.file_name().is_some_and(|file_name| file_name == module))
+        .unwrap_or_else(|| {
+            panic!("Could not find TLA module {module}, check 'TLA_MODULES' is set correctly")
+        })
 }
 
 /// Checks a trace against the model.
@@ -121,11 +216,14 @@ pub fn check_traces() {
     };
 
     set_java_path();
-    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
 
-    // Construct paths to the data files
-    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/nns/governance/tla");
+    let apalache = std::env::var("TLA_APALACHE_BIN")
+        .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
+    let apalache = PathBuf::from(apalache);
+
+    if !apalache.as_path().is_file() {
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+    }
 
     let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {
@@ -140,7 +238,9 @@ pub fn check_traces() {
             let apalache = apalache.clone();
             let constants = constants.clone();
             let pair = pair.clone();
-            let tla_module = tla_models_path.join(format!("{}_Apalache.tla", update.process_id));
+            // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
+            let tla_module = format!("{}_Apalache.tla", update.process_id);
+            let tla_module = get_tla_module_path(&tla_module);
             let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,

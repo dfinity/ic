@@ -848,7 +848,6 @@ mod tests {
             .replace("{{ backup_purging_interval_secs }}", "0")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
             .replace("{{ query_stats_epoch_length }}", "600");
         let config_source = ConfigSource::Literal(cfg);
 
@@ -1037,6 +1036,7 @@ mod tests {
                     hostos_version_id: None,
                     public_ipv4_config: None,
                     domain: None,
+                    node_reward_type: None,
                 }),
             )
             .expect("Failed to add node record.");

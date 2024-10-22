@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,91 +6,164 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test(
     name = "compute_allocation_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/config",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:futures",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+    ],
 )
 
 system_test(
     name = "cycles_restrictions_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+    ],
 )
 
 system_test(
     name = "general_execution_test",
+    srcs = glob(["general_execution_tests/*.rs"]),
+    crate_root = "general_execution_test.rs",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/config",
+        "//rs/crypto/sha2",
+        "//rs/cycles_account_manager",
+        "//rs/nns/constants",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-utils",
+        "@crate_index//:lazy_static",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
 )
 
 system_test(
     name = "inter_canister_queries_test",
+    srcs = glob(["inter_canister_queries_tests/*.rs"]),
+    crate_root = "inter_canister_queries_test.rs",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:ic-agent",
+        "@crate_index//:wat",
+    ],
 )
 
 system_test(
     name = "max_number_of_canisters_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+    ],
 )
 
 system_test(
     name = "system_api_security_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-utils",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
 )
 
 system_test(
     name = "system_subnets_test",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+    ],
 )
 
 system_test(
     name = "fill_execution_rounds_workload",
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "manual",
     ],
@@ -99,5 +172,13 @@ system_test(
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/universal_canister/lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:slog",
+    ],
 )

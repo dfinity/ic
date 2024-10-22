@@ -82,11 +82,11 @@ pub enum StepType {
 #[clap(version = "1.0")]
 pub struct SubnetSplittingArgs {
     /// Id of the subnet whose state will be split.
-    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub source_subnet_id: SubnetId,
 
     /// Id of the destination subnet.
-    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    #[clap(long, value_parser=ic_recovery::util::subnet_id_from_str)]
     pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to the subnet for read only access.
@@ -115,7 +115,7 @@ pub struct SubnetSplittingArgs {
     pub next_step: Option<StepType>,
 
     /// The canister ID ranges to be moved to the destination subnet.
-    #[clap(long, multiple_values(true), required = true)]
+    #[clap(long, num_args(1..), required = true)]
     pub canister_id_ranges_to_move: Vec<CanisterIdRange>,
 }
 

@@ -3,10 +3,10 @@ use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
-use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
+use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
 };
-use ic_icrc1_ledger_sm_tests::{
+use ic_ledger_suite_state_machine_tests::{
     generate_transactions, get_all_ledger_and_archive_blocks, TransactionGenerationParameters,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
@@ -335,12 +335,13 @@ fn should_upgrade_icrc_ck_btc_canister_with_golden_state() {
             .0,
         subaccount: None,
     };
-    let burns_without_spender = ic_icrc1_ledger_sm_tests::in_memory_ledger::BurnsWithoutSpender {
-        minter: ck_btc_minter,
-        burn_indexes: vec![
-            100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
-        ],
-    };
+    let burns_without_spender =
+        ic_ledger_suite_state_machine_tests::in_memory_ledger::BurnsWithoutSpender {
+            minter: ck_btc_minter,
+            burn_indexes: vec![
+                100785, 101298, 104447, 116240, 454395, 455558, 458776, 460251,
+            ],
+        };
 
     let state_machine = new_state_machine_with_golden_fiduciary_state_or_panic();
 

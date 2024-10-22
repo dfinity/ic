@@ -477,7 +477,7 @@ pub async fn install_bitcoin_canister_with_network(
 
     install_rust_canister_from_path(
         &mut bitcoin_canister,
-        get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
+        get_dependency_path(env::var("BTC_WASM_PATH").expect("BTC_WASM_PATH not set")),
         Some(Encode!(&args).unwrap()),
     )
     .await;

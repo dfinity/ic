@@ -155,6 +155,23 @@ fn set_java_path() {
     std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
 }
 
+/// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).
+/// TLA modules are read from $TLA_MODULES (space-separated list)
+/// NOTE: this assumes unique basenames amongst the modules
+fn get_tla_module_path(module: &str) -> PathBuf {
+    let modules = std::env::var("TLA_MODULES").expect(
+        "environment variable 'TLA_MODULES' should be a space-separated list of TLA modules",
+    );
+
+    modules
+        .split(" ")
+        .map(|f| f.into()) /* str -> PathBuf */
+        .find(|f: &PathBuf| f.file_name().is_some_and(|file_name| file_name == module))
+        .unwrap_or_else(|| {
+            panic!("Could not find TLA module {module}, check 'TLA_MODULES' is set correctly")
+        })
+}
+
 #[test]
 fn struct_test() {
     unsafe {
@@ -267,17 +284,23 @@ fn struct_test() {
         Some(&Vec::<TlaValue>::new().to_tla_value())
     );
 
-    let runfiles_dir = std::env::var("RUNFILES_DIR").expect("RUNFILES_DIR is not set");
-
     set_java_path();
-    // Construct paths to the data files
-    let apalache = PathBuf::from(&runfiles_dir).join("tla_apalache/bin/apalache-mc");
-    let tla_models_path = PathBuf::from(&runfiles_dir).join("_main/rs/tla_instrumentation/tla");
+
+    let apalache = std::env::var("TLA_APALACHE_BIN")
+        .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
+    let apalache = PathBuf::from(apalache);
+
+    if !apalache.as_path().is_file() {
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+    }
+
     let update = trace.update.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();
         println!("Constants: {:?}", constants);
-        let tla_module = tla_models_path.join(format!("{}_Apalache.tla", update.process_id));
+        // NOTE: the 'process_id" is actually the tla module name
+        let tla_module = format!("{}_Apalache.tla", update.process_id);
+        let tla_module = get_tla_module_path(&tla_module);
         check_tla_code_link(
             &apalache,
             PredicateDescription {

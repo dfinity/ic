@@ -4748,10 +4748,12 @@ impl Governance {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
                 upgrade_steps: cached_upgrade_steps.upgrade_steps,
                 response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
                 response_timestamp_seconds: None,
+                target_version: None,
             },
         }
     }

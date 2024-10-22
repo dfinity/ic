@@ -290,6 +290,7 @@ type Governance = record {
   sns_metadata : opt ManageSnsMetadata;
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
+  target_version: opt Version;
 };
 
 type GovernanceCachedMetrics = record {
@@ -712,6 +713,7 @@ type GetUpgradeJournalRequest = record {};
 type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
+  target_version : opt Version;
 };
 
 service : (Governance) -> {

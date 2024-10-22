@@ -1,5 +1,3 @@
-use ic_base_types::PrincipalId;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -49,23 +47,15 @@ async fn test_get_upgrade_journal() {
     install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
 
     // Publish (master) SNS Wasms to SNS-W.
-    let with_mainnet_sns_wasms = false;
-    let deployed_sns_starting_info = add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms)
+    let with_mainnet_sns_canisters = false;
+    let deployed_sns_starting_info = add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_canisters)
         .await
         .unwrap();
     let initial_sns_version = nns::sns_wasm::get_latest_sns_version(&pocket_ic).await;
 
     // Deploy an SNS instance via proposal.
     let sns = {
-        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
-            .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
-            .with_one_developer_neuron(
-                PrincipalId::new_user_test_id(830947),
-                ONE_MONTH_SECONDS * 6,
-                756575,
-                0,
-            )
-            .build();
+        let create_service_nervous_system = CreateServiceNervousSystemBuilder::default().build();
         let swap_parameters = create_service_nervous_system
             .swap_parameters
             .clone()
@@ -96,6 +86,7 @@ async fn test_get_upgrade_journal() {
         let sns_pb::GetUpgradeJournalResponse {
             upgrade_steps,
             response_timestamp_seconds,
+            ..
         } = sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
         let upgrade_steps = upgrade_steps
             .expect("upgrade_steps should be Some")
@@ -118,30 +109,30 @@ async fn test_get_upgrade_journal() {
 
     // Publish a new SNS version.
     let (new_sns_version_1, new_sns_version_2) = {
-        let (_, original_ledger_wasm) = deployed_sns_starting_info
-            .get(&SnsCanisterType::Ledger)
+        let (_, original_root_wasm) = deployed_sns_starting_info
+            .get(&SnsCanisterType::Root)
             .unwrap();
 
         let new_sns_version_1 = {
-            let ledger_wasm = create_modified_sns_wasm(original_ledger_wasm, Some(1));
-            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone())
+            let root_wasm = create_modified_sns_wasm(original_root_wasm, Some(1));
+            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone())
                 .await
                 .unwrap();
-            let ledger_wasm_hash = ledger_wasm.sha256_hash().to_vec();
+            let root_wasm_hash = root_wasm.sha256_hash().to_vec();
             sns_pb::governance::Version {
-                ledger_wasm_hash,
+                root_wasm_hash,
                 ..initial_sns_version.clone()
             }
         };
 
         let new_sns_version_2 = {
-            let ledger_wasm = create_modified_sns_wasm(original_ledger_wasm, Some(2));
-            add_wasm_via_nns_proposal(&pocket_ic, ledger_wasm.clone())
+            let root_wasm = create_modified_sns_wasm(original_root_wasm, Some(2));
+            add_wasm_via_nns_proposal(&pocket_ic, root_wasm.clone())
                 .await
                 .unwrap();
-            let ledger_wasm_hash = ledger_wasm.sha256_hash().to_vec();
+            let root_wasm_hash = root_wasm.sha256_hash().to_vec();
             sns_pb::governance::Version {
-                ledger_wasm_hash,
+                root_wasm_hash,
                 ..new_sns_version_1.clone()
             }
         };
@@ -162,7 +153,29 @@ async fn test_get_upgrade_journal() {
 
         assert_eq!(
             upgrade_steps.versions,
-            vec![initial_sns_version, new_sns_version_1, new_sns_version_2,]
+            vec![
+                initial_sns_version,
+                new_sns_version_1,
+                new_sns_version_2.clone()
+            ]
         );
+    }
+
+    // Advance the target version.
+    {
+        sns::governance::advance_target_version(
+            &pocket_ic,
+            sns.governance.canister_id,
+            new_sns_version_2.clone(),
+        )
+        .await;
+    }
+
+    // Check that the target version is set to the new version.
+    {
+        let sns_pb::GetUpgradeJournalResponse { target_version, .. } =
+            sns::governance::get_upgrade_journal(&pocket_ic, sns.governance.canister_id).await;
+
+        assert_eq!(target_version, Some(new_sns_version_2.clone()));
     }
 }
