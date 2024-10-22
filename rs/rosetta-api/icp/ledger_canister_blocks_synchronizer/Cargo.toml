@@ -10,7 +10,6 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
 ciborium = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-agent = { workspace = true }
 ic-certification = { path = "../../../certification" }

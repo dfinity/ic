@@ -14,7 +14,7 @@ cargo-fuzz = true
 hex = { workspace = true }
 libfuzzer-sys = "0.4"
 num-bigint = { workspace = true }
-subtle = "2.4"
+subtle = { workspace = true }
 
 [dependencies.ic-crypto-internal-threshold-sig-canister-threshold-sig]
 path = ".."

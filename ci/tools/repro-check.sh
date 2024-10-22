@@ -4,7 +4,7 @@
 # If it's a proposal, we need to make sure that proposal_hash == CDN_hash == build_hash.
 # Otherwise, we only need to make sure that CDN_hash == build_hash.
 
-set -euo pipefail
+set -eEuo pipefail
 
 pushd() {
     command pushd "$@" >/dev/null
@@ -69,11 +69,14 @@ print_usage() {
     cat >&2 <<-USAGE
     This script builds and diffs the update image between CI and build-ic
     Pick one of the following options:
-    -h	    this help message
-    -p      proposal id to check - the proposal has to be for an Elect Replica proposal
-    -c	    git revision/commit to use - the commit has to exist on master branch of
-            the IC repository on GitHub
-    <empty> no option - uses the commit at the tip of the branch this is run on
+    -h            this help message
+    --guestos     verify only build reproducibility of GuestOS images
+    --hostos      verify only build reproducibility of HostOS images
+    --setupos     verify only build reproducibility of SetupOS images
+    -p            proposal id to check - the proposal has to be for an Elect Replica proposal
+    -c            git revision/commit to use - the commit has to exist on master branch of
+                  the IC repository on GitHub
+    <empty>       no option - uses the commit at the tip of the branch this is run on
 USAGE
 }
 
@@ -119,22 +122,60 @@ if [ "${DEBUG:-}" == "2" ]; then
     set -x
 fi
 
+# Default behavior: Verify all OS components
+verify_guestos="true"
+verify_hostos="true"
+verify_setupos="true"
+
 proposal_id=""
 git_commit=""
 no_option=""
 SECONDS=0
+
+# OPTIND is a built-in variable in Bash that represents the index of the
+# next argument to be processed by getopts during argument parsing.
+if [ "$OPTIND" -eq 1 ]; then
+    no_option="true"
+fi
+
 pwd="$(pwd)"
 
 # Parse arguments
-while getopts ':i:h:c:p:d:' flag; do
-    case "${flag}" in
-        c) git_commit="${OPTARG}" ;;
-        p) proposal_id="${OPTARG}" ;;
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --guestos)
+            log "Verifying only build reproducibility of GuestOS"
+            verify_hostos="false"
+            verify_setupos="false"
+            ;;
+        --hostos)
+            log "Verifying only build reproducibility of HostOS"
+            verify_guestos="false"
+            verify_setupos="false"
+            ;;
+        --setupos)
+            log "Verifying only build reproducibility of SetupOS"
+            verify_guestos="false"
+            verify_hostos="false"
+            ;;
+        -p)
+            proposal_id="$2"
+            shift
+            ;;
+        -c)
+            git_commit="$2"
+            shift
+            ;;
+        -h)
+            print_usage
+            exit 0
+            ;;
         *)
             print_usage
             exit 1
             ;;
     esac
+    shift
 done
 
 log "Check the environment"
@@ -160,8 +201,8 @@ else
     log_warning "Please run this script on Ubuntu version 22.04 or higher"
 fi
 
-if [[ "$(cat /proc/meminfo | grep MemTotal | awk '{ print int($2/1024**2) }')" -ge 15 ]]; then
-    log_success "More than 16GB of RAM detected"
+if [[ "$(free -g | awk '/Mem:/ { print $2 }')" -ge 16 ]]; then
+    log_success "16GB or more RAM detected"
 else
     log_warning "You need at least 16GB of RAM on this machine"
 fi
@@ -172,19 +213,24 @@ else
     log_warning "You need at least 100GB of free disk space on this machine"
 fi
 
-log "Update package registry"
-sudo apt-get update -y
-log "Install needed dependencies"
-sudo apt-get install git curl jq podman -y
-
-# if no options have been chosen, we assume to check the latest commit of the
-# branch we are on.
-if [ "$OPTIND" -eq 1 ]; then
+# Default action if no flags are provided
+# - check the latest commit of the branch we are on
+# - verify all OS components
+if [ "$no_option" == "true" ]; then
     check_git_repo
     check_ic_repo
-
-    no_option="true"
 fi
+
+# Install dependencies if they are not available
+log "Check and install needed dependencies"
+for pkg in git curl jq podman; do
+    if ! command -v $pkg &>/dev/null; then
+        log "Installing missing package: $pkg"
+        sudo apt-get install -y $pkg
+    else
+        log_success "$pkg is already installed"
+    fi
+done
 
 # set the `git_hash` from the `proposal_id` or from the environment
 if [ -n "$proposal_id" ]; then
@@ -270,7 +316,7 @@ if [ -n "$proposal_id" ]; then
     popd
 fi
 
-#################### Check CI Hash
+# Download CI artifacts for the selected component
 download_ci_files() {
     BASE_URL="https://download.dfinity.systems/ic/$git_hash"
 
@@ -279,11 +325,6 @@ download_ci_files() {
 
     local os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.zst"
     local sha_url="${BASE_URL}/${os_type}/update-img/SHA256SUMS"
-
-    if [ "$os_type" == "host-os" ]; then
-        os_url="${BASE_URL}/${os_type}/update-img/update-img.tar.zst"
-        sha_url="${BASE_URL}/${os_type}/update-img/SHA256SUMS"
-    fi
 
     if [ "$os_type" == "setup-os" ]; then
         os_url="${BASE_URL}/${os_type}/disk-img/disk-img.tar.zst"
@@ -297,9 +338,16 @@ download_ci_files() {
     curl $DOWNLOAD_OPTIONS --output-dir "$output_dir" "$sha_url"
 }
 
-download_ci_files "guest-os" "$ci_out/guestos"
-download_ci_files "host-os" "$ci_out/hostos"
-download_ci_files "setup-os" "$ci_out/setupos"
+# Download the requested OS images
+if [ "$verify_guestos" == "true" ]; then
+    download_ci_files "guest-os" "$ci_out/guestos"
+fi
+if [ "$verify_hostos" == "true" ]; then
+    download_ci_files "host-os" "$ci_out/hostos"
+fi
+if [ "$verify_setupos" == "true" ]; then
+    download_ci_files "setup-os" "$ci_out/setupos"
+fi
 
 check_ci_hash() {
     local os_dir="$1"
@@ -320,9 +368,15 @@ check_ci_hash() {
 
 log "Validating that uploaded image hashes match the provided proposal hashes"
 
-check_ci_hash "guestos" "update-img.tar.zst" "ci_package_guestos_sha256_hex"
-check_ci_hash "hostos" "update-img.tar.zst" "ci_package_hostos_sha256_hex"
-check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
+if [ "$verify_guestos" == "true" ]; then
+    check_ci_hash "guestos" "update-img.tar.zst" "ci_package_guestos_sha256_hex"
+fi
+if [ "$verify_hostos" == "true" ]; then
+    check_ci_hash "hostos" "update-img.tar.zst" "ci_package_hostos_sha256_hex"
+fi
+if [ "$verify_setupos" == "true" ]; then
+    check_ci_hash "setupos" "disk-img.tar.zst" "ci_package_setupos_sha256_hex"
+fi
 
 log_success "The CI's artifacts and hash match"
 
@@ -336,12 +390,13 @@ if [ -n "$proposal_id" ]; then
             log_success "The guestos shasum from the proposal and CDN match"
         fi
     else
-        if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
-            error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
-        else
-            log_success "The guestos shasum from the proposal and CDN match"
+        if [ "$verify_hostos" == "true" ]; then
+            if [ "$proposal_package_sha256_hex" != "$ci_package_hostos_sha256_hex" ]; then
+                error "The sha256 sum from the proposal does not match the one from the CDN storage for hostOS update-img.tar.zst. The hostos sha256 sum from the proposal: $proposal_package_sha256_hex The hostos sha256 sum from the CDN storage: $ci_package_hostos_sha256_hex."
+            else
+                log_success "The guestos shasum from the proposal and CDN match"
+            fi
         fi
-
     fi
 fi
 
@@ -376,9 +431,15 @@ log "Build IC-OS"
 ./ci/container/build-ic.sh --icos
 log_success "Built IC-OS successfully"
 
-mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
-mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
-mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
+if [ "$verify_guestos" == "true" ]; then
+    mv artifacts/icos/guestos/update-img.tar.zst "$dev_out/guestos"
+fi
+if [ "$verify_hostos" == "true" ]; then
+    mv artifacts/icos/hostos/update-img.tar.zst "$dev_out/hostos"
+fi
+if [ "$verify_setupos" == "true" ]; then
+    mv artifacts/icos/setupos/disk-img.tar.zst "$dev_out/setupos"
+fi
 
 compute_dev_hash() {
     local os_dir="$1"
@@ -392,9 +453,15 @@ compute_dev_hash() {
     declare -g "$output_var_name=$computed_hash"
 }
 
-compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
-compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
-compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
+if [ "$verify_guestos" == "true" ]; then
+    compute_dev_hash "guestos" "update-img.tar.zst" "dev_package_guestos_sha256_hex"
+fi
+if [ "$verify_hostos" == "true" ]; then
+    compute_dev_hash "hostos" "update-img.tar.zst" "dev_package_hostos_sha256_hex"
+fi
+if [ "$verify_setupos" == "true" ]; then
+    compute_dev_hash "setupos" "disk-img.tar.zst" "dev_package_setupos_sha256_hex"
+fi
 
 compare_hashes() {
     local local_hash_var="$1"
@@ -414,9 +481,15 @@ compare_hashes() {
 
 log "Check hash of locally built artifact matches the one fetched from the proposal/CDN"
 
-compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
-compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
-compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
+if [ "$verify_guestos" == "true" ]; then
+    compare_hashes "dev_package_guestos_sha256_hex" "ci_package_guestos_sha256_hex" "GuestOS"
+fi
+if [ "$verify_hostos" == "true" ]; then
+    compare_hashes "dev_package_hostos_sha256_hex" "ci_package_hostos_sha256_hex" "HostOS"
+fi
+if [ "$verify_setupos" == "true" ]; then
+    compare_hashes "dev_package_setupos_sha256_hex" "ci_package_setupos_sha256_hex" "SetupOS"
+fi
 
 log "Total time: $(($SECONDS / 3600))h $((($SECONDS / 60) % 60))m $(($SECONDS % 60))s"
 

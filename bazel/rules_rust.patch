@@ -1,0 +1,27 @@
+# workaround for proc-macro2 build determinism issues
+# https://github.com/dtolnay/proc-macro2/issues/473
+diff --git a/cargo/cargo_build_script_runner/bin.rs b/cargo/cargo_build_script_runner/bin.rs
+index 8730c809..f8eda5db 100644
+--- a/cargo/cargo_build_script_runner/bin.rs
++++ b/cargo/cargo_build_script_runner/bin.rs
+@@ -84,7 +84,7 @@ fn run_buildrs() -> Result<(), String> {
+     command
+         .current_dir(&working_directory)
+         .envs(target_env_vars)
+-        .env("OUT_DIR", out_dir_abs)
++        .env("OUT_DIR", out_dir_abs.clone())
+         .env("CARGO_MANIFEST_DIR", manifest_dir)
+         .env("RUSTC", rustc)
+         .env("RUST_BACKTRACE", "full");
+@@ -195,6 +195,11 @@ fn run_buildrs() -> Result<(), String> {
+         .unwrap_or_else(|_| panic!("Unable to write file {:?}", link_flags_file));
+     write(&link_search_paths_file, link_search_paths.as_bytes())
+         .unwrap_or_else(|_| panic!("Unable to write file {:?}", link_search_paths_file));
++
++    let proc_macro2_d = out_dir_abs.join("proc_macro2.d");
++    if Path::new(&proc_macro2_d).exists() {
++        std::fs::remove_file(proc_macro2_d).unwrap();
++    }
+     Ok(())
+ }
+

@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 byte-unit = "4.0.14"
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 futures = { workspace = true }
 http = { workspace = true }
 http-body-util = { workspace = true }

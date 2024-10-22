@@ -18,5 +18,5 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-paste = "1.0.12"
+paste = { workspace = true }
 proptest = { workspace = true }
