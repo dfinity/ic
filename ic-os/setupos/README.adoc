@@ -24,7 +24,7 @@ To build a SetupOS image, refer to the link:../README.adoc[IC-OS README]
 
 This requires QEMU with qemu-system and qemu-kvm installed on the machine.
 
-Bazel can be used to boot a local VM with a GuestOS like this:
+Bazel can be used to boot a local VM with a SetupOS like this:
 
     bazel run //ic-os/setupos/envs/dev:launch-local-vm
 
