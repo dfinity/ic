@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "checksum": "377f4f3f4251a7f7ce04f017137003141dcc9b27d80eec1e1b8b00d8d6220dbc",
+=======
+  "checksum": "226ee49ff839d110027606fabeb6b08caa1d1cd36c5825158528479b8ae981a5",
+>>>>>>> origin/master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
