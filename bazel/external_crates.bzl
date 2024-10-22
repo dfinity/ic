@@ -497,7 +497,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "hyper": crate.spec(
                 version = "^1.5.0",
-                features = ["full"],
+                default_features = False,
+                features = ["server"],
             ),
             "hyper-socks2": crate.spec(
                 version = "^0.9.1",
