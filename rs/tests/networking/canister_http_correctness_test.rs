@@ -532,7 +532,7 @@ pub fn test_post_request(env: TestEnv) {
                     request: CanisterHttpRequestArgs {
                         url: format!("https://[{webserver_ipv6}]:20443/post"),
                         headers: BoundedHttpHeaders::new(vec![HttpHeader {
-                            name: "Content-Type".to_string(),
+                            name: "content-type".to_string(),
                             value: "application/x-www-form-urlencoded".to_string(),
                         }]),
                         method: HttpMethod::POST,
