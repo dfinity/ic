@@ -561,31 +561,6 @@ impl CertifiedStreamStore for FakeStateManager {
             stream.slice(begin_index, msg_limit),
             state.height(),
         ))
-        /*
-        let slice: SerializableStreamSlice = stream.slice(begin_index, msg_limit).into();
-
-        Ok(CertifiedStreamSlice {
-            payload: serde_cbor::to_vec(&slice).expect("failed to serialize stream slice"),
-            merkle_proof: vec![],
-            certification: Certification {
-                height: state.height(),
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            },
-        })
-        */
     }
 
     fn decode_certified_stream_slice(
