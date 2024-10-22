@@ -2,7 +2,7 @@ use super::NeuronStore;
 use crate::{
     neuron_store::Neuron,
     pb::v1::{NeuronState, Visibility},
-    storage::with_stable_neuron_store,
+    storage::{neurons::NeuronSections, with_stable_neuron_store},
 };
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
@@ -200,20 +200,20 @@ impl NeuronStore {
         now_seconds: u64,
         minimum_stake_e8s: u64,
     ) -> NeuronMetrics {
-        // let mut metrics = NeuronMetrics {
-        //     garbage_collectable_neurons_count: with_stable_neuron_store(|stable_neuron_store| {
-        //         stable_neuron_store.len() as u64
-        //     }),
-        //     neurons_fund_total_active_neurons: self.list_active_neurons_fund_neurons().len() as u64,
-        //     ..Default::default()
-        // };
-
         with_stable_neuron_store(|stable_neuron_store| {
             let mut metrics = NeuronMetrics {
                 ..Default::default()
             };
 
-            for neuron in stable_neuron_store.range_neurons(..) {
+            let neuron_sections = NeuronSections {
+                hot_keys: false,
+                recent_ballots: false,
+                followees: false,
+                known_neuron_data: true,
+                transfer: false,
+            };
+
+            for neuron in stable_neuron_store.range_neurons_sections(.., neuron_sections) {
                 let neuron = &neuron;
                 metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
                     now_seconds,
