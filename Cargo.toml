@@ -531,7 +531,7 @@ http = "1.1.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
-hyper = { version = "1.4.1", features = ["full"] }
+hyper = { version = "1.5.0", features = ["full"] }
 hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
@@ -637,7 +637,7 @@ rand_chacha = "0.3.1"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
-reqwest = { version = "0.12.7", default-features = false, features = [
+reqwest = { version = "0.12.8", default-features = false, features = [
     "blocking",
     "http2",
     "json",
@@ -651,7 +651,7 @@ rolling-file = "0.2.0"
 rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
-rustls = { version = "0.23.14", default-features = false, features = [
+rustls = { version = "0.23.15", default-features = false, features = [
     "ring",
     "std",
     "brotli",
