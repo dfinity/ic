@@ -23,6 +23,8 @@ pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 
+const PROXY_CANISTER_ID_PATH: &str = "proxy_canister_id";
+
 pub enum PemType {
     PemCert,
     PemKey,
@@ -76,6 +78,16 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
     await_nodes_healthy(&env);
     install_nns_canisters(&env);
+
+    // install proxy
+    let logger = env.logger();
+
+    // Get application subnet node to deploy canister to.
+    let mut nodes = get_node_snapshots(&env);
+    let node = nodes.next().expect("there is no application node");
+    let runtime = get_runtime_from_node(&node);
+    let _ = create_proxy_canister(&env, &runtime, &node);
+    let webserver_ipv6 = get_universal_vm_address(&env);
 }
 
 pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
@@ -198,8 +210,17 @@ pub fn create_proxy_canister<'a>(
         &env.logger(),
         "proxy_canister {} installed", proxy_canister_id
     );
-    Canister::new(
-        runtime,
-        CanisterId::unchecked_from_principal(PrincipalId::from(proxy_canister_id)),
-    )
+
+    let principal_id = PrincipalId::from(proxy_canister_id);
+
+    // write proxy canister id to TestEnv
+    env.write_json_object(PROXY_CANISTER_ID_PATH, &principal_id)
+        .expect("Could not write proxy canister id to TestEnv.");
+
+    Canister::new(runtime, CanisterId::unchecked_from_principal(principal_id))
+}
+
+pub fn get_proxy_canister_id(env: &TestEnv) -> PrincipalId {
+    env.read_json_object(PROXY_CANISTER_ID_PATH)
+        .expect("Proxy canister should should .")
 }
