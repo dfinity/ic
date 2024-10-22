@@ -57,11 +57,11 @@ use ic_replicated_state::{
 };
 use ic_types::ExecutionRound;
 
-const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 // The percentage of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
-const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
+const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 50;
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -74,6 +74,9 @@ const EMBEDDER_CACHE_HIT_COMPILATION_ERROR: &str = "embedder_cache_hit_compilati
 const COMPILATION_CACHE_HIT: &str = "compilation_cache_hit";
 const COMPILATION_CACHE_HIT_COMPILATION_ERROR: &str = "compilation_cache_hit_compilation_error";
 const CACHE_MISS: &str = "cache_miss";
+
+// The max amount of memory to use for sandboxes in KiB. This is equivalent to 50 GiB.
+const SANDBOX_PROCESSES_MAX_ANON_KIB: u64 = 50 * 1024 * 1024;
 
 struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_duration: HistogramVec,
@@ -342,6 +345,7 @@ pub struct SandboxProcess {
 impl Drop for SandboxProcess {
     fn drop(&mut self) {
         self.history.record("Terminate()".to_string());
+        println!("we terminated sandbox {}", self.pid);
         self.sandbox_service
             .terminate(protocol::sbxsvc::TerminateRequest {})
             .on_completion(|_| {});
@@ -637,6 +641,7 @@ pub struct SandboxedExecutionController {
     /// - An entry is removed from the registry only if it is in the `evicted`
     ///   state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    memory_usage: Arc<Mutex<u64>>,
     min_sandbox_count: usize,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
@@ -1074,8 +1079,12 @@ impl SandboxedExecutionController {
         let logger_copy = logger.clone();
         let (tx, rx) = std::sync::mpsc::channel();
 
+        let memory_usage = Arc::new(Mutex::new(0));
+        let memory_usage_copy = Arc::clone(&memory_usage);
+
         std::thread::spawn(move || {
             SandboxedExecutionController::monitor_and_evict_sandbox_processes(
+                memory_usage_copy,
                 logger_copy,
                 backends_copy,
                 metrics_copy,
@@ -1108,6 +1117,7 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
+            memory_usage,
             min_sandbox_count,
             max_sandbox_count,
             max_sandbox_idle_time,
@@ -1125,12 +1135,13 @@ impl SandboxedExecutionController {
     // - evict inactive processes,
     // - update memory usage metrics.
     fn monitor_and_evict_sandbox_processes(
+        #[allow(unused_variables)] memory_usage: Arc<Mutex<u64>>,
         // `logger` isn't used on MacOS.
         #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
-        min_sandbox_count: usize,
-        max_sandbox_count: usize,
+        #[allow(unused_variables)] min_sandbox_count: usize,
+        #[allow(unused_variables)] max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
         stop_request: Receiver<bool>,
     ) {
@@ -1186,6 +1197,9 @@ impl SandboxedExecutionController {
                     }
                 }
 
+                // Set memory usage for the other thread.
+                *memory_usage.lock().unwrap() = total_anon_rss;
+
                 metrics
                     .sandboxed_execution_subprocess_anon_rss_total
                     .set(total_anon_rss.try_into().unwrap());
@@ -1193,6 +1207,16 @@ impl SandboxedExecutionController {
                 metrics
                     .sandboxed_execution_subprocess_memfd_rss_total
                     .set(total_memfd_rss.try_into().unwrap());
+
+                println!("anon rss: {}", total_anon_rss);
+
+                //This is memory-usage based eviction. When the usage is over
+                //the limit, we evict half of the sandboxes between the min and max.
+                if total_anon_rss >= SANDBOX_PROCESSES_MAX_ANON_KIB {
+                    //let current_no_sandboxes = max_sandbox_count.min(sandbox_processes.len());
+                    let mut guard = backends.lock().unwrap();
+                    evict_at_most_sandbox_processes(&mut guard, 750, max_sandbox_idle_time);
+                }
             }
 
             // We don't need to record memory metrics on non-linux systems.  And
@@ -1220,16 +1244,6 @@ impl SandboxedExecutionController {
                         }
                     }
                 }
-            }
-
-            {
-                let mut guard = backends.lock().unwrap();
-                evict_sandbox_processes(
-                    &mut guard,
-                    min_sandbox_count,
-                    max_sandbox_count,
-                    max_sandbox_idle_time,
-                );
             }
 
             // Collect metrics sufficiently infrequently that it does not use
@@ -1277,12 +1291,24 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
+
+        let memory_usage = *self.memory_usage.lock().unwrap();
+        // Evict if we hit the memory limit or if we have too many sandboxes.
         if guard.len() > self.max_sandbox_count {
+            //|| memory_usage >= SANDBOX_PROCESSES_MAX_ANON_KIB {
             let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+            // We can reach the memory limit before we reach the sandbox limit.
+            let max_active_sandboxes = self
+                .max_sandbox_count
+                .min(guard.len())
+                .saturating_sub(to_evict);
+            // It can also be that we hit the memory limit with less than self.min_sandbox_count,
+            // although this should not happen unless in very degenerate cases.
+            let min_active_sandboxes = self.min_sandbox_count.min(max_active_sandboxes);
+
             evict_sandbox_processes(
                 &mut guard,
-                self.min_sandbox_count,
+                min_active_sandboxes,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
             );
@@ -1642,6 +1668,7 @@ fn wrap_remote_memory(
 // Evicts some sandbox process backends according to the heuristics of the
 // `sandbox_process_eviction::evict()` function. See the comments of that
 // function for the explanation of the threshold parameters.
+#[allow(dead_code)]
 fn evict_sandbox_processes(
     backends: &mut HashMap<CanisterId, Backend>,
     min_active_sandboxes: usize,
@@ -1655,7 +1682,7 @@ fn evict_sandbox_processes(
             sandbox_process, ..
         } => {
             // Once `strong_count` reaches zero, then `upgrade()` will always
-            // return `None`. This means that such entries never be used again,
+            // return `None`. This means that such entries will never be used again,
             // so it is safe to remove them from the hash map.
             sandbox_process.strong_count() > 0
         }
@@ -1692,6 +1719,70 @@ fn evict_sandbox_processes(
         max_active_sandboxes,
         last_used_threshold,
     );
+
+    // Actually evict all the selected eviction candidates.
+    for EvictionCandidate { id, .. } in evicted.iter() {
+        if let Some(backend) = backends.get_mut(id) {
+            let old = std::mem::replace(backend, Backend::Empty);
+            let new = match old {
+                Backend::Active {
+                    sandbox_process,
+                    stats,
+                } => Backend::Evicted {
+                    sandbox_process: Arc::downgrade(&sandbox_process),
+                    stats,
+                },
+                Backend::Evicted { .. } | Backend::Empty => old,
+            };
+            *backend = new;
+        }
+    }
+}
+
+fn evict_at_most_sandbox_processes(
+    backends: &mut HashMap<CanisterId, Backend>,
+    at_most: usize,
+    max_sandbox_idle_time: Duration,
+) {
+    // Remove the already terminated processes.
+    backends.retain(|_id, backend| match backend {
+        Backend::Active { .. } => true,
+        Backend::Evicted {
+            sandbox_process, ..
+        } => {
+            // Once `strong_count` reaches zero, then `upgrade()` will always
+            // return `None`. This means that such entries will never be used again,
+            // so it is safe to remove them from the hash map.
+            sandbox_process.strong_count() > 0
+        }
+        Backend::Empty => false,
+    });
+
+    let candidates: Vec<_> = backends
+        .iter()
+        .filter_map(|(id, backend)| match backend {
+            Backend::Active { stats, .. } => Some(EvictionCandidate {
+                id: *id,
+                last_used: stats.last_used,
+            }),
+            Backend::Evicted { .. } | Backend::Empty => None,
+        })
+        .collect();
+
+    let _last_used_threshold = match Instant::now().checked_sub(max_sandbox_idle_time) {
+        Some(threshold) => threshold,
+        None => {
+            // This case may happen on MacOS where `Instant::now()` returns the time after the reboot.
+            // Since `Instant` doesn't have a default/zero value, we return the oldest `last_used`.
+            candidates
+                .iter()
+                .map(|x| x.last_used)
+                .min()
+                .unwrap_or_else(Instant::now)
+        }
+    };
+
+    let evicted = sandbox_process_eviction::evict_at_most(candidates, at_most);
 
     // Actually evict all the selected eviction candidates.
     for EvictionCandidate { id, .. } in evicted.iter() {
