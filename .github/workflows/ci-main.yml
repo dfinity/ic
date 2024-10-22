@@ -79,6 +79,8 @@ jobs:
               BAZEL_EXTRA_ARGS+=" --keep_going"
           fi
 
+          BAZEL_EXTRA_ARGS+=" --test_env=RUST_LOG=trace"
+
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
       - name: Run Bazel Test All
