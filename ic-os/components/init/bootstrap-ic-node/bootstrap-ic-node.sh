@@ -190,3 +190,12 @@ write_metric "guestos_node_operator_private_key_exists" \
     "${node_operator_private_key_exists}" \
     "Existence of a Node Operator private key indicates the node deployment method" \
     "gauge"
+
+# temporary fix to remove existing certificates of the API BNs
+if [ -f /var/lib/ic/data/ic-boundary-tls.key ]; then
+    rm /var/lib/ic/data/ic-boundary-tls.key
+fi
+
+if [ -f /var/lib/ic/data/ic-boundary-tls.crt ]; then
+    rm /var/lib/ic/data/ic-boundary-tls.crt
+fi

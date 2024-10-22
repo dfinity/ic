@@ -3,7 +3,6 @@ pub mod btc_integration;
 pub mod ckbtc;
 pub mod icrc1_agent_test;
 pub mod ledger_tests;
-pub mod message_routing;
 pub mod networking;
 pub mod nns_tests;
 pub mod rosetta_test;

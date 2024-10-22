@@ -169,8 +169,11 @@ members = [
     "rs/nervous_system/common/test_keys",
     "rs/nervous_system/common/test_utils",
     "rs/nervous_system/common/validation",
+    "rs/nervous_system/histogram",
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
+    "rs/nervous_system/instruction_stats",
+    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/lock",
     "rs/nervous_system/neurons_fund",
@@ -367,7 +370,10 @@ members = [
     "rs/tests/driver",
     "rs/tests/execution",
     "rs/tests/message_routing",
+    "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
+    "rs/tests/message_routing/xnet",
+    "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/httpbin-rs",
     "rs/tests/networking",
     "rs/tests/networking/canisters",
@@ -642,7 +648,7 @@ reqwest = { version = "0.12.8", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = [ "sha2" ] }
+rsa = { version = "0.9.6", features = ["sha2"] }
 rstest = "0.19.0"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.15", default-features = false, features = [
