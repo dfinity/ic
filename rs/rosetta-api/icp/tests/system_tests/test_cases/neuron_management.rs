@@ -397,7 +397,7 @@ fn test_disburse_neuron() {
 
         let tip_block_height = query_encoded_blocks(&agent, u64::MAX, u64::MAX).await.chain_length;
 
-        // Now we should be able to disbursed the neuron
+        // Now we should be able to disburse the neuron
         env.rosetta_client
             .disburse_neuron(
                 env.network_identifier.clone(),
