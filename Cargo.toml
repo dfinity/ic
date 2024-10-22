@@ -531,7 +531,7 @@ http = "1.1.0"
 http-body = "1.0.1"
 http-body-util = "0.1.2"
 humantime-serde = "1.1.1"
-hyper = { version = "1.5.0", features = ["full"] }
+hyper = { version = "1.5.0", default-features = false, features = ["http1", "http2", "server"] }
 hyper-rustls = { version = "0.27.3", default-features = false, features = [
     "http1",
     "http2",
