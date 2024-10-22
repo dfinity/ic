@@ -22,7 +22,6 @@ pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Ledger
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
-pub mod arbitrary;
 pub mod flow;
 pub mod metrics;
 pub mod universal_canister;

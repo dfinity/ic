@@ -24,34 +24,22 @@ pub struct AddErc20TokenFlow {
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
         let now = std::time::SystemTime::now();
-        let mut is_live = false;
         let mut canister_ids = None;
-        let mut counter = 0;
-        while !is_live && counter < MAX_TICKS {
+        for _ in 0..MAX_TICKS {
             self.setup.env.tick();
             self.setup.env.advance_time(Duration::from_secs(1));
             self.setup.env.tick();
             canister_ids = self
                 .setup
                 .call_orchestrator_canister_ids(&self.params.contract);
+
             match &canister_ids {
                 Some(ids) if ids.ledger.is_some() && ids.index.is_some() => {
-                    let ledger_status = self
-                        .setup
-                        .canister_status_of(PrincipalId(ids.ledger.unwrap()).try_into().unwrap());
-                    let index_status = self
-                        .setup
-                        .canister_status_of(PrincipalId(ids.index.unwrap()).try_into().unwrap());
-                    is_live = ledger_status.status() == CanisterStatusType::Running
-                        && ledger_status.module_hash().is_some()
-                        && index_status.status() == CanisterStatusType::Running
-                        && index_status.module_hash().is_some();
+                    break;
                 }
                 _ => {}
             }
-            counter += 1;
         }
-
         let canister_ids = canister_ids.unwrap_or_else(|| {
             panic!(
                 "No managed canister IDs found for contract {:?}",
@@ -62,6 +50,43 @@ impl AddErc20TokenFlow {
             canister_ids.ledger, canister_ids.index,
             "BUG: ledger and index canister IDs MUST be different"
         );
+
+        let mut ledger_is_live = false;
+        for _ in 0..MAX_TICKS {
+            self.setup.env.tick();
+            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.env.tick();
+            let ledger_status = self.setup.canister_status_of(
+                PrincipalId(canister_ids.ledger.unwrap())
+                    .try_into()
+                    .unwrap(),
+            );
+            if ledger_status.status() == CanisterStatusType::Running
+                && ledger_status.module_hash().is_some()
+            {
+                ledger_is_live = true;
+                break;
+            }
+        }
+        assert!(ledger_is_live, "Ledger canister is not live");
+
+        let mut index_is_live = false;
+        for _ in 0..MAX_TICKS {
+            self.setup.env.tick();
+            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.env.tick();
+            let index_status = self
+                .setup
+                .canister_status_of(PrincipalId(canister_ids.index.unwrap()).try_into().unwrap());
+            if index_status.status() == CanisterStatusType::Running
+                && index_status.module_hash().is_some()
+            {
+                index_is_live = true;
+                break;
+            }
+        }
+        assert!(index_is_live, "Index canister is not live");
+
         now.elapsed().ok().map(|d| {
             println!(
                 "expect_new_ledger_and_index_canisters finished in {}ms",
