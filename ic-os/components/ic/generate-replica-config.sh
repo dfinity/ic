@@ -23,7 +23,9 @@ function read_config_variables() {
     BACKUP_PURGING_INTERVAL_SECS=$(get_config_value '.guestos_settings.guestos_dev_settings.backup_spool.backup_purging_interval_seconds')
     QUERY_STATS_EPOCH_LENGTH=$(get_config_value '.guestos_settings.guestos_dev_settings.query_stats_epoch_length')
     JAEGER_ADDR=$(get_config_value '.guestos_settings.guestos_dev_settings.jaeger_addr')
-    MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior')
+
+    # Compact the JSON and escape special characters
+    MALICIOUS_BEHAVIOR=$(get_config_value '.guestos_settings.guestos_dev_settings.malicious_behavior' | jq -c '.' | sed 's/[&\/]/\\&/g')
 }
 
 function configure_ipv6() {
