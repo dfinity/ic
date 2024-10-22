@@ -199,15 +199,20 @@ pub fn test_fee_collector_blocks<T>(
                 arb_account(),
                 arb_account(),
                 arb_account(),
+                arb_account(),
                 1..10_000_000u64,
             )
-                .prop_filter("The three accounts must be different", |(a1, a2, a3, _)| {
-                    a1 != a2 && a2 != a3 && a1 != a3
-                }),
-            |(account_from, account_to, fee_collector_account, amount)| {
+                .prop_filter(
+                    "The three accounts must be different",
+                    |(a1, a2, a3, a4, _)| {
+                        a1 != a2 && a2 != a3 && a1 != a3 && a1 != a4 && a2 != a4 && a3 != a4
+                    },
+                )
+                .no_shrink(),
+            |(account_from, account_to, account_spender, fee_collector_account, amount)| {
                 let args = encode_init_args(InitArgs {
                     fee_collector_account: Some(fee_collector_account),
-                    initial_balances: vec![(account_from, Nat::from((amount + FEE) * 6))],
+                    initial_balances: vec![(account_from, Nat::from((amount + FEE) * 7))],
                     ..init_args(vec![])
                 });
                 let args = Encode!(&args).unwrap();
@@ -265,13 +270,42 @@ pub fn test_fee_collector_blocks<T>(
                     .expect("Unable to perform the transfer");
                 transfer(&env, ledger_id, account_from, account_to, amount)
                     .expect("Unable to perform the transfer");
-                transfer(&env, ledger_id, account_from, account_to, amount)
-                    .expect("Unable to perform the transfer");
+                send_approval(
+                    &env,
+                    ledger_id,
+                    account_from.owner,
+                    &ApproveArgs {
+                        from_subaccount: account_from.subaccount,
+                        spender: account_spender,
+                        amount: Nat::from(amount + FEE),
+                        expected_allowance: None,
+                        expires_at: None,
+                        fee: None,
+                        memo: None,
+                        created_at_time: None,
+                    },
+                )
+                .expect("Unable to perform the approval");
+                send_transfer_from(
+                    &env,
+                    ledger_id,
+                    account_spender.owner,
+                    &TransferFromArgs {
+                        spender_subaccount: account_spender.subaccount,
+                        from: account_from,
+                        to: account_to,
+                        amount: Nat::from(amount),
+                        fee: None,
+                        memo: None,
+                        created_at_time: None,
+                    },
+                )
+                .expect("Unable to perform the transfer_from");
                 let blocks = match block_retrieval {
                     BlockRetrieval::Legacy => {
-                        get_blocks(&env, ledger_id.get().0, block_id, 3).blocks
+                        get_blocks(&env, ledger_id.get().0, block_id, 4).blocks
                     }
-                    BlockRetrieval::Icrc3 => icrc3_get_blocks(&env, ledger_id, block_id, 3)
+                    BlockRetrieval::Icrc3 => icrc3_get_blocks(&env, ledger_id, block_id, 4)
                         .blocks
                         .into_iter()
                         .map(|b| GenericBlock::from(b.block))
@@ -285,8 +319,14 @@ pub fn test_fee_collector_blocks<T>(
                     fee_collector_from_block(blocks.get(1).unwrap().clone()),
                     (None, Some(block_id))
                 );
+                // Expect the fee collector to be set in an approve block.
                 assert_eq!(
                     fee_collector_from_block(blocks.get(2).unwrap().clone()),
+                    (None, Some(block_id))
+                );
+                // Expect the fee collector to be set in a transfer_from block.
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(3).unwrap().clone()),
                     (None, Some(block_id))
                 );
 
