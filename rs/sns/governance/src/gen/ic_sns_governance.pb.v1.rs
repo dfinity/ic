@@ -1650,6 +1650,8 @@ pub struct Governance {
     /// Information about the timers that perform periodic tasks of this Governance canister.
     #[prost(message, optional, tag = "31")]
     pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
+    #[prost(message, optional, tag = "32")]
+    pub upgrade_journal: ::core::option::Option<UpgradeJournalEntries>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1995,6 +1997,64 @@ pub mod governance {
             }
         }
     }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Timers {
+    #[prost(uint64, optional, tag = "1")]
+    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersResponse {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersResponse {
+    #[prost(message, optional, tag = "1")]
+    pub timers: ::core::option::Option<Timers>,
 }
 /// Request message for 'get_metadata'.
 #[derive(
@@ -3334,6 +3394,129 @@ pub struct AdvanceTargetVersionRequest {
     ::prost::Message,
 )]
 pub struct AdvanceTargetVersionResponse {}
+/// Represents a single entry in the upgrade journal.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpgradeJournalEntry {
+    #[prost(uint64, optional, tag = "5")]
+    pub timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(oneof = "upgrade_journal_entry::Entry", tags = "1, 2, 3, 4")]
+    pub entry: ::core::option::Option<upgrade_journal_entry::Entry>,
+}
+/// Nested message and enum types in `UpgradeJournalEntry`.
+pub mod upgrade_journal_entry {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeStepsRefresh {
+        #[prost(message, optional, tag = "2")]
+        pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct TargetVersionSet {
+        #[prost(message, optional, tag = "2")]
+        pub version: ::core::option::Option<super::governance::Version>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeStarted {
+        #[prost(message, optional, tag = "2")]
+        pub current_version: ::core::option::Option<super::governance::Version>,
+        #[prost(message, optional, tag = "3")]
+        pub expected_version: ::core::option::Option<super::governance::Version>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct UpgradeCompleted {
+        #[prost(oneof = "upgrade_completed::Status", tags = "1, 2, 3, 4")]
+        pub status: ::core::option::Option<upgrade_completed::Status>,
+    }
+    /// Nested message and enum types in `UpgradeCompleted`.
+    pub mod upgrade_completed {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
+        pub enum Status {
+            #[prost(message, tag = "1")]
+            Succeeded(super::super::Empty),
+            #[prost(message, tag = "2")]
+            TimedOut(super::super::Empty),
+            /// The SNS ended up being upgraded to a version that was not the expected one.
+            #[prost(message, tag = "3")]
+            InvalidState(super::super::governance::Version),
+            #[prost(message, tag = "4")]
+            CanisterCallFailure(super::super::Empty),
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Entry {
+        #[prost(message, tag = "1")]
+        UpgradeStepsRefresh(UpgradeStepsRefresh),
+        #[prost(message, tag = "2")]
+        TargetVersionSet(TargetVersionSet),
+        #[prost(message, tag = "3")]
+        UpgradeStarted(UpgradeStarted),
+        #[prost(message, tag = "4")]
+        UpgradeCompleted(UpgradeCompleted),
+    }
+}
+/// Needed to cause prost to generate a type isomorphic to
+/// Option<Vec<UpgradeJournalEntry>>.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpgradeJournalEntries {
+    /// The entries in the upgrade journal.
+    #[prost(message, repeated, tag = "1")]
+    pub entries: ::prost::alloc::vec::Vec<UpgradeJournalEntry>,
+}
 /// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
 /// It is being implemented as part of the "effortless SNS upgrade" feature.
 #[derive(
@@ -3364,6 +3547,8 @@ pub struct GetUpgradeJournalResponse {
     /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
+    #[prost(message, optional, tag = "4")]
+    pub journal: ::core::option::Option<UpgradeJournalEntries>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is

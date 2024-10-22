@@ -37,23 +37,24 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            Account as AccountProto, AddMaturityRequest, AddMaturityResponse, Ballot,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, GetUpgradeJournalResponse,
-            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
-            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
-            ManageSnsMetadata, MintSnsTokens, MintTokensRequest, MintTokensResponse,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-            RewardEvent, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
+            AddMaturityResponse, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
+            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            GetUpgradeJournalResponse, Governance as GovernanceProto, GovernanceError,
+            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
+            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
+            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
+            RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+            UpgradeJournalEntries, UpgradeJournalEntry, UpgradeSnsControlledCanister,
             UpgradeSnsToNextVersion, Vote, WaitForQuietState,
         },
     },
@@ -4771,7 +4772,16 @@ impl Governance {
         // The following code must remain after the async call.
         if let Some(ref mut cached_upgrade_steps) = self.proto.cached_upgrade_steps {
             cached_upgrade_steps.response_timestamp_seconds = Some(self.env.now());
-            cached_upgrade_steps.upgrade_steps = Some(upgrade_steps);
+
+            // Update the upgrade steps if they have changed
+            if cached_upgrade_steps.upgrade_steps != Some(upgrade_steps.clone()) {
+                cached_upgrade_steps.upgrade_steps = Some(upgrade_steps.clone());
+                self.push_to_upgrade_journal(upgrade_journal_entry::Entry::UpgradeStepsRefresh(
+                    upgrade_journal_entry::UpgradeStepsRefresh {
+                        upgrade_steps: Some(upgrade_steps.clone()),
+                    },
+                ));
+            }
         }
         // It's unlikely that cached_upgrade_steps is None, the caller is
         // supposed to set the lock (by setting request_timestamp_seconds) before this function is called,
@@ -4780,9 +4790,31 @@ impl Governance {
         else {
             self.proto.cached_upgrade_steps = Some(CachedUpgradeSteps {
                 response_timestamp_seconds: Some(self.env.now()),
-                upgrade_steps: Some(upgrade_steps),
+                upgrade_steps: Some(upgrade_steps.clone()),
                 ..Default::default()
             });
+            self.push_to_upgrade_journal(upgrade_journal_entry::Entry::UpgradeStepsRefresh(
+                upgrade_journal_entry::UpgradeStepsRefresh {
+                    upgrade_steps: Some(upgrade_steps),
+                },
+            ));
+        }
+    }
+
+    pub fn push_to_upgrade_journal(&mut self, entry: upgrade_journal_entry::Entry) {
+        let upgrade_journal_entry = UpgradeJournalEntry {
+            entry: Some(entry),
+            timestamp_seconds: Some(self.env.now()),
+        };
+        match self.proto.upgrade_journal {
+            None => {
+                self.proto.upgrade_journal = Some(UpgradeJournalEntries {
+                    entries: vec![upgrade_journal_entry],
+                });
+            }
+            Some(ref mut journal) => {
+                journal.entries.push(upgrade_journal_entry);
+            }
         }
     }
 
@@ -4793,11 +4825,13 @@ impl Governance {
                 upgrade_steps: cached_upgrade_steps.upgrade_steps,
                 response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
                 target_version: self.proto.target_version.clone(),
+                journal: self.proto.upgrade_journal.clone(),
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
                 response_timestamp_seconds: None,
                 target_version: None,
+                journal: self.proto.upgrade_journal.clone(),
             },
         }
     }
