@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail};
+use anyhow::bail;
 use candid::{Decode, Encode};
 use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
@@ -11,6 +11,7 @@ use ic_nns_test_utils::state_test_helpers::{
     IcWasmTraceEventType, PrimitiveIcWasmTraceEvent,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
+#[allow(unused)]
 use pretty_assertions::assert_eq;
 use std::{
     collections::BTreeMap,
@@ -248,7 +249,8 @@ enum CostValue {
     StartCost(u64),
 }
 
-// Copied from https://github.com/dfinity/ic-repl/blob/746bea25ddd4cc98709f6b9eaa283f32a21ac30d/src/profiling.rs#L85C1-L162C2
+// Partially copied from
+// https://github.com/dfinity/ic-repl/blob/746bea25ddd4cc98709f6b9eaa283f32a21ac30d/src/profiling.rs#L85C1-L162C2
 fn render_profiling(
     input: Vec<(i32, i64)>,
     names: &BTreeMap<u16, String>,
@@ -258,85 +260,8 @@ fn render_profiling(
     use inferno::flamegraph::{from_reader, Options};
     // Convert to inferno's "folded" format.
 
-    let (inferno_trace, refactored_cost) =
+    let (inferno_trace, cost) =
         convert_trace_from_ic_wasm_to_inferno(input.clone(), names)?;
-
-    let mut stack = Vec::new();
-    let mut prefix = Vec::new();
-    let mut result = Vec::new();
-    let mut total = 0;
-    let mut prev = None;
-    let start_cost = input.first().map(|(_, count)| *count);
-    for (id, count) in input.into_iter() {
-        if id >= 0 {
-            stack.push((id, count, 0));
-            let name = match names.get(&(id as u16)) {
-                Some(name) => name.clone(),
-                None => "func_".to_string() + &id.to_string(),
-            };
-            prefix.push(name);
-        } else {
-            match stack.pop() {
-                None => return Err(anyhow!("pop empty stack")),
-                Some((start_id, start, children)) => {
-                    if start_id != -id {
-                        return Err(anyhow!("func id mismatch"));
-                    }
-                    let cost = count - start;
-                    let frame = prefix.join(";");
-                    prefix.pop().unwrap();
-                    if let Some((parent, parent_cost, children_cost)) = stack.pop() {
-                        stack.push((parent, parent_cost, children_cost + cost));
-                    } else {
-                        total += cost as u64;
-                    }
-                    match prev {
-                        Some(prev) if prev == frame => {
-                            // Add an empty spacer to avoid collapsing adjacent same-named calls
-                            // See https://github.com/jonhoo/inferno/issues/185#issuecomment-671393504
-                            result.push(format!("{};spacer 0", prefix.join(";")));
-                        }
-                        _ => (),
-                    }
-                    result.push(format!("{} {}", frame, cost - children));
-                    prev = Some(frame);
-                }
-            }
-        }
-    }
-    let cost = if !stack.is_empty() {
-        eprintln!("A trap occured or trace is too large");
-        CostValue::StartCost(start_cost.unwrap() as u64)
-    } else {
-        CostValue::Complete(total)
-    };
-    //println!("Cost: {} Wasm instructions", total);
-
-    {
-        let refactored_result = inferno_trace
-            .iter()
-            .map(|(stack_trace, size)| format!("{} {}", stack_trace.join(";"), size))
-            .collect::<Vec<_>>();
-        let mut result = result.clone();
-        result.reverse();
-        /*
-        fn head_and_tail(lst: &Vec<String>) -> Vec<String> {
-            let mut result = vec![];
-            let len = lst.len();
-
-            result.extend_from_slice(&lst[0..10]);
-            result.extend_from_slice(&lst[(len - 10)..len]);
-
-            result
-        }
-        assert_eq!(
-            head_and_tail(&refactored_result),
-            head_and_tail(&result),
-        );
-        */
-        assert_eq!(refactored_result, result,);
-    }
-    assert_eq!(refactored_cost, cost,);
 
     // Use the inferno library to visualize of where instructions were spent.
     let mut opt = Options::default();
