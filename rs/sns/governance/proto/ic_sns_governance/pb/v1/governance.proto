@@ -2189,8 +2189,7 @@ message UpgradeJournalEntry {
   }
 }
 
-// Needed to cause prost to generate a type isomorphic to
-// Option<Vec<UpgradeJournalEntry>>.
+// Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
 message UpgradeJournalEntries {
   // The entries in the upgrade journal.
   repeated UpgradeJournalEntry entries = 1;
