@@ -1316,7 +1316,16 @@ impl SandboxedExecutionController {
         };
         {
             let mut guard = self.backends.lock().unwrap();
-            (*guard).insert(canister_id, backend);
+            // The canisters are partitioned across cores, so if no backend
+            // is found at the beginning of the function, it should still be
+            // the case at this point.
+            //
+            // However, there is a chance that a non-replicated query spawned
+            // a sandbox meanwhile, so it should be returned and dropped here.
+            //
+            // Dropping the sandbox process includes it's termination,
+            // see `impl Drop for SandboxProcess`.
+            let _maybe_query_backend = (*guard).insert(canister_id, backend);
         }
 
         sandbox_process
