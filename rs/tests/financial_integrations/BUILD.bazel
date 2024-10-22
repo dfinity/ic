@@ -14,24 +14,6 @@ LEDGER_CANISTER_RUNTIME_DEPS = [
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
 
-system_test_nns(
-    name = "btc_get_balance_test",
-    env = {
-        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
-    },
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests/ckbtc"],
-)
-
 system_test(
     name = "icrc1_agent_test",
     env = {

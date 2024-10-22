@@ -16,7 +16,6 @@ axum = { workspace = true }
 backon = "0.4.1"
 base64 = { workspace = true }
 bincode = { workspace = true }
-bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 chrono = { workspace = true }
@@ -101,7 +100,6 @@ ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-ic-tests-ckbtc = { path = "ckbtc" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
@@ -180,10 +178,6 @@ path = "testing_verification/colocate_test.rs"
 [[bin]]
 name = "ic-ii-delegation-test"
 path = "testing_verification/ii_delegation_test.rs"
-
-[[bin]]
-name = "ic-systest-btc-get-balance"
-path = "financial_integrations/btc_get_balance_test.rs"
 
 [[bin]]
 name = "ic-systest-rosetta"
