@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
+    "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
