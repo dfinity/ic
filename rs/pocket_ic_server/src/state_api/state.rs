@@ -747,9 +747,9 @@ impl ApiState {
         loop {
             let instances = self.instances.read().await;
             let mut instance = instances[instance_id].lock().await;
-            match std::mem::replace(&mut instance.state, InstanceState::Deleted) {
-                InstanceState::Available(pocket_ic) => {
-                    std::mem::drop(pocket_ic);
+            match &instance.state {
+                InstanceState::Available(_) => {
+                    let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
                     break;
                 }
                 InstanceState::Deleted => {
