@@ -136,7 +136,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.4",
                 features = [
                     "axum",
                 ],

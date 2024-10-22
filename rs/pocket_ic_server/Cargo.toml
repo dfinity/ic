@@ -4,7 +4,7 @@ version = "6.0.0"
 edition = "2021"
 
 [dependencies]
-aide = { version = "^0.13.0", features = ["axum"] }
+aide = { version = "^0.13.4", features = ["axum"] }
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
