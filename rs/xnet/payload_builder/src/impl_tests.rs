@@ -12,6 +12,7 @@ use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5};
+use crate::certified_slice_pool::UnpackedStreamSlice;
 use ic_types::xnet::RejectReason;
 use maplit::btreemap;
 
@@ -213,9 +214,9 @@ async fn validate_signals_invalid_reject_signals() {
                 70.into(), // Signals end of incoming stream slice.
                 &vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 50.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
+                    RejectSignal::new(RejectReason::CanisterNotFound, 20.into()),
+                    RejectSignal::new(RejectReason::OutOfMemory, 50.into()),
+                    RejectSignal::new(RejectReason::QueueFull, 40.into()),
                 ]
                 .into(),
                 5.into(), // Expected signal index.
@@ -229,9 +230,9 @@ async fn validate_signals_invalid_reject_signals() {
                 SUBNET_1,
                 70.into(), // Signals end of incoming stream slice.
                 &vec![
-                    RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
+                    RejectSignal::new(RejectReason::CanisterStopping, 10.into()),
+                    RejectSignal::new(RejectReason::QueueFull, 20.into()),
+                    RejectSignal::new(RejectReason::CanisterNotFound, 40.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 80.into()),
                 ]
                 .into(),
@@ -245,10 +246,10 @@ async fn validate_signals_invalid_reject_signals() {
                 SUBNET_1,
                 80.into(), // Signals end of incoming stream slice.
                 &vec![
-                    RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 20.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 40.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 80.into()),
+                    RejectSignal::new(RejectReason::OutOfMemory, 10.into()),
+                    RejectSignal::new(RejectReason::CanisterStopped, 20.into()),
+                    RejectSignal::new(RejectReason::QueueFull, 40.into()),
+                    RejectSignal::new(RejectReason::CanisterNotFound, 80.into()),
                 ]
                 .into(),
                 5.into(), // Expected signal index.
@@ -507,6 +508,123 @@ async fn validate_slice_above_msg_limit() {
             },
             validate_slice(expected_message, expected_message + 1, signal_index, &state),
         );
+    });
+}
+
+#[tokio::test]
+async fn validate_slice_above_signal_limit() {
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
+        let validation_context = get_validation_context_for_test();
+
+        // Message and slice begin and end indices for outgoing stream to `SUBNET_1`.
+        const MESSAGE_BEGIN: u64 = 13;
+        const MESSAGE_END: u64 = MESSAGE_BEGIN + MAX_STREAM_MESSAGES as u64 + 10;
+        const SIGNAL_END: u64 = 107;
+
+        // State of an `Application` subnet with a stream for `SUBNET_1`.
+        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        state.with_streams(btreemap! {
+            SUBNET_1 => generate_stream(&StreamConfig {
+                message_begin: MESSAGE_BEGIN,
+                message_end: MESSAGE_END,
+                signal_end: SIGNAL_END,
+            }),
+        });
+
+        // A certified stream slice with more messages than `MAX_STREAM_MESSAGES` in it. Since it
+        // is generated from a `StreamConfig`, `header.begin` is the same as `messages.begin`.
+        let certified_slice = make_certified_stream_slice(
+            SUBNET_1,
+            StreamConfig {
+                message_begin: MESSAGE_BEGIN,
+                message_end: MESSAGE_END,
+                signal_end: SIGNAL_END,
+            },
+        );
+
+        // The slice is too big since inducting it would produce too many signals.
+        assert_matches!(
+            xnet_payload_builder.validate_slice(
+                SUBNET_1,
+                &certified_slice,
+                &ExpectedIndices {
+                    message_index: MESSAGE_BEGIN.into(),
+                    signal_index: SIGNAL_END.into(),
+                },
+                &validation_context,
+                &state,
+            ),
+            SliceValidationResult::Invalid(msg) if msg.contains("inducting slice would produce too many signals")
+        );
+
+        // Unpack the certified slice, take a prefix of 20 messages. Pack the remainder into a
+        // new certified stream slice.
+        let unpacked_slice: UnpackedStreamSlice = certified_slice.try_into().unwrap();
+        let certified_slice: CertifiedStreamSlice = match unpacked_slice.take_prefix(Some(20), None) {
+            Ok((Some(_prefix), Some(remainder))) => remainder.into(),
+            _ => unreachable!(),
+        };
+
+/*
+        // Helper for validating a generated slice from `SUBNET_1` with messages between
+        // the given indices and the given `signals_end` index.
+        let validate_slice = |message_begin, message_end, signal_end, state| {
+            let certified_slice = make_certified_stream_slice(
+                SUBNET_1,
+                StreamConfig {
+                    message_begin,
+                    message_end,
+                    signal_end,
+                },
+            );
+            xnet_payload_builder.validate_slice(
+                SUBNET_1,
+                &certified_slice,
+                &EXPECTED,
+                &validation_context,
+                state,
+            )
+        };
+
+        let expected_message = EXPECTED.message_index.get();
+        let signal_index = EXPECTED.signal_index.get();
+
+        // Sanity check: empty slice is rejected.
+        assert_matches!(
+            validate_slice(expected_message, expected_message, signal_index, &state),
+            SliceValidationResult::Empty
+        );
+        // Sanity check: empty slice with higher signals_end is valid.
+        assert_eq!(
+            SliceValidationResult::Valid {
+                messages_end: expected_message.into(),
+                signals_end: (signal_index + 1).into(),
+                byte_size: 1
+            },
+            validate_slice(expected_message, expected_message, signal_index + 1, &state),
+        );
+
+        // Non-empty slice has too many messages for a `System` subnet...
+        assert_matches!(
+            validate_slice(expected_message, expected_message + 1, signal_index, &state),
+            SliceValidationResult::Invalid(_)
+        );
+
+        // ...but would be valid on an `Application` subnet.
+        #[allow(clippy::redundant_clone)]
+        let mut state = state.clone();
+        state.metadata.own_subnet_type = SubnetType::Application;
+        assert_eq!(
+            SliceValidationResult::Valid {
+                messages_end: (expected_message + 1).into(),
+                signals_end: signal_index.into(),
+                byte_size: 1
+            },
+            validate_slice(expected_message, expected_message + 1, signal_index, &state),
+        );
+*/
     });
 }
 

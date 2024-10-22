@@ -730,7 +730,7 @@ impl XNetPayloadBuilderImpl {
                     signal_limit
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Stream from {}: slice length above limit",
+                    "Stream from {}: inducting slice would produce too many signals",
                     subnet_id
                 ));
             }
