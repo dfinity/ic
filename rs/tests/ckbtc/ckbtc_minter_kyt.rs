@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use bitcoincore_rpc::RpcApi;
@@ -22,8 +20,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys, upgrade_kyt,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction,
         assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
@@ -398,7 +396,7 @@ pub fn test_kyt(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test_kyt))
         .execute_from_args()?;
     Ok(())

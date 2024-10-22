@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use bitcoincore_rpc::{
@@ -23,8 +21,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
         wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
@@ -273,7 +271,7 @@ pub fn test_heartbeat(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test_heartbeat))
         .execute_from_args()?;
     Ok(())

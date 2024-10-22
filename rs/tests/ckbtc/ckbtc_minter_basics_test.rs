@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use candid::{Decode, Encode, Principal};
@@ -19,8 +17,9 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, config, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys, ADDRESS_LENGTH,
+    TEST_KEY_LOCAL,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
@@ -229,7 +228,7 @@ async fn test_update_balance(agent: &CkBtcMinterAgent) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test_ckbtc_addresses))
         .add_test(systest!(test_ckbtc_minter_agent))
         .execute_from_args()?;

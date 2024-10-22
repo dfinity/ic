@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use bitcoincore_rpc::{
@@ -21,8 +19,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, config, create_canister_at_id, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys,
+    activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
     utils::{
         ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
         send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
@@ -332,7 +330,7 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test_batching))
         .execute_from_args()?;
     Ok(())
