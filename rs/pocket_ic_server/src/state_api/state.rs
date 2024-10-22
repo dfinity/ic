@@ -1261,6 +1261,7 @@ impl ApiState {
         let instances = self.instances.read().await;
         let mut instance = instances[instance_id].lock().await;
         let progress_thread = instance.progress_thread.take();
+        // drop locks otherwise we might end up with a deadlock
         drop(instance);
         drop(instances);
         if let Some(t) = progress_thread {
