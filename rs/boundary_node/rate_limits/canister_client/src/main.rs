@@ -8,7 +8,7 @@ use rate_limits_api::{
 };
 use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "w6dgu-3iaaa-aaaab-qadha-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "yoizw-hyaaa-aaaab-qacea-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -51,7 +51,7 @@ async fn main() {
     add_config_2(&agent_full_access, canister_id).await;
 
     println!("Call 7. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
-    let rule_id = "5329ff47530283097e983b18f74eb390324fc2dfd08a37db14760c709b341436".to_string();
+    let rule_id = "e72de4bf25eeb5be951c78dddd4b3bcdac0890e1d90cb051d05c9afa0ce0fb0b".to_string();
     read_rule(&agent_restricted_read, rule_id, canister_id).await;
 }
 
