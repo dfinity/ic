@@ -72,6 +72,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
+        "experimental_system_test_colocation",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
