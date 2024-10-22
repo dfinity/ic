@@ -226,7 +226,7 @@ fn main() {
             ic_crypto_path: None,
             ic_state_path: None,
             ic_registry_local_store_path: None,
-            backup_retention_time_seconds: Some(3600),
+            backup_retention_time_seconds: None,
             backup_purging_interval_seconds: None,
             malicious_behavior: None,
             query_stats_epoch_length: None,
@@ -247,18 +247,14 @@ fn main() {
             }
         }
 
-        std::thread::sleep(std::time::Duration::from_secs(10 * 6000));
-
-        // todo: pass guestos config object to build-bootstrap after rewriting the script to accept config object
-
         // Build config image
         let filename = "config.tar.gz";
         let config_path = tempdir.as_ref().join(filename);
         let local_store = prep_dir.join("ic_registry_local_store");
         Command::new(build_bootstrap_script)
             .arg(&config_path)
-            .arg("--nns_urls")
-            .arg(ipv6_addr.to_string())
+            .arg("--guestos_config")
+            .arg(guestos_config_json_path)
             .arg("--ic_crypto")
             .arg(node.crypto_path())
             .arg("--ic_registry_local_store")
