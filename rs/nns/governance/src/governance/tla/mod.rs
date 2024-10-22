@@ -241,6 +241,12 @@ pub fn check_traces() {
             // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
             let tla_module = format!("{}_Apalache.tla", update.process_id);
             let tla_module = get_tla_module_path(&tla_module);
+            println!(
+                "State size: beginning: {}, end: {}; update: {}",
+                pair.start.size(),
+                pair.end.size(),
+                update.process_id
+            );
             let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,

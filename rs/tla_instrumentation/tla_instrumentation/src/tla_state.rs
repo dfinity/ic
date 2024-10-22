@@ -15,6 +15,10 @@ impl VarAssignment {
         Self(BTreeMap::new())
     }
 
+    pub fn size(&self) -> u64 {
+        self.0.len() as u64 + self.0.values().map(|x| x.size()).sum::<u64>()
+    }
+
     pub fn update(&mut self, locals: Vec<(String, TlaValue)>) {
         self.0.extend(locals)
     }
@@ -62,6 +66,10 @@ pub struct GlobalState(pub VarAssignment);
 impl GlobalState {
     pub fn new() -> Self {
         Self(VarAssignment::new())
+    }
+
+    pub fn size(&self) -> u64 {
+        self.0.size()
     }
 
     pub fn merge(&self, other: GlobalState) -> GlobalState {
