@@ -10,7 +10,7 @@ use std::{
 use axum::{
     body::Body,
     extract::{Path, Request},
-    http::{HeaderMap, HeaderName, Method, StatusCode, Uri},
+    http::{HeaderMap, HeaderName, Method, StatusCode},
     middleware::map_response,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
@@ -85,8 +85,7 @@ async fn redirect_handler(Path(n): Path<u64>) -> impl IntoResponse {
 }
 
 /// Builds the response body using the request
-async fn anything_handler(method: Method, uri: Uri, headers: HeaderMap, body: String) -> Vec<u8> {
-    let host = headers.get("host").unwrap().to_str().unwrap_or("");
+async fn anything_handler(method: Method, headers: HeaderMap, body: String) -> Vec<u8> {
     let headers = headers
         .iter()
         .map(|h| (h.0.to_string(), h.1.to_str().unwrap().to_string()))
@@ -96,7 +95,6 @@ async fn anything_handler(method: Method, uri: Uri, headers: HeaderMap, body: St
         "method": method.to_string(),
         "headers": headers,
         "data": body,
-        "url": format!("https://{}{}", host, uri),
     })
     .to_string();
 

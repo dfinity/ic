@@ -88,6 +88,7 @@ system_test_nns(
         "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/types",
+        "@crate_index//:assert_matches",
         "@crate_index//:tokio",
     ],
 )
