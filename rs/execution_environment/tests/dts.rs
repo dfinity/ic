@@ -1165,7 +1165,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::BitcoinSendTransactionInternal
             | Method::BitcoinGetSuccessors
             | Method::NodeMetricsHistory
-            | Method::SubnetStats
+            | Method::SubnetMetrics
             | Method::ProvisionalCreateCanisterWithCycles
             | Method::ProvisionalTopUpCanister => {}
             // Unsupported methods accepting just one argument.

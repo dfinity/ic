@@ -99,7 +99,7 @@ pub enum Method {
 
     // Subnet information
     NodeMetricsHistory,
-    SubnetStats,
+    SubnetMetrics,
 
     FetchCanisterLogs,
 
@@ -2588,31 +2588,31 @@ pub enum QueryMethod {
     FetchCanisterLogs,
 }
 
-/// `CandidType` for `SubnetStatsArgs`
+/// `CandidType` for `SubnetMetricsArgs`
 /// ```text
 /// record {
 ///     subnet_id: principal;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct SubnetStatsArgs {
+pub struct SubnetMetricsArgs {
     pub subnet_id: PrincipalId,
 }
 
-impl Payload<'_> for SubnetStatsArgs {}
+impl Payload<'_> for SubnetMetricsArgs {}
 
-/// `CandidType` for `SubnetStatsResponse`
+/// `CandidType` for `SubnetMetricsResponse`
 /// ```text
 /// record {
 ///     replica_version: text;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
-pub struct SubnetStatsResponse {
+pub struct SubnetMetricsResponse {
     pub replica_version: String,
 }
 
-impl Payload<'_> for SubnetStatsResponse {}
+impl Payload<'_> for SubnetMetricsResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text
