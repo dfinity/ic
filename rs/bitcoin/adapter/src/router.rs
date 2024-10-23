@@ -46,73 +46,72 @@ pub fn start_main_event_loop(
         network_message_sender,
         router_metrics.clone(),
     );
-    let adapter_awake_notifier = adapter_state.awake_notifier();
+
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
         loop {
-            if adapter_state.is_idle() {
-                connection_manager.make_idle();
-                blockchain_manager.make_idle();
-                adapter_awake_notifier.notified().await;
-                continue;
-            }
+            connection_manager.make_idle();
+            blockchain_manager.make_idle();
+            adapter_state.is_awake_rx.recv().await;
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
             // tokio::time::Interval::tick which are all cancellation safe.
-            tokio::join! {
-                is_idle = adapter_state.make_idle() => {
-                    //
-                },
-                event = connection_manager.receive_stream_event() => {
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
-                        connection_manager.process_event(&event)
-                    {
-                        connection_manager.discard(&event.address);
-                    }
-                },
-                network_message = network_message_receiver.recv() => {
-                    let (address, message) = network_message.unwrap();
-                    router_metrics
-                        .bitcoin_messages_received
-                        .with_label_values(&[message.cmd()])
-                        .inc();
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
-                        connection_manager.process_bitcoin_network_message(address, &message) {
-                        connection_manager.discard(&address);
-                    }
+            loop {
+                tokio::select! {
+                    is_idle = adapter_state.is_idle_rx.recv() => {
+                        break;
+                    },
+                    event = connection_manager.receive_stream_event() => {
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                            connection_manager.process_event(&event)
+                        {
+                            connection_manager.discard(&event.address);
+                        }
+                    },
+                    network_message = network_message_receiver.recv() => {
+                        let (address, message) = network_message.unwrap();
+                        router_metrics
+                            .bitcoin_messages_received
+                            .with_label_values(&[message.cmd()])
+                            .inc();
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
+                            connection_manager.process_bitcoin_network_message(address, &message) {
+                            connection_manager.discard(&address);
+                        }
 
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
-                        connection_manager.discard(&address);
-                    }
-                    if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
-                        connection_manager.discard(&address);
-                    }
-                },
-                result = blockchain_manager_rx.recv() => {
-                    let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
-                    match command {
-                        BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
-                            blockchain_manager.enqueue_new_blocks_to_download(next_headers);
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = blockchain_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                            connection_manager.discard(&address);
                         }
-                        BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
-                            blockchain_manager.prune_blocks(anchor, processed_block_hashes);
+                        if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) = transaction_manager.process_bitcoin_network_message(&mut connection_manager, address, &message) {
+                            connection_manager.discard(&address);
                         }
-                    };
-                }
-                transaction_manager_request = transaction_manager_rx.recv() => {
-                    match transaction_manager_request.unwrap() {
-                        TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.enqueue_transaction(&transaction),
+                    },
+                    result = blockchain_manager_rx.recv() => {
+                        let command = result.expect("Receiving should not fail because the sender part of the channel is never closed.");
+                        match command {
+                            BlockchainManagerRequest::EnqueueNewBlocksToDownload(next_headers) => {
+                                blockchain_manager.enqueue_new_blocks_to_download(next_headers);
+                            }
+                            BlockchainManagerRequest::PruneBlocks(anchor, processed_block_hashes) => {
+                                blockchain_manager.prune_blocks(anchor, processed_block_hashes);
+                            }
+                        };
                     }
-                },
-                _ = tick_interval.tick() => {
-                    // After an event is dispatched, the managers `tick` method is called to process possible
-                    // outgoing messages.
-                    connection_manager.tick(blockchain_manager.get_height(), handle_stream);
-                    blockchain_manager.tick(&mut connection_manager);
-                    transaction_manager.advertise_txids(&mut connection_manager);
-                }
-            };
+                    transaction_manager_request = transaction_manager_rx.recv() => {
+                        match transaction_manager_request.unwrap() {
+                            TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.enqueue_transaction(&transaction),
+                        }
+                    },
+                    _ = tick_interval.tick() => {
+                        // After an event is dispatched, the managers `tick` method is called to process possible
+                        // outgoing messages.
+                        connection_manager.tick(blockchain_manager.get_height(), handle_stream);
+                        blockchain_manager.tick(&mut connection_manager);
+                        transaction_manager.advertise_txids(&mut connection_manager);
+                    }
+                };
+            }   
         }
     });
 }

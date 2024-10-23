@@ -14,6 +14,7 @@ use std::{
     time::Instant,
 };
 use tokio::sync::{mpsc::channel, watch, Notify};
+use tokio::sync::mpsc;
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -154,39 +155,35 @@ pub struct AdapterState {
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
-    /// The field contains a notify handle that is used to wake up the adapter when it should become idle.
-    sender: watch::Sender<()>,
+    
+    idle_tx: mpsc::Sender<()>,
+    idle_rx: mpsc::Receiver<()>,
+
+    awake_tx: mpsc::Sender<()>,
+    awake_rx: mpsc::Receiver<()>, 
 }
 
 impl AdapterState {
     /// Crates new instance of the AdapterState.
     pub fn new(idle_seconds: u64) -> Self {
-        let (sender, _) = watch::channel(());
+        let (idle_tx, idle_rx) = mpsc::channel(());
+        let (awake_tx, awake_rx) = mpsc::channel(());
         Self {
             last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
-            sender,
+            idle_tx,
+            idle_rx,
+            awake_tx,
+            awake_rx,
         }
-    }
-
-    /// Returns if the adapter is idle.
-    pub fn is_idle(&self) -> bool {
-        match *self.last_received_at.read() {
-            Some(last) => last.elapsed().as_secs() > self.idle_seconds,
-            // Nothing received yet still in idle from startup.
-            None => true,
-        }
-    }
-
-    pub fn subscribe(&self) -> watch::Receiver<()> {
-        self.sender.subscribe()
     }
 
     /// Updates the current state of the adapter given a request was received.
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
-        let _ = self.sender.send(());
+        self.awake_tx.send(()).unwrap();
+        self.awake_rx.recv();
     }
 
     async fn wait_until_active(&self, receive: &mut watch::Receiver<()>) {
