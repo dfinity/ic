@@ -47,9 +47,12 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
+        "//packages/icrc-ledger-agent:icrc_ledger_agent",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/tree_hash",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
         "//rs/tests/driver:ic-system-test-driver",
