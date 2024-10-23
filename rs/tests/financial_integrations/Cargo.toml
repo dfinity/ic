@@ -10,5 +10,5 @@ documentation.workspace = true
 anyhow = { workspace = true }
 
 [[bin]]
-name = "ic-systest-icrc1-agent-test"
+name = "icrc1-agent-test"
 path = "icrc1_agent_test.rs"
