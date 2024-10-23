@@ -2,13 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
     # Keep sorted.
+    "//rs/ledger_suite/icp:__subpackages__",
+    "//rs/ledger_suite/icrc1:__pkg__",
+    "//rs/ledger_suite/icrc1/benchmark/generator:__pkg__",
+    "//rs/ledger_suite/icrc1/benchmark/worker:__pkg__",
+    "//rs/ledger_suite/icrc1/ledger:__pkg__",
     "//rs/nns:__subpackages__",
     "//rs/registry/canister:__pkg__",
-    "//rs/rosetta-api/icp_ledger:__subpackages__",
-    "//rs/rosetta-api/icrc1:__pkg__",
-    "//rs/rosetta-api/icrc1/benchmark/generator:__pkg__",
-    "//rs/rosetta-api/icrc1/benchmark/worker:__pkg__",
-    "//rs/rosetta-api/icrc1/ledger:__pkg__",
     "//rs/rust_canisters:__subpackages__",
 ])
 

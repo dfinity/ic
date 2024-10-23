@@ -39,7 +39,12 @@ impl VarAssignment {
                 .keys()
                 .collect::<BTreeSet<_>>()
                 .is_disjoint(&other.0.keys().collect()),
-            "The states have non-disjoint sets of keys: {:?}",
+            r#"The states have non-disjoint sets of keys:
+{:?}
+Possible causes:
+1. A local variable is set both after the last await and in default_locals.
+   This is the most likely cause if the stack trace includes tla_log_method_return.
+2. A local variable of the same name is set in multiple functions in the call stack."#,
             self.0
                 .keys()
                 .collect::<BTreeSet<_>>()

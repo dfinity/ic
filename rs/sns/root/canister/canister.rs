@@ -138,16 +138,6 @@ fn canister_post_upgrade() {
     );
     canister_init(state);
 
-    // Kick off migration one minute after upgrade
-    let duration = Duration::from_secs(60);
-    ic_cdk_timers::set_timer(duration, || {
-        ic_cdk::spawn(async {
-            let management_canister_client =
-                ManagementCanisterClientImpl::<CanisterRuntime>::new(None);
-            SnsRootCanister::migrate_canister_settings(&STATE, &management_canister_client).await;
-        })
-    });
-
     log!(INFO, "canister_post_upgrade: Done!");
 }
 
@@ -398,19 +388,6 @@ async fn poll_for_new_archive_canisters() {
 /// Encode the metrics in a format that can be understood by Prometheus.
 fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
-}
-
-/// This makes this Candid service self-describing, so that for example Candid
-/// UI, but also other tools, can seamlessly integrate with it.
-/// The concrete interface (__get_candid_interface_tmp_hack) is provisional, but
-/// works.
-///
-/// We include the .did file as committed, which means it is included verbatim in
-/// the .wasm; using `candid::export_service` here would involve unnecessary
-/// runtime computation.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    include_str!("root.did").to_string()
 }
 
 fn main() {

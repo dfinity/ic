@@ -1,6 +1,6 @@
 // Set up a testnet containing:
 //   one 1-node System and one 1-node Application subnets, one unassigned node, single boundary node, and a p8s (with grafana) VM.
-// All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
+// All replica nodes use the following resources: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //

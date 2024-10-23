@@ -3,13 +3,11 @@ use clap::{Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
+use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use config::types::{
-    GuestOSSettings, HostOSConfig, HostOSSettings, ICOSSettings, Logging, NetworkSettings,
-    SetupOSConfig, SetupOSSettings,
-};
+use config::types::*;
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -62,7 +60,6 @@ pub fn main() -> Result<()> {
             setupos_config_json_path,
         }) => {
             // get config.ini settings
-            let config_ini_settings = get_config_ini_settings(&config_ini_path)?;
             let ConfigIniSettings {
                 ipv6_prefix,
                 ipv6_prefix_length,
@@ -72,38 +69,69 @@ pub fn main() -> Result<()> {
                 ipv4_prefix_length,
                 domain,
                 verbose,
-            } = config_ini_settings;
+            } = get_config_ini_settings(&config_ini_path)?;
+
+            // create NetworkSettings
+            let deterministic_config = DeterministicIpv6Config {
+                prefix: ipv6_prefix,
+                prefix_length: ipv6_prefix_length,
+                gateway: ipv6_gateway,
+            };
+
+            let ipv4_config = match (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain) {
+                (Some(address), Some(gateway), Some(prefix_length), Some(domain)) => {
+                    Some(Ipv4Config {
+                        address,
+                        gateway,
+                        prefix_length,
+                        domain,
+                    })
+                }
+                (None, None, None, None) => None,
+                _ => {
+                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                    None
+                }
+            };
+
+            let network_settings = NetworkSettings {
+                ipv6_config: Ipv6Config::Deterministic(deterministic_config),
+                ipv4_config,
+            };
 
             // get deployment.json variables
             let deployment_json_settings = get_deployment_settings(&deployment_json_path)?;
-
-            let network_settings = NetworkSettings {
-                ipv6_prefix,
-                ipv6_prefix_length,
-                ipv6_gateway,
-                ipv4_address,
-                ipv4_gateway,
-                ipv4_prefix_length,
-                domain,
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
-            };
 
             let logging = Logging {
                 elasticsearch_hosts: deployment_json_settings.logging.hosts.to_string(),
                 elasticsearch_tags: None,
             };
 
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    println!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
+            };
+
             let icos_settings = ICOSSettings {
+                mgmt_mac,
+                deployment_environment: deployment_json_settings.deployment.name,
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
                     .then_some(node_operator_private_key_path),
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
+                icos_dev_settings: ICOSDevSettings::default(),
             };
 
             let setupos_settings = SetupOSSettings;
@@ -127,6 +155,7 @@ pub fn main() -> Result<()> {
                 hostos_settings,
                 guestos_settings,
             };
+            println!("SetupOSConfig: {:?}", setupos_config);
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
@@ -147,9 +176,21 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
+            // update select file paths for HostOS
+            let mut hostos_icos_settings = setupos_config.icos_settings;
+            let hostos_config_path = Path::new("/boot/config");
+            if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
+                *path = hostos_config_path.join("ssh_authorized_keys");
+            }
+            if let Some(ref mut path) = hostos_icos_settings.node_operator_private_key_path {
+                *path = hostos_config_path.join("node_operator_private_key.pem");
+            }
+            hostos_icos_settings.nns_public_key_path =
+                hostos_config_path.join("nns_public_key.pem");
+
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
-                icos_settings: setupos_config.icos_settings,
+                icos_settings: hostos_icos_settings,
                 hostos_settings: setupos_config.hostos_settings,
                 guestos_settings: setupos_config.guestos_settings,
             };

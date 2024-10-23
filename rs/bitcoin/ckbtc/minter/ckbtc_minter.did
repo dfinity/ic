@@ -27,6 +27,13 @@ type DefiniteCanisterSettings = record {
   memory_allocation : nat;
   compute_allocation : nat;
   reserved_cycles_limit : nat;
+  log_visibility: LogVisibility;
+  wasm_memory_limit : nat;
+};
+
+type LogVisibility = variant {
+    controllers;
+    public;
 };
 
 type RetrieveBtcArgs = record {
@@ -453,7 +460,7 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns the status of a withdrawal request request using the RetrieveBtcStatusV2 type.
     retrieve_btc_status_v2 : (record { block_index : nat64 }) -> (RetrieveBtcStatusV2) query;
-    
+
     // Returns the withdrawal statues by account.
     //
     // # Note

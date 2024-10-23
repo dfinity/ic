@@ -192,14 +192,12 @@ fn test_reschedule_in_local_while_in_remote() {
 #[test]
 fn test_invariants() {
     // Generates input queues with the given sizes for the given canisters.
-    fn input_queues_for_test(
-        queue_sizes: Vec<(CanisterId, u8)>,
-    ) -> Vec<(CanisterId, CanisterQueue)> {
+    fn input_queues_for_test(queue_sizes: Vec<(CanisterId, u8)>) -> Vec<(CanisterId, InputQueue)> {
         let mut pool = MessagePool::default();
         queue_sizes
             .into_iter()
             .map(|(canister_id, size)| {
-                let mut queue = CanisterQueue::new(500);
+                let mut queue = InputQueue::new(500);
                 for _ in 0..size {
                     let id = pool.insert_inbound(RequestBuilder::default().build().into());
                     queue.push_request(id);

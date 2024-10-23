@@ -10,7 +10,6 @@ documentation.workspace = true
 cc = "1.0"
 
 [dependencies]
-
 ic-interfaces = { path = "../interfaces" }
 bincode = { workspace = true }
 bytes = { workspace = true }
@@ -45,6 +44,7 @@ threadpool = { workspace = true }
 which = "4.2.2"
 
 [dev-dependencies]
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 # This makes the dependencies of the binary more consistent
 # with the dependencies of execution environment tests and

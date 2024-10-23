@@ -294,7 +294,7 @@ echo \"Rosetta container started \"
         .unwrap();
 
     // Add Rosetta image to config dir.
-    let path = get_dependency_path("rs/rosetta-api")
+    let path = get_dependency_path("rs/rosetta-api/icp")
         .into_os_string()
         .into_string()
         .unwrap();

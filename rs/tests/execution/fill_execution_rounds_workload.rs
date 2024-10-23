@@ -64,7 +64,7 @@ const SUBNET_SIZE: usize = 13;
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
-    let config = |env| config(env, SUBNET_SIZE, TUNED_INITIAL_NOTARIZATION_DELAY);
+    let setup = |env| setup(env, SUBNET_SIZE, TUNED_INITIAL_NOTARIZATION_DELAY);
     let test = |env| {
         fill_execution_rounds(
             env,
@@ -76,7 +76,7 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
@@ -88,7 +88,7 @@ const JAEGER_VM_NAME: &str = "jaeger-vm";
 
 const MAX_CANISTERS_INSTALLING_IN_PARALLEL: usize = 10;
 
-pub fn config(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
+pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
     let logger = env.logger();
     PrometheusVm::default()
         .with_required_host_features(vec![HostFeature::Performance])

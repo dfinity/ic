@@ -94,8 +94,6 @@ impl ManagedCanistersAssert {
             .expect("BUG: fail to make a transfer to trigger archive creation");
         }
 
-        self.setup.env.run_until_completion(/*max_ticks=*/ 10);
-
         let archive_ids_after: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()

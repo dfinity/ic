@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 //! # The Test Environment API
 //!
 //! The goal of this module is to provide the user with an extensible,
@@ -1238,7 +1239,6 @@ impl HasGroupSetup for TestEnv {
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                        self,
                     )
                     .unwrap();
                 }

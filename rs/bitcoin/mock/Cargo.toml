@@ -18,7 +18,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
-bitcoin = "0.28.1"
+bitcoin = { workspace = true }
 candid_parser = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }

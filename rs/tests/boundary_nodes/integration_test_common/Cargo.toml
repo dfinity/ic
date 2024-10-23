@@ -1,0 +1,20 @@
+[package]
+name = "ic-boundary-nodes-integration-test-common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+ic-agent = { workspace = true }
+ic-boundary-nodes-system-test-utils = { path = "../utils" }
+ic-system-test-driver = { path = "../../driver" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+wat = { workspace = true }

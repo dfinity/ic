@@ -26,17 +26,20 @@ CRATES_IO_URL = "https://crates.io/crates/"
 
 # noinspection PyMethodMayBeStatic
 class BazelCargoExecutor:
-
     def get_bazel_query_output(self, bazel_query: str, path: pathlib.Path) -> str:
         bazel_query_command = "bazel query"
-        bazel_extra_arguments = "--output package --notool_deps --noimplicit_deps --nohost_deps --ui_event_filters=-WARNING,-ERROR,-INFO"
+        bazel_extra_arguments = (
+            "--output package --notool_deps --noimplicit_deps --nohost_deps --ui_event_filters=-WARNING,-ERROR,-INFO"
+        )
 
         command = f"{bazel_query_command} {bazel_query} {bazel_extra_arguments}"
         environment = {}
         result = ""
 
         try:
-            result = ProcessExecutor.execute_command(command, path.resolve(), environment, "--keep_going" in command, False)
+            result = ProcessExecutor.execute_command(
+                command, path.resolve(), environment, "--keep_going" in command, False
+            )
         except subprocess.CalledProcessError:
             logging.debug(f"Command execution failed for bazel projects:\n{traceback.format_exc()}")
         finally:
@@ -58,7 +61,9 @@ class BazelCargoExecutor:
         audit_out = json.loads(result)
         return audit_out
 
-    def get_cargo_tree_output_for_vulnerable_dependency(self, vulnerable_dependency: Dependency, path: pathlib.Path, cargo_home=None) -> str:
+    def get_cargo_tree_output_for_vulnerable_dependency(
+        self, vulnerable_dependency: Dependency, path: pathlib.Path, cargo_home=None
+    ) -> str:
         environment = {}
 
         if cargo_home is not None:
@@ -66,9 +71,14 @@ class BazelCargoExecutor:
             cargo_bin = f"{cargo_home}/bin/"
             environment["CARGO_HOME"] = cargo_home
             advisory_path = f"{cargo_home}/advisory-db/"
-            command = f"{cargo_bin}cargo tree --edges=no-proc-macro --prefix=depth -d {advisory_path} --stale -n -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+            command = (
+                f"{cargo_bin}cargo tree --edges=no-proc-macro --prefix=depth -d {advisory_path} --stale -n -i "
+                + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+            )
         else:
-            command = "cargo tree --edges=no-proc-macro --prefix=depth -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+            command = "cargo tree --edges=no-proc-macro --prefix=depth -i " + ":".join(
+                [vulnerable_dependency.name, vulnerable_dependency.version]
+            )
 
         try:
             return ProcessExecutor.execute_command(command, path.resolve(), environment)
@@ -129,7 +139,7 @@ class BazelRustDependencyManager(DependencyManager):
         if vulnerability_from_cargo_audit["versions"]["patched"]:
             fix = {
                 vulnerability_id: vulnerability_from_cargo_audit["versions"]["patched"]
-                                  + vulnerability_from_cargo_audit["versions"]["unaffected"]
+                + vulnerability_from_cargo_audit["versions"]["unaffected"]
             }
         else:
             fix = {}
@@ -159,7 +169,6 @@ class BazelRustDependencyManager(DependencyManager):
         )
 
     def has_dependencies_changed(self) -> typing.Dict[str, bool]:
-
         external_crates_bzl = (self.root / "bazel" / "external_crates.bzl").as_posix()
         cargo_lock_toml = (self.root / "Cargo.Bazel.toml.lock").as_posix()
 
@@ -280,14 +289,16 @@ class BazelRustDependencyManager(DependencyManager):
                         project, vulnerable_dependency, first_level_dependencies
                     )
                 else:
-                    first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(vulnerable_dependency, path)
+                    first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(
+                        vulnerable_dependency, path
+                    )
                 lookup = next(
                     (
                         index
                         for index, value in enumerate(finding_builder)
                         if vulnerable_dependency.id == value.vulnerable_dependency.id
-                           and vulnerable_dependency.name == value.vulnerable_dependency.name
-                           and vulnerable_dependency.version == value.vulnerable_dependency.version
+                        and vulnerable_dependency.name == value.vulnerable_dependency.name
+                        and vulnerable_dependency.version == value.vulnerable_dependency.version
                     ),
                     -1,
                 )
@@ -334,7 +345,9 @@ class BazelRustDependencyManager(DependencyManager):
         return dep_line.endswith("(*)")
 
     @staticmethod
-    def __cargo_tree_parse_dependency_or_project(line: str, project_path: pathlib.Path) -> typing.Union[Dependency, str]:
+    def __cargo_tree_parse_dependency_or_project(
+        line: str, project_path: pathlib.Path
+    ) -> typing.Union[Dependency, str]:
         # a few sample lines (crates.io dep, repo dep, project):
         # build-info-build v0.0.26
         # cycles-minting-canister v0.8.0 (https://github.com/dfinity/ic?rev=89129b8212791d7e05cab62ff08eece2888a86e0#89129b82)
@@ -366,7 +379,9 @@ class BazelRustDependencyManager(DependencyManager):
         # in this case the path doesn't uniquely identify the dependency so we use the name as ID
         return Dependency(id=name, name=name, version=vers, fix_version_for_vulnerability={})
 
-    def __get_first_level_dependencies_and_projects_from_cargo(self, vulnerable_dependency: Dependency, path: pathlib.Path) -> typing.Tuple[typing.List[Dependency], typing.List[str]]:
+    def __get_first_level_dependencies_and_projects_from_cargo(
+        self, vulnerable_dependency: Dependency, path: pathlib.Path
+    ) -> typing.Tuple[typing.List[Dependency], typing.List[str]]:
         tree = self.executor.get_cargo_tree_output_for_vulnerable_dependency(vulnerable_dependency, path)
         # sample cargo tree output:
         # 0time v0.1.45
@@ -406,7 +421,7 @@ class BazelRustDependencyManager(DependencyManager):
                     continue
                 skip_higher_depth = False
                 if len(current_chain) >= depth:
-                    del current_chain[depth - 1:]
+                    del current_chain[depth - 1 :]
 
                 dependency_or_project = self.__cargo_tree_parse_dependency_or_project(dep_line, path)
                 if isinstance(dependency_or_project, str):
@@ -414,7 +429,9 @@ class BazelRustDependencyManager(DependencyManager):
                     projects.add(dependency_or_project)
                     if len(current_chain) > 0:
                         # the dependency before the project in the chain is the 1st lvl dep
-                        first_level_dependencies[current_chain[-1].id + ":" + current_chain[-1].version] = current_chain[-1]
+                        first_level_dependencies[current_chain[-1].id + ":" + current_chain[-1].version] = (
+                            current_chain[-1]
+                        )
                     skip_higher_depth = True
                 else:
                     # a dependency was returned
@@ -422,7 +439,9 @@ class BazelRustDependencyManager(DependencyManager):
                 current_depth = depth
         except (RuntimeError, ValueError):
             logging.error("error while parsing 1st level deps & projects from cargo tree.")
-            logging.debug(f"error while parsing 1st level deps & projects from cargo tree {tree}\n{traceback.format_exc()}")
+            logging.debug(
+                f"error while parsing 1st level deps & projects from cargo tree {tree}\n{traceback.format_exc()}"
+            )
 
         return list(first_level_dependencies.values()), list(projects)
 

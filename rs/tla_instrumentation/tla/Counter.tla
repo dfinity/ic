@@ -12,6 +12,7 @@ target(value) == Variant("Target_Method", value)
 
 variables 
     counter = 0;
+    empty_fun = [x \in {} |-> {}];
     mycan_to_othercan = <<>>;
     othercan_to_mycan = {};
 

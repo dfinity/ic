@@ -45,23 +45,20 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mac_address::mac_address::FormattedMacAddress;
     use std::path::PathBuf;
-    use types::{
-        GuestOSConfig, GuestOSSettings, GuestosDevConfig, HostOSConfig, HostOSSettings,
-        ICOSSettings, Logging, NetworkSettings, SetupOSConfig, SetupOSSettings,
-    };
+    use types::*;
 
     #[test]
-    fn test_serialize_and_deserialize() {
+    fn test_serialize_and_deserialize() -> Result<(), Box<dyn std::error::Error>> {
+        let ipv6_config = Ipv6Config::Deterministic(DeterministicIpv6Config {
+            prefix: "2a00:fb01:400:200".to_string(),
+            prefix_length: 64_u8,
+            gateway: "2a00:fb01:400:200::1".parse().unwrap(),
+        });
         let network_settings = NetworkSettings {
-            ipv6_prefix: "2a00:fb01:400:200".to_string(),
-            ipv6_prefix_length: 64_u8,
-            ipv6_gateway: "2a00:fb01:400:200::1".parse().unwrap(),
-            ipv4_address: None,
-            ipv4_gateway: None,
-            ipv4_prefix_length: None,
-            domain: None,
-            mgmt_mac: None,
+            ipv6_config,
+            ipv4_config: None,
         };
         let logging = Logging {
             elasticsearch_hosts: [
@@ -73,13 +70,16 @@ mod tests {
             .join(" "),
             elasticsearch_tags: None,
         };
+        let icos_dev_settings = ICOSDevSettings::default();
         let icos_settings = ICOSSettings {
+            mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
+            deployment_environment: "Mainnet".to_string(),
             logging,
             nns_public_key_path: PathBuf::from("/path/to/key"),
             nns_urls: vec!["http://localhost".parse().unwrap()],
-            hostname: "mainnet".to_string(),
             node_operator_private_key_path: None,
             ssh_authorized_keys_path: None,
+            icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;
         let hostos_settings = HostOSSettings {
@@ -91,7 +91,7 @@ mod tests {
             ic_crypto_path: None,
             ic_state_path: None,
             ic_registry_local_store_path: None,
-            guestos_dev: GuestosDevConfig::default(),
+            guestos_dev_settings: GuestOSDevSettings::default(),
         };
 
         let setupos_config_struct = SetupOSConfig {
@@ -133,5 +133,7 @@ mod tests {
         serialize_and_deserialize(&setupos_config_struct);
         serialize_and_deserialize(&hostos_config_struct);
         serialize_and_deserialize(&guestos_config_struct);
+
+        Ok(())
     }
 }

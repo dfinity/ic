@@ -52,7 +52,10 @@ use super::process_exe_and_args::{
 #[cfg(target_os = "linux")]
 use super::process_os_metrics;
 use super::sandbox_process_eviction::{self, EvictionCandidate};
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::{
+    canister_state::execution_state::NextScheduledMethod, page_map::PageAllocatorFileDescriptor,
+};
+use ic_types::ExecutionRound;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -993,15 +996,20 @@ impl WasmExecutor for SandboxedExecutionController {
             stable_memory_page_map,
             ic_replicated_state::NumWasmPages::from(0),
         );
-        let execution_state = ExecutionState::new(
+        let is_wasm64 = serialized_module.is_wasm64;
+        let execution_state = ExecutionState {
             canister_root,
             wasm_binary,
-            ExportedFunctions::new(serialized_module.exported_functions.clone()),
+            exports: ExportedFunctions::new(serialized_module.exported_functions.clone()),
             wasm_memory,
             stable_memory,
             exported_globals,
-            serialized_module.wasm_metadata.clone(),
-        );
+            metadata: serialized_module.wasm_metadata.clone(),
+            last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
+            is_wasm64,
+        };
+
         Ok((
             execution_state,
             serialized_module.compilation_cost,

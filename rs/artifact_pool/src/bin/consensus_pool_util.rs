@@ -32,9 +32,7 @@ fn main() {
                     .long("artifact")
                     .value_name("NAME")
                     .help("Artifact name")
-                    .multiple_occurrences(true)
-                    .multiple_values(true)
-                    .takes_value(true),
+                    .num_args(1..),
             ),
         )
         .subcommand(Command::new("import").about("Import data from stdin"))
@@ -48,7 +46,7 @@ fn main() {
                         .value_name("FILE")
                         .help("Output filename")
                         .required(true)
-                        .takes_value(true),
+                        .num_args(1),
                 ),
         )
         .arg(arg!(<PATH>       "PATH to the consensus pool directory"));
@@ -57,7 +55,7 @@ fn main() {
         .expect("Unable to output help message");
     let matches = app.get_matches();
     let path = matches
-        .value_of("PATH")
+        .get_one::<String>("PATH")
         .expect("Missing PATH to consensus pool directory");
     if let Some(matches) = matches.subcommand_matches("export") {
         export(path, matches)
@@ -141,8 +139,10 @@ fn to_string<T: Serialize>(msg: &T) -> String {
 }
 
 fn export(path: &str, matches: &clap::ArgMatches) {
-    let artifacts = match matches.values_of("artifact") {
-        Some(names) => parse_artifact_names(&names.collect::<Vec<&str>>()),
+    let artifacts = match matches.get_many::<String>("artifact") {
+        Some(names) => {
+            parse_artifact_names(&names.map(|name| name.as_str()).collect::<Vec<&str>>())
+        }
         None => ALL_ARTIFACT_NAMES.to_vec(),
     };
 
@@ -259,7 +259,7 @@ fn import(path: &str) {
 
 fn export_cup_proto(path: &str, matches: &clap::ArgMatches) {
     let filename = matches
-        .value_of("output")
+        .get_one::<String>("output")
         .expect("Expect an output filename");
     let mut file = std::fs::File::create(filename)
         .unwrap_or_else(|err| panic!("Cannot open file {} for write: {:?}", filename, err));

@@ -412,6 +412,13 @@ type Swap = record {
   buyers : vec record { text; BuyerState };
   params : opt Params;
   open_sns_token_swap_proposal_id : opt nat64;
+  timers : opt Timers;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
 };
 
 type SweepResult = record {
@@ -466,4 +473,5 @@ service : (Init) -> {
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
     );
+  reset_timers : (record {}) -> (record {});
 }
