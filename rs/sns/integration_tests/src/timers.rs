@@ -15,11 +15,13 @@ use ic_types::{CanisterId, PrincipalId};
 use pretty_assertions::assert_eq;
 use std::time::{Duration, SystemTime};
 
-const TWO_WEEKS_SECONDS: u64 = 14 * 24 * 60 * 60;
+const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+const ONE_WEEK_SECONDS: u64 = 7 * ONE_DAY_SECONDS;
 
 fn swap_init(now: SystemTime) -> Init {
     let now = now.duration_since(SystemTime::UNIX_EPOCH).unwrap();
-    let swap_due_timestamp_seconds = Some((now + Duration::from_secs(TWO_WEEKS_SECONDS)).as_secs());
+    let swap_due_timestamp_seconds =
+        Some((now + Duration::from_secs(2 * ONE_WEEK_SECONDS)).as_secs());
 
     Init {
         swap_due_timestamp_seconds,
@@ -71,6 +73,7 @@ fn root_init() -> SnsRootCanister {
         archive_canister_ids: vec![],
         dapp_canister_ids: vec![],
         testflight: false,
+        timers: None,
     }
 }
 
@@ -104,7 +107,12 @@ fn try_reset_timers(state_machine: &StateMachine, canister_id: CanisterId) -> Re
 /// Assumes that `canister_id` is an ID of an already installed canister that implements:
 /// - `get_timers`
 /// - `reset_timers`
-fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: CanisterId) {
+fn run_canister_reset_timers_test(
+    state_machine: &StateMachine,
+    canister_id: CanisterId,
+    reset_timers_cool_down_interval_seconds: u64,
+    run_periodic_tasks_interval_seconds: u64,
+) {
     let last_spawned_timestamp_seconds = {
         let timers = get_timers(state_machine, canister_id);
         let last_reset_timestamp_seconds = assert_matches!(timers, Some(Timers {
@@ -113,9 +121,9 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
             ..
         }) => last_reset_timestamp_seconds);
 
-        // Resetting the timers cannot be done sooner than `RESET_TIMERS_COOL_DOWN_INTERVAL` after
-        // the canister is initialized.
-        state_machine.advance_time(Duration::from_secs(1000));
+        // Resetting the timers cannot be done sooner than `reset_timers_cool_down_interval_seconds`
+        // after the canister is initialized.
+        state_machine.advance_time(Duration::from_secs(reset_timers_cool_down_interval_seconds));
         state_machine.tick();
 
         let timers = get_timers(state_machine, canister_id);
@@ -130,13 +138,18 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
 
         assert_eq!(
             last_spawned_timestamp_seconds,
-            last_reset_timestamp_seconds + 1000
+            last_reset_timestamp_seconds + reset_timers_cool_down_interval_seconds
         );
         last_spawned_timestamp_seconds
     };
 
     // Reset the timers.
-    try_reset_timers(state_machine, canister_id);
+    try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
+        panic!(
+            "Unable to call reset_timers on canister {:?}: {}",
+            canister_id, err
+        )
+    });
 
     // Inspect the sate after resetting the timers.
     {
@@ -156,7 +169,7 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
             last_spawned_before_reset_timestamp_seconds
         );
 
-        state_machine.advance_time(Duration::from_secs(100));
+        state_machine.advance_time(Duration::from_secs(run_periodic_tasks_interval_seconds));
         state_machine.tick();
 
         let timers = get_timers(state_machine, canister_id);
@@ -171,7 +184,7 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
 
         assert_eq!(
             last_spawned_timestamp_seconds,
-            last_spawned_before_reset_timestamp_seconds + 100
+            last_spawned_before_reset_timestamp_seconds + run_periodic_tasks_interval_seconds
         );
     }
 }
@@ -179,9 +192,11 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
 fn run_canister_reset_timers_cannot_be_spammed_test(
     state_machine: &StateMachine,
     canister_id: CanisterId,
+    reset_timers_cool_down_interval_seconds: u64,
 ) {
-    // Ensure there was more than 600 seconds since the timers were initialized.
-    state_machine.advance_time(Duration::from_secs(600));
+    // Ensure there was more than `reset_timers_cool_down_interval_seconds` seconds since the timers
+    // were initialized.
+    state_machine.advance_time(Duration::from_secs(reset_timers_cool_down_interval_seconds));
     state_machine.tick();
 
     let get_last_spawned_timestamp_seconds = || {
@@ -203,12 +218,20 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
     let last_spawned_timestamp_seconds_1 = get_last_spawned_timestamp_seconds();
 
     // Attempt to reset the timers again, after a small delay.
-    state_machine.advance_time(Duration::from_secs(500));
+    let insufficient_for_resetting_timers_by_seconds = reset_timers_cool_down_interval_seconds
+        .checked_sub(100)
+        .unwrap();
+    state_machine.advance_time(Duration::from_secs(
+        insufficient_for_resetting_timers_by_seconds,
+    ));
     state_machine.tick();
 
     {
         let err_text = try_reset_timers(state_machine, canister_id).unwrap_err();
-        assert!(err_text.contains("Reset has already been called within the past 600 seconds"));
+        assert!(err_text.contains(&format!(
+            "Reset has already been called within the past {} seconds",
+            reset_timers_cool_down_interval_seconds
+        )));
     }
 
     let last_spawned_timestamp_seconds_2 = get_last_spawned_timestamp_seconds();
@@ -220,7 +243,7 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
     );
 
     // Attempt to reset the timers again after reset cool down.
-    state_machine.advance_time(Duration::from_secs(101));
+    state_machine.advance_time(Duration::from_secs(100));
     state_machine.tick();
 
     try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
@@ -232,10 +255,9 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
 
     let last_spawned_timestamp_seconds_3 = get_last_spawned_timestamp_seconds();
 
-    // Waited for 500 + 101 seconds after the last reset.
     assert_eq!(
         last_spawned_timestamp_seconds_3,
-        last_spawned_timestamp_seconds_2 + 601
+        last_spawned_timestamp_seconds_2 + reset_timers_cool_down_interval_seconds
     );
 }
 
@@ -288,7 +310,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     // (1) advance the Swap lifecycle
     // (2) set already_tried_to_auto_finalize
     // (3) unset requires_periodic_tasks
-    state_machine.advance_time(Duration::from_secs(TWO_WEEKS_SECONDS));
+    state_machine.advance_time(Duration::from_secs(2 * ONE_WEEK_SECONDS));
     state_machine.tick();
     state_machine.advance_time(Duration::from_secs(100));
     state_machine.tick();
@@ -323,7 +345,7 @@ fn test_swap_reset_timers() {
             .unwrap()
     };
 
-    run_canister_reset_timers_test(&state_machine, canister_id)
+    run_canister_reset_timers_test(&state_machine, canister_id, 600, 60);
 }
 
 #[test]
@@ -339,7 +361,7 @@ fn test_governance_reset_timers() {
             .unwrap()
     };
 
-    run_canister_reset_timers_test(&state_machine, canister_id);
+    run_canister_reset_timers_test(&state_machine, canister_id, 600, 60);
 }
 
 #[test]
@@ -354,7 +376,12 @@ fn test_root_reset_timers() {
             .unwrap()
     };
 
-    run_canister_reset_timers_test(&state_machine, canister_id);
+    run_canister_reset_timers_test(
+        &state_machine,
+        canister_id,
+        ONE_WEEK_SECONDS,
+        ONE_DAY_SECONDS,
+    );
 }
 
 #[test]
@@ -370,7 +397,7 @@ fn test_swap_reset_timers_cannot_be_spammed() {
             .unwrap()
     };
 
-    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id);
+    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, 600);
 }
 
 #[test]
@@ -385,7 +412,7 @@ fn test_governance_reset_timers_cannot_be_spammed() {
             .unwrap()
     };
 
-    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id);
+    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, 600);
 }
 
 #[test]
@@ -400,5 +427,5 @@ fn test_root_reset_timers_cannot_be_spammed() {
             .unwrap()
     };
 
-    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id);
+    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id, ONE_WEEK_SECONDS);
 }
