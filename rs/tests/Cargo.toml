@@ -255,10 +255,6 @@ name = "ic-systest-ckbtc-update-balance"
 path = "financial_integrations/ckbtc/ckbtc_minter_update_balance.rs"
 
 [[bin]]
-name = "ic-systest-icrc1-agent-test"
-path = "financial_integrations/icrc1_agent_test.rs"
-
-[[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
 

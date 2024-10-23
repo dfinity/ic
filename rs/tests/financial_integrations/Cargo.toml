@@ -1,0 +1,11 @@
+[package]
+name = "financial_integrations-system-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "ic-systest-icrc1-agent-test"
+path = "financial_integrations/icrc1_agent_test.rs"
