@@ -34,11 +34,12 @@ system_test_nns(
 
 system_test(
     name = "icrc1_agent_test",
+    srcs = glob(["icrc1_agent_test/*.rs"]),
+    crate_root = "icrc1_agent_test.rs",
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
@@ -47,7 +48,6 @@ system_test(
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/financial-integrations:icrc1_agent_test",
         "@crate_index//:anyhow",
     ],
 )

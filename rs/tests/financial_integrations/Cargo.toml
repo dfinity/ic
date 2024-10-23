@@ -11,4 +11,4 @@ anyhow = { workspace = true }
 
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
-path = "financial_integrations/icrc1_agent_test.rs"
+path = "icrc1_agent_test.rs"
