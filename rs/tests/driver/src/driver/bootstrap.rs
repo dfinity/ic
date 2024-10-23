@@ -411,6 +411,8 @@ fn create_config_disk_image(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<()> {
+    // Build GuestOS config object
+    let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
     let mut args = GenerateTestnetConfigArgs {
         ipv6_config_type: Some("RouterAdvertisement".to_string()),
         deterministic_prefix: None,
@@ -539,6 +541,8 @@ fn create_config_disk_image(
         .registry_local_store_path();
 
     cmd.arg(img_path.clone())
+        .arg("--guestos_config")
+        .arg(guestos_config_json_path)
         .arg("--ic_registry_local_store")
         .arg(local_store_path)
         .arg("--ic_state")
