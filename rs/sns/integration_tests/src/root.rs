@@ -43,6 +43,7 @@ fn test_get_status() {
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
+                timers: None,
             },
         )
         .await;
