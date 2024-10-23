@@ -57,9 +57,6 @@ fn governance_proto() -> governance_pb::Governance {
         .build()
 }
 
-/// Assumes `canister_id` is installed and has an endpoint called "reset_timers".
-fn run_canister_reset_timers_cannot_be_spammed_test()
-
 #[test]
 fn test_swap_periodic_tasks_disabled_eventually() {
     let state_machine = state_machine_builder_for_sns_tests().build();
