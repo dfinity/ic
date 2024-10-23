@@ -2253,7 +2253,7 @@ impl FromStr for SchnorrKeyId {
 
 /// Types of curves that can be used for threshold key derivation (vetKD).
 /// ```text
-/// (variant { bls12_381; })
+/// (variant { bls12_381_g2; })
 /// ```
 #[derive(
     Copy,
@@ -2270,14 +2270,15 @@ impl FromStr for SchnorrKeyId {
     Serialize,
 )]
 pub enum VetKdCurve {
-    #[serde(rename = "bls12_381")]
-    Bls12_381,
+    #[serde(rename = "bls12_381_g2")]
+    #[allow(non_camel_case_types)]
+    Bls12_381_G2,
 }
 
 impl From<&VetKdCurve> for pb_registry_crypto::VetKdCurve {
     fn from(item: &VetKdCurve) -> Self {
         match item {
-            VetKdCurve::Bls12_381 => pb_registry_crypto::VetKdCurve::VetkdCurveBls12381,
+            VetKdCurve::Bls12_381_G2 => pb_registry_crypto::VetKdCurve::VetkdCurveBls12381G2,
         }
     }
 }
@@ -2287,7 +2288,7 @@ impl TryFrom<pb_registry_crypto::VetKdCurve> for VetKdCurve {
 
     fn try_from(item: pb_registry_crypto::VetKdCurve) -> Result<Self, Self::Error> {
         match item {
-            pb_registry_crypto::VetKdCurve::VetkdCurveBls12381 => Ok(VetKdCurve::Bls12_381),
+            pb_registry_crypto::VetKdCurve::VetkdCurveBls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
             pb_registry_crypto::VetKdCurve::VetkdCurveUnspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "VetKdCurve",
@@ -2309,7 +2310,7 @@ impl FromStr for VetKdCurve {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "bls12_381" => Ok(Self::Bls12_381),
+            "bls12_381_g2" => Ok(Self::Bls12_381_G2),
             _ => Err(format!("{} is not a recognized vetKD curve", s)),
         }
     }

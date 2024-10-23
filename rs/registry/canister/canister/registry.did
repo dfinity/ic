@@ -140,7 +140,7 @@ type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
 
 type VetKdKeyId = record { curve: VetKdCurve; name: text };
 
-type VetKdCurve = variant { bls12_381 };
+type VetKdCurve = variant { bls12_381_g2 };
 
 type EcdsaConfig = record {
   quadruples_to_create_in_advance : nat32;
