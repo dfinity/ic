@@ -185,7 +185,7 @@ struct CheckpointLoader {
 }
 
 impl CheckpointLoader {
-    fn into_checkpoint_error(
+    fn map_to_checkpoint_error(
         &self,
         field: String,
         err: ic_protobuf::proxy::ProxyDecodeError,
@@ -207,13 +207,13 @@ impl CheckpointLoader {
         let ingress_history_proto = self.checkpoint_layout.ingress_history().deserialize()?;
         let ingress_history =
             ic_replicated_state::IngressHistoryState::try_from(ingress_history_proto)
-                .map_err(|err| self.into_checkpoint_error("IngressHistoryState".into(), err))?;
+                .map_err(|err| self.map_to_checkpoint_error("IngressHistoryState".into(), err))?;
         let metadata_proto = self.checkpoint_layout.system_metadata().deserialize()?;
         let mut metadata = ic_replicated_state::SystemMetadata::try_from((
             metadata_proto,
             &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
-        .map_err(|err| self.into_checkpoint_error("SystemMetadata".into(), err))?;
+        .map_err(|err| self.map_to_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.ingress_history = ingress_history;
         metadata.own_subnet_type = self.own_subnet_type;
 
@@ -225,7 +225,7 @@ impl CheckpointLoader {
         {
             metadata.split_from = Some(
                 subnet_id_try_from_protobuf(split_from)
-                    .map_err(|err| self.into_checkpoint_error("split_from".into(), err))?,
+                    .map_err(|err| self.map_to_checkpoint_error("split_from".into(), err))?,
             );
         }
 
@@ -243,14 +243,14 @@ impl CheckpointLoader {
             self.checkpoint_layout.subnet_queues().deserialize()?,
             &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
-        .map_err(|err| self.into_checkpoint_error("CanisterQueues".into(), err))
+        .map_err(|err| self.map_to_checkpoint_error("CanisterQueues".into(), err))
     }
 
     fn load_query_stats(&self) -> Result<RawQueryStats, CheckpointError> {
         let stats = self.checkpoint_layout.stats().deserialize()?;
         if let Some(query_stats) = stats.query_stats {
             Ok(RawQueryStats::try_from(query_stats)
-                .map_err(|err| self.into_checkpoint_error("QueryStats".into(), err))?)
+                .map_err(|err| self.map_to_checkpoint_error("QueryStats".into(), err))?)
         } else {
             Ok(RawQueryStats::default())
         }
