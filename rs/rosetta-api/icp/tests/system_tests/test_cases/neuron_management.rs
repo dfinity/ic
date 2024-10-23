@@ -300,12 +300,13 @@ fn test_start_and_stop_neuron_dissolve() {
 fn test_disburse_neuron() {
     let rt = Runtime::new().unwrap();
     rt.block_on(async {
+        let initial_balance = 100_000_000_000;
         let env = RosettaTestingEnvironment::builder()
             .with_initial_balances(
                 vec![(
                     AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
                     // A hundred million ICP should be enough
-                    icp_ledger::Tokens::from_tokens(100_000_000).unwrap(),
+                    icp_ledger::Tokens::from_e8s(initial_balance),
                 )]
                 .into_iter()
                 .collect(),
@@ -315,7 +316,7 @@ fn test_disburse_neuron() {
             .await;
 
         // Stake the minimum amount 100 million e8s
-        let staked_amount = 100_000_000u64;
+        let staked_amount = initial_balance/10;
         let neuron_index = 0;
         let from_subaccount = [0; 32];
 
@@ -441,7 +442,7 @@ fn test_disburse_neuron() {
         .clone()
         .value.parse::<u64>().unwrap();
 
-        let tip_block_height = query_encoded_blocks(&agent, u64::MAX, u64::MAX).await.chain_length;
+        //let tip_block_height = query_encoded_blocks(&agent, u64::MAX, u64::MAX).await.chain_length;
         env.pocket_ic.tick().await;
         env.pocket_ic.tick().await;
         env.pocket_ic.tick().await;
@@ -451,6 +452,18 @@ fn test_disburse_neuron() {
         env.pocket_ic.tick().await;
         env.pocket_ic.tick().await;
         env.pocket_ic.tick().await;
+
+        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
+            DissolveState::WhenDissolvedTimestampSeconds (d) => {
+                // The neuron should now be in DISSOLVED state
+                assert!(d<now);
+            }
+            k => panic!(
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
+                k
+            ),
+        }
 
         // Now we should be able to disburse the neuron
         env.rosetta_client
@@ -463,28 +476,16 @@ fn test_disburse_neuron() {
             )
             .await
             .unwrap();
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        
-        let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-        match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
-            DissolveState::WhenDissolvedTimestampSeconds (d) => {
-                // The neuron should now be in DISSOLVED state
-                assert!(d<now);
-            }
-            k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
-            ),
-        }
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
+        env.pocket_ic.tick().await;
 
         // // Wait for the ledger to sync up to the block where the disbursement happened
         // wait_for_rosetta_to_sync_up_to_block(
@@ -512,6 +513,10 @@ fn test_disburse_neuron() {
             .unwrap().clone()
             .value.parse::<u64>().unwrap();
 
-        assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_tokens());
+        assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
+        
+        // The neuron should not show up anymore
+        let neurons = list_neurons(&agent).await;
+        assert!(neurons.full_neurons.is_empty());
     });
 }
