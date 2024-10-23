@@ -4,7 +4,6 @@ use mockall::automock;
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 
 const FULL_ACCESS_ID: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
-const FULL_READ_TESTING_ID: &str = "un4fu-tqaaa-aaaab-qadjq-cai"; // TODO: remove this
 
 #[automock]
 pub trait ResolveAccessLevel {
@@ -36,19 +35,19 @@ impl ResolveAccessLevel for AccessLevelResolver {
     fn get_access_level(&self) -> AccessLevel {
         let full_access_principal = Principal::from_text(FULL_ACCESS_ID).unwrap();
 
-        API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
-            let mut full_read_principals = cell.borrow_mut();
-            // TODO: this is just for testing, remove later
-            let full_read_id = Principal::from_text(FULL_READ_TESTING_ID).unwrap();
-            let _ = full_read_principals.insert(full_read_id);
+        if self.caller_id == full_access_principal {
+            return AccessLevel::FullAccess;
+        }
 
-            if self.caller_id == full_access_principal {
-                return AccessLevel::FullAccess;
-            } else if full_read_principals.contains(&self.caller_id) {
-                return AccessLevel::FullRead;
-            }
+        let has_full_read_access = API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
+            let full_read_principals = cell.borrow();
+            full_read_principals.contains(&self.caller_id)
+        });
 
-            AccessLevel::RestrictedRead
-        })
+        if has_full_read_access {
+            return AccessLevel::FullRead;
+        }
+
+        AccessLevel::RestrictedRead
     }
 }
