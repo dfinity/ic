@@ -2,7 +2,7 @@ use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
     assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
-    LedgerMetadataValue, LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
+    LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -10,14 +10,13 @@ use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
 use ic_management_canister_types::{
-    CanisterInfoResponse, CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
+    CanisterInfoResponse, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::collections::BTreeSet;
-use std::time::Duration;
 
 pub struct AddErc20TokenFlow {
     pub setup: LedgerSuiteOrchestrator,
@@ -27,68 +26,26 @@ pub struct AddErc20TokenFlow {
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
         let now = std::time::SystemTime::now();
-        let mut canister_ids = None;
-        for _ in 0..MAX_TICKS {
-            self.setup.env.tick();
-            self.setup.env.advance_time(Duration::from_secs(1));
-            self.setup.env.tick();
-            canister_ids = self
-                .setup
-                .call_orchestrator_canister_ids(&self.params.contract);
-
-            match &canister_ids {
-                Some(ids) if ids.ledger.is_some() && ids.index.is_some() => {
-                    break;
-                }
-                _ => {}
-            }
-        }
-        let canister_ids = canister_ids.unwrap_or_else(|| {
-            panic!(
-                "No managed canister IDs found for contract {:?}",
-                &self.params.contract
-            )
-        });
+        let contract = self.params.contract;
+        let canister_ids =
+            self.setup.wait_for(
+                || match self.setup.call_orchestrator_canister_ids(&contract) {
+                    Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
+                    incomplete_ids => Err(format!(
+                        "Not all canister IDs are available for ERC-20 {:?}: {:?}",
+                        contract, incomplete_ids
+                    )),
+                },
+            );
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
             "BUG: ledger and index canister IDs MUST be different"
         );
 
-        let mut ledger_is_live = false;
-        for _ in 0..MAX_TICKS {
-            self.setup.env.tick();
-            self.setup.env.advance_time(Duration::from_secs(1));
-            self.setup.env.tick();
-            let ledger_status = self.setup.canister_status_of(
-                PrincipalId(canister_ids.ledger.unwrap())
-                    .try_into()
-                    .unwrap(),
-            );
-            if ledger_status.status() == CanisterStatusType::Running
-                && ledger_status.module_hash().is_some()
-            {
-                ledger_is_live = true;
-                break;
-            }
-        }
-        assert!(ledger_is_live, "Ledger canister is not live");
-
-        let mut index_is_live = false;
-        for _ in 0..MAX_TICKS {
-            self.setup.env.tick();
-            self.setup.env.advance_time(Duration::from_secs(1));
-            self.setup.env.tick();
-            let index_status = self
-                .setup
-                .canister_status_of(PrincipalId(canister_ids.index.unwrap()).try_into().unwrap());
-            if index_status.status() == CanisterStatusType::Running
-                && index_status.module_hash().is_some()
-            {
-                index_is_live = true;
-                break;
-            }
-        }
-        assert!(index_is_live, "Index canister is not live");
+        self.setup
+            .wait_for_canister_to_be_installed_and_running(canister_ids.ledger.unwrap());
+        self.setup
+            .wait_for_canister_to_be_installed_and_running(canister_ids.index.unwrap());
 
         now.elapsed().ok().map(|d| {
             println!(
