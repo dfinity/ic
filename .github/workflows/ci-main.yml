@@ -568,6 +568,6 @@ jobs:
         uses: ./.github/actions/bazel-test-all/
         with:
           BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/financial_integrations:icrc1_agent_test_bin"
+          BAZEL_TARGETS: "//rs/tests/financial_integrations:icrc1_agent_test"
           BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
