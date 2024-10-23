@@ -2234,7 +2234,7 @@ impl StateManagerImpl {
         //    or unnecessary preservation occurs.
         //
         // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
-        // //    an empty set, having no effect on the outcome.
+        //    an empty set, having no effect on the outcome.
         //
         // In the future, separating these sets could clarify their distinct purposes and
         // simplify reasoning about correctness without relying heavily on input behavior.
@@ -2384,9 +2384,11 @@ impl StateManagerImpl {
 
             let state_heights = self.list_state_heights(CERT_ANY);
 
-            debug_assert!(heights_to_keep.iter().all(|h| unfiltered_checkpoint_heights
-                .contains(h)
-                || *h == latest_certified_height));
+            debug_assert!(heights_to_keep
+                .iter()
+                .all(|h| unfiltered_checkpoint_heights.contains(h)
+                    || extra_inmemory_heights_to_keep.contains(h)
+                    || *h == latest_certified_height));
 
             debug_assert!(state_heights.contains(&latest_state_height));
             debug_assert!(state_heights.contains(&latest_certified_height));
