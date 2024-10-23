@@ -47,14 +47,12 @@ pub fn start_main_event_loop(
         router_metrics.clone(),
     );
 
-    let mut awake_rx = adapter_state.awake_tx.clone().subscribe();
-
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
         loop {
             connection_manager.make_idle();
             blockchain_manager.make_idle();
-            let _ = awake_rx.changed().await;
+            let _ = adapter_state.is_awake().await;
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
             // tokio::time::Interval::tick which are all cancellation safe.
