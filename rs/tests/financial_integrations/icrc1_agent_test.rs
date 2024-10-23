@@ -1,10 +1,10 @@
-#[rustfmt::skip]
+mod icrc1_agent_test;
 
 use anyhow::Result;
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
-mod icrc1_agent_test;
+use icrc1_agent_test;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
