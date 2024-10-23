@@ -1434,7 +1434,7 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
 
@@ -1448,7 +1448,7 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0));
+        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -1481,7 +1481,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
         // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1504,7 +1504,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20));
+        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1539,7 +1539,7 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         state_manager.flush_tip_channel();
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
-        state_manager.remove_inmemory_states_below(height(6));
+        state_manager.remove_inmemory_states_below(height(6), &BTreeSet::new());
 
         // Only odd heights should have been removed
         assert_eq!(
