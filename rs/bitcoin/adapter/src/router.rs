@@ -60,7 +60,10 @@ pub fn start_main_event_loop(
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
             // tokio::time::Interval::tick which are all cancellation safe.
-            tokio::select! {
+            tokio::join! {
+                is_idle = adapter_state.make_idle() => {
+                    //
+                },
                 event = connection_manager.receive_stream_event() => {
                     if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                         connection_manager.process_event(&event)

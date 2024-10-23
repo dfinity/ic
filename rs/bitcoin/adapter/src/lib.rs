@@ -13,7 +13,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::{mpsc::channel, Notify};
+use tokio::sync::{mpsc::channel, watch, Notify};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -154,17 +154,18 @@ pub struct AdapterState {
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
-    /// The field contains a notify handle to notify waiters when the adapter is no longer idle.
-    awake_notify: Arc<Notify>,
+    /// The field contains a notify handle that is used to wake up the adapter when it should become idle.
+    sender: watch::Sender<()>,
 }
 
 impl AdapterState {
     /// Crates new instance of the AdapterState.
     pub fn new(idle_seconds: u64) -> Self {
+        let (sender, _) = watch::channel(());
         Self {
             last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
-            awake_notify: Arc::new(Notify::new()),
+            sender,
         }
     }
 
@@ -177,16 +178,19 @@ impl AdapterState {
         }
     }
 
+    pub fn subscribe(&self) -> watch::Receiver<()> {
+        self.sender.subscribe()
+    }
+
     /// Updates the current state of the adapter given a request was received.
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
-        self.awake_notify.notify_waiters();
+        let _ = self.sender.send(());
     }
 
-    /// Returns a clone of the notify handle.
-    pub fn awake_notifier(&self) -> Arc<Notify> {
-        self.awake_notify.clone()
+    async fn wait_until_active(&self, receive: &mut watch::Receiver<()>) {
+        receive.changed().await.unwrap();
     }
 }
 
