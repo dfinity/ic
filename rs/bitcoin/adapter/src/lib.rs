@@ -159,6 +159,7 @@ pub struct AdapterState {
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
 
+    /// The field contains a watch channel that is used to wake up the adapter when it is idle.
     awake_tx: watch::Sender<()>,
 }
 
