@@ -943,7 +943,7 @@ fn icrc1_archive_options(
     cycles_for_archive_creation: Nat,
 ) -> ArchiveOptions {
     ArchiveOptions {
-        trigger_threshold: 20,
+        trigger_threshold: 2_000,
         num_blocks_to_archive: 1_000,
         node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
         max_message_size_bytes: None,

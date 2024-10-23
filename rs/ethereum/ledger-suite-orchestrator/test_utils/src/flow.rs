@@ -1,14 +1,17 @@
 use crate::metrics::MetricsAssert;
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    assert_reply, out_of_band_upgrade, stop_canister, LedgerAccount, LedgerMetadataValue,
-    LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
+    assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
+    LedgerMetadataValue, LedgerSuiteOrchestrator, MAX_TICKS, MINTER_PRINCIPAL,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_ledger::ChangeArchiveOptions;
 use ic_ledger_suite_orchestrator::candid::{AddErc20Arg, ManagedCanisterIds};
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm};
-use ic_management_canister_types::{CanisterInfoResponse, CanisterStatusType};
+use ic_management_canister_types::{
+    CanisterInfoResponse, CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload,
+};
 use ic_state_machine_tests::{CanisterStatusResultV2, StateMachine};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
@@ -141,9 +144,17 @@ impl ManagedCanistersAssert {
     }
 
     pub fn trigger_creation_of_archive(self) -> Self {
-        const ARCHIVE_TRIGGER_THRESHOLD: u64 = 20;
+        const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
 
         let now = std::time::SystemTime::now();
+        // The productive value for `trigger_threshold` is `2_000`,
+        // which would require `2_000` transfers to trigger the creation of an archive,
+        // which would take in the order of 20s (order of magnitude is 10ms per transfer with state machine tests).
+        // We see this value to an artificially low number to speed up the test.
+        self.upgrade_ledger_to_change_archive_options(ChangeArchiveOptions {
+            trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
+            ..Default::default()
+        });
         let archive_ids_before: BTreeSet<_> = self
             .call_ledger_archives()
             .into_iter()
@@ -321,6 +332,43 @@ impl ManagedCanistersAssert {
             Result<Nat, TransferError>
         )
         .expect("failed to decode transfer response")
+    }
+
+    pub fn upgrade_ledger_to_change_archive_options(&self, archive_options: ChangeArchiveOptions) {
+        use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+
+        let module_hash_before = self
+            .ledger_canister_status()
+            .module_hash()
+            .expect("BUG: ledger is not installed");
+
+        let upgrade_args = Some(LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
+            change_archive_options: Some(archive_options),
+            ..Default::default()
+        })));
+        let res = self.setup.env.execute_ingress_as(
+            self.setup.ledger_suite_orchestrator_id.into(),
+            CanisterId::ic_00(),
+            Method::InstallCode,
+            InstallCodeArgs::new(
+                CanisterInstallMode::Upgrade,
+                self.ledger_canister_id(),
+                ledger_wasm().to_bytes(),
+                Encode!(&upgrade_args).unwrap(),
+                None,
+                None,
+            )
+            .encode(),
+        );
+        assert_reply(res.unwrap());
+        let module_hash_after = self
+            .ledger_canister_status()
+            .module_hash()
+            .expect("BUG: ledger is not installed");
+        assert_eq!(
+            module_hash_before, module_hash_after,
+            "BUG: ledger wasm hash changed when changing archive options"
+        );
     }
 
     pub fn call_ledger_icrc3_get_blocks(&self, request: &Vec<GetBlocksRequest>) -> GetBlocksResult {
