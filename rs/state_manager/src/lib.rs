@@ -2225,16 +2225,19 @@ impl StateManagerImpl {
                     state_metadata.bundled_manifest.as_ref().map(|_| *height)
                 });
 
-        // Although `extra_inmemory_heights_to_keep` is intended only for preserving in-memory states,
-        // it is acceptable to include these heights in the `heights_to_keep` set, which keeps both
-        // in-memory states and checkpoints. This is safe for the following reasons:
+        // The `extra_inmemory_heights_to_keep` is used for preserving in-memory states,
+        // but it can safely be included in the `heights_to_keep` set, which retains both
+        // in-memory states and checkpoints. This is safe because:
         //
-        // 1. If this inner function is invoked by `remove_inmemory_states_below`, no checkpoints are removed
-        //    regardless of their inclusion in `extra_inmemory_heights_to_keep`. Thus, including the extra in-memory heights
-        //    provides no overprotection or adverse effects.
+        // 1. When called by `remove_inmemory_states_below`, checkpoints are never removed,
+        //    regardless of the inclusion of `extra_inmemory_heights_to_keep`, so no harm
+        //    or unnecessary preservation occurs.
         //
-        // 2. If this inner function is invoked by `remove_states_below`, the `extra_inmemory_heights_to_keep`
-        //    will always be an empty set, meaning it has no influence on the final result.
+        // 2. When called by `remove_states_below`, `extra_inmemory_heights_to_keep` is always
+        // //    an empty set, having no effect on the outcome.
+        //
+        // In the future, separating these sets could clarify their distinct purposes and
+        // simplify reasoning about correctness without relying heavily on input behavior.
         let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
             .keys()
@@ -3311,7 +3314,7 @@ impl StateManager for StateManagerImpl {
                 .min(oldest_checkpoint_to_keep)
         };
 
-        // The public API does not need to protect extra states, so we pass an empty set here.
+        // The public interface does not protect extra states, so we pass an empty set here.
         self.remove_states_below_impl(
             oldest_height_to_keep,
             oldest_checkpoint_to_keep,
@@ -3328,6 +3331,7 @@ impl StateManager for StateManagerImpl {
     /// * The latest state
     /// * The latest certified state
     /// * State 0
+    /// * Specified extra heights to keep
     fn remove_inmemory_states_below(
         &self,
         requested_height: Height,
