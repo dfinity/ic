@@ -4,7 +4,8 @@ use anyhow::Result;
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
-use ic_tests::icrc1_agent_test;
+
+mod icrc1_agent_test;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
