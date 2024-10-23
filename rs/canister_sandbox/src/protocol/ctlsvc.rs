@@ -125,10 +125,12 @@ mod tests {
             }),
             execute_total_duration: Duration::from_secs(10),
             execute_run_duration: Duration::from_secs(1),
+            send_duration: Duration::from_millis(1),
         };
         let msg = Request::ExecutionFinished(ExecutionFinishedRequest {
             exec_id: ExecId::new(),
             exec_output,
+            send_time: std::time::SystemTime::UNIX_EPOCH,
         });
         assert_eq!(round_trip_request(&msg), msg);
     }

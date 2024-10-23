@@ -215,6 +215,8 @@ pub struct StartExecutionRequest {
 
     /// Arguments to execution (api type, caller, payload, ...).
     pub exec_input: SandboxExecInput,
+
+    pub send_time: std::time::SystemTime,
 }
 
 /// Reply to an `StartExecutionRequest`.
@@ -595,6 +597,7 @@ mod tests {
                 ),
                 wasm_reserved_pages: NumWasmPages::new(1),
             },
+            send_time: std::time::SystemTime::UNIX_EPOCH,
         });
         assert_eq!(round_trip_request(&msg), msg);
     }

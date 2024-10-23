@@ -73,7 +73,9 @@ impl SandboxService for SandboxServer {
             wasm_memory_id,
             stable_memory_id,
             exec_input,
+            send_time,
         } = req;
+        let duration = send_time.elapsed().unwrap();
         rpc::Call::new_resolved({
             SandboxManager::start_execution(
                 &self.manager,
@@ -82,6 +84,7 @@ impl SandboxService for SandboxServer {
                 wasm_memory_id,
                 stable_memory_id,
                 exec_input,
+                duration,
             );
             Ok(StartExecutionReply { success: true })
         })
@@ -615,6 +618,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -639,6 +643,7 @@ mod tests {
                 wasm_memory_id,
                 stable_memory_id,
                 exec_input: exec_input_for_query("read", &[], globals),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -696,6 +701,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -759,6 +765,7 @@ mod tests {
                     next_wasm_memory_id,
                     next_stable_memory_id,
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -778,6 +785,7 @@ mod tests {
                     &[16, 0, 0, 0, 4, 0, 0, 0],
                     vec![Global::I64(0)],
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -845,6 +853,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -885,6 +894,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -909,6 +919,7 @@ mod tests {
                 wasm_memory_id,
                 stable_memory_id,
                 exec_input: exec_input_for_query("read", &[], globals),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -965,6 +976,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1028,6 +1040,7 @@ mod tests {
                     next_wasm_memory_id,
                     next_stable_memory_id,
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1047,6 +1060,7 @@ mod tests {
                     &[16, 0, 0, 0, 4, 0, 0, 0],
                     vec![Global::I64(0)],
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1101,6 +1115,7 @@ mod tests {
                     child_wasm_memory_id,
                     child_stable_memory_id,
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1132,6 +1147,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1202,6 +1218,7 @@ mod tests {
                     child_wasm_memory_id,
                     child_stable_memory_id,
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1233,6 +1250,7 @@ mod tests {
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1337,6 +1355,7 @@ mod tests {
                 wasm_memory_id,
                 stable_memory_id,
                 exec_input,
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();
@@ -1457,6 +1476,7 @@ mod tests {
                 wasm_memory_id,
                 stable_memory_id,
                 exec_input,
+                send_time: std::time::SystemTime::UNIX_EPOCH,
             })
             .sync()
             .unwrap();

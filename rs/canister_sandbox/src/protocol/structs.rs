@@ -39,6 +39,8 @@ pub struct SandboxExecOutput {
     pub state: Option<StateModifications>,
     pub execute_total_duration: std::time::Duration,
     pub execute_run_duration: std::time::Duration,
+    pub send_duration: std::time::Duration,
+    pub resp_send_time: std::time::SystemTime,
 }
 
 /// Describes the memory changes performed by execution.

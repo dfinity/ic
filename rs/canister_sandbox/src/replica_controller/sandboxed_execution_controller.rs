@@ -80,6 +80,8 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_replica_execute_prepare_duration: HistogramVec,
     sandboxed_execution_replica_execute_wait_duration: HistogramVec,
     sandboxed_execution_replica_execute_finish_duration: HistogramVec,
+    sandboxed_execution_replica_execute_send_duration: HistogramVec,
+    sandboxed_execution_replica_execute_recv_duration: HistogramVec,
     sandboxed_execution_sandbox_execute_duration: HistogramVec,
     sandboxed_execution_sandbox_execute_run_duration: HistogramVec,
     sandboxed_execution_spawn_process: Histogram,
@@ -141,6 +143,18 @@ impl SandboxedExecutionMetrics {
             sandboxed_execution_replica_execute_finish_duration: metrics_registry.histogram_vec(
                 "sandboxed_execution_replica_execute_finish_duration_seconds",
                 "The time to finalize execution in the replica controller",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_replica_execute_send_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_send_duration_seconds",
+                "The time to send execution message to the sandbox",
+                decimal_buckets_with_zero(-4, 1),
+                &["api_type"],
+            ),
+            sandboxed_execution_replica_execute_recv_duration: metrics_registry.histogram_vec(
+                "sandboxed_execution_replica_execute_recv_duration_seconds",
+                "The time to recieve execution message from the sandbox",
                 decimal_buckets_with_zero(-4, 1),
                 &["api_type"],
             ),
@@ -785,6 +799,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     sandbox_safe_system_state,
                     wasm_reserved_pages: get_wasm_reserved_pages(execution_state),
                 },
+                send_time: std::time::SystemTime::now(),
             })
             .on_completion(|_| {});
         drop(prepare_timer);
@@ -1373,6 +1388,10 @@ impl SandboxedExecutionController {
                 };
                 self.metrics
                     .observe_executed_message_slice(api_type_label, execution_status);
+                self.metrics
+                    .sandboxed_execution_replica_execute_recv_duration
+                    .with_label_values(&[api_type_label])
+                    .observe(exec_output.resp_send_time.elapsed().unwrap().as_secs_f64());
                 exec_output
             }
         };
@@ -1403,6 +1422,10 @@ impl SandboxedExecutionController {
             .sandboxed_execution_sandbox_execute_run_duration
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
+        self.metrics
+            .sandboxed_execution_replica_execute_send_duration
+            .with_label_values(&[api_type_label])
+            .observe(exec_output.send_duration.as_secs_f64());
 
         execution_tracing.trace(&self.logger, &exec_output, execution_start.elapsed());
 

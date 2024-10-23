@@ -75,6 +75,7 @@ impl Execution {
         workers: &mut threadpool::ThreadPool,
         exec_input: SandboxExecInput,
         total_timer: std::time::Instant,
+        send_duration: std::time::Duration,
     ) {
         let wasm_memory = (*wasm_memory).clone();
         let stable_memory = (*stable_memory).clone();
@@ -86,7 +87,14 @@ impl Execution {
         });
 
         workers.execute(move || {
-            execution.run(exec_id, exec_input, wasm_memory, stable_memory, total_timer)
+            execution.run(
+                exec_id,
+                exec_input,
+                wasm_memory,
+                stable_memory,
+                total_timer,
+                send_duration,
+            )
         });
     }
 
@@ -99,6 +107,7 @@ impl Execution {
         mut wasm_memory: Memory,
         mut stable_memory: Memory,
         total_timer: std::time::Instant,
+        send_duration: std::time::Duration,
     ) {
         let run_timer = std::time::Instant::now();
 
@@ -212,6 +221,8 @@ impl Execution {
                             state: state_modifications,
                             execute_total_duration: total_timer.elapsed(),
                             execute_run_duration: run_timer.elapsed(),
+                            send_duration,
+                            resp_send_time: std::time::SystemTime::now(),
                         },
                     },
                 );
@@ -240,6 +251,8 @@ impl Execution {
                             state: None,
                             execute_total_duration: total_timer.elapsed(),
                             execute_run_duration: run_timer.elapsed(),
+                            send_duration,
+                            resp_send_time: std::time::SystemTime::now(),
                         },
                     },
                 );
@@ -398,6 +411,7 @@ impl SandboxManager {
         wasm_memory_id: MemoryId,
         stable_memory_id: MemoryId,
         exec_input: SandboxExecInput,
+        send_duration: std::time::Duration,
     ) {
         let total_timer = std::time::Instant::now();
         let mut guard = sandbox_manager.repr.lock().unwrap();
@@ -429,6 +443,7 @@ impl SandboxManager {
                 &mut guard.workers_for_replicated_execution,
                 exec_input,
                 total_timer,
+                send_duration,
             ),
             ExecutionMode::NonReplicated => Execution::start_on_worker_thread(
                 exec_id,
@@ -439,6 +454,7 @@ impl SandboxManager {
                 &mut guard.workers_for_non_replicated_execution,
                 exec_input,
                 total_timer,
+                send_duration,
             ),
         };
     }
