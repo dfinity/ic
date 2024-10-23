@@ -5,7 +5,7 @@ use std::{
 use thiserror::Error;
 
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
+    AssembleResult, ArtifactAssembler, BouncerFactory, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;

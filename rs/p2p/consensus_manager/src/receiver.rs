@@ -18,7 +18,7 @@ use axum::{
 };
 use bytes::Bytes;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::consensus::{Aborted, ArtifactAssembler, Peers};
+use ic_interfaces::p2p::consensus::{AssembleResult, ArtifactAssembler, Peers};
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::p2p::v1 as pb;
 use ic_quic_transport::{ConnId, Shutdown, SubnetTopology};
@@ -491,10 +491,10 @@ where
         select! {
             assemble_result = assemble_artifact => {
                 match assemble_result {
-                    Ok((artifact, peer_id)) => {
-                        let id = artifact.id();
+                    AssembleResult::Done { message, peer_id } => {
+                        let id = message.id();
                         // Send artifact to pool
-                        sender.send(UnvalidatedArtifactMutation::Insert((artifact, peer_id)));
+                        sender.send(UnvalidatedArtifactMutation::Insert((message, peer_id)));
 
                         // wait for deletion from peers
                         peer_rx.wait_for(|p| p.is_empty()).await;
@@ -506,7 +506,7 @@ where
                             .with_label_values(&[ASSEMBLE_TASK_RESULT_COMPLETED])
                             .inc();
                     }
-                    Err(Aborted) => {
+                    AssembleResult::Unwanted => {
                         // wait for deletion from peers
                         peer_rx.wait_for(|p| p.is_empty()).await;
                         metrics

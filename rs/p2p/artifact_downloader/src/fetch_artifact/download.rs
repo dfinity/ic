@@ -13,7 +13,7 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
-    Aborted, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
+    AssembleResult, ArtifactAssembler, Bouncer, BouncerFactory, BouncerValue, Peers, ValidatedPoolReader,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -100,7 +100,7 @@ impl<Artifact: PbArtifact> ArtifactAssembler<Artifact, Artifact> for FetchArtifa
         id: <Artifact as IdentifiableArtifact>::Id,
         artifact: Option<(Artifact, NodeId)>,
         peers: P,
-    ) -> Result<(Artifact, NodeId), Aborted> {
+    ) -> AssembleResult<Artifact> {
         Self::download_artifact(
             self.log.clone(),
             id,
@@ -167,7 +167,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         artifact: &mut Option<(Artifact, NodeId)>,
         metrics: &FetchArtifactMetrics,
         bouncer_watcher: &mut watch::Receiver<Bouncer<Artifact::Id>>,
-    ) -> Result<(), Aborted> {
+    ) -> AssemleResult<Artifact> {
         let mut bouncer_value = bouncer_watcher.borrow_and_update()(id);
 
         // Clear the artifact from memory if it was pushed.
@@ -182,7 +182,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         }
 
         if let BouncerValue::Unwanted = bouncer_value {
-            return Err(Aborted);
+            return AssemleResult::Unwanted;
         }
         Ok(())
     }
@@ -205,7 +205,7 @@ impl<Artifact: PbArtifact> FetchArtifact<Artifact> {
         mut bouncer_watcher: watch::Receiver<Bouncer<Artifact::Id>>,
         transport: Arc<dyn Transport>,
         metrics: FetchArtifactMetrics,
-    ) -> Result<(Artifact, NodeId), Aborted> {
+    ) -> AssembleResult<Artifact> {
         // Evaluate bouncer and wait until we should fetch.
         Self::wait_fetch(&id, &mut artifact, &metrics, &mut bouncer_watcher).await?;
 
