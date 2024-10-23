@@ -2393,9 +2393,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .into_iter()
             .map(|v| v.try_into())
             .collect::<Result<_, _>>()?;
-        if task_queue.len() > 1 {
+        if task_queue.len() > 2 {
             return Err(ProxyDecodeError::Other(format!(
-                "Expecting at most one task queue entry. Found {:?}",
+                "Expecting at most two task queue entry. Found {:?}",
                 task_queue
             )));
         }
