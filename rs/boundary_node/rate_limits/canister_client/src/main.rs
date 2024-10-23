@@ -39,21 +39,20 @@ async fn main() {
     read_config(&agent_full_access, version, canister_id).await;
 
     println!("Call 3. Read config by non-privileged user (RestrictedRead level). Rules and descriptions are hidden in the response");
-    read_config(&agent_restricted_read, version, canister_id).await;
+    let rule_ids = read_config(&agent_restricted_read, version, canister_id).await;
 
     println!("Call 4. Disclose rules (two rules in this case) linked to a single incident");
     let incident_id = "incident_id_1".to_string();
     disclose_incident(&agent_full_access, incident_id, canister_id).await;
 
     println!("Call 5. Read config by non-privileged user again. Now rules related to the disclosed incident are fully shown");
-    read_config(&agent_restricted_read, version, canister_id).await;
+    let _ = read_config(&agent_restricted_read, version, canister_id).await;
 
     println!("Call 6. Add another config (version = 3) with one newly added rule, one remove rule");
     add_config_2(&agent_full_access, canister_id).await;
 
     println!("Call 7. Inspect the metadata of the removed rule. All metadata fields should be visible, including versions when the rule was added/removed");
-    let rule_id = "e72de4bf25eeb5be951c78dddd4b3bcdac0890e1d90cb051d05c9afa0ce0fb0b".to_string();
-    read_rule(&agent_restricted_read, rule_id, canister_id).await;
+    read_rule(&agent_restricted_read, &rule_ids[2], canister_id).await;
 }
 
 async fn create_agent<I: Identity + 'static>(identity: I) -> Agent {
@@ -213,7 +212,7 @@ async fn add_config_2(agent: &Agent, canister_id: Principal) {
     println!("Response to add_config() call: {decoded:#?}");
 }
 
-async fn read_config(agent: &Agent, version: Version, canister_id: Principal) {
+async fn read_config(agent: &Agent, version: Version, canister_id: Principal) -> Vec<RuleId> {
     let args = Encode!(&Some(version)).unwrap();
 
     let response = agent
@@ -223,9 +222,18 @@ async fn read_config(agent: &Agent, version: Version, canister_id: Principal) {
         .await
         .expect("update call failed");
 
-    let decoded = Decode!(&response, GetConfigResponse).expect("failed to decode candid response");
+    let decoded = Decode!(&response, GetConfigResponse)
+        .expect("failed to decode candid response")
+        .unwrap();
 
-    println!("Response to get_config() call: {}", decoded.unwrap());
+    println!("Response to get_config() call: {}", decoded);
+
+    decoded
+        .config
+        .rules
+        .into_iter()
+        .map(|rule| rule.id)
+        .collect()
 }
 
 async fn disclose_incident(agent: &Agent, incident_id: IncidentId, canister_id: Principal) {
@@ -244,8 +252,8 @@ async fn disclose_incident(agent: &Agent, incident_id: IncidentId, canister_id: 
     println!("Response to disclose_rules() call: {decoded:#?}");
 }
 
-async fn read_rule(agent: &Agent, rule_id: RuleId, canister_id: Principal) {
-    let args = Encode!(&rule_id).unwrap();
+async fn read_rule(agent: &Agent, rule_id: &RuleId, canister_id: Principal) {
+    let args = Encode!(rule_id).unwrap();
 
     let response = agent
         .update(&canister_id, "get_rule_by_id")
