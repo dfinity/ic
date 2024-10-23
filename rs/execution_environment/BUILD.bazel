@@ -226,6 +226,25 @@ rust_ic_bench(
 )
 
 rust_ic_bench(
+    name = "4k_timers_bench",
+    srcs = ["benches/4k_timers.rs"],
+    compile_data = [
+        "benches/data/timer-canister.wasm.gz",
+    ],
+    data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],
+    env = dict(ENV.items() + [
+        ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),
+    ]),
+    deps = [
+        # Keep sorted.
+        "//rs/execution_environment/benches/lib:execution_environment_bench",
+        "//rs/state_machine_tests",
+        "//rs/types/base_types",
+        "//rs/types/types_test_utils",
+    ] + BENCH_DEPENDENCIES,
+)
+
+rust_ic_bench(
     name = "100k_canisters_bench",
     srcs = ["benches/100k_canisters.rs"],
     data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],

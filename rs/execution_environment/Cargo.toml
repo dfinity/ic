@@ -122,6 +122,10 @@ name = "scheduler"
 
 [[bench]]
 harness = false
+name = "4k_timers"
+
+[[bench]]
+harness = false
 name = "100k_canisters"
 
 [[bench]]

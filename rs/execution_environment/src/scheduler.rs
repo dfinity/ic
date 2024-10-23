@@ -627,6 +627,10 @@ impl SchedulerImpl {
                 }
             }
         }
+        println!(
+            "XXX     heartbeat_and_timer_canister_ids:{}",
+            heartbeat_and_timer_canister_ids.len()
+        );
         heartbeat_and_timer_canister_ids
     }
 
