@@ -3,8 +3,9 @@ use candid::{Decode, Encode, Principal};
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
-use ic_nns_test_utils::sns_wasm::build_governance_sns_wasm;
+use ic_nns_test_utils::sns_wasm::{build_governance_sns_wasm, build_root_sns_wasm};
 use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
+use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
 };
@@ -52,13 +53,25 @@ fn swap_init(now: SystemTime) -> Init {
     }
 }
 
-fn governance_proto() -> Governance {
+fn governance_init() -> Governance {
     GovernanceCanisterInitPayloadBuilder::new()
         .with_root_canister_id(PrincipalId::new_anonymous())
         .with_ledger_canister_id(PrincipalId::new_anonymous())
         .with_swap_canister_id(PrincipalId::new_anonymous())
         .with_ledger_canister_id(PrincipalId::new_anonymous())
         .build()
+}
+
+fn root_init() -> SnsRootCanister {
+    SnsRootCanister {
+        governance_canister_id: Some(PrincipalId::new_anonymous()),
+        ledger_canister_id: Some(PrincipalId::new_anonymous()),
+        swap_canister_id: Some(PrincipalId::new_anonymous()),
+        index_canister_id: Some(PrincipalId::new_anonymous()),
+        archive_canister_ids: vec![],
+        dapp_canister_ids: vec![],
+        testflight: false,
+    }
 }
 
 fn get_timers(state_machine: &StateMachine, canister_id: CanisterId) -> Option<Timers> {
@@ -320,7 +333,22 @@ fn test_governance_reset_timers() {
     // Install the Governance canister.
     let canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
-        let args = Encode!(&governance_proto()).unwrap();
+        let args = Encode!(&governance_init()).unwrap();
+        state_machine
+            .install_canister(wasm.clone(), args, None)
+            .unwrap()
+    };
+
+    run_canister_reset_timers_test(&state_machine, canister_id);
+}
+
+#[test]
+fn test_root_reset_timers() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    let canister_id = {
+        let wasm = build_root_sns_wasm().wasm;
+        let args = Encode!(&root_init()).unwrap();
         state_machine
             .install_canister(wasm.clone(), args, None)
             .unwrap()
@@ -351,7 +379,22 @@ fn test_governance_reset_timers_cannot_be_spammed() {
 
     let canister_id = {
         let wasm = build_governance_sns_wasm().wasm;
-        let args = Encode!(&governance_proto()).unwrap();
+        let args = Encode!(&governance_init()).unwrap();
+        state_machine
+            .install_canister(wasm.clone(), args, None)
+            .unwrap()
+    };
+
+    run_canister_reset_timers_cannot_be_spammed_test(&state_machine, canister_id);
+}
+
+#[test]
+fn test_root_reset_timers_cannot_be_spammed() {
+    let state_machine = state_machine_builder_for_sns_tests().build();
+
+    let canister_id = {
+        let wasm = build_root_sns_wasm().wasm;
+        let args = Encode!(&root_init()).unwrap();
         state_machine
             .install_canister(wasm.clone(), args, None)
             .unwrap()
