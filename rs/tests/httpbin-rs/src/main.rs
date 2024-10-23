@@ -26,6 +26,7 @@ use rustls::ServerConfig;
 use serde_json::json;
 use tokio::{
     net::TcpListener,
+    select, signal,
     time::{sleep, Duration},
 };
 use tokio_rustls::TlsAcceptor;
@@ -267,6 +268,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         port_file.write_all(real_port.to_string().as_bytes())?;
     }
 
+    let mut pinned_shutdown_signal = std::pin::pin!(shutdown_signal());
+
     match (args.cert_file, args.key_file) {
         (Some(cert_file), Some(key_file)) => {
             // Load public certificate.
@@ -287,34 +290,64 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let tls_acceptor = TlsAcceptor::from(Arc::new(config));
 
             loop {
-                let (tcp_stream, _remote_addr) = listener.accept().await?;
+                select! {
+                    connection = listener.accept() => {
+                        let (tcp_stream, _) = connection?;
+                        let tls_acceptor = tls_acceptor.clone();
 
-                let tls_acceptor = tls_acceptor.clone();
+                        let router = router();
+                        let hyper_service =
+                            hyper::service::service_fn(move |request: Request<Incoming>| {
+                                router.clone().call(request)
+                            });
 
-                let router = router();
-                let hyper_service =
-                    hyper::service::service_fn(move |request: Request<Incoming>| {
-                        router.clone().call(request)
-                    });
-
-                tokio::spawn(async move {
-                    let tls_stream = match tls_acceptor.accept(tcp_stream).await {
-                        Ok(tls_stream) => tls_stream,
-                        Err(err) => {
-                            eprintln!("failed to perform tls handshake: {err:#}");
-                            return;
-                        }
-                    };
-                    if let Err(err) = Builder::new(TokioExecutor::new())
-                        .serve_connection(TokioIo::new(tls_stream), hyper_service)
-                        .await
-                    {
-                        eprintln!("failed to serve connection: {err:#}");
+                        tokio::spawn(async move {
+                            let tls_stream = match tls_acceptor.accept(tcp_stream).await {
+                                Ok(tls_stream) => tls_stream,
+                                Err(err) => {
+                                    eprintln!("failed to perform tls handshake: {err:#}");
+                                    return;
+                                }
+                            };
+                            if let Err(err) = Builder::new(TokioExecutor::new())
+                                .serve_connection(TokioIo::new(tls_stream), hyper_service)
+                                .await
+                            {
+                                eprintln!("failed to serve connection: {err:#}");
+                            }
+                        });
                     }
-                });
+                    _ = &mut pinned_shutdown_signal => {
+                        break;
+                    }
+                };
             }
         }
-        _ => axum::serve(listener, router()).await?,
+        _ => {
+            axum::serve(listener, router())
+                .with_graceful_shutdown(shutdown_signal())
+                .await?
+        }
     };
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }
