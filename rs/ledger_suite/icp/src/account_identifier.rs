@@ -51,6 +51,13 @@ impl From<Account> for AccountIdentifier {
     }
 }
 
+impl From<&Account> for AccountIdentifier {
+    fn from(account: &Account) -> Self {
+        Self::new(account.owner.into(), account.subaccount.map(Subaccount))
+    }
+}
+
+
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
 static ACCOUNT_DOMAIN_SEPARATOR: &[u8] = b"\x0Aaccount-id";
 

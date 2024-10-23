@@ -1,8 +1,12 @@
 use candid::{Decode, Encode};
+use ic_base_types::{CanisterId, PrincipalId};
 use canister_test::Wasm;
-use ic_base_types::CanisterId;
 use ic_icrc1_ledger_sm_tests::{generate_transactions, TransactionGenerationParameters};
-use ic_ledger_core::block::BlockType;
+use ic_icrc1_ledger_sm_tests::in_memory_ledger::{
+    ApprovalKey, BurnsWithoutSpender, InMemoryLedger,
+};
+
+use ic_ledger_core::{block::BlockType, tokens::Tokens};
 use ic_ledger_test_utils::state_machine_helpers::index::{
     get_all_blocks, wait_until_sync_is_completed,
 };
@@ -18,6 +22,8 @@ use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{Archives, FeatureFlags, LedgerCanisterPayload, UpgradeArgs};
 use std::time::Instant;
+use ic_icrc1_ledger_sm_tests::get_all_ledger_and_archive_blocks;
+use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 
 const INDEX_CANISTER_ID: CanisterId =
     CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
@@ -28,6 +34,120 @@ const TRANSFER_MULTIPLIER: u64 = 1000;
 const APPROVE_MULTIPLIER: u64 = 100;
 const TRANSFER_FROM_MULTIPLIER: u64 = 10;
 const BURN_MULTIPLIER: u64 = 1;
+
+type InMemoryIcpLedger = InMemoryLedger<ApprovalKey, AccountIdentifier, Tokens>;
+struct LedgerState {
+    in_memory_ledger: InMemoryIcpLedger,
+    num_blocks: u64,
+}
+
+impl LedgerState {
+    fn assert_eq(&self, other: &Self) {
+        assert_eq!(
+            other.num_blocks, self.num_blocks,
+            "Number of blocks ({}) does not match number of blocks in previous state ({})",
+            self.num_blocks, other.num_blocks,
+        );
+        assert!(
+            other.in_memory_ledger == self.in_memory_ledger,
+            "In-memory ledger state does not match previous state"
+        );
+    }
+
+    /// Fetch the next blocks from the ledger canister and ingest them into the in-memory ledger.
+    /// If `total_num_blocks` is `None`, fetch all blocks from the ledger canister, otherwise fetch
+    /// `total_num_blocks - self.num_blocks` blocks (some amount of latest blocks that the in-memory
+    /// ledger does not hold yet).
+    fn fetch_next_blocks(
+        &mut self,
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        total_num_blocks: Option<u64>,
+    ) {
+        let num_blocks = total_num_blocks
+            .unwrap_or(u64::MAX)
+            .saturating_sub(self.num_blocks);
+        let blocks = get_all_ledger_and_archive_blocks(
+            state_machine,
+            canister_id,
+            Some(self.num_blocks),
+            Some(num_blocks),
+        );
+        self.num_blocks = self
+            .num_blocks
+            .checked_add(blocks.len() as u64)
+            .expect("number of blocks should fit in u64");
+        self.in_memory_ledger.ingest_icrc1_ledger_blocks(&blocks);
+    }
+
+    fn new(burns_without_spender: Option<BurnsWithoutSpender<AccountIdentifier>>) -> Self {
+        let in_memory_ledger = InMemoryIcpLedger::new(burns_without_spender);
+        Self {
+            in_memory_ledger,
+            num_blocks: 0,
+        }
+    }
+
+    fn verify_balances_and_allowances(
+        &self,
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+    ) {
+        self.in_memory_ledger
+            .verify_balances_and_allowances(state_machine, canister_id);
+    }
+
+    /// Verify the ledger state and generate new transactions. In particular:
+    /// - Create a new instance of an in-memory ledger by fetching blocks from the ledger
+    ///   - If a previous ledger state is provided, only fetch the blocks that were present when
+    ///     the previous state was generated.
+    /// - Verify that the balances and allowances in the in-memory ledger match the ledger
+    ///   canister state
+    /// - If a previous ledger state is provided, assert that the state of the newly-generated
+    ///   in-memory ledger state matches that of the previous state
+    /// - Generate transactions on the ledger canister
+    /// - Fetch all blocks from the ledger canister into the new `ledger_state`
+    /// - Return the new `ledger_state`
+    fn verify_state_and_generate_transactions(
+        state_machine: &StateMachine,
+        canister_id: CanisterId,
+        burns_without_spender: Option<BurnsWithoutSpender<AccountIdentifier>>,
+        previous_ledger_state: Option<LedgerState>,
+    ) -> Self {
+        let num_blocks_to_fetch = previous_ledger_state
+            .as_ref()
+            .map(|previous_ledger_state| previous_ledger_state.num_blocks);
+
+        let mut ledger_state = LedgerState::new(burns_without_spender);
+        // Only fetch the blocks that were present when the previous state was generated. This is
+        // necessary since there may have been in-transit messages for the ledger in the backup,
+        // or new transactions triggered e.g., by timers running in other canisters on the subnet,
+        // that get applied after the `StateMachine` is initialized, and are not part of the
+        // transactions in `generate_transactions`.
+        ledger_state.fetch_next_blocks(state_machine, canister_id, num_blocks_to_fetch);
+        ledger_state.verify_balances_and_allowances(state_machine, canister_id);
+        // Verify the reconstructed ledger state matches the previous state
+        if let Some(previous_ledger_state) = &previous_ledger_state {
+            ledger_state.assert_eq(previous_ledger_state);
+        }
+        generate_transactions(
+            state_machine,
+            canister_id,
+            TransactionGenerationParameters {
+                mint_multiplier: MINT_MULTIPLIER,
+                transfer_multiplier: TRANSFER_MULTIPLIER,
+                approve_multiplier: APPROVE_MULTIPLIER,
+                transfer_from_multiplier: TRANSFER_FROM_MULTIPLIER,
+                burn_multiplier: BURN_MULTIPLIER,
+                num_transactions_per_type: NUM_TRANSACTIONS_PER_TYPE,
+            },
+        );
+        // Fetch all blocks into the new `ledger_state`. This call only retrieves blocks that were
+        // not fetched in the previous call to `fetch_next_blocks`.
+        ledger_state.fetch_next_blocks(state_machine, canister_id, None);
+        ledger_state
+    }
+}
 
 /// Create a state machine with the golden NNS state, then upgrade and downgrade the ICP
 /// ledger canister suite.
@@ -45,6 +165,13 @@ fn should_create_state_machine_with_golden_nns_state() {
 
     // Verify ledger, archives, and index block parity
     setup.verify_ledger_archive_index_block_parity();
+
+    let ledger_state = LedgerState::verify_state_and_generate_transactions(
+        &setup.state_machine,
+        LEDGER_CANISTER_ID,
+        None,
+        None,
+    );
 
     setup.perform_transactions();
 
