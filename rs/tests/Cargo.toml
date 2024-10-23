@@ -231,10 +231,6 @@ name = "ic-systest-rosetta-neuron-spawn-test"
 path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-staking-test"
-path = "financial_integrations/rosetta/rosetta_neuron_staking_test.rs"
-
-[[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
 path = "financial_integrations/ckbtc/ckbtc_minter_basics_test.rs"
 
