@@ -12429,6 +12429,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.20",
+ "config",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
@@ -14506,6 +14507,7 @@ name = "launch-single-vm"
 version = "0.1.0"
 dependencies = [
  "clap 4.5.20",
+ "config",
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
