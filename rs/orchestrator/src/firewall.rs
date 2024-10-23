@@ -35,6 +35,8 @@ enum Role {
     BoundaryNode,
 }
 
+const SOCKS_PROXY_PORT: u32 = 1080;
+
 /// Provides function to continuously check the Registry to determine if there
 /// has been a change in the firewall config, and if so, updates the node's
 /// firewall rules file accordingly.
@@ -289,7 +291,7 @@ impl Firewall {
         FirewallRule {
             ipv4_prefixes: system_subnet_node_ipv4s.clone(),
             ipv6_prefixes: system_subnet_node_ipv6s.clone(),
-            ports: self.replica_config.tcp_ports_for_node_whitelist.clone(),
+            ports: vec![SOCKS_PROXY_PORT],
             action: FirewallAction::Allow as i32,
             comment: "system subnet nodes for SOCKS proxy".to_string(),
             user: None,
@@ -692,8 +694,11 @@ mod tests {
         make_api_boundary_node_record_key, make_firewall_rules_record_key, make_node_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{
+        add_single_subnet_record, add_subnet_list_record, SubnetRecordBuilder,
+    };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     use super::*;
@@ -966,8 +971,6 @@ mod tests {
         let registry_version = RegistryVersion::new(1);
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
-        let subnet_record = SubnetRecordBuilder::from(&[node]).build();
-
         // add [`NodeRecord`] for the given node
         add_node_record(
             &registry_data_provider,
@@ -975,12 +978,66 @@ mod tests {
             node,
             /*ip=*/ "1.1.1.1",
         );
-        // add [`NodeRecord`] for some other node
+
+        // create a system subnet with one node
+        let system_subnet_node_id = node_test_id(1001);
         add_node_record(
             &registry_data_provider,
             registry_version,
-            node_test_id(123),
-            /*ip=*/ "2.2.2.2",
+            system_subnet_node_id,
+            /*ip=*/ "fd5b:693c:f8ea::1",
+        );
+        let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
+            .with_subnet_type(SubnetType::System)
+            .build();
+        let system_subnet_id = subnet_test_id(100);
+        add_single_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            system_subnet_id,
+            system_subnet_record,
+        );
+
+        // create an application subnet
+        let app_subnet_node_id = node_test_id(2002);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            app_subnet_node_id,
+            /*ip=*/ "2.0.0.2",
+        );
+        let app_subnet_record = SubnetRecordBuilder::from(&[app_subnet_node_id])
+            .with_subnet_type(SubnetType::Application)
+            .build();
+        let app_subnet_id = subnet_test_id(200);
+        add_single_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            app_subnet_id,
+            app_subnet_record,
+        );
+
+        // Add an API boundary node
+        let api_boundary_node_id = node_test_id(3003);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            api_boundary_node_id,
+            /*ip=*/ "3.0.0.3",
+        );
+        add_api_boundary_node_record(
+            &registry_data_provider,
+            registry_version,
+            api_boundary_node_id,
+        );
+
+        // Add an unassigned node
+        let unassigned_node_id = node_test_id(4004);
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            unassigned_node_id,
+            /*ip=*/ "4.0.0.4",
         );
 
         // Add a bunch of firewall rules for different scopes.
@@ -1020,23 +1077,18 @@ mod tests {
             /*port=*/ 1007,
         );
 
+        let mut subnet_ids = vec![system_subnet_id, app_subnet_id];
+
         match role {
             Role::AssignedReplica(subnet_id) => {
-                add_subnet_record(
+                let subnet_record = SubnetRecordBuilder::from(&[node]).build();
+                add_single_subnet_record(
                     &registry_data_provider,
                     registry_version.get(),
                     subnet_id,
                     subnet_record,
                 );
-            }
-            Role::UnassignedReplica => {
-                registry_data_provider
-                    .add::<ApiBoundaryNodeRecord>(
-                        &make_api_boundary_node_record_key(node),
-                        RegistryVersion::from(registry_version),
-                        None,
-                    )
-                    .expect("Failed to add subnet record.");
+                subnet_ids.push(subnet_id);
             }
             Role::BoundaryNode => {
                 registry_data_provider
@@ -1047,9 +1099,12 @@ mod tests {
                             version: String::from("11"),
                         }),
                     )
-                    .expect("Failed to add subnet record.");
+                    .expect("Failed to add API BN record.");
             }
+            Role::UnassignedReplica => {}
         }
+
+        add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_ids);
 
         let registry = Arc::new(FakeRegistryClient::new(
             Arc::clone(&registry_data_provider) as Arc<_>
@@ -1086,6 +1141,23 @@ mod tests {
                 }),
             )
             .expect("Failed to add node record.");
+    }
+
+    /// Adds an [`ApiBoundaryNodeRecord`] to the registry.
+    fn add_api_boundary_node_record(
+        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_version: RegistryVersion,
+        node: NodeId,
+    ) {
+        registry_data_provider
+            .add(
+                &make_api_boundary_node_record_key(node),
+                registry_version,
+                Some(ApiBoundaryNodeRecord {
+                    version: String::from("11"),
+                }),
+            )
+            .expect("Failed to add API boundary node record.");
     }
 
     /// Adds a [`FirewallRule`] to the registry.
