@@ -178,9 +178,9 @@ pub fn load_checkpoint_parallel_and_mark_verified(
 }
 
 struct CheckpointLoader {
-    checkpoint_layout: &'static CheckpointLayout<ReadOnly>,
+    checkpoint_layout: CheckpointLayout<ReadOnly>,
     own_subnet_type: SubnetType,
-    metrics: &'static CheckpointMetrics,
+    metrics: CheckpointMetrics,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
@@ -196,6 +196,7 @@ impl CheckpointLoader {
             proto_err: err.to_string(),
         }
     }
+
     fn load_system_metadata(&self) -> Result<ic_replicated_state::SystemMetadata, CheckpointError> {
         let _timer = self
             .metrics
@@ -210,7 +211,7 @@ impl CheckpointLoader {
         let metadata_proto = self.checkpoint_layout.system_metadata().deserialize()?;
         let mut metadata = ic_replicated_state::SystemMetadata::try_from((
             metadata_proto,
-            self.metrics as &dyn CheckpointLoadingMetrics,
+            &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
         .map_err(|err| self.into_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.ingress_history = ingress_history;
@@ -230,6 +231,7 @@ impl CheckpointLoader {
 
         Ok(metadata)
     }
+
     fn load_subnet_queues(&self) -> Result<ic_replicated_state::CanisterQueues, CheckpointError> {
         let _timer = self
             .metrics
@@ -239,7 +241,7 @@ impl CheckpointLoader {
 
         ic_replicated_state::CanisterQueues::try_from((
             self.checkpoint_layout.subnet_queues().deserialize()?,
-            self.metrics as &dyn CheckpointLoadingMetrics,
+            &self.metrics as &dyn CheckpointLoadingMetrics,
         ))
         .map_err(|err| self.into_checkpoint_error("CanisterQueues".into(), err))
     }
@@ -255,8 +257,8 @@ impl CheckpointLoader {
     }
 
     fn load_canister_states(
-        self,
-        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+        &self,
+        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     ) -> Result<BTreeMap<CanisterId, CanisterState>, CheckpointError> {
         let _timer = self
             .metrics
@@ -266,12 +268,12 @@ impl CheckpointLoader {
 
         let mut canister_states = BTreeMap::new();
         let canister_ids = self.checkpoint_layout.canister_ids()?;
-        let results = maybe_parallel_map(&mut thread_pool, canister_ids.iter(), |canister_id| {
+        let results = maybe_parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
             load_canister_state_from_checkpoint(
-                self.checkpoint_layout,
+                &self.checkpoint_layout,
                 canister_id,
                 Arc::clone(&self.fd_factory),
-                self.metrics,
+                &self.metrics,
             )
         });
 
@@ -279,7 +281,7 @@ impl CheckpointLoader {
             let (canister_state, durations) = canister_state?;
             canister_states.insert(canister_state.system_state.canister_id(), canister_state);
 
-            durations.apply(self.metrics);
+            durations.apply(&self.metrics);
         }
 
         Ok(canister_states)
@@ -287,7 +289,7 @@ impl CheckpointLoader {
 
     fn load_canister_snapshots(
         &self,
-        mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+        thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CanisterSnapshots, CheckpointError> {
         let _timer = self
             .metrics
@@ -297,11 +299,11 @@ impl CheckpointLoader {
 
         let mut canister_snapshots = BTreeMap::new();
         let snapshot_ids = self.checkpoint_layout.snapshot_ids()?;
-        let results = maybe_parallel_map(&mut thread_pool, snapshot_ids.iter(), |snapshot_id| {
+        let results = maybe_parallel_map(thread_pool, snapshot_ids.iter(), |snapshot_id| {
             (
                 **snapshot_id,
                 load_snapshot_from_checkpoint(
-                    self.checkpoint_layout,
+                    &self.checkpoint_layout,
                     snapshot_id,
                     Arc::clone(&self.fd_factory),
                 ),
@@ -312,7 +314,7 @@ impl CheckpointLoader {
             let (canister_snapshot, durations) = canister_snapshot?;
             canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
 
-            durations.apply(self.metrics);
+            durations.apply(&self.metrics);
         }
 
         Ok(CanisterSnapshots::new(canister_snapshots))
@@ -329,133 +331,18 @@ pub fn load_checkpoint(
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let checkpoint_loader = CheckpointLoader {
-        checkpoint_layout,
-        own_subnet_id,
-        metrics,
+        checkpoint_layout: checkpoint_layout.clone(),
+        own_subnet_type,
+        metrics: metrics.clone(),
         fd_factory,
     };
-    let into_checkpoint_error =
-        |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: checkpoint_layout.raw_path().into(),
-            field,
-            proto_err: err.to_string(),
-        };
-
-    let metadata = {
-        let _timer = metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["system_metadata"])
-            .start_timer();
-
-        let ingress_history_proto = checkpoint_layout.ingress_history().deserialize()?;
-        let ingress_history =
-            ic_replicated_state::IngressHistoryState::try_from(ingress_history_proto)
-                .map_err(|err| into_checkpoint_error("IngressHistoryState".into(), err))?;
-        let metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
-        let mut metadata = ic_replicated_state::SystemMetadata::try_from((
-            metadata_proto,
-            metrics as &dyn CheckpointLoadingMetrics,
-        ))
-        .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
-        metadata.ingress_history = ingress_history;
-        metadata.own_subnet_type = own_subnet_type;
-
-        if let Some(split_from) = checkpoint_layout.split_marker().deserialize()?.subnet_id {
-            metadata.split_from = Some(
-                subnet_id_try_from_protobuf(split_from)
-                    .map_err(|err| into_checkpoint_error("split_from".into(), err))?,
-            );
-        }
-
-        metadata
-    };
-
-    let subnet_queues = {
-        let _timer = metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["subnet_queues"])
-            .start_timer();
-
-        ic_replicated_state::CanisterQueues::try_from((
-            checkpoint_layout.subnet_queues().deserialize()?,
-            metrics as &dyn CheckpointLoadingMetrics,
-        ))
-        .map_err(|err| into_checkpoint_error("CanisterQueues".into(), err))?
-    };
-
-    let stats = checkpoint_layout.stats().deserialize()?;
-    let query_stats = if let Some(query_stats) = stats.query_stats {
-        RawQueryStats::try_from(query_stats)
-            .map_err(|err| into_checkpoint_error("QueryStats".into(), err))?
-    } else {
-        RawQueryStats::default()
-    };
-
-    let canister_states = {
-        let _timer = metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["canister_states"])
-            .start_timer();
-
-        let mut canister_states = BTreeMap::new();
-        let canister_ids = checkpoint_layout.canister_ids()?;
-        let results = maybe_parallel_map(&mut thread_pool, canister_ids.iter(), |canister_id| {
-            load_canister_state_from_checkpoint(
-                checkpoint_layout,
-                canister_id,
-                Arc::clone(&fd_factory),
-                metrics,
-            )
-        });
-
-        for canister_state in results.into_iter() {
-            let (canister_state, durations) = canister_state?;
-            canister_states.insert(canister_state.system_state.canister_id(), canister_state);
-
-            durations.apply(metrics);
-        }
-
-        canister_states
-    };
-
-    let canister_snapshots = {
-        let _timer = metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["canister_snapshots"])
-            .start_timer();
-
-        let mut canister_snapshots = BTreeMap::new();
-        let snapshot_ids = checkpoint_layout.snapshot_ids()?;
-        let results = maybe_parallel_map(&mut thread_pool, snapshot_ids.iter(), |snapshot_id| {
-            (
-                **snapshot_id,
-                load_snapshot_from_checkpoint(
-                    checkpoint_layout,
-                    snapshot_id,
-                    Arc::clone(&fd_factory),
-                ),
-            )
-        });
-
-        for (snapshot_id, canister_snapshot) in results.into_iter() {
-            let (canister_snapshot, durations) = canister_snapshot?;
-            canister_snapshots.insert(snapshot_id, Arc::new(canister_snapshot));
-
-            durations.apply(metrics);
-        }
-
-        CanisterSnapshots::new(canister_snapshots)
-    };
-
-    let state = ReplicatedState::new_from_checkpoint(
-        canister_states,
-        metadata,
-        subnet_queues,
-        query_stats,
-        canister_snapshots,
-    );
-
-    Ok(state)
+    Ok(ReplicatedState::new_from_checkpoint(
+        checkpoint_loader.load_canister_states(&mut thread_pool)?,
+        checkpoint_loader.load_system_metadata()?,
+        checkpoint_loader.load_subnet_queues()?,
+        checkpoint_loader.load_query_stats()?,
+        checkpoint_loader.load_canister_snapshots(&mut thread_pool)?,
+    ))
 }
 
 #[derive(Default)]
