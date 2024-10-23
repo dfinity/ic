@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::ExpectedIndices;
+use crate::{get_signal_limit, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -1159,6 +1159,17 @@ impl CertifiedSlicePool {
             None => return Ok(None),
         };
 
+        let signal_limit = get_signal_limit(
+            slice.payload.header.begin(),
+            slice
+                .payload
+                .messages
+                .as_ref()
+                .map(|messages| messages.begin()),
+        );
+        let msg_limit =
+            Some(msg_limit.map_or(signal_limit, |msg_limit| msg_limit.min(signal_limit)));
+
         // GC first if explicit begin indices were provided.
         let original_message_count = slice.payload.len();
         if let Some(begin) = begin {
@@ -1560,5 +1571,17 @@ pub mod testing {
 
     pub fn slice_len(slice: &UnpackedStreamSlice) -> usize {
         slice.payload.len()
+    }
+
+    pub fn stream_begin(slice: &UnpackedStreamSlice) -> StreamIndex {
+        slice.payload.header.begin()
+    }
+
+    pub fn slice_end(slice: &UnpackedStreamSlice) -> Option<StreamIndex> {
+        slice
+            .payload
+            .messages
+            .as_ref()
+            .map(|messages| messages.end())
     }
 }
