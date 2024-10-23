@@ -120,7 +120,6 @@ pub fn assert_existence_of_ledger_total_transactions_metric<T>(
 
 pub fn assert_ledger_upgrade_instructions_consumed_metric_set<T, U>(
     ledger_wasm: Vec<u8>,
-    ledger_wasm_nextmigrationversionmemorymanager: Option<Vec<u8>>,
     encode_init_args: fn(InitArgs) -> T,
     encode_upgrade_args: fn() -> U,
 ) where
@@ -143,31 +142,19 @@ pub fn assert_ledger_upgrade_instructions_consumed_metric_set<T, U>(
         assert_eq!(0, parse_metric(&env, canister_id, metric));
     }
 
-    let test_upgrade = |ledger_wasm: Vec<u8>| {
-        let args = encode_upgrade_args();
-        let encoded_upgrade_args = Encode!(&args).unwrap();
-        env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args)
-            .expect("should successfully upgrade ledger canister");
+    let args = encode_upgrade_args();
+    let encoded_upgrade_args = Encode!(&args).unwrap();
+    env.upgrade_canister(canister_id, ledger_wasm, encoded_upgrade_args)
+        .expect("should successfully upgrade ledger canister");
 
-        let pre_upgrade_instructions_consumed = parse_metric(&env, canister_id, PRE_UPGRADE_METRIC);
-        let post_upgrade_instructions_consumed =
-            parse_metric(&env, canister_id, POST_UPGRADE_METRIC);
-        assert_ne!(0, pre_upgrade_instructions_consumed);
-        assert_ne!(0, post_upgrade_instructions_consumed);
-        assert_eq!(
-            pre_upgrade_instructions_consumed + post_upgrade_instructions_consumed,
-            parse_metric(&env, canister_id, TOTAL_UPGRADE_METRICS)
-        );
-    };
-
-    test_upgrade(ledger_wasm.clone());
-    if let Some(ledger_wasm_nextmigrationversionmemorymanager) =
-        ledger_wasm_nextmigrationversionmemorymanager
-    {
-        test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
-        test_upgrade(ledger_wasm_nextmigrationversionmemorymanager);
-    }
-    test_upgrade(ledger_wasm);
+    let pre_upgrade_instructions_consumed = parse_metric(&env, canister_id, PRE_UPGRADE_METRIC);
+    let post_upgrade_instructions_consumed = parse_metric(&env, canister_id, POST_UPGRADE_METRIC);
+    assert_ne!(0, pre_upgrade_instructions_consumed);
+    assert_ne!(0, post_upgrade_instructions_consumed);
+    assert_eq!(
+        pre_upgrade_instructions_consumed + post_upgrade_instructions_consumed,
+        parse_metric(&env, canister_id, TOTAL_UPGRADE_METRICS)
+    );
 }
 
 fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) {
