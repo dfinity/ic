@@ -46,6 +46,7 @@ use std::{
     process::Command,
     thread::{self, JoinHandle},
 };
+use tempfile::tempdir;
 use url::Url;
 use zstd::stream::write::Encoder;
 
@@ -412,7 +413,7 @@ fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
-    let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
+    let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
     let mut args = GenerateTestnetConfigArgs {
         ipv6_config_type: Some("RouterAdvertisement".to_string()),
         deterministic_prefix: None,
@@ -460,7 +461,7 @@ fn create_config_disk_image(
         .nodes()
         .next()
     {
-        args.nns_urls = Some(format!("http://[{}]:8080", node.get_ip_addr()));
+        args.nns_urls = Some(vec![format!("http://[{}]:8080", node.get_ip_addr())]);
     }
 
     if let Some(malicious_behavior) = malicious_behavior {
@@ -478,7 +479,7 @@ fn create_config_disk_image(
             node.node_id,
             query_stats_epoch_length
         );
-        args.query_stats_epoch_length = Some(format!("{}", query_stats_epoch_length));
+        args.query_stats_epoch_length = Some(query_stats_epoch_length);
     }
 
     if let Some(ipv4_config) = ipv4_config {
@@ -488,7 +489,7 @@ fn create_config_disk_image(
         );
         args.ipv4_address = Some(ipv4_config.ip_addr().to_string());
         args.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
-        args.ipv4_prefix_length = Some(ipv4_config.prefix_length().to_string());
+        args.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
     }
 
     if let Some(domain) = domain {
@@ -496,7 +497,7 @@ fn create_config_disk_image(
             test_env.logger(),
             "Node with id={} has domain_name {}", node.node_id, domain,
         );
-        args.domain = Some(domain);
+        args.ipv4_domain = Some(domain);
     }
 
     let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
