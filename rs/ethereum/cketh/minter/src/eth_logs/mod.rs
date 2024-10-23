@@ -333,7 +333,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 };
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
-                let [value_bytes] = parse_data_into_32_bytes_words(entry.data, event_source)?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
                 Ok(ReceivedEthEvent {
                     transaction_hash,
                     block_number,
@@ -359,7 +359,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
                 let [value_bytes, subaccount_bytes] =
-                    parse_data_into_32_bytes_words(entry.data, event_source)?;
+                    parse_data_into_32_byte_words(entry.data, event_source)?;
                 let value = Wei::from_be_bytes(value_bytes);
                 let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
                 Ok(ReceivedEthEvent {
@@ -387,7 +387,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let erc20_contract_address = parse_address(&entry.topics[1])?;
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
-                let [value_bytes] = parse_data_into_32_bytes_words(entry.data, event_source)?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
                 Ok(ReceivedErc20Event {
                     transaction_hash,
                     block_number,
@@ -415,7 +415,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
                 let [value_bytes, subaccount_bytes] =
-                    parse_data_into_32_bytes_words(entry.data, event_source)?;
+                    parse_data_into_32_byte_words(entry.data, event_source)?;
                 let value = Erc20Value::from_be_bytes(value_bytes);
                 let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
                 Ok(ReceivedErc20Event {
@@ -441,7 +441,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
     }
 }
 
-fn parse_data_into_32_bytes_words<const N: usize>(
+fn parse_data_into_32_byte_words<const N: usize>(
     data: Data,
     event_source: EventSource,
 ) -> Result<[[u8; 32]; N], ReceivedEventError> {
