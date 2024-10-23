@@ -9354,6 +9354,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "ic-universal-canister",
+ "icp-ledger",
  "icrc-ledger-types",
  "icrc1-test-env",
  "icrc1-test-suite",

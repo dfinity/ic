@@ -1,8 +1,11 @@
-use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState, Tokens};
+use crate::in_memory_ledger::{ApprovalKey, InMemoryLedger, InMemoryLedgerState};
+use crate::Tokens;
 use ic_ledger_core::approvals::Allowance;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_types::PrincipalId;
+#[cfg(feature = "icp-tokens")]
+use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 
 const ACCOUNT_ID_1: u64 = 134;
@@ -18,8 +21,14 @@ const FEE_AMOUNT: u64 = 10_000u64;
 const TIMESTAMP_NOW: u64 = 0;
 const TIMESTAMP_LATER: u64 = 1;
 
+#[cfg(feature = "icp-tokens")]
+type AccountType = AccountIdentifier;
+
+#[cfg(not(feature = "icp-tokens"))]
+type AccountType = Account;
+
 struct LedgerBuilder {
-    ledger: InMemoryLedger<ApprovalKey, Account, Tokens>,
+    ledger: InMemoryLedger<AccountType, Tokens>,
 }
 
 impl LedgerBuilder {
@@ -29,13 +38,18 @@ impl LedgerBuilder {
         }
     }
 
-    fn with_mint(mut self, to: &Account, amount: &Tokens) -> Self {
+    fn with_mint(mut self, to: &AccountType, amount: &Tokens) -> Self {
         self.ledger.process_mint(to, amount);
         self.ledger.validate_invariants();
         self
     }
 
-    fn with_burn(mut self, from: &Account, spender: &Option<Account>, amount: &Tokens) -> Self {
+    fn with_burn(
+        mut self,
+        from: &AccountType,
+        spender: &Option<AccountType>,
+        amount: &Tokens,
+    ) -> Self {
         let irrelevant_index = 0;
         self.ledger
             .process_burn(from, spender, amount, irrelevant_index);
@@ -45,9 +59,9 @@ impl LedgerBuilder {
 
     fn with_transfer(
         mut self,
-        from: &Account,
-        to: &Account,
-        spender: &Option<Account>,
+        from: &AccountType,
+        to: &AccountType,
+        spender: &Option<AccountType>,
         amount: &Tokens,
         fee: &Option<Tokens>,
     ) -> Self {
@@ -58,8 +72,8 @@ impl LedgerBuilder {
 
     fn with_approve(
         mut self,
-        from: &Account,
-        spender: &Account,
+        from: &AccountType,
+        spender: &AccountType,
         amount: &Tokens,
         expected_allowance: &Option<Tokens>,
         expires_at: &Option<u64>,
@@ -79,7 +93,7 @@ impl LedgerBuilder {
         self
     }
 
-    fn build(self) -> InMemoryLedger<ApprovalKey, Account, Tokens> {
+    fn build(self) -> InMemoryLedger<AccountType, Tokens> {
         self.ledger
     }
 }
@@ -413,9 +427,9 @@ fn should_increase_and_decrease_balance_with_transfer_from() {
     assert_eq!(Some(&Tokens::from(TRANSFER_AMOUNT)), actual_balance3);
 }
 
-fn account_from_u64(account_id: u64) -> Account {
-    Account {
+fn account_from_u64(account_id: u64) -> AccountType {
+    AccountType::from(Account {
         owner: PrincipalId::new_user_test_id(account_id).0,
         subaccount: None,
-    }
+    })
 }
