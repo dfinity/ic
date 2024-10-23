@@ -23,8 +23,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
-/// A neuron type internal to the governance crate. Currently, this type is identical to the
-/// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
+/// A neuron type internal to the governance crate. Gradually, this type will evolve
 /// towards having all private fields while exposing methods for mutations, which allows it to hold
 /// invariants.
 #[derive(Clone, Debug)]
@@ -1681,9 +1680,13 @@ impl TryFrom<StoredDissolveStateAndAge> for DissolveStateAndAge {
                 when_dissolved_timestamp_seconds,
             ) => {
                 if aging_since_timestamp_seconds == u64::MAX {
-                    Ok(DissolveStateAndAge::DissolvingOrDissolved {
-                        when_dissolved_timestamp_seconds,
-                    })
+                    if when_dissolved_timestamp_seconds > 0 {
+                        Ok(DissolveStateAndAge::DissolvingOrDissolved {
+                            when_dissolved_timestamp_seconds,
+                        })
+                    } else {
+                        Err("Dissolve delay must be greater than 0".to_string())
+                    }
                 } else {
                     Err("Aging since timestamp must be u64::MAX for dissolving or dissolved neurons".to_string())
                 }

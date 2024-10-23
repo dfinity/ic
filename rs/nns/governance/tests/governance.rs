@@ -3917,6 +3917,8 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 
     let network_economics = NetworkEconomics::with_default_values();
 
+    let now = driver.now();
+
     let neurons = vec![
         Neuron {
             id: Some(NeuronId { id: 1 }),
@@ -3927,7 +3929,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
                 .expect("Could not get random byte array")
                 .to_vec(),
             kyc_verified: false,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now)),
             aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
@@ -3940,7 +3942,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
                 .expect("Could not get random byte array")
                 .to_vec(),
             kyc_verified: false,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now)),
             aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
@@ -3953,7 +3955,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
                 .expect("Could not get random byte array")
                 .to_vec(),
             kyc_verified: false,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now)),
             aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
@@ -3966,7 +3968,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
                 .expect("Could not get random byte array")
                 .to_vec(),
             kyc_verified: false,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now)),
             aging_since_timestamp_seconds: u64::MAX,
             ..Default::default()
         },
