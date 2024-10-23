@@ -432,7 +432,7 @@ fn create_config_disk_image(
         nns_public_key_path: None,
         nns_urls: None,
         node_operator_private_key_path: None,
-        ssh_authorized_keys_path: None,
+        ssh_authorized_keys_path: Some("/boot/config/accounts_ssh_authorized_keys".into()),
         ic_crypto_path: None,
         ic_state_path: None,
         ic_registry_local_store_path: None,
@@ -500,11 +500,6 @@ fn create_config_disk_image(
         args.ipv4_domain = Some(domain);
     }
 
-    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-    if ssh_authorized_pub_keys_dir.exists() {
-        args.ssh_authorized_keys_path = Some(ssh_authorized_pub_keys_dir);
-    }
-
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
     info!(
         test_env.logger(),
@@ -550,6 +545,12 @@ fn create_config_disk_image(
         .arg(node.state_path())
         .arg("--ic_crypto")
         .arg(node.crypto_path());
+
+    let ssh_authorized_pub_keys_dir: PathBuf = test_env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
+    if ssh_authorized_pub_keys_dir.exists() {
+        cmd.arg("--accounts_ssh_authorized_keys")
+            .arg(ssh_authorized_pub_keys_dir);
+    }
 
     let key = "PATH";
     let old_path = match std::env::var(key) {
