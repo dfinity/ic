@@ -89,15 +89,12 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 
 === Testing
 
-TODO: update...
+For testing, to add new configuration bits, you can modify the config tool located at 
+link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *bootstrap-ic-node.sh* directly, 
+particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
 
-* *bootstrap-ic-node.sh* can be temporarily tweaked (internally adapt paths, then run the process_bootstrap function):
-** run stand-alone
-** verify that the config image is unpacked
-** verify its files are in the correct locations
-
+* *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.
 * *bootstrap-ic-node.sh* can be temporarily tweaked (internally adapt paths; basically just running the process_bootstrap function of it) to run stand-alone and verify that the config image is unpacked and its files sorted into the correct locations.
-
 * *generate-replica-config.sh* can be run stand-alone to verify that it produces the intended ic.json5 configuration from the template.
 
 After all is done, it is advised to prepare a configuration for a single node and boot it in a VM before conducting testnet deployments.
