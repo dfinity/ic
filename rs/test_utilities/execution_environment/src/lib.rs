@@ -61,7 +61,7 @@ use ic_types::{
         RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, ReplicaVersion, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -142,6 +142,7 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         chain_key_settings: BTreeMap::new(),
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+        replica_version: ReplicaVersion::default(),
     }
 }
 

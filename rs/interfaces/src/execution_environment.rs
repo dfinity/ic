@@ -13,7 +13,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness, Time,
+    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
+    ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1184,6 +1185,8 @@ pub struct RegistryExecutionSettings {
     pub provisional_whitelist: ProvisionalWhitelist,
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+    /// This field is not from the registry, but from the most recent block.
+    pub replica_version: ReplicaVersion,
 }
 
 /// Chain key configuration of execution that comes from the registry.

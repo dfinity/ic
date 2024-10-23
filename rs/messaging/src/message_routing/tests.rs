@@ -674,6 +674,7 @@ fn make_batch_processor(
         provisional_whitelist: ProvisionalWhitelist::All,
         chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
+        replica_version: ReplicaVersion::default(),
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -703,7 +704,11 @@ fn try_to_read_registry(
     ReadRegistryError,
 > {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
-    batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
+    batch_processor.try_to_read_registry(
+        registry.get_latest_version(),
+        own_subnet_id,
+        &ReplicaVersion::default(),
+    )
 }
 
 /// Tests that `BatchProcessorImpl::try_to_read_registry()` returns `Ok(_)`; and checks that the
@@ -889,7 +894,11 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             node_public_keys,
             api_boundary_nodes,
         ) = batch_processor
-            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
+            .try_to_read_registry(
+                fixture.registry.get_latest_version(),
+                own_subnet_id,
+                &ReplicaVersion::default(),
+            )
             .unwrap();
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
@@ -1096,8 +1105,11 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // Check that minimal specification returns `Ok(_)`.
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
-        let result = batch_processor
-            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        let result = batch_processor.try_to_read_registry(
+            fixture.registry.get_latest_version(),
+            own_subnet_id,
+            &ReplicaVersion::default(),
+        );
         assert_matches!(result, Ok(_));
 
         // Minimal specification contains an empty `membership` for `own_subnet_id`. Check the
@@ -1411,8 +1423,11 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
 
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
-        let res = batch_processor
-            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        let res = batch_processor.try_to_read_registry(
+            fixture.registry.get_latest_version(),
+            own_subnet_id,
+            &ReplicaVersion::default(),
+        );
         assert_matches!(res, Ok(_));
 
         // check that critical error counter is incremented both for missing and invalid keys.
@@ -1556,8 +1571,11 @@ fn try_read_registry_can_skip_missing_or_invalid_fields_of_api_boundary_nodes() 
 
         let (batch_processor, metrics, _, _) =
             make_batch_processor(fixture.registry.clone(), log.clone());
-        let res = batch_processor
-            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        let res = batch_processor.try_to_read_registry(
+            fixture.registry.get_latest_version(),
+            own_subnet_id,
+            &ReplicaVersion::default(),
+        );
         assert_matches!(res, Ok(_));
 
         // There are six API BNs in the registry. However, five nodes have missing or invalid fields of NodeRecord.
@@ -1619,13 +1637,21 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
 
         // Try reading the registry at the next version; should return `Err(_)`.
         assert_matches!(
-            batch_processor.try_to_read_registry(next_registry_version, own_subnet_id),
+            batch_processor.try_to_read_registry(
+                next_registry_version,
+                own_subnet_id,
+                &ReplicaVersion::default()
+            ),
             Err(ReadRegistryError::Transient(_))
         );
         // Write minimal records to the registry, reading the registry should now work.
         fixture.write_test_records(&minimal_input).unwrap();
         assert_matches!(
-            batch_processor.try_to_read_registry(next_registry_version, own_subnet_id),
+            batch_processor.try_to_read_registry(
+                next_registry_version,
+                own_subnet_id,
+                &ReplicaVersion::default()
+            ),
             Ok(_)
         );
 
@@ -1636,7 +1662,11 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
         // Spawn a thread trying to read from the registry at the next version; this will fail
         // until we update the registry.
         let handle = std::thread::spawn(move || {
-            batch_processor.read_registry(next_registry_version, own_subnet_id)
+            batch_processor.read_registry(
+                next_registry_version,
+                own_subnet_id,
+                &ReplicaVersion::default(),
+            )
         });
         // Wait 150ms, then update the registry and join the thread above.
         std::thread::sleep(Duration::from_millis(150));
@@ -1690,11 +1720,19 @@ fn reading_mainnet_registry_succeeds() {
 
         let (batch_processor, _, _, _) = make_batch_processor(registry, log);
         assert_matches!(
-            batch_processor.try_to_read_registry(registry_version, mainnet_nns_subnet()),
+            batch_processor.try_to_read_registry(
+                registry_version,
+                mainnet_nns_subnet(),
+                &ReplicaVersion::default()
+            ),
             Ok(_)
         );
         assert_matches!(
-            batch_processor.try_to_read_registry(registry_version, mainnet_app_subnet()),
+            batch_processor.try_to_read_registry(
+                registry_version,
+                mainnet_app_subnet(),
+                &ReplicaVersion::default()
+            ),
             Ok(_)
         );
     });

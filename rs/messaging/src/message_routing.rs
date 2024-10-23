@@ -39,7 +39,8 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
+    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
+    Time,
 };
 use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
@@ -665,6 +666,7 @@ impl BatchProcessorImpl {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
+        replica_version: &ReplicaVersion,
     ) -> (
         NetworkTopology,
         SubnetFeatures,
@@ -673,7 +675,7 @@ impl BatchProcessorImpl {
         ApiBoundaryNodes,
     ) {
         loop {
-            match self.try_to_read_registry(registry_version, own_subnet_id) {
+            match self.try_to_read_registry(registry_version, own_subnet_id, replica_version) {
                 Ok(result) => return result,
                 Err(ReadRegistryError::Persistent(error_message)) => {
                     // Increment the critical error counter in case of a persistent error.
@@ -709,6 +711,7 @@ impl BatchProcessorImpl {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
+        replica_version: &ReplicaVersion,
     ) -> Result<
         (
             NetworkTopology,
@@ -799,6 +802,7 @@ impl BatchProcessorImpl {
                 provisional_whitelist,
                 chain_key_settings,
                 subnet_size,
+                replica_version: replica_version.clone(),
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1163,7 +1167,11 @@ impl BatchProcessor for BatchProcessorImpl {
             registry_execution_settings,
             node_public_keys,
             api_boundary_nodes,
-        ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
+        ) = self.read_registry(
+            registry_version,
+            state.metadata.own_subnet_id,
+            &batch.replica_version,
+        );
 
         self.metrics.blocks_proposed_total.inc();
         self.metrics
