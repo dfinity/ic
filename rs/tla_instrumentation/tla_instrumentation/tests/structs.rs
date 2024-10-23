@@ -10,7 +10,7 @@ use tla_instrumentation::{
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
-use tla_instrumentation_proc_macros::tla_update_method;
+use tla_instrumentation_proc_macros::{tla_update_method, with_tla_trace_check};
 
 mod common;
 use common::check_tla_trace;
@@ -35,9 +35,10 @@ mod tla_stuff {
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
+        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
     }
 
-    pub static TLA_TRACES: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+    pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
 
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
@@ -110,7 +111,9 @@ mod tla_stuff {
     }
 }
 
-use tla_stuff::{my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+use tla_stuff::{
+    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+};
 
 struct StructCanister {
     pub counter: u64,
@@ -155,7 +158,7 @@ fn struct_test() {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
     }
-    let trace = &TLA_TRACES.read().unwrap()[0];
+    let trace = &TLA_TRACES_MUTEX.read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
         Some(&2_u64.to_string())
@@ -262,4 +265,19 @@ fn struct_test() {
     );
 
     check_tla_trace(trace);
+}
+
+fn tla_check_traces() {
+    let traces = TLA_TRACES_LKEY.get();
+    let traces = traces.borrow();
+    for t in &*traces {
+        check_tla_trace(&t)
+    }
+}
+
+#[test]
+#[with_tla_trace_check]
+fn annotated_test() {
+    let canister = &mut StructCanister { counter: 0 };
+    tokio_test::block_on(canister.my_method());
 }

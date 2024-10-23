@@ -41,7 +41,7 @@ pub struct Update {
     pub post_process: fn(&mut Vec<ResolvedStatePair>) -> TlaConstantAssignment,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UpdateTrace {
     pub update: Update,
     pub state_pairs: Vec<ResolvedStatePair>,
