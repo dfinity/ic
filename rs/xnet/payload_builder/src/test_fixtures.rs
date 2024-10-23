@@ -194,20 +194,15 @@ pub(crate) fn make_certified_stream_slice(
 }
 
 /// Generates a `StreamSlice` where the `header.begin` and `messages.begin`
-/// can be specified independently.
-pub(crate) fn make_stream_slice(
-    stream_begin: u64,
-    stream_end: u64,
-    messages_begin: u64,
-    signals_end: u64,
-) -> StreamSlice {
-    assert!(stream_begin <= messages_begin);
-    assert!(messages_begin <= stream_end);
+/// can be specified independently; note: `header.end == messages.end`.
+pub(crate) fn make_stream_slice(config: StreamConfig, messages_begin: u64) -> StreamSlice {
+    assert!(config.message_begin <= messages_begin);
+    assert!(messages_begin <= config.message_end);
 
     let header = StreamHeader::new(
-        stream_begin.into(),
-        stream_end.into(),
-        signals_end.into(),
+        config.message_begin.into(),
+        config.message_end.into(),
+        config.signal_end.into(),
         VecDeque::new(),    // no reject signals
         Default::default(), // no stream flags
     );
@@ -220,7 +215,7 @@ pub(crate) fn make_stream_slice(
         .build();
 
     let mut messages = StreamIndexedQueue::with_begin(messages_begin.into());
-    for _ in messages_begin..stream_end {
+    for _ in messages_begin..config.message_end {
         messages.push(message.clone().into());
     }
 

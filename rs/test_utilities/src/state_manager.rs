@@ -588,7 +588,10 @@ impl CertifiedStreamStore for FakeStateManager {
     }
 }
 
-/// Encode a `StreamSlice` directly. This is useful for generating a `CertifiedStreamSlice` where
+/// Encode a `StreamSlice` directly as CBOR, with no whitness or certification;
+/// compatible with `FakeStateManager`.
+///
+/// This is useful for generating a `CertifiedStreamSlice` where
 /// `slice.header().begin() != `slice.messages().begin()` for use in tests.
 pub fn encode_certified_stream_slice(
     slice: StreamSlice,

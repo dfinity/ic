@@ -523,13 +523,13 @@ async fn validate_slice_above_signal_limit() {
         const REVERSE_STREAM_BEGIN: u64 = 13;
         const REVERSE_STREAM_END: u64 = REVERSE_STREAM_BEGIN + 10;
 
-        // `begin`, `end` and `signals_end` such that the stream on the remote subnet as maximum
+        // `begin`, `end` and `signals_end` such that the stream on the remote subnet has maximum
         // size and nothing is gc'ed on this subnet.
         const STREAM_BEGIN: u64 = 20;
         const MAX_STREAM_END: u64 = STREAM_BEGIN + MAX_STREAM_MESSAGES as u64;
         const SIGNALS_END: u64 = REVERSE_STREAM_BEGIN;
         // `begin` of `messages` in the stream slice close to the `end` in the stream header; this
-        // way the slice won't have thousands of messages in it (only 10).
+        // way the slice won't have thousands of messages in it.
         const MESSAGE_BEGIN: u64 = MAX_STREAM_END - 10;
 
         // The expected indices match those in the stream slices we will try to validate.
@@ -551,10 +551,12 @@ async fn validate_slice_above_signal_limit() {
         // A `StreamSlice` with `StreamHeader` for an oversized stream (by 10 messages).
         // Inducting this would produce too many signals, should fail to validate.
         let stream_slice = make_stream_slice(
-            STREAM_BEGIN,
-            MAX_STREAM_END + 10,
+            StreamConfig {
+                message_begin: STREAM_BEGIN,
+                message_end: MAX_STREAM_END + 10,
+                signal_end: SIGNALS_END,
+            },
             MESSAGE_BEGIN,
-            SIGNALS_END,
         );
         let certified_stream_slice = encode_certified_stream_slice(stream_slice, 1.into());
 
@@ -572,8 +574,14 @@ async fn validate_slice_above_signal_limit() {
         // A `StreamSlice` with `StreamHeader` for a stream of maximum size.
         // Inducting this would produce the maximum number of signals allowed,
         // should validate successfully.
-        let stream_slice =
-            make_stream_slice(STREAM_BEGIN, MAX_STREAM_END, MESSAGE_BEGIN, SIGNALS_END);
+        let stream_slice = make_stream_slice(
+            StreamConfig {
+                message_begin: STREAM_BEGIN,
+                message_end: MAX_STREAM_END,
+                signal_end: SIGNALS_END,
+            },
+            MESSAGE_BEGIN,
+        );
         let certified_stream_slice = encode_certified_stream_slice(stream_slice, 1.into());
 
         assert_eq!(
