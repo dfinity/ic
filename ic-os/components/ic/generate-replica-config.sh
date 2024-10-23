@@ -37,6 +37,8 @@ function configure_ipv6() {
             ;;
         "Fixed")
             IPV6_ADDRESS=$(get_config_value '.network_settings.ipv6_config.Fixed.address')
+            # Remove the subnet part from the IPv6 address
+            IPV6_ADDRESS="${IPV6_ADDRESS%%/*}"
             ;;
         "RouterAdvertisement")
             interface=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
