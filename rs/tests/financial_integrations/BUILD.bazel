@@ -46,7 +46,6 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
-        "//rs/tests:ic_tests",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
     ],
