@@ -107,9 +107,9 @@ function get_if_address_retries() {
 
 function set_default_config_values() {
     [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
-    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"  # Default value is 24h
-    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600"  # Default value is 1h
-    [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"  # Default is 600 blocks (around 10min)
+    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default value is 24h
+    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default value is 1h
+    [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
 
     # todo: remove node_index variable and hard-code into ic.json5.template
@@ -118,12 +118,12 @@ function set_default_config_values() {
 
 # If the URL is of the form "https://[IPv6]/" then we extract the IPv6 address.
 # Otherwise, we copy over the whole URL to ic.json5
-# If a URL is of the form "http://[IPv6_address]/" or "https://[IPv6_address]/", 
+# If a URL is of the form "http://[IPv6_address]/" or "https://[IPv6_address]/",
 # it extracts just the IPv6 address.
 # For all other URLs, it leaves them unchanged.
 function process_nns_urls() {
     local processed_urls=()
-    IFS=',' read -ra URLS <<< "$NNS_URLS"
+    IFS=',' read -ra URLS <<<"$NNS_URLS"
     for url in "${URLS[@]}"; do
         if [[ $url =~ ^https?://\[([0-9a-fA-F:]+)\](:[0-9]+)?(/.*)?$ ]]; then
             ipv6_addr="${BASH_REMATCH[1]}"
@@ -133,7 +133,10 @@ function process_nns_urls() {
             processed_urls+=("$url")
         fi
     done
-    NNS_URLS=$(IFS=','; echo "${processed_urls[*]}")
+    NNS_URLS=$(
+        IFS=','
+        echo "${processed_urls[*]}"
+    )
 }
 
 while getopts "i:o:" OPT; do

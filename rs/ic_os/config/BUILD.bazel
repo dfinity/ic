@@ -32,12 +32,12 @@ rust_library(
         ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
+    crate_name = "config",
+    edition = "2021",
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
     ],
-    crate_name = "config",
-    edition = "2021",
     deps = DEPENDENCIES,
 )
 
