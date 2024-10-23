@@ -5651,19 +5651,22 @@ impl Governance {
                 let mut total_power: u128 = 0;
                 // No neuron in the stable storage should have maturity.
 
-                for neuron in self.neuron_store.voting_eligible_neurons(now_seconds) {
-                    let voting_power = neuron.voting_power(now_seconds);
+                self.neuron_store
+                    .with_voting_eligible_neurons(now_seconds, |iter| {
+                        for neuron in iter {
+                            let voting_power = neuron.voting_power(now_seconds);
 
-                    total_power += voting_power as u128;
+                            total_power += voting_power as u128;
 
-                    ballots.insert(
-                        neuron.id().id,
-                        Ballot {
-                            vote: Vote::Unspecified as i32,
-                            voting_power,
-                        },
-                    );
-                }
+                            ballots.insert(
+                                neuron.id().id,
+                                Ballot {
+                                    vote: Vote::Unspecified as i32,
+                                    voting_power,
+                                },
+                            );
+                        }
+                    });
 
                 if total_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting

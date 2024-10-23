@@ -696,8 +696,24 @@ impl NeuronStore {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
 
-    pub fn active_neurons_iter(&self) -> impl Iterator<Item = &Neuron> {
-        self.heap_neurons.values()
+    // TODO make this "With_iterator" so you can use it from inside the stable neuron closure
+    pub fn with_active_neurons_iter<'a, R, Callback>(&'a self, callback: Callback) -> R
+    where
+        Callback: FnOnce(&mut Box<dyn Iterator<Item = Neuron> + 'a>) -> R,
+    {
+        if self.use_stable_memory_for_all_neurons {
+            with_stable_neuron_store(|stable_store| {
+                let iter =
+                    Box::new(stable_store.range_neurons(..)) as Box<dyn Iterator<Item = Neuron>>;
+                let result = callback(&mut iter);
+                drop(iter);
+                result
+            })
+        } else {
+            let iter =
+                Box::new(self.heap_neurons.values().cloned()) as Box<dyn Iterator<Item = Neuron>>;
+            callback(&mut iter)
+        }
     }
 
     /// Returns Neurons in heap starting with the first one whose ID is >= begin.
@@ -733,12 +749,9 @@ impl NeuronStore {
     fn filter_map_active_neurons<R>(
         &self,
         filter: impl Fn(&Neuron) -> bool,
-        f: impl FnMut(&Neuron) -> R,
+        f: impl FnMut(Neuron) -> R,
     ) -> Vec<R> {
-        self.active_neurons_iter()
-            .filter(|n| filter(n))
-            .map(f)
-            .collect()
+        self.with_active_neurons_iter(|iter| iter.filter(|n| filter(n)).map(f).collect())
     }
 
     fn is_active_neurons_fund_neuron(neuron: &Neuron, now: u64) -> bool {
@@ -791,12 +804,22 @@ impl NeuronStore {
     }
 
     /// Returns an iterator of all voting-eligible neurons
-    pub fn voting_eligible_neurons(&self, now_seconds: u64) -> impl Iterator<Item = &Neuron> {
+    pub fn with_voting_eligible_neurons<R, Callback>(
+        &self,
+        now_seconds: u64,
+        callback: Callback,
+    ) -> R
+    where
+        Callback: FnOnce(&mut dyn Iterator<Item = Neuron>) -> R,
+    {
         // This should be safe to do without with_neuron because
         // all voting_eligible neurons should be in the heap
-        self.active_neurons_iter().filter(move |&neuron| {
-            neuron.dissolve_delay_seconds(now_seconds)
-                >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+        self.with_active_neurons_iter(|iter| {
+            let filtered = iter.filter(|neuron| {
+                neuron.dissolve_delay_seconds(now_seconds)
+                    >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+            });
+            callback(&mut filtered.into_iter())
         })
     }
 

@@ -2911,11 +2911,10 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             n.voting_power(fake_driver.now()) as f64
         })
         .expect("Neuron not found")
-        / gov
-            .neuron_store
-            .active_neurons_iter()
-            .map(|neuron| neuron.voting_power(fake_driver.now()))
-            .sum::<u64>() as f64;
+        / gov.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.voting_power(fake_driver.now()))
+                .sum::<u64>() as f64
+        });
     let expected_distributed_e8s_equivalent =
         (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
     assert_eq!(expected_distributed_e8s_equivalent, 15);
@@ -2940,13 +2939,15 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
-    for neuron in gov.neuron_store.active_neurons_iter() {
-        if neuron.id().id == 1 {
-            continue;
-        }
+    gov.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            if neuron.id().id == 1 {
+                continue;
+            }
 
-        assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
-    }
+            assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
+        }
+    });
 
     // The ballots should have been cleared
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
@@ -7091,9 +7092,7 @@ fn test_manage_and_reward_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -7401,9 +7400,7 @@ fn test_manage_and_reward_multiple_node_providers() {
     // Find the neuron...
     let neuron = gov
         .neuron_store
-        .active_neurons_iter()
-        .find(|x| x.controller() == np_pid_2)
-        .unwrap();
+        .with_active_neurons_iter(|mut iter| iter.find(|x| x.controller() == np_pid_2).unwrap());
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
@@ -13195,15 +13192,17 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for neuron in governance.neuron_store.active_neurons_iter() {
-        let current_neuron_maturity = neuron.maturity_e8s_equivalent;
+    governance.neuron_store.with_active_neurons_iter(|iter| {
+        for neuron in iter {
+            let current_neuron_maturity = neuron.maturity_e8s_equivalent;
 
-        assert_ne!(
-            current_neuron_maturity, starting_maturity,
-            "neuron: {:#?}",
-            neuron,
-        );
-    }
+            assert_ne!(
+                current_neuron_maturity, starting_maturity,
+                "neuron: {:#?}",
+                neuron,
+            );
+        }
+    });
 
     // Step 3.2: Inspect the latest_reward_event.
     let reward_event = governance.heap_data.latest_reward_event.as_ref().unwrap();
