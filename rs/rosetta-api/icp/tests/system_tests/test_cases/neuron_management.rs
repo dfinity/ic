@@ -324,7 +324,6 @@ fn test_change_auto_stake_maturity() {
             )
             .await
             .unwrap();
-        env.pocket_ic.tick().await;
 
         // See if the neuron was created successfully
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
@@ -347,7 +346,6 @@ fn test_change_auto_stake_maturity() {
                 .metadata,
         )
         .unwrap();
-        env.pocket_ic.tick().await;
 
         assert_eq!(
             change_auto_stake_maturity_response
@@ -375,7 +373,6 @@ fn test_change_auto_stake_maturity() {
                 .metadata,
         )
         .unwrap();
-        env.pocket_ic.tick().await;
 
         assert_eq!(
             change_auto_stake_maturity_response
