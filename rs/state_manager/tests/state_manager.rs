@@ -1601,11 +1601,30 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
+        state_manager.remove_inmemory_states_below(height(5), &btreeset![height(1), height(7)]);
+
+        // State at height 1 is kept because of it is included in `extra_heights_to_keep`.
+        // The additional protection on the state at height 7 has no effect since it is above the requested height.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(1),
+                height(2),
+                height(4),
+                height(5),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
         state_manager.remove_inmemory_states_below(height(9), &btreeset![height(7), height(8)]);
 
-        // State at height 7 is kept.
+        // State at height 7 is kept because of it is included in `extra_heights_to_keep`.
         // The additional protection on the state at height 8 currently has no effect since it is a checkpoint.
-        // However this may be subject to change in the future.
+        // However, this may be subject to change in the future.
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![
