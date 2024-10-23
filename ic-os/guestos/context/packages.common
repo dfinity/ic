@@ -51,6 +51,9 @@ usbutils
 xfsprogs
 zstd
 
+# Required for API boundary nodes to enable IPv4 HTTP outcalls
+dante-server
+
 # This is unclear -- why is this here? This should "probably" be dev tool.
 protobuf-compiler
 
