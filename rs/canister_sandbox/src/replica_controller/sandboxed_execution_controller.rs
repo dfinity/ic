@@ -1141,6 +1141,7 @@ impl SandboxedExecutionController {
     ) {
         loop {
             let sandbox_processes = get_sandbox_process_stats(&backends);
+            #[allow(unused_mut)] // for MacOS
             let mut sandbox_processes_rss = HashMap::with_capacity(sandbox_processes.len());
 
             #[cfg(target_os = "linux")]
@@ -1213,7 +1214,7 @@ impl SandboxedExecutionController {
                 let now = std::time::Instant::now();
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (_sandbox_process, stats, status) in &sandbox_processes {
+                for (_canister_id, _sandbox_process, stats, status) in &sandbox_processes {
                     let time_since_last_usage = now
                         .checked_duration_since(stats.last_used)
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
