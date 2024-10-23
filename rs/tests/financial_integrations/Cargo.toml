@@ -9,11 +9,8 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 assert_matches = { workspace = true }
-candid = { workspace = true }
-canister_test = { workspace = true }
-dfn_candid = { workspace = true }
-ic_nns_test_utils = { workspace = true }
-ic_icrc1_ledger = { workspace = true }
+canister_test = { path = "../../rust_canisters" }
+dfn_candid = { path = "../../rust_canisters" }
 
 [[bin]]
 name = "icrc1-agent-test"
