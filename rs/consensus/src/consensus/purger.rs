@@ -503,7 +503,9 @@ mod tests {
             state_manager
                 .get_mut()
                 .expect_remove_inmemory_states_below()
-                .withf(move |height| *height == *inmemory_purge_height_clone.read().unwrap())
+                .withf(move |height, _extra_heights| {
+                    *height == *inmemory_purge_height_clone.read().unwrap()
+                })
                 .return_const(());
 
             state_manager
