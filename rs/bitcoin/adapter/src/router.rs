@@ -52,13 +52,13 @@ pub fn start_main_event_loop(
         loop {
             connection_manager.make_idle();
             blockchain_manager.make_idle();
-            let _ = adapter_state.is_awake().await;
+            adapter_state.become_awake().await;
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
             // tokio::time::Interval::tick which are all cancellation safe.
             loop {
                 tokio::select! {
-                    _ = adapter_state.is_idle() => {
+                    _ = adapter_state.become_idle() => {
                         break;
                     },
                     event = connection_manager.receive_stream_event() => {

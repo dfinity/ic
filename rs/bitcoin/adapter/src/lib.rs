@@ -178,11 +178,12 @@ impl AdapterState {
     pub fn received_now(&self) {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
-        self.awake_tx.send(()).unwrap();
+        // TODO: perhaps log something if this fails
+        let _ = self.awake_tx.send(());
     }
 
     /// A future that returns when/if the adapter becomes/is awake.
-    pub async fn is_awake(&self) -> () {
+    pub async fn become_awake(&self) {
         let mut awake_rx = self.awake_tx.clone().subscribe();
         loop {
             match *self.last_received_at.read() {
@@ -199,7 +200,7 @@ impl AdapterState {
     }
 
     /// A future that returns when/if the adapter becomes/is idle.
-    pub async fn is_idle(&self) -> () {
+    pub async fn become_idle(&self) {
         loop {
             let mut tick_interval: tokio::time::Interval;
             match *self.last_received_at.read() {
@@ -207,6 +208,7 @@ impl AdapterState {
                     if last.elapsed().as_secs() > self.idle_seconds {
                         return ();
                     }
+                    // tick again for the remaining seconds
                     tick_interval = interval(Duration::from_secs(self.idle_seconds - last.elapsed().as_secs()));
                 }
                 // Nothing received yet still in idle from startup.
