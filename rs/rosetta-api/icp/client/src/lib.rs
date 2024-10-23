@@ -16,6 +16,7 @@ use ic_rosetta_api::request_types::SetDissolveTimestampMetadata;
 use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
+use icrc_ledger_types::icrc1::account::DEFAULT_SUBACCOUNT;
 use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::NetworkIdentifier;
@@ -731,6 +732,28 @@ impl RosettaClient {
         .await
     }
 
+    /// You can increase the amount of ICP that is staked in a neuron.
+    pub async fn increase_neuron_stake<T>(
+        &self,
+        network_identifier: NetworkIdentifier,
+        signer_keypair: &T,
+        args: RosettaIncreaseNeuronStakeArgs,
+    ) -> anyhow::Result<ConstructionSubmitResponse>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        // Create Neuron and Increase Stake are functionally identical
+        self.create_neuron(
+            network_identifier,
+            signer_keypair,
+            RosettaCreateNeuronArgs::builder(args.additional_stake)
+                .with_neuron_index(args.neuron_index.unwrap_or(0))
+                .with_from_subaccount(args.from_subaccount.unwrap_or(*DEFAULT_SUBACCOUNT))
+                .build(),
+        )
+        .await
+    }
+
     /// The amount of rewards you can expect to receive are amongst other factors dependent on the amount of time a neuron is locked up for.
     /// If the dissolve timestamp is set to a value that is before 6 months in the future you will not be getting any rewards for the locked period.
     /// This is because the last 6 months of a dissolving neuron, the neuron will not get any rewards.
@@ -986,6 +1009,53 @@ impl RosettaSetNeuronDissolveDelayArgsBuilder {
         RosettaSetNeuronDissolveDelayArgs {
             dissolve_delay_seconds: self.dissolve_delay_seconds,
             neuron_index: self.neuron_index,
+        }
+    }
+}
+
+pub struct RosettaIncreaseNeuronStakeArgs {
+    pub neuron_index: Option<u64>,
+    pub additional_stake: Nat,
+    pub from_subaccount: Option<Subaccount>,
+}
+
+impl RosettaIncreaseNeuronStakeArgs {
+    pub fn builder(additional_stake: Nat) -> RosettaIncreaseNeuronStakeArgsBuilder {
+        RosettaIncreaseNeuronStakeArgsBuilder::new(additional_stake)
+    }
+}
+
+pub struct RosettaIncreaseNeuronStakeArgsBuilder {
+    additional_stake: Nat,
+    neuron_index: Option<u64>,
+    // The subaccount from which the ICP should be transferred
+    from_subaccount: Option<[u8; 32]>,
+}
+
+impl RosettaIncreaseNeuronStakeArgsBuilder {
+    pub fn new(additional_stake: Nat) -> Self {
+        Self {
+            additional_stake,
+            neuron_index: None,
+            from_subaccount: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn build(self) -> RosettaIncreaseNeuronStakeArgs {
+        RosettaIncreaseNeuronStakeArgs {
+            additional_stake: self.additional_stake,
+            neuron_index: self.neuron_index,
+            from_subaccount: self.from_subaccount,
         }
     }
 }
