@@ -24,4 +24,4 @@ thiserror = { workspace = true }
 
 [lib]
 crate-type = ["cdylib"]
-path = "canister/canister.rs"
+path = "canister/lib.rs"

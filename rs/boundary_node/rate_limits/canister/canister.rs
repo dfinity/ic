@@ -1,11 +1,13 @@
 use std::{collections::HashSet, time::Duration};
 
-use access_control::AccessLevelResolver;
-use add_config::{AddsConfig, ConfigAdder};
+use crate::access_control::AccessLevelResolver;
+use crate::add_config::{AddsConfig, ConfigAdder};
+use crate::confidentiality_formatting::ConfidentialityFormatterFactory;
+use crate::disclose::{DisclosesRules, RulesDiscloser};
+use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
+use crate::state::{init_version_and_config, with_state};
+use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::{candid_method, Principal};
-use confidentiality_formatting::ConfidentialityFormatterFactory;
-use disclose::{DisclosesRules, RulesDiscloser};
-use fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, query, update};
 use rate_limits_api::{
@@ -13,16 +15,6 @@ use rate_limits_api::{
     GetApiBoundaryNodeIdsRequest, GetConfigResponse, GetRuleByIdResponse, InitArg, InputConfig,
     RuleId, Version,
 };
-use state::{init_version_and_config, with_state};
-use storage::API_BOUNDARY_NODE_PRINCIPALS;
-mod access_control;
-mod add_config;
-mod confidentiality_formatting;
-mod disclose;
-mod fetcher;
-mod state;
-mod storage;
-mod types;
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
