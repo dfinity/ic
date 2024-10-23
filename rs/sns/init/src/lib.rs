@@ -646,6 +646,7 @@ impl SnsInitPayload {
             archive_canister_ids: vec![],
             index_canister_id: Some(sns_canister_ids.index),
             testflight,
+            timers: None,
         }
     }
 
