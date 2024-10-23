@@ -51,6 +51,12 @@ rust_test(
 )
 
 rust_test(
+    name = "basic_tests",
+    srcs = ["tla_instrumentation/tests/basic_tests.rs"],
+    deps = [":tla_instrumentation"],
+)
+
+rust_test(
     name = "multiple_calls_test",
     srcs = [
         "tla_instrumentation/tests/common.rs",
