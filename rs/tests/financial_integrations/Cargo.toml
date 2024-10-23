@@ -6,6 +6,9 @@ edition.workspace = true
 description.workspace = true
 documentation.workspace = true
 
+[dependencies]
+anyhow = { workspace = true }
+
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
