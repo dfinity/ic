@@ -209,7 +209,7 @@ fn get_tla_module_path(module: &str) -> PathBuf {
 /// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
     // Large states make Apalache time and memory consumption explode. We'll look at
-    // improving htat later, for now we introduce a hard limit on the state size, and
+    // improving that later, for now we introduce a hard limit on the state size, and
     // skip checking states larger than the limit
     const STATE_SIZE_LIMIT: u64 = 500;
     let traces = {
