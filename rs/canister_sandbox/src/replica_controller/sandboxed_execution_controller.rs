@@ -60,12 +60,20 @@ use ic_types::ExecutionRound;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
-// The number of sandbox processes to evict in one go in order to amortize
-// for the eviction cost.
+/// The number of sandbox processes to evict in one go in order to amortize
+/// for the eviction cost. A large number could lead to the eviction
+/// of many sandboxes and increased system load. The number was chosen
+/// based on the assumption of 800 canister executions per round
+/// distributed across 4 execution cores.
 const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
 
-/// By default assume each sandbox process takes 50 MiB of RSS memory.
-const DEFAULT_SANDBOX_PROCESS_RSS_SIZE: NumBytes = NumBytes::new(50 * 1024 * 1024);
+/// The RSS to evict in one go in order to amortize for the eviction cost (1 GiB).
+const SANDBOX_PROCESSES_RSS_TO_EVICT: NumBytes = NumBytes::new(1024 * 1024 * 1024);
+
+/// By default, assume each sandbox process consumes 50 MiB of RSS.
+/// The actual memory usage is updated asynchronously.
+/// See `monitor_and_evict_sandbox_processes`
+const DEFAULT_SANDBOX_PROCESS_RSS: NumBytes = NumBytes::new(50 * 1024 * 1024);
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -644,7 +652,7 @@ pub struct SandboxedExecutionController {
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
-    max_sandboxes_rss_size: NumBytes,
+    max_sandboxes_rss: NumBytes,
     trace_execution: FlagStatus,
     logger: ReplicaLogger,
     /// Executable and arguments to be passed to `canister_sandbox` which are
@@ -1067,7 +1075,7 @@ impl SandboxedExecutionController {
             create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
         let max_sandbox_count = embedder_config.max_sandbox_count;
         let max_sandbox_idle_time = embedder_config.max_sandbox_idle_time;
-        let max_sandboxes_rss_size = embedder_config.max_sandboxes_rss_size;
+        let max_sandboxes_rss = embedder_config.max_sandboxes_rss;
         let trace_execution = embedder_config.trace_execution;
         let sandbox_exec_argv =
             create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
@@ -1086,7 +1094,7 @@ impl SandboxedExecutionController {
                 metrics_copy,
                 max_sandbox_count,
                 max_sandbox_idle_time,
-                max_sandboxes_rss_size,
+                max_sandboxes_rss,
                 rx,
             );
         });
@@ -1115,7 +1123,7 @@ impl SandboxedExecutionController {
             backends,
             max_sandbox_count,
             max_sandbox_idle_time,
-            max_sandboxes_rss_size,
+            max_sandboxes_rss,
             trace_execution,
             logger,
             sandbox_exec_argv,
@@ -1136,7 +1144,7 @@ impl SandboxedExecutionController {
         metrics: Arc<SandboxedExecutionMetrics>,
         max_sandbox_count: usize,
         max_sandbox_idle_time: Duration,
-        max_sandboxes_rss_size: NumBytes,
+        max_sandboxes_rss: NumBytes,
         stop_request: Receiver<bool>,
     ) {
         loop {
@@ -1161,6 +1169,8 @@ impl SandboxedExecutionController {
                         metrics
                             .sandboxed_execution_subprocess_anon_rss
                             .observe(kib as f64);
+                        let bytes = NumBytes::new(kib * 1024);
+                        sandbox_processes_rss.insert(*canister_id, bytes);
                     } else {
                         warn!(logger, "Unable to get anon RSS for pid {}", pid);
                     }
@@ -1176,10 +1186,6 @@ impl SandboxedExecutionController {
                     metrics
                         .sandboxed_execution_subprocess_rss
                         .observe(process_rss as f64);
-                    if process_rss > 0 {
-                        let bytes = NumBytes::new(process_rss * 1024);
-                        sandbox_processes_rss.insert(*canister_id, bytes);
-                    }
                     let time_since_last_usage = now
                         .checked_duration_since(stats.last_used)
                         .unwrap_or_else(|| std::time::Duration::from_secs(0));
@@ -1240,7 +1246,7 @@ impl SandboxedExecutionController {
                     &mut guard,
                     max_sandbox_count,
                     max_sandbox_idle_time,
-                    max_sandboxes_rss_size,
+                    max_sandboxes_rss,
                 );
             }
 
@@ -1296,21 +1302,21 @@ impl SandboxedExecutionController {
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
         let total_rss = total_sandboxes_rss(&guard);
-        if guard.len() > self.max_sandbox_count || total_rss > self.max_sandboxes_rss_size {
+        if guard.len() > self.max_sandbox_count || total_rss > self.max_sandboxes_rss {
             // Make room for a few sandboxes in one go, assuming each sandbox
-            // takes `DEFAULT_SANDBOX_PROCESS_RSS_SIZE`.
+            // takes `DEFAULT_SANDBOX_PROCESS_RSS`.
             let max_active_sandboxes = self
                 .max_sandbox_count
                 .saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
-            let max_sandboxes_rss_size = self.max_sandboxes_rss_size.saturating_sub(
-                &(DEFAULT_SANDBOX_PROCESS_RSS_SIZE * SANDBOX_PROCESSES_TO_EVICT as u64),
-            );
+            let max_sandboxes_rss = self
+                .max_sandboxes_rss
+                .saturating_sub(&SANDBOX_PROCESSES_RSS_TO_EVICT);
 
             evict_sandbox_processes(
                 &mut guard,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
-                max_sandboxes_rss_size,
+                max_sandboxes_rss,
             );
         }
 
@@ -1338,7 +1344,7 @@ impl SandboxedExecutionController {
             sandbox_process: Arc::clone(&sandbox_process),
             stats: SandboxProcessStats {
                 last_used: now,
-                rss: DEFAULT_SANDBOX_PROCESS_RSS_SIZE,
+                rss: DEFAULT_SANDBOX_PROCESS_RSS,
             },
         };
         (*guard).insert(canister_id, backend);
@@ -1668,7 +1674,7 @@ fn wrap_remote_memory(
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
-/// Updates sandbox processes RSS memory usage.
+/// Updates sandbox processes RSS.
 fn update_sandbox_processes_rss(
     backends: &mut HashMap<CanisterId, Backend>,
     sandbox_processes_rss: HashMap<CanisterId, NumBytes>,
@@ -1681,7 +1687,7 @@ fn update_sandbox_processes_rss(
     }
 }
 
-/// Returns the total RSS memory size for active sandboxes.
+/// Returns the total RSS for active sandboxes.
 fn total_sandboxes_rss(backends: &HashMap<CanisterId, Backend>) -> NumBytes {
     backends
         .values()
@@ -1699,7 +1705,7 @@ fn evict_sandbox_processes(
     backends: &mut HashMap<CanisterId, Backend>,
     max_active_sandboxes: usize,
     max_sandbox_idle_time: Duration,
-    max_sandboxes_rss_size: NumBytes,
+    max_sandboxes_rss: NumBytes,
 ) {
     // Remove the already terminated processes.
     backends.retain(|_id, backend| match backend {
@@ -1745,7 +1751,7 @@ fn evict_sandbox_processes(
         total_sandboxes_rss(backends),
         max_active_sandboxes,
         last_used_threshold,
-        max_sandboxes_rss_size,
+        max_sandboxes_rss,
     );
 
     // Actually evict all the selected eviction candidates.

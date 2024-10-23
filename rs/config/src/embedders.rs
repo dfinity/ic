@@ -50,9 +50,8 @@ pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 5_000;
 /// duration and sandbox process eviction is activated.
 pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
-/// Sandbox processes may be evicted if their total RSS memory size
-/// exceeds 100 GiB.
-pub(crate) const DEFAULT_MAX_SANDBOXES_RSS_SIZE: NumBytes = NumBytes::new(100 * 1024 * 1024 * 1024);
+/// Sandbox processes may be evicted if their total RSS exceeds 100 GiB.
+pub(crate) const DEFAULT_MAX_SANDBOXES_RSS: NumBytes = NumBytes::new(100 * 1024 * 1024 * 1024);
 
 /// The maximum number of pages that a message dirties without optimizing dirty
 /// page copying by triggering a new execution slice for copying pages.
@@ -205,9 +204,9 @@ pub struct Config {
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
 
-    /// Sandbox processes may be evicted if their total RSS memory size
-    /// exceeds the specified amount in bytes.
-    pub max_sandboxes_rss_size: NumBytes,
+    /// Sandbox processes may be evicted if their total RSS exceeds
+    /// the specified amount in bytes.
+    pub max_sandboxes_rss: NumBytes,
 
     /// The type of the local subnet. The default value here should be replaced
     /// with the correct value at runtime when the hypervisor is created.
@@ -267,7 +266,7 @@ impl Config {
             },
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
-            max_sandboxes_rss_size: DEFAULT_MAX_SANDBOXES_RSS_SIZE,
+            max_sandboxes_rss: DEFAULT_MAX_SANDBOXES_RSS,
             subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
             trace_execution: FlagStatus::Disabled,

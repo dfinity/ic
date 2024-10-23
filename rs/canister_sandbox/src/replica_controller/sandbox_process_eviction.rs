@@ -1,4 +1,4 @@
-use num_traits::ops::saturating::SaturatingSub;
+use num_traits::ops::saturating::SaturatingAdd;
 use std::time::Instant;
 
 use ic_types::{CanisterId, NumBytes};
@@ -28,28 +28,29 @@ pub(crate) struct EvictionCandidate {
 /// 4. Return the evicted candidates.
 pub(crate) fn evict(
     mut candidates: Vec<EvictionCandidate>,
-    mut total_rss: NumBytes,
+    total_rss: NumBytes,
     max_count_threshold: usize,
     last_used_threshold: Instant,
-    max_sandboxes_rss_size: NumBytes,
+    max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
     candidates.sort_by_key(|x| x.last_used);
 
     let evict_at_least = candidates.len().saturating_sub(max_count_threshold);
 
     let mut evicted = vec![];
+    let mut evicted_rss = NumBytes::new(0);
 
     for candidate in candidates.into_iter() {
         if candidate.last_used >= last_used_threshold
             && evicted.len() >= evict_at_least
-            && total_rss <= max_sandboxes_rss_size
+            && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
         {
             // We have already evicted the minimum required number of candidates
             // and all the remaining candidates were not idle the recent
             // `last_used_threshold` time window. No need to evict more.
             break;
         }
-        total_rss = total_rss.saturating_sub(&candidate.rss);
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
         evicted.push(candidate);
     }
 

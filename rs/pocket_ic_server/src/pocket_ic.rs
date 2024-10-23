@@ -359,7 +359,7 @@ impl PocketIc {
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
         hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
-        hypervisor_config.embedders_config.max_sandboxes_rss_size =
+        hypervisor_config.embedders_config.max_sandboxes_rss =
             NumBytes::new(2 * 1024 * 1024 * 1024);
         // shorter query stats epoch length for faster query stats aggregation
         hypervisor_config.query_stats_epoch_length = 60;
