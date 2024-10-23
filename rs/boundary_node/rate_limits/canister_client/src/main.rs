@@ -4,11 +4,12 @@ use ic_agent::{
     Agent, Identity,
 };
 use rate_limits_api::{
-    v1::RateLimitRule, AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse, GetConfigResponse, GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version
+    v1::RateLimitRule, AddConfigResponse, DiscloseRulesArg, DiscloseRulesResponse,
+    GetConfigResponse, GetRuleByIdResponse, IncidentId, InputConfig, InputRule, RuleId, Version,
 };
 use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "yoizw-hyaaa-aaaab-qacea-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "5oxzc-3qaaa-aaaab-qaczq-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
