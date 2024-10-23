@@ -1572,4 +1572,16 @@ pub mod testing {
     pub fn slice_len(slice: &UnpackedStreamSlice) -> usize {
         slice.payload.len()
     }
+
+    pub fn stream_begin(slice: &UnpackedStreamSlice) -> StreamIndex {
+        slice.payload.header.begin()
+    }
+
+    pub fn slice_end(slice: &UnpackedStreamSlice) -> Option<StreamIndex> {
+        slice
+            .payload
+            .messages
+            .as_ref()
+            .map(|messages| messages.end())
+    }
 }

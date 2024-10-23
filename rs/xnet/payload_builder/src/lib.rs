@@ -232,7 +232,7 @@ impl XNetPayloadBuilderMetrics {
 }
 
 // TODO: Unify this constant and `MAX_STREAM_MESSAGES` in the stream builder.
-const MAX_STREAM_MESSAGES: usize = 50_000;
+pub const MAX_STREAM_MESSAGES: usize = 10_000;
 
 /// Implementation of `XNetPayloadBuilder` that uses a `StateManager`,
 /// `RegistryClient` and `XNetClient` to build and validate `XNetPayloads`.

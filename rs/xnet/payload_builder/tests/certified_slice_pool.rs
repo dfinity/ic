@@ -16,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::ExpectedIndices;
+use ic_xnet_payload_builder::{ExpectedIndices, MAX_STREAM_MESSAGES};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -131,11 +131,16 @@ proptest! {
             let (prefix, postfix) = unpacked.take_prefix(msg_limit, byte_limit).unwrap();
 
             // Ensure that any limits were respected.
-            if let (Some(msg_limit), Some(prefix)) = (msg_limit, prefix.as_ref()) {
-                assert!(testing::slice_len(prefix) <= msg_limit);
-            }
-            if let (Some(byte_limit), Some(prefix)) = (byte_limit, prefix.as_ref()) {
-                assert!(prefix.count_bytes() <= byte_limit);
+            if let Some(prefix) = prefix.as_ref() {
+                if let Some(msg_limit) = msg_limit {
+                    assert!(testing::slice_len(prefix) <= msg_limit);
+                }
+                if let Some(byte_limit) = byte_limit {
+                    assert!(prefix.count_bytes() <= byte_limit);
+                }
+                if let Some(slice_end) = testing::slice_end(prefix) {
+                    assert!(slice_end <= testing::stream_begin(prefix) + StreamIndex::new(MAX_STREAM_MESSAGES as u64));
+                }
             }
 
             // And that a longer prefix would have gone over one the limits.
