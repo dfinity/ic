@@ -695,24 +695,24 @@ impl NeuronStore {
     pub fn has_neuron_with_account_id(&self, account_id: &AccountIdentifier) -> bool {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
-
-    // TODO make this "With_iterator" so you can use it from inside the stable neuron closure
-    pub fn with_active_neurons_iter<'a, R, Callback>(&'a self, callback: Callback) -> R
-    where
-        Callback: FnOnce(&mut Box<dyn Iterator<Item = Neuron> + 'a>) -> R,
-    {
+    pub fn with_active_neurons_iter<R>(
+        &self,
+        callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
+    ) -> R {
         if self.use_stable_memory_for_all_neurons {
             with_stable_neuron_store(|stable_store| {
-                let iter =
-                    Box::new(stable_store.range_neurons(..)) as Box<dyn Iterator<Item = Neuron>>;
-                let result = callback(&mut iter);
-                drop(iter);
-                result
+                let now = self.now();
+                let iter = Box::new(
+                    stable_store
+                        .range_neurons(..)
+                        .filter(|n| !n.is_inactive(now)),
+                ) as Box<dyn Iterator<Item = Neuron>>;
+                callback(iter)
             })
         } else {
             let iter =
                 Box::new(self.heap_neurons.values().cloned()) as Box<dyn Iterator<Item = Neuron>>;
-            callback(&mut iter)
+            callback(iter)
         }
     }
 
