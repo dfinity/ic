@@ -24,12 +24,12 @@
     "sha256": "57f2cbbdbc2d8943173acc6ebd55aca9b9c12e2140b38ff5f20aea7b101ea570"
   },
   "genesis-token": {
-    "rev": "cf237434877b39d0a94fb5ef84b13ea576a225ac",
-    "sha256": "31d91cbdfa6e1aae4cc4fee4f611e25f33922bd3d336f4cdc97d511e03b264a7"
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "fd25a4e2e283b498c3be1aaf63cc9b2726264d78a12b12f43ad453ceeb575e7c"
   },
   "governance": {
-    "rev": "c494c2af8bfc70a6501448dc73bf806477388738",
-    "sha256": "365411fcf8a925775e2111778ddda8f22ce828366c79b53b97ea78554dde381b"
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "f458575214cfade0a49041ba1234c0794a45244ac57647cba601670203fe1427"
   },
   "index": {
     "rev": "b43280208c32633a29657a1051660324e88a373d",
@@ -44,8 +44,8 @@
     "sha256": "76978515223287ece643bc7ca087eb310412b737e2382a73b8ae55fcb458da5b"
   },
   "registry": {
-    "rev": "87343a880050ca72b1361138535211f5770dd52e",
-    "sha256": "57c72469f01fd6ea8b5c5a962a1fed9b4ad550bbebdae38c29d5ad330c25c724"
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "d5c963c7ec0bbe701d50cc72116bb22988846641f4e912ef58a36eea7d787397"
   },
   "root": {
     "rev": "c494c2af8bfc70a6501448dc73bf806477388738",
@@ -60,8 +60,8 @@
     "sha256": "9476aa71bcee621aba93a3d7c115c543f42c543de840da3224c5f70a32dbfe4d"
   },
   "sns_governance": {
-    "rev": "c494c2af8bfc70a6501448dc73bf806477388738",
-    "sha256": "62be1b74e8f8d1c51253035c91bc6f159c2885bcf653f79e9143b8edcd60ff9c"
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "35808c4e3320c7b4eb1ccef3862aa343c6d5c8bcd7d241de5d44ec267f7f67df"
   },
   "sns_index": {
     "rev": "d4ee25b0865e89d3eaac13a60f0016d5e3296b31",
@@ -76,7 +76,7 @@
     "sha256": "d93e219b1c7f50098da1e4b19dae3e803014f7450e4fb61de5a0dc46dd94d6e1"
   },
   "swap": {
-    "rev": "c494c2af8bfc70a6501448dc73bf806477388738",
-    "sha256": "a301ef4fd2c752cd96390a3d3b655e93c8efd8c0958962e3cf4d8deed02bdc1d"
+    "rev": "4bed17bfc82cddc5691743db6228992cdc2740f4",
+    "sha256": "c265efedfb9268de8fa7647c04268a89339e4d02d670d146eb4564fa4a694a7f"
   }
 }

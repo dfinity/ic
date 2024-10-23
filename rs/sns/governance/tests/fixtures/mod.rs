@@ -465,8 +465,8 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn heartbeat(&mut self) -> &mut Self {
-        self.governance.heartbeat().now_or_never();
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
+        self.governance.run_periodic_tasks().now_or_never();
         self
     }
 

@@ -295,10 +295,6 @@ name = "ic-systest-update-workload-large-payload"
 path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
-name = "ic-systest-xnet-malicious-slices"
-path = "message_routing/xnet/xnet_malicious_slices.rs"
-
-[[bin]]
 name = "ic-xc-ledger-suite-orchestrator"
 path = "cross_chain/ic_xc_ledger_suite_orchestrator_test.rs"
 
