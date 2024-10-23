@@ -98,7 +98,7 @@ impl ManagedCanistersAssert {
         // The productive value for `trigger_threshold` is `2_000`,
         // which would require `2_000` transfers to trigger the creation of an archive,
         // which would take in the order of 20s (order of magnitude is 10ms per transfer with state machine tests).
-        // We see this value to an artificially low number to speed up the test.
+        // We set this value to an artificially low number to speed up the test.
         self.upgrade_ledger_to_change_archive_options(ChangeArchiveOptions {
             trigger_threshold: Some(ARCHIVE_TRIGGER_THRESHOLD),
             ..Default::default()
