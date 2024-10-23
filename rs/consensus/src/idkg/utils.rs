@@ -444,7 +444,7 @@ pub(crate) fn algorithm_for_key_id(key_id: &MasterPublicKeyId) -> AlgorithmId {
             SchnorrAlgorithm::Ed25519 => AlgorithmId::ThresholdEd25519,
         },
         MasterPublicKeyId::VetKd(vetkd_key_id) => match vetkd_key_id.curve {
-            VetKdCurve::Bls12_381 => AlgorithmId::ThresBls12_381,
+            VetKdCurve::Bls12_381 => AlgorithmId::Placeholder,
         },
     }
 }
