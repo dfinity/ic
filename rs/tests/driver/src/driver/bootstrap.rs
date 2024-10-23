@@ -527,7 +527,7 @@ fn create_config_disk_image(
     }
 
     // populate guestos_config_json_path with serialized guestos config object
-    let _ = generate_testnet_config(args);
+    generate_testnet_config(args)?;
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
     let script_path =
