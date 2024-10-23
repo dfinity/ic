@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_types)]
+
 use anyhow::{bail, Context};
 use common::storage::storage_client::StorageClient;
 use common::storage::types::MetadataEntry;

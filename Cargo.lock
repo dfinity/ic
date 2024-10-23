@@ -2268,6 +2268,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "ic-types",
+ "mac_address",
  "once_cell",
  "regex",
  "serde",
@@ -4788,6 +4789,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
+ "mac_address",
  "network",
  "utils",
 ]
@@ -4895,7 +4897,7 @@ name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
  "axum",
- "clap 4.5.20",
+ "clap 4.5.19",
  "hyper 1.5.0",
  "hyper-util",
  "rustls 0.23.15",
@@ -5608,6 +5610,33 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "x509-parser",
+]
+
+[[package]]
+name = "ic-boundary-nodes-custom-domains-test"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "certificate_orchestrator_interface",
+ "chacha20poly1305",
+ "ic-agent",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "indoc",
+ "k256",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "reqwest 0.12.8",
+ "serde_json",
+ "slog",
+ "tokio",
 ]
 
 [[package]]
@@ -9164,7 +9193,9 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-ledger-hash-of",
+ "ic-stable-structures",
  "num-traits",
+ "proptest",
  "serde",
  "serde_bytes",
 ]
@@ -9675,6 +9706,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-histogram"
+version = "0.0.1"
+dependencies = [
+ "ic-metrics-encoder",
+ "pretty_assertions",
+ "prometheus-parse",
+]
+
+[[package]]
 name = "ic-nervous-system-humanize"
 version = "0.9.0"
 dependencies = [
@@ -9698,6 +9738,27 @@ dependencies = [
  "lazy_static",
  "num-bigint 0.4.6",
  "tokio",
+]
+
+[[package]]
+name = "ic-nervous-system-instruction-stats"
+version = "0.0.1"
+dependencies = [
+ "ic-cdk 0.16.0",
+ "ic-metrics-encoder",
+ "ic-nervous-system-histogram",
+ "itertools 0.12.1",
+ "lazy_static",
+]
+
+[[package]]
+name = "ic-nervous-system-instruction-stats-update-attribute"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-cdk 0.16.0",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -11567,6 +11628,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.16.0",
  "ic-cdk-macros 0.9.0",
+ "ic-cdk-timers",
  "ic-crypto-sha2",
  "ic-icrc1-ledger",
  "ic-ledger-core",
@@ -13702,6 +13764,7 @@ dependencies = [
  "candid",
  "crc32fast",
  "hex",
+ "ic-stable-structures",
  "itertools 0.12.1",
  "num-bigint 0.4.6",
  "num-traits",
@@ -14925,6 +14988,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "mac_address"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "regex",
+ "serde",
+ "sha2 0.10.8",
+ "utils",
+]
+
+[[package]]
 name = "mach2"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15117,6 +15192,22 @@ dependencies = [
  "slog",
  "tokio",
  "xnet-test",
+]
+
+[[package]]
+name = "message-routing-system-tests-xnet"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "canister-test",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "slog",
+ "systest-message-routing-common",
+ "tokio",
+ "xnet-slo-test-lib",
 ]
 
 [[package]]
@@ -15381,14 +15472,12 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "config",
- "hex",
+ "mac_address",
  "ping",
  "rayon",
- "regex",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
- "sha2 0.10.8",
  "utils",
 ]
 
@@ -15397,6 +15486,7 @@ name = "networking-system-tests"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "assert_matches",
  "candid",
  "canister-test",
  "canister_http",
@@ -16143,9 +16233,9 @@ dependencies = [
  "reqwest 0.12.8",
  "serde",
  "slog",
- "tests",
  "tokio",
  "url",
+ "xnet-slo-test-lib",
 ]
 
 [[package]]
@@ -16645,7 +16735,6 @@ dependencies = [
  "flate2",
  "hex",
  "ic-agent",
- "ic-cdk 0.16.0",
  "ic-transport-types",
  "k256",
  "lazy_static",
@@ -16663,6 +16752,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "wat",
+ "wslpath",
 ]
 
 [[package]]
@@ -19008,6 +19098,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.20",
  "config",
+ "mac_address",
  "network",
  "utils",
 ]
@@ -19714,6 +19805,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "systest-message-routing-common"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+ "dfn_candid",
+ "futures",
+ "ic-system-test-driver",
+ "slog",
+ "xnet-test",
+]
+
+[[package]]
 name = "tagptr"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19948,8 +20051,6 @@ dependencies = [
  "bitcoincore-rpc",
  "candid",
  "canister-test",
- "certificate_orchestrator_interface",
- "chacha20poly1305",
  "chrono",
  "crossbeam-channel",
  "cycles-minting-canister",
@@ -20045,7 +20146,6 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
- "indoc",
  "itertools 0.12.1",
  "json5",
  "k256",
@@ -21991,6 +22091,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
 
 [[package]]
+name = "wslpath"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04a2ecdf2cc4d33a6a93d71bcfbc00bb1f635cdb8029a2cc0709204a045ec7a3"
+
+[[package]]
 name = "wycheproof"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22048,8 +22154,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da84f1a25939b27f6820d92aed108f83ff920fdf11a7b19366c27c4cda81d4f"
 dependencies = [
  "libc",
- "linux-raw-sys",
- "rustix",
+]
+
+[[package]]
+name = "xnet-slo-test-lib"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+ "dfn_candid",
+ "futures",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "slog",
+ "systest-message-routing-common",
+ "tokio",
+ "xnet-test",
 ]
 
 [[package]]

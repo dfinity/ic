@@ -15,21 +15,28 @@ Coverage:: End-to-end registration processing
 
 end::catalog[] */
 
-use crate::custom_domains_integration::setup::{
+mod setup;
+
+use ic_system_test_driver::{
+    driver::{boundary_node::BoundaryNodeVm, group::SystemTestGroup, test_env::TestEnv},
+    retry_with_msg_async, systest,
+    util::block_on,
+};
+use setup::{
     access_domain, create_bn_http_client, get_registration_status, get_service_errors,
-    remove_dns_records, remove_registration, setup_asset_canister, setup_dns_records,
+    remove_dns_records, remove_registration, setup, setup_asset_canister, setup_dns_records,
     submit_registration_request, update_dns_records, update_registration, GetRequestState,
     RegistrationRequestState, RemoveRequestState, UpdateRequestState, BOUNDARY_NODE_VM_ID,
-};
-use ic_system_test_driver::{
-    driver::boundary_node::BoundaryNodeVm, driver::test_env::TestEnv, util::block_on,
 };
 
 use slog::info;
 
 use std::time::Duration;
 
-use anyhow::Error;
+use anyhow::{bail, Error, Result};
+
+pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(90);
+pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 // Goal: Process a single registration
 //
@@ -92,15 +99,26 @@ pub fn test_end_to_end_registration(env: TestEnv) {
             }
         }
 
-        // wait a bit
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
         // check that the custom domain is being served by the BN by checking the content of the canister
-        assert_eq!(
-            access_domain(bn_http_client.clone(), domain_name).await?,
-            "canister1",
-            "Site content of the custom domain is not correct"
-        );
+        retry_with_msg_async!(
+            "check updated domain",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let content = match access_domain(bn_http_client.clone(), domain_name).await {
+                    Ok(x) => x,
+                    Err(x) => bail!("Custom domain is not ready yet: {x}"),
+                };
+
+                if content != "canister1" {
+                    bail!("Custom domain is not pointing to the right canister: expected 'canister1', got '{}'", content);
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("The boundary node failed to configure the custom domain");
 
         // need to wait a second to prevent being rate-limited
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -127,27 +145,45 @@ pub fn test_end_to_end_registration(env: TestEnv) {
         // update the DNS records
         update_dns_records(env.clone(), domain_name, new_asset_canister_id).await?;
 
-        // wait for DNS changes to propagate
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // submit an update request
-        let update_response = update_registration(bn_http_client.clone(), registration_id.as_str()).await?;
+        retry_with_msg_async!(
+            "update the canister of the custom domain",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let update_response = update_registration(bn_http_client.clone(), registration_id.as_str()).await?;
 
-        // check if the update request was accepted
-        match update_response {
-            UpdateRequestState::Accepted => {},
-            UpdateRequestState::Rejected(reason) => panic!("Failed to update the custom domain: {reason}"),
-        };
-
-        // wait a bit
-        tokio::time::sleep(Duration::from_secs(2)).await;
+                // check if the update request was accepted
+                match update_response {
+                    UpdateRequestState::Accepted => Ok(()),
+                    UpdateRequestState::Rejected(reason) => bail!("Failed to update the custom domain: {reason}"),
+                }
+            }
+        )
+        .await
+        .expect("Failed to submit the update request");
 
         // check that the custom domain is being served by the BN by checking the content of the canister
-        assert_eq!(
-            access_domain(bn_http_client.clone(), domain_name).await?,
-            "canister2",
-            "Site content of the custom domain is not correct"
-        );
+        retry_with_msg_async!(
+            "check updated domain",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let content = match access_domain(bn_http_client.clone(), domain_name).await {
+                    Ok(x) => x,
+                    Err(x) => bail!("Failed to fetch the content of the canister: {x}"),
+                };
+
+                if content != "canister2" {
+                    bail!("Custom domain is not pointing to the right canister: expected 'canister2', got '{}'", content);
+                }
+                Ok(())
+            }
+        )
+        .await
+        .expect("Failed to update the domain to canister mapping");
 
         info!(
             logger,
@@ -157,28 +193,41 @@ pub fn test_end_to_end_registration(env: TestEnv) {
         // remove the DNS records of the custom domain
         remove_dns_records(env.clone(), domain_name).await?;
 
-        // wait for DNS changes to propagate
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
         // request to delete the custom domain
-        let remove_response = remove_registration(bn_http_client.clone(), registration_id.as_str()).await?;
-
-        // check if the removal request was accepted
-        match remove_response {
-            RemoveRequestState::Accepted => {},
-            RemoveRequestState::Rejected(reason) => panic!("Failed to remove the custom domain: {reason}"),
-        };
-
-        // need to wait a second to prevent being rate-limited
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        retry_with_msg_async!(
+            "remove custom domain",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let remove_response = remove_registration(bn_http_client.clone(), registration_id.as_str()).await?;
+                // check if the removal request was accepted
+                match remove_response {
+                    RemoveRequestState::Accepted => Ok(()),
+                    RemoveRequestState::Rejected(reason) => bail!("Couldn't process the removal request: {reason}"),
+                }
+            }
+        )
+        .await
+        .expect("Failed to remove the custom domain");
 
         // make sure the domain has been removed
-        let registration_status = get_registration_status(bn_http_client.clone(), registration_id.as_str()).await?;
-        match registration_status {
-            GetRequestState::Accepted(_) => panic!("Failed to delete the custom domain: it still exists"),
-            GetRequestState::Rejected(reason) if reason == "not found" =>  {},
-            GetRequestState::Rejected(reason) => panic!("Failed to delete the custom domain: {reason}"),
-        };
+        retry_with_msg_async!(
+            "check custom domain status",
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let registration_status = get_registration_status(bn_http_client.clone(), registration_id.as_str()).await?;
+                match registration_status {
+                    GetRequestState::Accepted(_) => bail!("Failed to delete the custom domain: it still exists"),
+                    GetRequestState::Rejected(reason) if reason == "not found" =>  Ok(()),
+                    GetRequestState::Rejected(reason) => bail!("Failed to delete the custom domain: {reason}"),
+                }
+            }
+        )
+        .await
+        .expect("Failed to check that the custom domain has been removed");
 
         info!(
             logger,
@@ -195,4 +244,11 @@ pub fn test_end_to_end_registration(env: TestEnv) {
         Ok::<(), Error>(())
     })
     .expect("failed to run test");
+}
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test_end_to_end_registration))
+        .execute_from_args()
 }
