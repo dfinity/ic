@@ -29,6 +29,7 @@ use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::CanisterModule;
+use num_traits::ops::saturating::SaturatingSub;
 #[cfg(target_os = "linux")]
 use prometheus::IntGauge;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
@@ -59,9 +60,9 @@ use ic_types::ExecutionRound;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
-// The percentage of sandbox processes to evict in one go in order to amortize
+// The number of sandbox processes to evict in one go in order to amortize
 // for the eviction cost.
-const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
+const SANDBOX_PROCESSES_TO_EVICT: usize = 200;
 
 /// By default assume each sandbox process takes 50 MiB of RSS memory.
 const DEFAULT_SANDBOX_PROCESS_RSS_SIZE: NumBytes = NumBytes::new(50 * 1024 * 1024);
@@ -1293,14 +1294,22 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
-        if guard.len() > self.max_sandbox_count {
-            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
-            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+        let total_rss = total_sandboxes_rss(&guard);
+        if guard.len() > self.max_sandbox_count || total_rss > self.max_sandboxes_rss_size {
+            // Make room for a few sandboxes in one go, assuming each sandbox
+            // takes `DEFAULT_SANDBOX_PROCESS_RSS_SIZE`.
+            let max_active_sandboxes = self
+                .max_sandbox_count
+                .saturating_sub(SANDBOX_PROCESSES_TO_EVICT);
+            let max_sandboxes_rss_size = self.max_sandboxes_rss_size.saturating_sub(
+                &(DEFAULT_SANDBOX_PROCESS_RSS_SIZE * SANDBOX_PROCESSES_TO_EVICT as u64),
+            );
+
             evict_sandbox_processes(
                 &mut guard,
                 max_active_sandboxes,
                 self.max_sandbox_idle_time,
-                self.max_sandboxes_rss_size,
+                max_sandboxes_rss_size,
             );
         }
 
@@ -1671,6 +1680,17 @@ fn update_sandbox_processes_rss(
     }
 }
 
+/// Returns the total RSS memory size for active sandboxes.
+fn total_sandboxes_rss(backends: &HashMap<CanisterId, Backend>) -> NumBytes {
+    backends
+        .values()
+        .map(|backend| match backend {
+            Backend::Active { stats, .. } => stats.rss,
+            Backend::Evicted { .. } | Backend::Empty => 0.into(),
+        })
+        .sum()
+}
+
 // Evicts some sandbox process backends according to the heuristics of the
 // `sandbox_process_eviction::evict()` function. See the comments of that
 // function for the explanation of the threshold parameters.
@@ -1694,18 +1714,14 @@ fn evict_sandbox_processes(
         Backend::Empty => false,
     });
 
-    let mut total_rss = NumBytes::new(0);
     let candidates: Vec<_> = backends
         .iter()
         .filter_map(|(id, backend)| match backend {
-            Backend::Active { stats, .. } => {
-                total_rss += stats.rss;
-                Some(EvictionCandidate {
-                    id: *id,
-                    last_used: stats.last_used,
-                    rss: stats.rss,
-                })
-            }
+            Backend::Active { stats, .. } => Some(EvictionCandidate {
+                id: *id,
+                last_used: stats.last_used,
+                rss: stats.rss,
+            }),
             Backend::Evicted { .. } | Backend::Empty => None,
         })
         .collect();
@@ -1725,7 +1741,7 @@ fn evict_sandbox_processes(
 
     let evicted = sandbox_process_eviction::evict(
         candidates,
-        total_rss,
+        total_sandboxes_rss(backends),
         max_active_sandboxes,
         last_used_threshold,
         max_sandboxes_rss_size,
