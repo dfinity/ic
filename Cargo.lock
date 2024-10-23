@@ -12401,6 +12401,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.19",
+ "config",
  "crossbeam-channel",
  "cycles-minting-canister",
  "deterministic_ips",
