@@ -864,9 +864,7 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) =
-            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
-        {
+        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
             op_out_to_response(op_out).await
         } else {
             (
