@@ -25,7 +25,6 @@ pub struct AddErc20TokenFlow {
 
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
-        let now = std::time::SystemTime::now();
         let contract = self.params.contract;
         let canister_ids =
             self.setup.wait_for(
@@ -46,13 +45,6 @@ impl AddErc20TokenFlow {
             .wait_for_canister_to_be_installed_and_running(canister_ids.ledger.unwrap());
         self.setup
             .wait_for_canister_to_be_installed_and_running(canister_ids.index.unwrap());
-
-        now.elapsed().ok().map(|d| {
-            println!(
-                "expect_new_ledger_and_index_canisters finished in {}ms",
-                d.as_millis()
-            )
-        });
 
         ManagedCanistersAssert {
             setup: self.setup,
@@ -103,7 +95,6 @@ impl ManagedCanistersAssert {
     pub fn trigger_creation_of_archive(self) -> Self {
         const ARCHIVE_TRIGGER_THRESHOLD: usize = 10;
 
-        let now = std::time::SystemTime::now();
         // The productive value for `trigger_threshold` is `2_000`,
         // which would require `2_000` transfers to trigger the creation of an archive,
         // which would take in the order of 20s (order of magnitude is 10ms per transfer with state machine tests).
@@ -147,21 +138,14 @@ impl ManagedCanistersAssert {
         );
         assert!(archive_ids_before.is_subset(&archive_ids_after));
 
-        let res = Self {
+        Self {
             setup: self.setup,
             canister_ids: ManagedCanisterIds {
                 ledger: self.canister_ids.ledger,
                 index: self.canister_ids.index,
                 archives: Vec::from_iter(archive_ids_after),
             },
-        };
-        if let Some(d) = now.elapsed().ok() {
-            println!(
-                "trigger_creation_of_archive finished in {}ms",
-                d.as_millis()
-            )
         }
-        res
     }
 
     pub fn assert_ledger_canister_info_satisfy<P: FnOnce(&CanisterInfoResponse) -> bool>(
@@ -169,19 +153,12 @@ impl ManagedCanistersAssert {
         caller: &UniversalCanister,
         predicate: P,
     ) -> Self {
-        let now = std::time::SystemTime::now();
         let canister_info = caller.canister_info(self.ledger_canister_id());
         assert!(
             predicate(&canister_info),
             "BUG: ledger canister info does not satisfy predicate. Canister info: {:?}",
             canister_info
         );
-        if let Some(d) = now.elapsed().ok() {
-            println!(
-                "assert_ledger_canister_info_satisfy finished in {}ms",
-                d.as_millis()
-            )
-        }
         self
     }
 
@@ -242,7 +219,6 @@ impl ManagedCanistersAssert {
         controller: T,
         wasm: LedgerWasm,
     ) -> Self {
-        let now = std::time::SystemTime::now();
         out_of_band_upgrade(
             &self,
             controller.into(),
@@ -250,9 +226,6 @@ impl ManagedCanistersAssert {
             wasm.to_bytes(),
         )
         .expect("failed to upgrade ledger canister");
-        if let Some(d) = now.elapsed().ok() {
-            println!("ledger_out_of_band_upgrade finished in {}ms", d.as_millis())
-        }
         self
     }
 
@@ -397,18 +370,11 @@ impl ManagedCanistersAssert {
     }
 
     pub fn assert_ledger_has_wasm_hash<T: AsRef<[u8]>>(self, expected: T) -> Self {
-        let now = std::time::SystemTime::now();
         assert_eq!(
             self.ledger_canister_status().module_hash(),
             Some(expected.as_ref().to_vec()),
             "BUG: unexpected wasm hash for ledger canister"
         );
-        if let Some(d) = now.elapsed().ok() {
-            println!(
-                "assert_ledger_has_wasm_hash finished in {}ms",
-                d.as_millis()
-            )
-        }
         self
     }
 
