@@ -71,7 +71,7 @@ use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
 use ic_types::{epoch_from_height, QueryStatsEpoch};
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
     stat::{utimensat, UtimensatFlags},
@@ -1575,6 +1575,78 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
             vec![height(0), height(4), height(6)],
+        );
+    });
+}
+
+#[test]
+fn remove_inmemory_states_below_can_keep_extra_states() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let mut heights = vec![height(0)];
+        for i in 1..10 {
+            let (_height, state) = state_manager.take_tip();
+            heights.push(height(i));
+
+            let scope = if i % 2 == 0 {
+                CertificationScope::Full
+            } else {
+                CertificationScope::Metadata
+            };
+
+            state_manager.commit_and_certify(state, height(i), scope.clone(), None);
+        }
+        // We need to wait for hashing to complete, otherwise the
+        // checkpoint can be retained until the hashing is complete.
+        state_manager.flush_tip_channel();
+
+        assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+
+        state_manager.remove_inmemory_states_below(height(9), &btreeset![height(7), height(8)]);
+
+        // State at height 7 is kept.
+        // The additional protection on the state at height 8 currently has no effect since it is a checkpoint.
+        // However this may be subject to change in the future.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(2),
+                height(4),
+                height(6),
+                height(7),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_inmemory_states_below(height(9), &BTreeSet::new());
+
+        // State at height 7 is removed.
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![
+                height(0),
+                height(2),
+                height(4),
+                height(6),
+                height(8),
+                height(9)
+            ],
+        );
+
+        state_manager.remove_states_below(height(8));
+        state_manager.flush_deallocation_channel();
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(8), height(9)],
+        );
+
+        let state_manager = restart_fn(state_manager, Some(height(8)));
+
+        assert_eq!(
+            state_manager.list_state_heights(CERT_ANY),
+            vec![height(0), height(8)],
         );
     });
 }
