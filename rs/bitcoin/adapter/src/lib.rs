@@ -5,6 +5,7 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
@@ -13,7 +14,11 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::sync::{mpsc::channel, watch, Notify};
+use tokio::{
+    sync::mpsc::{channel, Receiver},
+    time::interval,
+};
+use tokio::sync::{watch, Notify};
 use tokio::sync::mpsc;
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
@@ -155,27 +160,20 @@ pub struct AdapterState {
     last_received_at: Arc<RwLock<Option<Instant>>>,
     /// The field contains how long the adapter should wait to before becoming idle.
     idle_seconds: u64,
-    
-    idle_tx: mpsc::Sender<()>,
-    idle_rx: mpsc::Receiver<()>,
 
-    awake_tx: mpsc::Sender<()>,
-    awake_rx: mpsc::Receiver<()>, 
+    awake_tx: watch::Sender<()>,
 }
 
 impl AdapterState {
     /// Crates new instance of the AdapterState.
     pub fn new(idle_seconds: u64) -> Self {
-        let (idle_tx, idle_rx) = mpsc::channel(());
-        let (awake_tx, awake_rx) = mpsc::channel(());
-        Self {
+        let (awake_tx, _) = watch::channel(());
+        let state = Self {
             last_received_at: Arc::new(RwLock::new(None)),
             idle_seconds,
-            idle_tx,
-            idle_rx,
             awake_tx,
-            awake_rx,
-        }
+        };
+        state
     }
 
     /// Updates the current state of the adapter given a request was received.
@@ -183,11 +181,43 @@ impl AdapterState {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
         self.awake_tx.send(()).unwrap();
-        self.awake_rx.recv();
     }
 
-    async fn wait_until_active(&self, receive: &mut watch::Receiver<()>) {
-        receive.changed().await.unwrap();
+    /// A future that returns when the adapter becomes awake.
+    pub async fn is_awake(&self) -> () {
+        let mut awake_rx = self.awake_tx.clone().subscribe();
+
+        loop {
+            match *self.last_received_at.read() {
+                Some(last) => {
+                    if last.elapsed().as_secs() < self.idle_seconds {
+                        return ();
+                    }
+                }
+                // Nothing received yet still in idle from startup.
+                None => {},
+            };
+            let _ = awake_rx.changed().await;
+        }
+    }
+
+    /// A future that returns when the adapter becomes idle.
+    pub async fn is_idle(&self) -> () {
+        let mut tick_interval = interval(Duration::from_secs(self.idle_seconds));
+
+        loop {
+            tick_interval.tick().await;
+            match *self.last_received_at.read() {
+                Some(last) => {
+                    if last.elapsed().as_secs() > self.idle_seconds {
+                        return ();
+                    }
+                    tick_interval = interval(Duration::from_secs(self.idle_seconds - last.elapsed().as_secs()));
+                }
+                // Nothing received yet still in idle from startup.
+                None => return (),
+            };
+        }
     }
 }
 
