@@ -1380,7 +1380,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::SubnetMetrics) => {
                 let res = SubnetMetricsArgs::decode(payload)
-                    .and_then(|args| self.subnet_stats(&registry_settings, args));
+                    .and_then(|args| self.subnet_stats(registry_settings, args));
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
