@@ -528,15 +528,8 @@ async fn validate_slice_above_signal_limit() {
         const STREAM_BEGIN: u64 = 20;
         const MAX_STREAM_END: u64 = STREAM_BEGIN + MAX_STREAM_MESSAGES as u64;
         const SIGNALS_END: u64 = REVERSE_STREAM_BEGIN;
-        // `begin` of `messages` in the stream slice close to the `end` in the stream header; this
-        // way the slice won't have thousands of messages in it.
-        const MESSAGE_BEGIN: u64 = MAX_STREAM_END - 10;
-
-        // The expected indices match those in the stream slices we will try to validate.
-        const EXPECTED: ExpectedIndices = ExpectedIndices {
-            message_index: StreamIndex::new(MESSAGE_BEGIN),
-            signal_index: StreamIndex::new(SIGNALS_END),
-        };
+        // `begin` of `messages` in the stream slice.
+        const MESSAGE_BEGIN: u64 = STREAM_BEGIN + 30;
 
         // State of an `Application` subnet with a stream for `SUBNET_1`.
         let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
@@ -548,55 +541,61 @@ async fn validate_slice_above_signal_limit() {
             }),
         });
 
-        // A `StreamSlice` with `StreamHeader` for an oversized stream (by 10 messages).
-        // Inducting this would produce too many signals, should fail to validate.
-        let stream_slice = make_stream_slice(
-            StreamConfig {
-                message_begin: STREAM_BEGIN,
-                message_end: MAX_STREAM_END + 10,
-                signal_end: SIGNALS_END,
-            },
-            MESSAGE_BEGIN,
-        );
-        let certified_stream_slice = encode_certified_stream_slice(stream_slice, 1.into());
+        // An oversized stream to take slices from.
+        let stream = generate_stream(&StreamConfig {
+            message_begin: STREAM_BEGIN,
+            message_end: MAX_STREAM_END + 10,
+            signal_end: SIGNALS_END,
+        });
 
-        assert_matches!(
+        // Helper for validating a generated slice from `SUBNET_1` taken from `stream`
+        // with messages starting end ending at the given indices.
+        let validate_slice = |slice_begin: u64, slice_end: u64, state| {
+            let slice = stream.slice(slice_begin.into(), Some((slice_end - slice_begin) as usize));
+            let certified_stream_slice = encode_certified_stream_slice(slice, 1.into());
             xnet_payload_builder.validate_slice(
                 SUBNET_1,
                 &certified_stream_slice,
-                &EXPECTED,
+                &ExpectedIndices {
+                    message_index: slice_begin.into(),
+                    signal_index: SIGNALS_END.into(),
+                },
                 &validation_context,
-                &state,
-            ),
-            SliceValidationResult::Invalid(msg) if msg.contains("inducting slice would produce too many signals")
-        );
+                state,
+            )
+        };
 
-        // A `StreamSlice` with `StreamHeader` for a stream of maximum size.
-        // Inducting this would produce the maximum number of signals allowed,
-        // should validate successfully.
-        let stream_slice = make_stream_slice(
-            StreamConfig {
-                message_begin: STREAM_BEGIN,
-                message_end: MAX_STREAM_END,
-                signal_end: SIGNALS_END,
-            },
-            MESSAGE_BEGIN,
-        );
-        let certified_stream_slice = encode_certified_stream_slice(stream_slice, 1.into());
-
+        // A large slice, but with `slice_end <= MAX_STREAM_END` should succesfully validate.
+        let slice_begin = STREAM_BEGIN + 30;
+        let slice_end = slice_begin + MAX_STREAM_MESSAGES as u64 / 2;
         assert_eq!(
-            xnet_payload_builder.validate_slice(
-                SUBNET_1,
-                &certified_stream_slice,
-                &EXPECTED,
-                &validation_context,
-                &state,
-            ),
+            validate_slice(slice_begin, slice_end, &state),
             SliceValidationResult::Valid {
-                messages_end: MAX_STREAM_END.into(),
+                messages_end: slice_end.into(),
                 signals_end: SIGNALS_END.into(),
                 byte_size: 1,
             }
+        );
+
+        // A small slice just before `MAX_STREAM_END` should validate (i.e. it's not about the
+        // number of messages).
+        let slice_begin = MAX_STREAM_END - 20;
+        let slice_end = MAX_STREAM_END;
+        assert_eq!(
+            validate_slice(slice_begin, slice_end, &state),
+            SliceValidationResult::Valid {
+                messages_end: slice_end.into(),
+                signals_end: SIGNALS_END.into(),
+                byte_size: 1,
+            }
+        );
+
+        // Any slice with `slice_end > MAX_STREAM_END` should fail to validate.
+        let slice_begin = MAX_STREAM_END - 10;
+        let slice_end = MAX_STREAM_END + 1;
+        assert_matches!(
+            validate_slice(slice_begin, slice_end, &state),
+            SliceValidationResult::Invalid(msg) if msg.contains("inducting slice would produce too many signals")
         );
     });
 }

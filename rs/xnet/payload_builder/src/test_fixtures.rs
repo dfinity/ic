@@ -25,7 +25,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     messages::CallbackId,
     time::UNIX_EPOCH,
-    xnet::{CertifiedStreamSlice, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue},
     Height, NumBytes, RegistryVersion, SubnetId,
 };
 use maplit::btreemap;
@@ -191,35 +191,6 @@ pub(crate) fn make_certified_stream_slice(
             None,
         )
         .unwrap()
-}
-
-/// Generates a `StreamSlice` where the `header.begin` and `messages.begin`
-/// can be specified independently; note: `header.end == messages.end`.
-pub(crate) fn make_stream_slice(config: StreamConfig, messages_begin: u64) -> StreamSlice {
-    assert!(config.message_begin <= messages_begin);
-    assert!(messages_begin <= config.message_end);
-
-    let header = StreamHeader::new(
-        config.message_begin.into(),
-        config.message_end.into(),
-        config.signal_end.into(),
-        VecDeque::new(),    // no reject signals
-        Default::default(), // no stream flags
-    );
-
-    let message = RequestBuilder::default()
-        .sender(canister_test_id(SRC_CANISTER))
-        .receiver(canister_test_id(DST_CANISTER))
-        .method_name("test_method".to_string())
-        .sender_reply_callback(CallbackId::from(CALLBACK_ID))
-        .build();
-
-    let mut messages = StreamIndexedQueue::with_begin(messages_begin.into());
-    for _ in messages_begin..config.message_end {
-        messages.push(message.clone().into());
-    }
-
-    StreamSlice::from_parts(header, Some(messages))
 }
 
 /// Configuration for generating a stream: begin/end indices for messages; and
