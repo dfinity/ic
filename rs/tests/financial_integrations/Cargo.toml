@@ -12,7 +12,6 @@ assert_matches = { workspace = true }
 candid = { workspace = true }
 canister_test = { workspace = true }
 dfn_candid = { workspace = true }
-ic_crypto_tree_hash = { workspace = true }
 ic_nns_test_utils = { workspace = true }
 ic_icrc1_ledger = { workspace = true }
 
