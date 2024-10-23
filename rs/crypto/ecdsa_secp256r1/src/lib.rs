@@ -440,14 +440,8 @@ impl PrivateKey {
 
     /// Derive a private key from this private key using a derivation path
     ///
-    /// This is the same derivation system used by the Internet Computer when
-    /// deriving subkeys for threshold ECDSA with secp256r1
-    ///
     /// As long as each index of the derivation path is a 4-byte input with the highest
     /// bit cleared, this derivation scheme matches SLIP-10
-    ///
-    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
-    /// for details on the derivation scheme.
     ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
         let chain_code = [0u8; 32];
@@ -457,14 +451,8 @@ impl PrivateKey {
     /// Derive a private key from this private key using a derivation path
     /// and chain code
     ///
-    /// This is the same derivation system used by the Internet Computer when
-    /// deriving subkeys for threshold ECDSA with secp256r1
-    ///
     /// As long as each index of the derivation path is a 4-byte input with the highest
     /// bit cleared, this derivation scheme matches SLIP-10
-    ///
-    /// See <https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-ecdsa_public_key>
-    /// for details on the derivation scheme.
     ///
     pub fn derive_subkey_with_chain_code(
         &self,
@@ -585,9 +573,6 @@ impl PublicKey {
 
     /// Derive a public key from this public key using a derivation path
     ///
-    /// This is the same derivation system used by the Internet Computer when
-    /// deriving subkeys for threshold ECDSA with secp256r1
-    ///
     pub fn derive_subkey(&self, derivation_path: &DerivationPath) -> (Self, [u8; 32]) {
         let chain_code = [0u8; 32];
         self.derive_subkey_with_chain_code(derivation_path, &chain_code)
@@ -595,9 +580,6 @@ impl PublicKey {
 
     /// Derive a public key from this public key using a derivation path
     /// and chain code
-    ///
-    /// This is the same derivation system used by the Internet Computer when
-    /// deriving subkeys for threshold ECDSA with secp256r1
     ///
     /// This derivation matches SLIP-10
     pub fn derive_subkey_with_chain_code(
