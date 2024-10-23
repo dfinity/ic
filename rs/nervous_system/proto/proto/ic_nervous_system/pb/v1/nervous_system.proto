@@ -55,3 +55,19 @@ message Decimal {
   // E.g. "3.14".
   optional string human_readable = 1;
 }
+
+// API types related to managing canister timers.
+
+message ResetTimersRequest {}
+message ResetTimersResponse {}
+
+message Timers {
+  optional bool requires_periodic_tasks = 1;
+  optional uint64 last_reset_timestamp_seconds = 2;
+  optional uint64 last_spawned_timestamp_seconds = 3;
+}
+
+message GetTimersRequest {}
+message GetTimersResponse {
+  optional Timers timers = 1;
+}

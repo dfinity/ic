@@ -10,23 +10,13 @@ use ic_nervous_system_clients::{
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
 use ic_nervous_system_common::{serve_logs, serve_logs_v2, serve_metrics};
+use ic_nervous_system_proto::pb::v1::{GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers};
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_swap::{
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
-        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
-        GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
-        GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
-        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateRequest, GetStateResponse, Init, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
-        NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-        ResetTimersRequest, ResetTimersResponse, Swap, Timers,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse, GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse, GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse, GetStateRequest, GetStateResponse, Init, ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest, NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -303,6 +293,13 @@ async fn run_periodic_tasks() {
              Stop scheduling new periodic tasks."
         );
     }
+}
+
+#[query]
+fn get_timers(arg: GetTimersRequest) -> GetTimersResponse {
+    let GetTimersRequest {} = arg;
+    let timers = swap().timers;
+    GetTimersResponse { timers }
 }
 
 fn init_timers() {
