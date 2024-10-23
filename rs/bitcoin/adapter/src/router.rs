@@ -50,8 +50,6 @@ pub fn start_main_event_loop(
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
         loop {
-            connection_manager.make_idle();
-            blockchain_manager.make_idle();
             adapter_state.become_awake().await;
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
@@ -111,6 +109,8 @@ pub fn start_main_event_loop(
                     }
                 };
             }   
+            connection_manager.make_idle();
+            blockchain_manager.make_idle();
         }
     });
 }

@@ -8,16 +8,12 @@ use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use parking_lot::RwLock;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::{
-    sync::{mpsc::channel, watch},
-    time::interval,
-};
+use tokio::{select, sync::{mpsc::channel, watch}, time::sleep};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -145,7 +141,11 @@ pub enum TransactionManagerRequest {
 /// thread-safe.
 #[derive(Clone)]
 pub struct AdapterState {
-    /// The field contains instant of the latest received request.
+    /// The field contains how long the adapter should wait before becoming idle.
+    idle_seconds: u64,
+
+    /// The watch channel that holds the last received time.
+    /// The field contains the instant of the latest received request.
     /// None means that we haven't reveived a request yet and the adapter should be in idle mode!
     ///
     /// !!! BE CAREFUL HERE !!! since the adapter should ALWAYS be idle when starting up.
@@ -155,67 +155,64 @@ pub struct AdapterState {
     /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
     /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
     /// 'idle_seconds' we encountered an underflow and panicked.
-    last_received_at: Arc<RwLock<Option<Instant>>>,
-    /// The field contains how long the adapter should wait to before becoming idle.
-    idle_seconds: u64,
-
-    /// The field contains a watch channel that is used to wake up the adapter when it is idle.
-    awake_tx: watch::Sender<()>,
+    /// 
+    /// I't simportant that this value is set to None on startup.
+    last_received_tx: watch::Sender<Option<Instant>>,
 }
 
 impl AdapterState {
-    /// Crates new instance of the AdapterState.
+    /// Creates a new instance of the AdapterState.
     pub fn new(idle_seconds: u64) -> Self {
-        let (awake_tx, _) = watch::channel(());
-        let state = Self {
-            last_received_at: Arc::new(RwLock::new(None)),
+        // Initialize the watch channel with `None`, indicating no requests have been received yet.
+        let (last_received_tx, _) = watch::channel(None);
+        Self {
             idle_seconds,
-            awake_tx,
-        };
-        state
+            last_received_tx,
+        }
     }
 
-    /// Updates the current state of the adapter given a request was received.
+    /// Updates the state to indicate a request was received now.
     pub fn received_now(&self) {
-        // Instant::now() is monotonically nondecreasing clock.
-        *self.last_received_at.write() = Some(Instant::now());
-        // TODO: perhaps log something if this fails
-        let _ = self.awake_tx.send(());
+        let _ = self.last_received_tx.send(Some(Instant::now()));
     }
 
     /// A future that returns when/if the adapter becomes/is awake.
     pub async fn become_awake(&self) {
-        let mut awake_rx = self.awake_tx.clone().subscribe();
+        let mut last_received_rx = self.last_received_tx.subscribe();
         loop {
-            match *self.last_received_at.read() {
+            match *last_received_rx.borrow() {
                 Some(last) => {
                     if last.elapsed().as_secs() < self.idle_seconds {
-                        return ();
+                        return;
                     }
                 }
-                // Nothing received yet still in idle from startup.
-                None => {},
-            };
-            let _ = awake_rx.changed().await;
+                // No requests received yet; the adapter is idle.
+                None => {}
+            }
+            // Wait for a change in the last received time.
+            let _ = last_received_rx.changed().await;
         }
     }
 
     /// A future that returns when/if the adapter becomes/is idle.
     pub async fn become_idle(&self) {
+        let mut last_received_rx = self.last_received_tx.subscribe();
         loop {
-            let mut tick_interval: tokio::time::Interval;
-            match *self.last_received_at.read() {
+            let last_received = *last_received_rx.borrow();
+            match last_received {
                 Some(last) => {
-                    if last.elapsed().as_secs() > self.idle_seconds {
-                        return ();
+                    let elapsed = last.elapsed().as_secs();
+                    if elapsed >= self.idle_seconds {
+                        return;
                     }
-                    // tick again for the remaining seconds
-                    tick_interval = interval(Duration::from_secs(self.idle_seconds - last.elapsed().as_secs()));
+                    select! {
+                        _ = sleep(Duration::from_secs(self.idle_seconds - elapsed)) => {}
+                        _ = last_received_rx.changed() => {}
+                    }
                 }
-                // Nothing received yet still in idle from startup.
-                None => return (),
-            };
-            tick_interval.tick().await;
+                // No requests received yet; the adapter is idle.
+                None => return,
+            }
         }
     }
 }
