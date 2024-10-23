@@ -48,14 +48,14 @@ system_test(
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/icrc1/ledger",
         "//rs/nns/test_utils",
+        "//rs/rust_canisters/dfn_candid",
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:canister_test",
-        "@crate_index//:dfn_candid",
-        "@crate_index//:ic_icrc1_ledger",
     ],
 )
 
