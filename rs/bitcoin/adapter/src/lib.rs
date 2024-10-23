@@ -15,11 +15,9 @@ use std::{
     time::Instant,
 };
 use tokio::{
-    sync::mpsc::{channel, Receiver},
+    sync::{mpsc::channel, watch},
     time::interval,
 };
-use tokio::sync::{watch, Notify};
-use tokio::sync::mpsc;
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -183,10 +181,9 @@ impl AdapterState {
         self.awake_tx.send(()).unwrap();
     }
 
-    /// A future that returns when the adapter becomes awake.
+    /// A future that returns when/if the adapter becomes/is awake.
     pub async fn is_awake(&self) -> () {
         let mut awake_rx = self.awake_tx.clone().subscribe();
-
         loop {
             match *self.last_received_at.read() {
                 Some(last) => {
@@ -201,12 +198,10 @@ impl AdapterState {
         }
     }
 
-    /// A future that returns when the adapter becomes idle.
+    /// A future that returns when/if the adapter becomes/is idle.
     pub async fn is_idle(&self) -> () {
-        let mut tick_interval = interval(Duration::from_secs(self.idle_seconds));
-
         loop {
-            tick_interval.tick().await;
+            let mut tick_interval: tokio::time::Interval;
             match *self.last_received_at.read() {
                 Some(last) => {
                     if last.elapsed().as_secs() > self.idle_seconds {
@@ -217,6 +212,7 @@ impl AdapterState {
                 // Nothing received yet still in idle from startup.
                 None => return (),
             };
+            tick_interval.tick().await;
         }
     }
 }
