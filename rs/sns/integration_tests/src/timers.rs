@@ -123,7 +123,12 @@ fn run_canister_reset_timers_test(state_machine: &StateMachine, canister_id: Can
     };
 
     // Reset the timers.
-    try_reset_timers(state_machine, canister_id);
+    try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
+        panic!(
+            "Unable to call reset_timers on canister {:?}: {}",
+            canister_id, err
+        )
+    });
 
     // Inspect the sate after resetting the timers.
     {
