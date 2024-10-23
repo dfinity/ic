@@ -2395,7 +2395,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .collect::<Result<_, _>>()?;
         if task_queue.len() > 2 {
             return Err(ProxyDecodeError::Other(format!(
-                "Expecting at most two task queue entry. Found {:?}",
+                "At most, two tasks are expected in the task queue. Found {:?}",
                 task_queue
             )));
         }
