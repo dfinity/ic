@@ -161,59 +161,42 @@ pub struct AdapterState {
     /// 'idle_seconds' we encountered an underflow and panicked.
     ///
     /// I't simportant that this value is set to None on startup.
-    last_received_tx: watch::Sender<Option<Instant>>,
+    last_received_rx: watch::Receiver<Option<Instant>>,
 }
 
 impl AdapterState {
     /// Creates a new instance of the AdapterState.
-    pub fn new(idle_seconds: u64) -> Self {
+    pub fn new(idle_seconds: u64) -> (Self, watch::Sender<Option<Instant>>) {
         // Initialize the watch channel with `None`, indicating no requests have been received yet.
-        let (last_received_tx, _) = watch::channel(None);
-        Self {
-            idle_seconds,
-            last_received_tx,
-        }
-    }
-
-    /// Updates the state to indicate a request was received now.
-    pub fn received_now(&self) {
-        let _ = self.last_received_tx.send(Some(Instant::now()));
+        let (tx, last_received_rx) = watch::channel(None);
+        (
+            Self {
+                idle_seconds,
+                last_received_rx,
+            },
+            tx,
+        )
     }
 
     /// A future that returns when/if the adapter becomes/is awake.
-    pub async fn active(&self) {
-        let mut last_received_rx = self.last_received_tx.subscribe();
-        loop {
-            if let Some(last) = *last_received_rx.borrow() {
-                if last.elapsed().as_secs() < self.idle_seconds {
-                    return;
+    pub async fn active(&mut self) {
+        let _ = self
+            .last_received_rx
+            .wait_for(|v| {
+                if let Some(last) = v {
+                    return last.elapsed().as_secs() < self.idle_seconds;
                 }
-            }
-            // Wait for a change in the last received time.
-            let _ = last_received_rx.changed().await;
-        }
+                false
+            })
+            .await;
     }
 
     /// A future that returns when/if the adapter becomes/is idle.
-    pub async fn idle(&self) {
-        let mut last_received_rx = self.last_received_tx.subscribe();
-        loop {
-            let last_received = *last_received_rx.borrow();
-            match last_received {
-                Some(last) => {
-                    let elapsed = last.elapsed().as_secs();
-                    if elapsed >= self.idle_seconds {
-                        return;
-                    }
-                    select! {
-                        _ = sleep(Duration::from_secs(self.idle_seconds - elapsed)) => {}
-                        _ = last_received_rx.changed() => {}
-                    }
-                }
-                // No requests received yet; the adapter is idle.
-                None => return,
-            }
+    pub fn is_idle(&mut self) -> bool {
+        if let Some(last) = self.last_received_rx.borrow().clone() {
+            return last.elapsed().as_secs() > self.idle_seconds;
         }
+        true
     }
 }
 
@@ -226,7 +209,7 @@ pub fn start_server(
 ) {
     let _enter = rt_handle.enter();
 
-    let adapter_state = AdapterState::new(config.idle_seconds);
+    let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
@@ -244,7 +227,7 @@ pub fn start_server(
     start_grpc_server(
         config.clone(),
         log.clone(),
-        adapter_state.clone(),
+        tx,
         get_successors_handler,
         transaction_manager_tx,
         metrics_registry,

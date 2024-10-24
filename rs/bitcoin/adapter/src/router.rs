@@ -28,7 +28,7 @@ pub fn start_main_event_loop(
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
-    adapter_state: AdapterState,
+    mut adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {
@@ -56,9 +56,6 @@ pub fn start_main_event_loop(
             // tokio::time::Interval::tick which are all cancellation safe.
             loop {
                 tokio::select! {
-                    _ = adapter_state.idle() => {
-                        break;
-                    },
                     event = connection_manager.receive_stream_event() => {
                         if let Err(ProcessBitcoinNetworkMessageError::InvalidMessage) =
                             connection_manager.process_event(&event)
@@ -101,6 +98,11 @@ pub fn start_main_event_loop(
                         }
                     },
                     _ = tick_interval.tick() => {
+                        if adapter_state.is_idle() {
+                            connection_manager.make_idle();
+                            blockchain_manager.make_idle();
+                            break;
+                        }
                         // After an event is dispatched, the managers `tick` method is called to process possible
                         // outgoing messages.
                         connection_manager.tick(blockchain_manager.get_height(), handle_stream);
@@ -109,8 +111,6 @@ pub fn start_main_event_loop(
                     }
                 };
             }
-            connection_manager.make_idle();
-            blockchain_manager.make_idle();
         }
     });
 }
