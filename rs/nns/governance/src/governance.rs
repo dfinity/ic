@@ -3441,6 +3441,17 @@ impl Governance {
             MAX_DISSOLVE_DELAY_SECONDS,
         );
 
+        let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: created_timestamp_seconds,
+            }
+        } else {
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: created_timestamp_seconds,
+            }
+        };
+
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
         // method finishes would cause the funds to be lost.
@@ -3451,10 +3462,7 @@ impl Governance {
             child_nid,
             to_subaccount,
             child_controller,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds: created_timestamp_seconds,
-            },
+            dissolve_state_and_age,
             created_timestamp_seconds,
         )
         .with_followees(self.heap_data.default_followees.clone())
