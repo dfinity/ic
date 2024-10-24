@@ -6011,6 +6011,7 @@ dependencies = [
  "memory_tracker",
  "mockall 0.13.0",
  "nix 0.24.3",
+ "num-traits",
  "once_cell",
  "prometheus",
  "rayon",
