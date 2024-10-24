@@ -2,6 +2,12 @@
 
 set -e
 
+source /opt/ic/bin/config.sh
+
+read_config_variables() {
+    authorized_ssh_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
+}
+
 copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
@@ -11,6 +17,8 @@ copy_ssh_keys() {
     fi
 }
 
+read_config_variables
+
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")
@@ -18,12 +26,10 @@ for ACCOUNT in backup readonly admin; do
     mkdir -p "${HOMEDIR}/.ssh"
     chmod 700 "${HOMEDIR}" "${HOMEDIR}/.ssh"
 
-    GUESTOS_AUTHORIZED_SSH_KEYS="/boot/config/accounts_ssh_authorized_keys/${ACCOUNT}"
-    HOSTOS_AUTHORIZED_SSH_KEYS="/boot/config/ssh_authorized_keys/${ACCOUNT}"
+    AUTHORIZED_SSH_KEYS="${authorized_ssh_keys}/${ACCOUNT}"
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
-    copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
-    copy_ssh_keys "${HOSTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
+    copy_ssh_keys "${AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
 
     chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
     restorecon -r "${HOMEDIR}"

@@ -31,6 +31,7 @@ def image_deps(mode, _malicious = False):
         "bootfs": {},
         "rootfs": {
             "//rs/ic_os/release:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
+            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
         },
 
         # Set various configuration values
