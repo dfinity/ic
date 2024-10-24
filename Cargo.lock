@@ -20386,7 +20386,6 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "local_key",
- "serde",
  "sha2 0.10.8",
  "tla_instrumentation_proc_macros",
  "tokio-test",
