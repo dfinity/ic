@@ -56,8 +56,8 @@ name = "ic-systest-ckbtc-batching"
 path = "ckbtc_minter_batching.rs"
 
 [[bin]]
-name = "ic-systest-ckbtc-heartbeat"
-path = "ckbtc_minter_heartbeat.rs"
+name = "ic-systest-ckbtc-deposit-and-withdrawal"
+path = "ckbtc_minter_deposit_and_withdrawal.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-retrieve-btc"

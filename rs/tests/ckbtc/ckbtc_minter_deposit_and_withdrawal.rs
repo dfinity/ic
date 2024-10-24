@@ -34,7 +34,7 @@ use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::{debug, info};
 
-pub fn test_heartbeat(env: TestEnv) {
+pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
@@ -272,7 +272,7 @@ pub fn test_heartbeat(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test_heartbeat))
+        .add_test(systest!(test_deposit_and_withdrawal))
         .execute_from_args()?;
     Ok(())
 }

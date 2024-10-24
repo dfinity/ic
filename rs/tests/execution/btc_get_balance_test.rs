@@ -204,6 +204,7 @@ pub fn get_balance(env: TestEnv) {
     // We only exit retry loop successfully if we got the expected satoshi balance
     res.expect("Failed to get btc balance");
 }
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)

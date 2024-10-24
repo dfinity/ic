@@ -84,7 +84,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "ckbtc_minter_heartbeat",
+    name = "ckbtc_minter_deposit_and_withdrawal",
     env = {
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
