@@ -10,10 +10,12 @@ use ic_state_machine_tests::StateMachine;
 mod common;
 
 fn index_wasm(env_var: &str) -> Vec<u8> {
-    let index_wasm_path = std::env::var(env_var).expect(&format!(
-        "The Index wasm path must be set using the env variable {}",
-        env_var
-    ));
+    let index_wasm_path = std::env::var(env_var).unwrap_or_else(|_| {
+        panic!(
+            "The Index wasm path must be set using the env variable {}",
+            env_var
+        )
+    });
     std::fs::read(&index_wasm_path).unwrap_or_else(|e| {
         panic!(
             "failed to load index Wasm file from path {} (env var {}): {}",
