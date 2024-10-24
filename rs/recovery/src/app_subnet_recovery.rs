@@ -210,10 +210,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 if self.params.pub_key.is_none() {
                     self.params.pub_key = read_optional(
                         &self.logger,
-                        "Enter public key to add readonly SSH access to subnet. Ensure the right format.\n\
-                        Format:   ssh-ed25519 <pubkey> <identity>\n\
-                        Example:  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPwS/0S6xH0g/xLDV0Tz7VeMZE9AKPeSbLmCsq9bY3F1 foo@dfinity.org\n\
-                        Enter your key: ",
+                        "Enter public key to add readonly SSH access to subnet: ",
                     );
                 }
             }
