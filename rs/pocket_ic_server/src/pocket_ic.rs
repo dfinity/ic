@@ -345,7 +345,7 @@ impl PocketIc {
             execution_environment::Config::default()
         };
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
-            let instruction_limit = NumInstructions::new(99_999_999_999_999);
+            let instruction_limit = NumInstructions::new(499_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
                 subnet_config.scheduler_config.max_instructions_per_round = instruction_limit;
             }
