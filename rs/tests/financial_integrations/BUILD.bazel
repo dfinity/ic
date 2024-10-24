@@ -34,7 +34,6 @@ system_test_nns(
 
 system_test(
     name = "icrc1_agent_test",
-    srcs = glob(["icrc1_agent_tests/*.rs"]),
     crate_root = "icrc1_agent_test.rs",
     env = {
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
