@@ -676,9 +676,10 @@ impl Swap {
     ///
     /// See also: `Swap.run_periodic_tasks`.
     pub fn requires_periodic_tasks(&self) -> bool {
-        // Practically, already_tried_to_auto_finalize should never be None, but we err towards
-        // caution, which in this case means to continue scheduling periodic tasks.
-        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(false)
+        // Practically, already_tried_to_auto_finalize should never be None, unless a Swap has not
+        // been updated since this field had been introduced. We default this field to `true` to
+        // capture those old Swaps (which were finalized manually).
+        !self.lifecycle_is_terminal() || !self.already_tried_to_auto_finalize.unwrap_or(true)
     }
 
     //

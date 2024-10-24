@@ -1,4 +1,6 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_nervous_system_proto::pb::v1::Timers;
 use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
@@ -104,6 +106,18 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
     {
         let (mut swap_pre_state, mut swap_post_state) =
             run_upgrade_for_swap(state_machine, swap_canister_id, swap_wasm_1, sns_name);
+
+        // Ensure the timers are not going to be scheduled for this Swap.
+        assert_matches!(
+            swap_post_state.swap,
+            Some(Swap {
+                timers: Some(Timers {
+                    requires_periodic_tasks: Some(false),
+                    ..
+                }),
+                ..
+            })
+        );
 
         // Some fields need to be redacted as they were introduced after some Swaps were created.
         redact_unavailable_swap_fields(&mut swap_post_state);

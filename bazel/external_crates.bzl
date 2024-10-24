@@ -136,7 +136,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "aide": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.4",
                 features = [
                     "axum",
                 ],
@@ -902,7 +902,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "proc-macro2": crate.spec(
-                version = "^1.0.88",
+                version = "^1.0.89",
             ),
             "procfs": crate.spec(
                 version = "^0.9",
