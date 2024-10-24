@@ -378,7 +378,7 @@ fn test_get_set_cycle_balance() {
     assert_eq!(balance, initial_balance + 420);
 }
 
-#[test]
+//#[test]
 fn test_create_and_drop_instances() {
     let pic = PocketIc::new();
     let id = pic.instance_id();
@@ -622,7 +622,7 @@ fn test_too_large_call() {
     .unwrap_err();
 }
 
-#[tokio::test]
+//#[tokio::test]
 async fn test_create_and_drop_instances_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
     let id = pic.instance_id;

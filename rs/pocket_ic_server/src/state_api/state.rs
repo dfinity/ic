@@ -74,11 +74,25 @@ const MIN_OPERATION_DELAY: Duration = Duration::from_millis(100);
 // The minimum delay between consecutive attempts to read the graph in auto progress mode.
 const READ_GRAPH_DELAY: Duration = Duration::from_millis(100);
 
-pub const STATE_LABEL_HASH_SIZE: usize = 32;
+pub const STATE_LABEL_HASH_SIZE: usize = 16;
 
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
+
+impl StateLabel {
+    pub fn new(instance_id: InstanceId) -> Self {
+        let mut seq_no: u128 = instance_id.try_into().unwrap();
+        seq_no <<= 64;
+        Self(seq_no.to_le_bytes())
+    }
+
+    pub fn bump(&mut self) {
+        let mut seq_no: u128 = u128::from_le_bytes(self.0);
+        seq_no += 1;
+        self.0 = seq_no.to_le_bytes();
+    }
+}
 
 // The only error condition is if the vector has the wrong size.
 pub struct InvalidSize;
@@ -126,7 +140,7 @@ impl std::fmt::Debug for Instance {
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
-    instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
+    instances: Arc<Mutex<Vec<Mutex<Instance>>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
     sync_wait_time: Duration,
     // PocketIC server port
@@ -187,7 +201,7 @@ impl PocketIcApiStateBuilder {
                 })
             })
             .collect();
-        let instances = Arc::new(RwLock::new(instances));
+        let instances = Arc::new(Mutex::new(instances));
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
 
@@ -644,7 +658,7 @@ impl ApiState {
     // Executes an operation to completion and returns its `OpOut`
     // or `None` if the auto progress mode received a stop signal.
     async fn execute_operation(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
+        instances: Arc<Mutex<Vec<Mutex<Instance>>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         instance_id: InstanceId,
         op: impl Operation + Send + Sync + 'static,
@@ -711,42 +725,58 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
-        let mut instances = self.instances.write().await;
+    pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
+    where
+        F: FnOnce(InstanceId) -> PocketIc + std::marker::Send + 'static,
+    {
+        trace!("add_instance:start");
+        let mut instances = self.instances.lock().await;
+        trace!("add_instance:locked");
         let instance_id = instances.len();
+        let instance = tokio::task::spawn_blocking(move || f(instance_id))
+            .await
+            .expect("Failed to create PocketIC instance");
+        trace!("add_instance:done_blocking");
+        let topology = instance.topology();
         instances.push(Mutex::new(Instance {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        instance_id
+        (instance_id, topology)
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
         self.stop_progress(instance_id).await;
         loop {
-            let instances = self.instances.read().await;
+            let instances = self.instances.lock().await;
+            trace!("grabbed instances in delete_instance; instance_id={}", instance_id);
             let mut instance = instances[instance_id].lock().await;
-            match std::mem::replace(&mut instance.state, InstanceState::Deleted) {
-                InstanceState::Available(pocket_ic) => {
-                    std::mem::drop(pocket_ic);
+            match &instance.state {
+                InstanceState::Available(_) => {
+                    let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
+            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Deleted => {
+            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Busy { .. } => {}
             }
             drop(instance);
             drop(instances);
+            trace!("released instances in delete_instance; instance_id={}", instance_id);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
 
     pub async fn delete_all_instances(arc_self: Arc<ApiState>) {
         let mut tasks = JoinSet::new();
-        let instances = arc_self.instances.read().await;
+        let instances = arc_self.instances.lock().await;
+        trace!("delete_all_instances: grabbed instances");
         let num_instances = instances.len();
         drop(instances);
+        trace!("delete_all_instances: released instances");
         for instance_id in 0..num_instances {
             let arc_self_clone = arc_self.clone();
             tasks.spawn(async move { arc_self_clone.delete_instance(instance_id).await });
@@ -1124,7 +1154,7 @@ impl ApiState {
     }
 
     async fn process_canister_http_requests(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
+        instances: Arc<Mutex<Vec<Mutex<Instance>>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         instance_id: InstanceId,
         rx: &mut Receiver<()>,
@@ -1147,7 +1177,8 @@ impl ApiState {
             let subnet_id = canister_http_request.subnet_id;
             let request_id = canister_http_request.request_id;
             let response = loop {
-                let instances = instances.read().await;
+                let instances = instances.lock().await;
+                trace!("process_canister_http_requests: grabbed instances; instance_id={}", instance_id);
                 let instance = instances[instance_id].lock().await;
                 if let InstanceState::Available(pocket_ic) = &instance.state {
                     let canister_http_adapters = pocket_ic.canister_http_adapters();
@@ -1172,6 +1203,7 @@ impl ApiState {
                 }
                 drop(instance);
                 drop(instances);
+                trace!("process_canister_http_requests: released instances; instance_id={}", instance_id);
                 tokio::time::sleep(Duration::from_millis(10)).await;
             };
             let mock_canister_http_response = MockCanisterHttpResponse {
@@ -1206,7 +1238,8 @@ impl ApiState {
         let artificial_delay = Duration::from_millis(artificial_delay_ms.unwrap_or_default());
         let instances_clone = self.instances.clone();
         let graph = self.graph.clone();
-        let instances = self.instances.read().await;
+        let instances = self.instances.lock().await;
+        trace!("auto_progress: grabbed instances; instance_id={}", instance_id);
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
@@ -1251,19 +1284,23 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
+        trace!("auto_progress: released instances; instance_id={}", instance_id);
             Ok(())
         } else {
+        trace!("auto_progress: released instances; instance_id={}", instance_id);
             Err("Auto progress mode has already been enabled.".to_string())
         }
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {
-        let instances = self.instances.read().await;
+        let instances = self.instances.lock().await;
+        trace!("stop_progress: grabbed instances; instance_id={}", instance_id);
         let mut instance = instances[instance_id].lock().await;
         let progress_thread = instance.progress_thread.take();
         // drop locks otherwise we might end up with a deadlock
         drop(instance);
         drop(instances);
+        trace!("stop_progress: released instances; instance_id={}", instance_id);
         if let Some(t) = progress_thread {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
@@ -1271,11 +1308,15 @@ impl ApiState {
     }
 
     pub async fn list_instance_states(&self) -> Vec<String> {
-        let instances = self.instances.read().await;
+        panic!("");
+        let instances = self.instances.lock().await;
         let mut res = vec![];
 
+        println!("total instances: {}", instances.len());
         for instance in &*instances {
+            println!("grabbing instance");
             let instance = &*instance.lock().await;
+            println!("grabbed instance");
             match &instance.state {
                 InstanceState::Busy { state_label, op_id } => {
                     res.push(format!("Busy({:?}, {:?})", state_label, op_id))
@@ -1345,7 +1386,7 @@ impl ApiState {
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
     /// cases when clients want to enforce a long-running blocking call.
     async fn update_instances_with_timeout<O>(
-        instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
+        instances: Arc<Mutex<Vec<Mutex<Instance>>>>,
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         op: Arc<O>,
         instance_id: InstanceId,
@@ -1361,11 +1402,14 @@ impl ApiState {
             op_id,
         );
         let instances_cloned = instances.clone();
-        let instances_locked = instances_cloned.read().await;
+        let instances_locked = instances_cloned.lock().await;
+        trace!("update_instances_with_timeout: grabbed instances; instance_id={}", instance_id);
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
+            println!("waiting to grab instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             let mut instance = instance_mutex.lock().await;
+            println!("grabbed instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             // If this instance is busy, return the running op and initial state
             match &instance.state {
                 InstanceState::Deleted => {
@@ -1407,16 +1451,22 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
-                            let instances = instances.blocking_read();
+                            println!("waiting to grab instane: old={:?} op_id={:?}", old_state_label, op_id);
+                            let instances = instances.blocking_lock();
+                            trace!("update_instances_with_timeout-thread: grabbed instances; instance_id={}", instance_id);
+                            println!("waiting to grab graph: old={:?} op_id={:?}", old_state_label, op_id);
                             let mut graph_guard = graph.blocking_write();
+                            println!("grabbed graph: old={:?} op_id={:?}", old_state_label, op_id);
                             let cached_computations =
                                 graph_guard.entry(old_state_label.clone()).or_default();
                             cached_computations
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
+                            println!("grabbed instance: old={:?} op_id={:?}", old_state_label, op_id);
                             if let InstanceState::Deleted = &instance.state {
                                 error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
@@ -1424,8 +1474,8 @@ impl ApiState {
                                 instance.state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-                            // also return old_state_label so we can prune graph if we return quickly
-                            (result, old_state_label)
+        trace!("update_instances_with_timeout-thread: released instances; instance_id={}", instance_id);
+                            result
                         }
                     };
 
@@ -1440,6 +1490,7 @@ impl ApiState {
         };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances_locked);
+        trace!("update_instances_with_timeout: released instances; instance_id={}", instance_id);
 
         // We schedule a blocking background task on the tokio runtime. Note that if all
         // blocking workers are busy, the task is put on a queue (which is what we want).
@@ -1458,7 +1509,7 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok((op_out, _old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
@@ -1491,6 +1542,7 @@ impl std::fmt::Debug for InstanceState {
 
 impl std::fmt::Debug for ApiState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        /*
         let instances = self.instances.blocking_read();
         let graph = self.graph.blocking_read();
 
@@ -1503,6 +1555,7 @@ impl std::fmt::Debug for ApiState {
         for (k, v) in graph.iter() {
             writeln!(f, "  {k:?} => {v:?}")?;
         }
+        */
         Ok(())
     }
 }
