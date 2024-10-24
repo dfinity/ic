@@ -192,6 +192,14 @@ impl CyclesAccountManager {
         }
     }
 
+    /// Charges instructions according to the Wasm64 fees.
+    pub fn switch_to_wasm64_mode(&mut self) {
+        let mut wasm64_config = self.config;
+        wasm64_config.ten_update_instructions_execution_fee =
+            wasm64_config.ten_update_instructions_execution_fee_wasm64;
+        self.config = wasm64_config;
+    }
+
     /// Returns the subnet type of this [`CyclesAccountManager`].
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
@@ -1127,6 +1135,36 @@ impl CyclesAccountManager {
     /// when the canister doesn't have it set in the settings.
     pub fn default_reserved_balance_limit(&self) -> Cycles {
         self.config.default_reserved_balance_limit
+    }
+
+    /// Charges extra for a successful Wasm64 canister installation or upgrade.
+    pub fn wasm64_install_or_upgrade_surcharge(
+        &self,
+        system_state: &mut SystemState,
+        canister_current_memory_usage: NumBytes,
+        canister_current_message_memory_usage: NumBytes,
+        canister_compute_allocation: ComputeAllocation,
+        num_instructions: NumInstructions,
+        subnet_size: usize,
+        reveal_top_up: bool,
+    ) -> Result<Cycles, CanisterOutOfCyclesError> {
+        let instr_cost = self.convert_instructions_to_cycles(num_instructions);
+        self.consume_with_threshold(
+            system_state,
+            instr_cost,
+            self.freeze_threshold_cycles(
+                system_state.freeze_threshold,
+                system_state.memory_allocation,
+                canister_current_memory_usage,
+                canister_current_message_memory_usage,
+                canister_compute_allocation,
+                subnet_size,
+                system_state.reserved_balance(),
+            ),
+            CyclesUseCase::Instructions,
+            reveal_top_up,
+        )
+        .map(|_| instr_cost)
     }
 }
 
