@@ -730,6 +730,17 @@ pub fn all_authentication_schemes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<Authen
     schemes
 }
 
+pub fn all_authentication_schemes_except<R: Rng + CryptoRng>(
+    exception: AuthenticationScheme,
+    rng: &mut R,
+) -> Vec<AuthenticationScheme> {
+    let all_schemes = all_authentication_schemes(rng);
+    all_schemes
+        .into_iter()
+        .filter(|scheme| scheme != &exception)
+        .collect()
+}
+
 pub fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
     UserKeyPair(Ed25519KeyPair::generate(rng))
 }
