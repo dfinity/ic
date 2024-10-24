@@ -18,7 +18,6 @@ use ic_rosetta_api::{
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
-use rosetta_core::request_types::AccountBalanceRequest;
 use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
