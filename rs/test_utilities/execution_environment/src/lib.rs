@@ -52,6 +52,7 @@ use ic_replicated_state::{
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
+use ic_types::ReplicaVersion;
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
@@ -213,6 +214,7 @@ pub struct ExecutionTest {
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
     idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    replica_version: ReplicaVersion,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -1255,6 +1257,7 @@ impl ExecutionTest {
             self.install_code_instruction_limits.clone(),
             &mut mock_random_number_generator(),
             &self.idkg_subnet_public_keys,
+            &self.replica_version,
             &self.registry_settings,
             &mut round_limits,
         );
@@ -1680,6 +1683,7 @@ pub struct ExecutionTestBuilder {
     heap_delta_rate_limit: NumBytes,
     upload_wasm_chunk_instructions: NumInstructions,
     canister_snapshot_baseline_instructions: NumInstructions,
+    replica_version: ReplicaVersion,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1721,6 +1725,7 @@ impl Default for ExecutionTestBuilder {
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
             canister_snapshot_baseline_instructions: scheduler_config
                 .canister_snapshot_baseline_instructions,
+            replica_version: ReplicaVersion::default(),
         }
     }
 }
@@ -2082,6 +2087,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_replica_version(mut self, replica_version: ReplicaVersion) -> Self {
+        self.replica_version = replica_version;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2304,6 +2314,7 @@ impl ExecutionTestBuilder {
             idkg_subnet_public_keys,
             log: self.log,
             checkpoint_files: vec![],
+            replica_version: self.replica_version,
         }
     }
 }

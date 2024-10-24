@@ -728,11 +728,12 @@ impl Player {
         pool: Option<&ConsensusPoolImpl>,
         mut extra: F,
     ) -> (Time, Option<(Height, Vec<IngressWithPrinter>)>) {
-        let (registry_version, time, randomness) = match pool {
+        let (registry_version, time, randomness, replica_version) = match pool {
             None => (
                 self.registry.get_latest_version(),
                 ic_types::time::current_time(),
                 Randomness::from([0; 32]),
+                ReplicaVersion::default(),
             ),
             Some(pool) => {
                 let pool = PoolReader::new(pool);
@@ -750,6 +751,7 @@ impl Player {
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
                     Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    last_block.version.clone(),
                 )
             }
         };
@@ -766,6 +768,7 @@ impl Player {
             time,
             consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
+            replica_version,
         };
         let context_time = extra_batch.time;
         let extra_msgs = extra(self, context_time);
