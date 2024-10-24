@@ -59,7 +59,7 @@ import Test.Tasty.HUnit
 
 -- * The test suite (see below for helper functions)
 
-icTests :: TestSubnetConfig -> TestSubnetConfig -> AgentConfig -> TestTree
+icTests :: TestSubnetConfig -> TestSubnetConfig -> AgentConfig -> IO TestTree
 icTests my_sub other_sub =
   let (my_subnet_id_as_entity, my_type, my_nodes, my_ranges, _) = my_sub
    in let ((ecid_as_word64, last_canister_id_as_word64) : _) = my_ranges
@@ -71,12 +71,17 @@ icTests my_sub other_sub =
                            in let ecid = rawEntityId $ wordToId ecid_as_word64
                                in let other_ecid = rawEntityId $ wordToId other_ecid_as_word64
                                    in let specified_canister_id = rawEntityId $ wordToId last_canister_id_as_word64
-                                       in let unused_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 1)
+                                       in let store_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 1)
+                                         in let unused_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 2)
                                            in let initial_cycles = case my_type of
                                                     System -> 0
                                                     _ -> (2 ^ (60 :: Int))
-                                               in withAgentConfig $
-                                                    testGroup "Interface Spec acceptance tests" $
+                                               in withAgentConfig $ do
+                                                    universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                    _ <- ic_provisional_create ic00 ecid (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
+                                                    ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
+                                                    ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
+                                                    return $ testGroup "Interface Spec acceptance tests" $
                                                       let test_subnet_msg sub subnet_id subnet_id' cid = do
                                                             cid2 <- ic_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid Nothing
                                                             ic_install (ic00viaWithCyclesSubnet subnet_id cid 0) (enum #install) cid2 trivialWasmModule ""
@@ -576,9 +581,9 @@ icTests my_sub other_sub =
                                                                                          step "Reinstall on empty"
                                                                                          ic_install (ic00via cid) (enum #reinstall) can_id2 trivialWasmModule "",
                                                                                        simpleTestCase "aaaaa-aa (inter-canister, large)" ecid $ \cid -> do
-                                                                                         universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                          can_id <- ic_provisional_create (ic00via cid) ecid Nothing Nothing Nothing
-                                                                                         ic_install (ic00via cid) (enum #install) can_id universal_wasm ""
+                                                                                         ic_set_controllers (ic00via cid) can_id [store_canister_id, cid]
+                                                                                         ic_install_single_chunk (ic00via store_canister_id) (enum #install) can_id store_canister_id ucan_chunk_hash ""
                                                                                          do call can_id $ replyData "Hi"
                                                                                            >>= is "Hi",
                                                                                        simpleTestCase "randomness" ecid $ \cid -> do
@@ -698,8 +703,7 @@ icTests my_sub other_sub =
                                                                                                    let controllers = [defaultUser, otherUser]
                                                                                                    cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                                                                                                    ic_set_controllers ic00 cid controllers
-                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                   ic_install ic00 (enum #install) cid universal_wasm ""
+                                                                                                   ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash ""
 
                                                                                                    cs <- ic_canister_status (ic00via cid) cid
                                                                                                    assertBool "canister should not control itself in this test" $ not $ elem cid controllers
@@ -708,8 +712,7 @@ icTests my_sub other_sub =
                                                                                                    let controllers = [defaultUser, otherUser]
                                                                                                    cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                                                                                                    ic_set_controllers ic00 cid controllers
-                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                   ic_install ic00 (enum #install) cid universal_wasm ""
+                                                                                                   ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash ""
 
                                                                                                    -- Set new controller
                                                                                                    ic_set_controllers (ic00as defaultUser) cid [ecdsaUser]
@@ -724,8 +727,9 @@ icTests my_sub other_sub =
                                                                                                  simpleTestCase "Multiple controllers (aaaaa-aa)" ecid $ \cid -> do
                                                                                                    let controllers = [cid, otherUser]
                                                                                                    cid2 <- ic_create_with_controllers (ic00viaWithCycles cid 20_000_000_000_000) ecid controllers
-                                                                                                   universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                                   ic_install (ic00via cid) (enum #install) cid2 universal_wasm ""
+                                                                                                   ic_set_controllers (ic00via cid) cid2 (controllers ++ [store_canister_id])
+                                                                                                   ic_install_single_chunk (ic00via store_canister_id) (enum #install) cid2 store_canister_id ucan_chunk_hash ""
+                                                                                                   ic_set_controllers (ic00via cid) cid2 controllers
 
                                                                                                    -- Controllers should be able to fetch the canister status.
                                                                                                    cs <- ic_canister_status (ic00via cid) cid2
@@ -1501,14 +1505,12 @@ icTests my_sub other_sub =
                                                                                            testCase "uninstall and reinstall wipes state" $ do
                                                                                              cid <- install ecid (setGlobal "FOO")
                                                                                              ic_uninstall ic00 cid
-                                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                             ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
+                                                                                             ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run (setGlobal "BAR"))
                                                                                              query cid (replyData getGlobal) >>= is "BAR",
                                                                                            testCase "uninstall and reinstall wipes stable memory" $ do
                                                                                              cid <- install ecid (ignore (stableGrow (int 1)) >>> stableWrite (int 0) "FOO")
                                                                                              ic_uninstall ic00 cid
-                                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                             ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
+                                                                                             ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run (setGlobal "BAR"))
                                                                                              query cid (replyData (i2b stableSize)) >>= asWord32 >>= is 0
                                                                                              do
                                                                                                query cid $
@@ -1524,8 +1526,7 @@ icTests my_sub other_sub =
                                                                                              cid <- install ecid $ setCertifiedData "FOO"
                                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "FOO"
                                                                                              ic_uninstall ic00 cid
-                                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                             ic_install ic00 (enum #install) cid universal_wasm (run noop)
+                                                                                             ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run noop)
                                                                                              query cid (replyData getCertificate) >>= extractCertData cid >>= is "",
                                                                                            simpleTestCase "uninstalled rejects calls" ecid $ \cid -> do
                                                                                              call cid (replyData "Hi") >>= is "Hi"
@@ -1622,8 +1623,7 @@ icTests my_sub other_sub =
                                                                                              awaitStatus grs1 >>= isReject [4]
 
                                                                                              step "Reinstall"
-                                                                                             universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                             ic_install ic00 (enum #install) cid universal_wasm (run (setGlobal "BAR"))
+                                                                                             ic_install_single_chunk ic00 (enum #install) cid store_canister_id ucan_chunk_hash (run (setGlobal "BAR"))
 
                                                                                              step "Create second long-running call"
                                                                                              grs2 <-
@@ -1795,9 +1795,8 @@ icTests my_sub other_sub =
                                                                                                  certValue @Blob cert ["canister", cid, "controllers"] >>= asCBORBlobList >>= isSet [],
                                                                                                testCase "module_hash of universal canister" $ do
                                                                                                  cid <- install ecid noop
-                                                                                                 universal_wasm <- getTestWasm "universal_canister.wasm.gz"
                                                                                                  cert <- getStateCert anonymousUser cid [["canister", cid, "module_hash"]]
-                                                                                                 certValue @Blob cert ["canister", cid, "module_hash"] >>= is (sha256 universal_wasm),
+                                                                                                 certValue @Blob cert ["canister", cid, "module_hash"] >>= is ucan_chunk_hash,
                                                                                                testGroup
                                                                                                  "malformed request id"
                                                                                                  [ simpleTestCase ("rid \"" ++ shorten 8 (asHex rid) ++ "\"") ecid $ \cid -> do
@@ -2010,8 +2009,8 @@ icTests my_sub other_sub =
                                                                                                return cid
                                                                                              create_via cid initial_cycles = do
                                                                                                cid2 <- ic_create (ic00viaWithCycles cid initial_cycles) ecid Nothing
-                                                                                               universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                               ic_install (ic00via cid) (enum #install) cid2 universal_wasm (run noop)
+                                                                                               ic_set_controllers (ic00via cid) cid2 [store_canister_id, cid]
+                                                                                               ic_install_single_chunk (ic00via store_canister_id) (enum #install) cid2 store_canister_id ucan_chunk_hash (run noop)
                                                                                                return cid2
                                                                                           in [ testGroup "cycles API - backward compatibility" $
                                                                                                  [ simpleTestCase "canister_cycle_balance = canister_cycle_balance128 for numbers fitting in 64 bits" ecid $ \cid -> do
