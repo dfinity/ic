@@ -33,7 +33,7 @@ use ic_system_test_driver::{
 
 use std::convert::TryFrom;
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
         .setup_and_start(&env)
@@ -412,7 +412,7 @@ pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &Ledger
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
     Ok(())
