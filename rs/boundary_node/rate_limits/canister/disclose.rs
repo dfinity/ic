@@ -38,19 +38,18 @@ impl<S, A> RulesDiscloser<S, A> {
 
 impl<S: Repository, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, A> {
     fn disclose_rules(&self, arg: DiscloseRulesArg) -> Result<(), DiscloseRulesError> {
-        if self.access_resolver.get_access_level() != AccessLevel::FullAccess {
-            return Err(DiscloseRulesError::Unauthorized);
-        }
-        match arg {
-            DiscloseRulesArg::RuleIds(rule_ids) => {
-                disclose_rules(&self.state, time(), &rule_ids)?;
+        if self.access_resolver.get_access_level() == AccessLevel::FullAccess {
+            match arg {
+                DiscloseRulesArg::RuleIds(rule_ids) => {
+                    disclose_rules(&self.state, time(), &rule_ids)?;
+                }
+                DiscloseRulesArg::IncidentIds(incident_ids) => {
+                    disclose_incidents(&self.state, time(), &incident_ids)?;
+                }
             }
-            DiscloseRulesArg::IncidentIds(incident_ids) => {
-                disclose_incidents(&self.state, time(), &incident_ids)?;
-            }
+            return Ok(());
         }
-
-        Ok(())
+        Err(DiscloseRulesError::Unauthorized);
     }
 }
 
