@@ -221,7 +221,7 @@ pub fn check_traces() {
         println!("Checking {} traces with TLA/Apalache", traces.len());
         for t in traces {
             let total_len = t.state_pairs.len();
-            let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(*p)).count();
+            let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
             println!(
                 "TLA/Apalache checks: keeping {}/{} states for update {}",
                 under_limit_len, total_len, t.update.process_id
