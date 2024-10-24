@@ -9587,6 +9587,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-metrics-tool"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.5.20",
+]
+
+[[package]]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
 dependencies = [

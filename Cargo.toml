@@ -126,6 +126,7 @@ members = [
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/config",
     "rs/ic_os/fstrim_tool",
+    "rs/ic_os/metrics_tool",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/build_tools/inject_files",
