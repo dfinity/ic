@@ -271,7 +271,7 @@ fn tla_check_traces() {
     let traces = TLA_TRACES_LKEY.get();
     let traces = traces.borrow();
     for t in &*traces {
-        check_tla_trace(&t)
+        check_tla_trace(t)
     }
 }
 
