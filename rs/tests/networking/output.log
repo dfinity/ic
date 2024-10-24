@@ -1,0 +1,155 @@
+[0;36mTarget `//rs/tests/networking:cloner_canister` doesn't exist. However, a single substring match (for non-colocated test) `[//rs/tests/networking:cloner_canister_workload]` was found and will be used  ...
+[0m[0;36mRaw Bazel command to be invoked: 
+$ bazel test //rs/tests/networking:cloner_canister_workload --config=systest --cache_test_results=no --test_timeout=3600 --test_arg=--debug-keepalive --test_timeout=600000 --test_tmpdir=test_tmpdir[0m
+INFO: Invocation ID: 2afbe559-eb8f-476c-8b7d-9b0d57a1da89
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/2afbe559-eb8f-476c-8b7d-9b0d57a1da89
+Computing main repo mapping: 
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //rs/tests/networking:cloner_canister_workload (0 packages loaded, 0 targets configured)
+Analyzing: target //rs/tests/networking:cloner_canister_workload (0 packages loaded, 0 targets configured)
+[0 / 1] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+INFO: Analyzed target //rs/tests/networking:cloner_canister_workload (0 packages loaded, 17 targets configured).
+[49 / 56] Compiling Rust bin _wasm_cloner_canister (1 files); 1s linux-sandbox, remote-cache ... (3 actions, 2 running)
+[49 / 56] Compiling Rust bin _wasm_cloner_canister (1 files); 2s linux-sandbox, remote-cache ... (3 actions running)
+[50 / 56] Compiling Rust bin _wasm_cloner_canister (1 files); 6s linux-sandbox, remote-cache ... (3 actions, 2 running)
+INFO: From Compiling Rust bin cloner_canister_workload_bin (1 files) [for tool]:
+warning: unused import: `canister_api::GenericRequest`
+  --> rs/tests/networking/cloner_canister_workload.rs:26:5
+   |
+26 |     canister_api::GenericRequest,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: 1 warning emitted
+
+[52 / 56] Compiling Rust bin _wasm_cloner_canister (1 files); 8s linux-sandbox, remote-cache ... (2 actions running)
+[53 / 56] Compiling Rust bin _wasm_cloner_canister (1 files); 9s linux-sandbox, remote-cache
+Generating public/private ed25519 key pair.
+Your identification has been saved in /ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/root_env/ssh/authorized_priv_keys/admin
+Your public key has been saved in /ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/root_env/ssh/authorized_priv_keys/admin.pub
+The key fingerprint is:
+SHA256:8YpRRd8E8WHE8FSK/wAyRtk0VUsQqcksfR2xCus9JVI admin
+The key's randomart image is:
++--[ED25519 256]--+
+|         .++*X@=+|
+|         o...@o+o|
+|        o B.*E*o.|
+|       . = O++.. |
+|      . S oo.oo. |
+|       o .. o oo |
+|      . .  . o  .|
+|              .  |
+|                 |
++----[SHA256]-----+
+2024-10-23 13:07:11.329 INFO[rs/tests/driver/src/driver/log_events.rs:20:9] {"event_name":"infra_group_name_created_event","body":{"message":"Created new InfraProvider group","group":"cloner-canister-workload--1729688831235"}}
+2024-10-23 13:07:11.330 INFO[rs/tests/driver/src/driver/log_events.rs:20:9] {"event_name":"kibana_url_created_event","body":{"message":"Replica logs will appear in Kibana","url":"https://kibana.testnet.dfinity.network/app/discover#/?_g=(time:(from:now-1y,to:now))&_a=(columns:!(host.name,message,level),filters:!(('$state':(store:appState),query:(match_phrase:(tags:cloner-canister-workload--1729688831235)))),grid:(columns:(host.name:(width:513))),index:'9620e363-cd26-441c-a042-7eaa9e9e39ed',interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))"}}
+2024-10-23 13:07:11.330 DEBG[rs/tests/driver/src/driver/group.rs:831:13] Created group context: GroupContext { exec_path: "/home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt-exec-ST-d57f47055a04/bin/rs/tests/networking/cloner_canister_workload_bin", group_dir: "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87", filter_tests: None, logger: Logger(), sock_id: 0, debug_keepalive: true, no_farm_keepalive: false, group_base_name: "cloner_canister_workload", k8s: false }
+2024-10-23 13:07:11.330 INFO[rs/tests/driver/src/driver/group.rs:838:13] Number of CPUs 16
+2024-10-23 13:07:11.330 INFO[rs/tests/driver/src/driver/group.rs:841:13] Set tokio runtime: worker_threads=16, blocking_threads=16
+2024-10-23 13:07:11.333 DEBG[rs/tests/driver/src/driver/group.rs:542:9] SystemTestGroup.make_plan
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:212:5] subproc(task_name=uvms_logs_stream)
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:212:5] subproc(task_name=keepalive)
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:212:5] subproc(task_name=setup)
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:222:5] timed(plan=Plan::Leaf< task=Task< task_id=setup > >, timeout=14400s)
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:246:5] compose(root=Some(Task< task_id=uvms_logs_stream >), ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=debugKeepAliveTask > >])
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:212:5] subproc(task_name=install_cloner_canisters)
+2024-10-23 13:07:11.333 TRCE[rs/tests/driver/src/driver/group.rs:222:5] timed(plan=Plan::Leaf< task=Task< task_id=install_cloner_canisters > >, timeout=14400s)
+2024-10-23 13:07:11.334 TRCE[rs/tests/driver/src/driver/group.rs:246:5] compose(root=None, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >])
+2024-10-23 13:07:11.334 TRCE[rs/tests/driver/src/driver/group.rs:246:5] compose(root=Some(Task< task_id=report >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >])
+2024-10-23 13:07:11.334 TRCE[rs/tests/driver/src/driver/group.rs:246:5] compose(root=Some(Task< task_id=keepalive >), ordering=Parallel, children=[Plan::Supervised< supervisor=Task< task_id=report >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >, Plan::Supervised< supervisor=Task< task_id=uvms_logs_stream >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=debugKeepAliveTask > >] >])
+2024-10-23 13:07:11.334 INFO[rs/tests/driver/src/driver/group.rs:857:13] Generated plan: Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Parallel, children=[Plan::Supervised< supervisor=Task< task_id=report >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >, Plan::Supervised< supervisor=Task< task_id=uvms_logs_stream >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=debugKeepAliveTask > >] >] >
+2024-10-23 13:07:11.334 DEBG[rs/tests/driver/src/driver/group.rs:862:13] Generated static_plan: Plan::Supervised< supervisor=Test("keepalive"), ordering=Parallel, children=[Plan::Supervised< supervisor=Test("report"), ordering=Sequential, children=[Plan::Supervised< supervisor=Test("dummy(0)"), ordering=Sequential, children=[Plan::Supervised< supervisor=Timeout("setup"), ordering=Sequential, children=[Plan::Leaf< task=Test("setup") >] >, Plan::Supervised< supervisor=Timeout("install_cloner_canisters"), ordering=Sequential, children=[Plan::Leaf< task=Test("install_cloner_canisters") >] >] >] >, Plan::Supervised< supervisor=Test("uvms_logs_stream"), ordering=Sequential, children=[Plan::Leaf< task=Test("debugKeepAliveTask") >] >] >
+2024-10-23 13:07:11.334 DEBG[rs/tests/driver/src/driver/group.rs:886:13] Generated task table: {Test("debugKeepAliveTask"): Task< task_id=debugKeepAliveTask >, Test("dummy(0)"): Task< task_id=dummy(0) >, Test("install_cloner_canisters"): Task< task_id=install_cloner_canisters >, Test("keepalive"): Task< task_id=keepalive >, Test("report"): Task< task_id=report >, Test("setup"): Task< task_id=setup >, Test("uvms_logs_stream"): Task< task_id=uvms_logs_stream >, Timeout("install_cloner_canisters"): Task< task_id=timeout(install_cloner_canisters) >, Timeout("setup"): Task< task_id=timeout(setup) >}
+2024-10-23 13:07:11.334 INFO[rs/tests/driver/src/driver/group.rs:892:17] Executing parent-process-specific code ...
+2024-10-23 13:07:11.334 INFO[rs/tests/driver/src/driver/group.rs:898:17] Generated action_graph
+2024-10-23 13:07:11.334 INFO[rs/tests/driver/src/driver/group.rs:909:17] Generated task_scheduler
+2024-10-23 13:07:11.335 INFO[rs/tests/driver/src/driver/subprocess_task.rs:76:9] Spawning "/home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt-exec-ST-d57f47055a04/bin/rs/tests/networking/cloner_canister_workload_bin" "--working-dir" "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87" "--group-base-name" "cloner_canister_workload" "spawn-child" "keepalive" "4180650697802266139" ...
+2024-10-23 13:07:11.335 INFO[rs/tests/driver/src/driver/subprocess_task.rs:76:9] Spawning "/home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt-exec-ST-d57f47055a04/bin/rs/tests/networking/cloner_canister_workload_bin" "--working-dir" "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87" "--group-base-name" "cloner_canister_workload" "spawn-child" "setup" "12167531512181191779" ...
+2024-10-23 13:07:11.335 INFO[rs/tests/driver/src/driver/subprocess_task.rs:76:9] Spawning "/home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/execroot/_main/bazel-out/k8-opt-exec-ST-d57f47055a04/bin/rs/tests/networking/cloner_canister_workload_bin" "--working-dir" "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87" "--group-base-name" "cloner_canister_workload" "spawn-child" "uvms_logs_stream" "6803787248556798594" ...
+2024-10-23 13:07:11.341 INFO[keepalive:rs/tests/driver/src/driver/group.rs:838:0] Number of CPUs 16
+2024-10-23 13:07:11.341 INFO[keepalive:rs/tests/driver/src/driver/group.rs:841:0] Set tokio runtime: worker_threads=16, blocking_threads=16
+2024-10-23 13:07:11.341 INFO[setup:rs/tests/driver/src/driver/group.rs:838:0] Number of CPUs 16
+2024-10-23 13:07:11.341 INFO[setup:rs/tests/driver/src/driver/group.rs:841:0] Set tokio runtime: worker_threads=16, blocking_threads=16
+2024-10-23 13:07:11.343 INFO[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:838:0] Number of CPUs 16
+2024-10-23 13:07:11.343 INFO[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:841:0] Set tokio runtime: worker_threads=16, blocking_threads=16
+2024-10-23 13:07:11.344 DEBG[keepalive:rs/tests/driver/src/driver/group.rs:542:0] SystemTestGroup.make_plan
+2024-10-23 13:07:11.344 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=uvms_logs_stream)
+2024-10-23 13:07:11.344 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=keepalive)
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=setup)
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=setup > >, timeout=14400s)
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=install_cloner_canisters)
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=install_cloner_canisters > >, timeout=14400s)
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:246:0] compose(root=None, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >])
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=keepalive >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >])
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=uvms_logs_stream >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >])
+2024-10-23 13:07:11.345 TRCE[keepalive:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=report >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=uvms_logs_stream >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >] >])
+2024-10-23 13:07:11.346 INFO[keepalive:rs/tests/driver/src/driver/group.rs:945:0] Executing sub-process-specific code ...
+2024-10-23 13:07:11.346 DEBG[keepalive:rs/tests/driver/src/driver/group.rs:624:0] >>> keepalive
+2024-10-23 13:07:11.346 DEBG[setup:rs/tests/driver/src/driver/group.rs:542:0] SystemTestGroup.make_plan
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=uvms_logs_stream)
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=keepalive)
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=setup)
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=setup > >, timeout=14400s)
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=install_cloner_canisters)
+2024-10-23 13:07:11.346 TRCE[setup:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=install_cloner_canisters > >, timeout=14400s)
+2024-10-23 13:07:11.347 TRCE[setup:rs/tests/driver/src/driver/group.rs:246:0] compose(root=None, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >])
+2024-10-23 13:07:11.347 TRCE[setup:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=keepalive >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >])
+2024-10-23 13:07:11.347 TRCE[setup:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=uvms_logs_stream >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >])
+2024-10-23 13:07:11.347 TRCE[setup:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=report >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=uvms_logs_stream >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >] >])
+2024-10-23 13:07:11.347 INFO[keepalive:rs/tests/driver/src/driver/group.rs:657:0] Setup directory not created yet.
+2024-10-23 13:07:11.347 INFO[setup:rs/tests/driver/src/driver/group.rs:945:0] Executing sub-process-specific code ...
+2024-10-23 13:07:11.347 DEBG[setup:rs/tests/driver/src/driver/group.rs:678:0] >>> setup_fn
+2024-10-23 13:07:11.347 TRCE[setup:rs/tests/driver/src/driver/group.rs:290:0] get_setup_env()
+2024-10-23 13:07:11.347 DEBG[setup:rs/tests/driver/src/driver/context.rs:211:0] ProcessContext.new
+2024-10-23 13:07:11.348 DEBG[setup:rs/tests/driver/src/driver/context.rs:113:0] Ensuring directory "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup" exists ...
+2024-10-23 13:07:11.348 DEBG[setup:rs/tests/driver/src/driver/context.rs:118:0] Directory "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup" doesn't exist, creating ...
+2024-10-23 13:07:11.348 DEBG[setup:rs/tests/driver/src/driver/context.rs:123:0] Copying configuration from "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/root_env" to "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup_tmp" ...
+2024-10-23 13:07:11.348 DEBG[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:542:0] SystemTestGroup.make_plan
+2024-10-23 13:07:11.348 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=uvms_logs_stream)
+2024-10-23 13:07:11.348 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=keepalive)
+2024-10-23 13:07:11.348 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=setup)
+2024-10-23 13:07:11.348 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=setup > >, timeout=14400s)
+2024-10-23 13:07:11.348 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:212:0] subproc(task_name=install_cloner_canisters)
+2024-10-23 13:07:11.349 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:222:0] timed(plan=Plan::Leaf< task=Task< task_id=install_cloner_canisters > >, timeout=14400s)
+2024-10-23 13:07:11.349 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:246:0] compose(root=None, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >])
+2024-10-23 13:07:11.349 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=keepalive >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >])
+2024-10-23 13:07:11.349 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=uvms_logs_stream >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >])
+2024-10-23 13:07:11.349 TRCE[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:246:0] compose(root=Some(Task< task_id=report >), ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=uvms_logs_stream >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=keepalive >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=dummy(0) >, ordering=Sequential, children=[Plan::Supervised< supervisor=Task< task_id=timeout(setup) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=setup > >] >, Plan::Supervised< supervisor=Task< task_id=timeout(install_cloner_canisters) >, ordering=Sequential, children=[Plan::Leaf< task=Task< task_id=install_cloner_canisters > >] >] >] >] >])
+2024-10-23 13:07:11.349 INFO[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:945:0] Executing sub-process-specific code ...
+2024-10-23 13:07:11.349 DEBG[setup:rs/tests/driver/src/driver/context.rs:129:0] Renaming directory from "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup_tmp" to "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup" ...
+2024-10-23 13:07:11.349 DEBG[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:580:0] >>> uvms_logs_stream
+2024-10-23 13:07:11.369 DEBG[setup:rs/tests/driver/src/driver/prometheus_vm.rs:171:0] Copying Grafana dashboards from "/home/ubuntu/.cache/bazel/_bazel_ubuntu/6d065581cce7ad9076e3b8db2b3afaf0/sandbox/linux-sandbox/36/execroot/_main/bazel-out/k8-opt/bin/rs/tests/networking/cloner_canister_workload/run-test.sh.runfiles/_main/rs/tests/dashboards" to "/ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup/universal_vms/prometheus/config/grafana/dashboards" ...
+[56 / 57] Testing //rs/tests/networking:cloner_canister_workload; 1s linux-sandbox
+2024-10-23 13:07:12.336 INFO[rs/tests/driver/src/driver/task.rs:153:17] Keeping alive system under test due to `ict -k` flag. Ctrl-c to stop.
+2024-10-23 13:07:19.808 INFO[setup:rs/tests/driver/src/driver/log_events.rs:20:0] {"event_name":"farm_vm_created_event","body":{"vm_name":"prometheus","hostname":"fr1-dll23.fr1.dfinity.network","ipv6":"2602:fb2b:110:10:50f0:ffff:fe12:8fc6","v_cpus":2,"memory_ki_b":16780000}}
+2024-10-23 13:07:19.888 INFO[setup:StdErr] Read : 0 / 1 MB ==>  0%                                                                                /tmp/tmp.SfWcnFQt5H  :  0.04%   (1065134 =>    447 bytes, /ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup/universal_vms/prometheus/config_ssh_disk.img.zst) 
+2024-10-23 13:07:19.889 INFO[setup:StdOut] image size: 1065134
+2024-10-23 13:07:19.889 INFO[setup:StdOut] mkfs.fat 4.1 (2017-01-24)
+2024-10-23 13:07:20.033 INFO[setup:StdErr] Read : 0 / 5 MB ==>  0%                                                                                /tmp/tmp.69YjDGpNBs  :  1.55%   (6246054 =>  96515 bytes, /ic/test_tmpdir/_tmp/39ea8b04dc627f21942ef8fc38a1fe87/setup/universal_vms/prometheus/config_disk.img.zst) 
+2024-10-23 13:07:20.034 INFO[setup:StdOut] image size: 6246054
+2024-10-23 13:07:20.034 INFO[setup:StdOut] mkfs.fat 4.1 (2017-01-24)
+2024-10-23 13:07:20.180 INFO[setup:rs/tests/driver/src/driver/universal_vm.rs:187:0] Uploaded image: 7dfc4983a0feaa75f8f263f5f695232cc42bd295ec2a3dce510185451de68679
+2024-10-23 13:07:21.086 INFO[setup:rs/tests/driver/src/driver/log_events.rs:20:0] {"event_name":"vm_console_link_created_event","body":{"url":"https://farm.dfinity.systems/group/cloner-canister-workload--1729688831235/vm/prometheus/console/","vm_name":"prometheus"}}
+2024-10-23 13:07:21.352 INFO[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:587:0] Streaming Journald for newly discovered [uvm=prometheus] with ipv6=2602:fb2b:110:10:50f0:ffff:fe12:8fc6
+2024-10-23 13:07:21.732 DEBG[setup:rs/tests/driver/src/driver/test_env_api.rs:1908:0] Func="get_ssh_session to 2602:fb2b:110:10:50f0:ffff:fe12:8fc6 [rs/tests/driver/src/driver/universal_vm.rs:392]" is being retried for the maximum of 500s with a linear backoff of 5s
+2024-10-23 13:07:24.422 DEBG[setup:rs/tests/driver/src/driver/test_env_api.rs:1929:0] Func="get_ssh_session to 2602:fb2b:110:10:50f0:ffff:fe12:8fc6 [rs/tests/driver/src/driver/universal_vm.rs:392]" failed on attempt 1. Error: No route to host (os error 113)...
+2024-10-23 13:07:24.422 ERRO[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:1057:0] Streaming Journald for uvm=prometheus with ipv6=2602:fb2b:110:10:50f0:ffff:fe12:8fc6 failed with: No route to host (os error 113)
+2024-10-23 13:07:24.422 WARN[uvms_logs_stream:rs/tests/driver/src/driver/group.rs:1063:0] All entries of Journald are read to completion. Streaming Journald will start again in 5 sec ...
+
+Bazel caught interrupt signal; cancelling pending invocation.
+
+-- Test timed out at 2024-10-23 13:07:24 UTC --
+Target //rs/tests/networking:cloner_canister_workload up-to-date:
+  bazel-bin/rs/tests/networking/cloner_canister_workload/run-test.sh
+ERROR: build interrupted
+INFO: Elapsed time: 24.785s, Critical Path: 23.73s
+INFO: 14 processes: 5 internal, 9 linux-sandbox.
+ERROR: Build did NOT complete successfully
+FAILED: 
+//rs/tests/networking:cloner_canister_workload                        NO STATUS
+
+Executed 0 out of 1 test: 1 was skipped.
+INFO: Streaming build results to: https://dash.idx.dfinity.network/invocation/2afbe559-eb8f-476c-8b7d-9b0d57a1da89

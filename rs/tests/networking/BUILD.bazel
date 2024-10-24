@@ -237,7 +237,8 @@ system_test_nns(
 system_test(
     name = "cloner_canister_workload",
     env = {
-        "CLONER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/canisters:cloner_canister)",
+        "CLONER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/cloner_canister:cloner_canister)",
+        "FIBONACCI_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/fibonacci_canister:fibonacci_canister)",
     },
     tags = [
         "manual",
@@ -245,13 +246,15 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests/networking/canisters:cloner_canister",
+        "//rs/tests/networking/cloner_canister:cloner_canister",
+        "//rs/tests/networking/fibonacci_canister:fibonacci_canister",
     ],
     deps = [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/networking/canisters:cloner_canister_types",
+        "//rs/tests/networking/cloner_canister:cloner_canister_types",
+        "//rs/tests/networking/fibonacci_canister:fibonacci_canister_types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:slog",

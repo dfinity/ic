@@ -20,9 +20,11 @@
 use anyhow::Result;
 use candid::Encode;
 use cloner_canister_types::SpinupCanistersArgs;
+use fibonacci_canister_types::FibonacciArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
+    canister_api::GenericRequest,
     driver::{
         farm::HostFeature,
         group::SystemTestGroup,
@@ -42,6 +44,11 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const COUNTER_CANISTER_METHOD: &str = "write";
+const COUNTER_CANISTER_PAYLOAD_SIZE_BYTES: usize = 1024;
+const COUNTER_CANISTER_RPS: u32 = 1000;
+
+const FIBONACCI_CANISTER_NUMBER_OF_SQUARES: u64 = 1000;
 
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
@@ -49,7 +56,7 @@ const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 // 100,000 canisters, with 500 batches, will take ~25 minutes to set up.
 // Yields 280-310ms commit and certify times.
 // We need minimum 350+ms, so we should probably push this to 150,000 canisters.
-const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 200_000;
+const NUMBER_OF_CANISTERS_TO_INSTALL: u64 = 100;
 const CANISTERS_INSTALLED_PER_CLONER_CANISTER: u64 = 500;
 const AMOUNT_OF_CLONER_CANISTERS: u64 =
     NUMBER_OF_CANISTERS_TO_INSTALL / CANISTERS_INSTALLED_PER_CLONER_CANISTER;
@@ -121,9 +128,20 @@ pub fn install_cloner_canisters(env: TestEnv) {
     let app_node = app_subnet.nodes().next().unwrap();
     let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
 
+    let app_agents = app_subnet
+        .nodes()
+        .map(|node| node.build_default_agent())
+        .collect::<Vec<_>>();
+
+    let fibonacci_canister = app_node.create_and_install_canister_with_arg(
+        &std::env::var("FIBONACCI_CANISTER_WASM_PATH")
+            .expect("`FIBONACCI_CANISTER_WASM_PATH` not set"),
+        None,
+    );
+
     info!(
         &logger,
-        "Sending ingress messages to {:?}. Be careful to not kill this node while spinning up canisters, otherwise the installation of cloner canisters will fail.",
+        "Sending ingress messages to {:?}. Be careful to not kill this node while spinning up canisters, otherwise the installation of cloner canisters will fail. And cause a panic.",
         app_node.get_public_url().to_string()
     );
 
@@ -187,6 +205,34 @@ pub fn install_cloner_canisters(env: TestEnv) {
 
     // keep the workload running for a while
     info!(&logger, "Step 5: Finished spinning up canisters.");
+
+    info!(&logger, "Step 6: Starting fibonacci workload.");
+
+    // start fibonacci load
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let app_agent_count = app_agents.len();
+
+    for app_agent in app_agents.into_iter() {
+        let fibonacci_canister = fibonacci_canister.clone();
+        let rps_on_agent = COUNTER_CANISTER_RPS / app_agent_count as u32;
+        let duration_between_requests = Duration::from_secs(1) / rps_on_agent;
+
+        runtime.spawn(async move {
+            loop {
+                let app_agent = app_agent.clone();
+                tokio::spawn(async move {
+                    app_agent
+                        .update(&fibonacci_canister, COUNTER_CANISTER_METHOD)
+                        .with_arg(Encode!(FibonacciArgs(38)).unwrap())
+                        .call()
+                        .await
+                });
+
+                tokio::time::sleep(duration_between_requests).await;
+            }
+        });
+    }
+
     info!(
         &logger,
         "Waiting {:?} before downloading prometheus data.", TESTNET_LIFETIME_AFTER_SETUP
