@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::OrchestratorMetrics,

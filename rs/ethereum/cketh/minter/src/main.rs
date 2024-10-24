@@ -628,6 +628,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_address,
                     value,
                     principal,
+                    subaccount,
                 }) => EP::AcceptedDeposit {
                     transaction_hash: transaction_hash.to_string(),
                     block_number: block_number.into(),
@@ -635,6 +636,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_address: from_address.to_string(),
                     value: value.into(),
                     principal,
+                    subaccount: subaccount.map(|s| s.to_bytes()),
                 },
                 EventType::AcceptedErc20Deposit(ReceivedErc20Event {
                     transaction_hash,
@@ -644,6 +646,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     value,
                     principal,
                     erc20_contract_address,
+                    subaccount,
                 }) => EP::AcceptedErc20Deposit {
                     transaction_hash: transaction_hash.to_string(),
                     block_number: block_number.into(),
@@ -652,6 +655,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     value: value.into(),
                     principal,
                     erc20_contract_address: erc20_contract_address.to_string(),
+                    subaccount: subaccount.map(|s| s.to_bytes()),
                 },
                 EventType::InvalidDeposit {
                     event_source,

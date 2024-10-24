@@ -70,7 +70,7 @@ impl CanisterHttp {
             .with_native_roots()
             .expect("Failed to set native roots")
             .https_only()
-            .enable_http1()
+            .enable_all_versions()
             .wrap_connector(proxy_connector);
 
         // Https client setup.
@@ -82,7 +82,7 @@ impl CanisterHttp {
         #[cfg(feature = "http")]
         let builder = builder.https_or_http();
 
-        let builder = builder.enable_http1();
+        let builder = builder.enable_all_versions();
         let direct_https_connector = builder.wrap_connector(http_connector);
 
         let socks_client =

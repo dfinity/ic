@@ -1,36 +1,12 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-BTC_RUNTIME_DEPS = [
-    # Keep sorted.
-    "//rs/tests:btc_uvm_config_image",
-    "@btc_canister//file",
-]
 
 LEDGER_CANISTER_RUNTIME_DEPS = [
     # Keep sorted.
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
 ]
-
-system_test_nns(
-    name = "btc_get_balance_test",
-    env = {
-        "BTC_WASM_PATH": "$(rootpath @btc_canister//file)",
-    },
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
 
 system_test(
     name = "icrc1_agent_test",
