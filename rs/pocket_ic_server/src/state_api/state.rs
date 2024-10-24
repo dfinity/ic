@@ -729,11 +729,14 @@ impl ApiState {
     where
         F: FnOnce(InstanceId) -> PocketIc + std::marker::Send + 'static,
     {
+        trace!("add_instance:start");
         let mut instances = self.instances.lock().await;
+        trace!("add_instance:locked");
         let instance_id = instances.len();
         let instance = tokio::task::spawn_blocking(move || f(instance_id))
             .await
             .expect("Failed to create PocketIC instance");
+        trace!("add_instance:done_blocking");
         let topology = instance.topology();
         instances.push(Mutex::new(Instance {
             progress_thread: None,
