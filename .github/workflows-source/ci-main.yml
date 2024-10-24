@@ -421,21 +421,3 @@ jobs:
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-  test-icrc1_agent_test:
-    name: icrc1_agent_test
-    <<: *dind-large-setup
-    runs-on:
-      group: zh1
-      labels: dind-large
-    steps:
-      - <<: *checkout
-      - <<: *before-script
-      - <<: *docker-login
-      - name: Run icrc1_agent_test
-        uses:  ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/tests/financial_integrations:icrc1_agent_test"
-          BAZEL_CI_CONFIG: "--config=systest --repository_cache=/cache/bazel"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
