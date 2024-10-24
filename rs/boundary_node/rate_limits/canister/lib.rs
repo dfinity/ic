@@ -1,18 +1,16 @@
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod access_control;
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod add_config;
 #[cfg(target_family = "wasm")]
 mod canister;
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod confidentiality_formatting;
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod disclose;
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod fetcher;
-#[cfg(target_family = "wasm")]
+#[allow(dead_code)]
 mod state;
-#[cfg(target_family = "wasm")]
 mod storage;
-#[cfg(target_family = "wasm")]
 mod types;

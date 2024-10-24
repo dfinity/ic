@@ -49,7 +49,7 @@ impl<S: Repository, A: ResolveAccessLevel> DisclosesRules for RulesDiscloser<S, 
             }
             return Ok(());
         }
-        Err(DiscloseRulesError::Unauthorized);
+        Err(DiscloseRulesError::Unauthorized)
     }
 }
 

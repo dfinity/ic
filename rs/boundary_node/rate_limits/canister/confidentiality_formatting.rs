@@ -1,3 +1,4 @@
+use mockall::automock;
 use std::marker::PhantomData;
 
 use crate::{
@@ -6,7 +7,8 @@ use crate::{
 };
 
 /// Trait for formatting confidential data based on access levels
-pub trait ConfidentialityFormatting {
+#[automock(type Input = OutputConfig;)]
+pub trait ConfidentialityFormatting<Input = OutputConfig> {
     type Input: Clone;
 
     fn format(&self, value: &Self::Input) -> Self::Input;

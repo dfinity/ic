@@ -11,6 +11,7 @@ pub trait EntityFetcher {
 
     fn fetch(&self, input: Self::Input) -> Result<Self::Output, Self::Error>;
 }
+
 pub struct ConfigFetcher<R, F> {
     pub repository: R,
     pub formatter: F,
@@ -150,5 +151,40 @@ impl From<FetchConfigError> for String {
 impl From<FetchRuleError> for String {
     fn from(value: FetchRuleError) -> Self {
         value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::confidentiality_formatting::MockConfidentialityFormatting;
+    use crate::state::MockRepository;
+    use crate::storage::{StorableConfig, StorableVersion};
+
+    use super::*;
+
+    #[test]
+    fn test_get_config_success() {
+        // Arrange
+        let mut mock_formatter = MockConfidentialityFormatting::new();
+        mock_formatter.expect_format().returning(|_| OutputConfig {
+            schema_version: 1,
+            rules: vec![],
+        });
+
+        let mut mock_repository = MockRepository::new();
+        mock_repository
+            .expect_get_version()
+            .returning(|| Some(StorableVersion(1)));
+        mock_repository.expect_get_config().returning(|_| {
+            Some(StorableConfig {
+                schema_version: 1,
+                active_since: 1,
+                rule_ids: vec![],
+            })
+        });
+
+        let fetcher = ConfigFetcher::new(mock_repository, mock_formatter);
+        // Act + assert
+        fetcher.fetch(Some(1)).expect("failed to get a config");
     }
 }
