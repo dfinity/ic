@@ -11,6 +11,8 @@ mod disclose;
 #[allow(dead_code)]
 mod fetcher;
 #[allow(dead_code)]
+mod metrics;
+#[allow(dead_code)]
 mod state;
 mod storage;
 mod types;

@@ -11,11 +11,13 @@ anyhow = { workspace = true }
 bincode = { workspace = true }
 candid = { workspace = true }
 hex = { workspace = true }
-mockall = { workspace = true }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
+mockall = { workspace = true }
 rate-limits-api = { path = "./api" }
 serde = { workspace = true }
 serde_json = { workspace = true }

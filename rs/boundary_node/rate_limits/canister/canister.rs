@@ -5,9 +5,11 @@ use crate::add_config::{AddsConfig, ConfigAdder};
 use crate::confidentiality_formatting::ConfidentialityFormatterFactory;
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
+use crate::metrics::{encode_metrics, serve_metrics};
 use crate::state::{init_version_and_config, with_state};
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::{candid_method, Principal};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
 use ic_cdk_macros::{init, query, update};
 use rate_limits_api::{
@@ -81,6 +83,16 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
         discloser.disclose_rules(args.into())
     })?;
     Ok(())
+}
+
+// TODO: adjust quota
+#[query(decoding_quota = 10000)]
+#[candid_method(query)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(ic_cdk::api::time() as i64, encode_metrics),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }
 
 fn periodically_poll_api_boundary_nodes(interval: Duration) {

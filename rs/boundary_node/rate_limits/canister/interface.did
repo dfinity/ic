@@ -3,6 +3,7 @@ type Timestamp = nat64;         // Represents timestamp in nanoseconds since the
 type RuleId = text;             // Unique identifier for each rule
 type SchemaVersion = nat64;     // Version of the schema for encoding/decoding the rules
 type IncidentId = text;         // Unique identifier for each incident
+type HeaderField = record { text; text; };
 
 
 // Input structure for defining a rule with mandatory fields within a config
@@ -81,6 +82,20 @@ type InputConfig = record {
   rules: vec InputRule;
 };
 
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+};
+
 // Initialization arguments for the service
 type InitArg = record {
   registry_polling_period_secs: nat64; // IDs of existing API boundary nodes are polled from the registry with this periodicity
@@ -102,4 +117,7 @@ service : (InitArg) -> {
 
   // Fetch all rules IDs related to an ID of the incident
   get_rules_by_incident_id: (IncidentId) -> (GetRulesByIncidentIdResponse) query;
+
+  // Canister metrics (Http Interface)
+  http_request: (HttpRequest) -> (HttpResponse) query;
 }
