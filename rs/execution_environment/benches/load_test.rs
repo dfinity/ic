@@ -1,5 +1,5 @@
 use ic_error_types::UserError;
-use ic_management_canister_types::{self as ic00, CanisterSettingsArgs, Payload};
+use ic_management_canister_types::{self as ic00, Payload};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -31,12 +31,11 @@ fn await_ingress_responses(
     let start_time = Instant::now();
 
     for _ in 0..MAX_TICKS {
-        let statuses: Vec<IngressStatus> = message_ids
+        let results: Vec<_> = message_ids
             .iter()
-            .map(|msg_id| env.ingress_status(msg_id))
+            .filter_map(|msg_id| get_result(env.ingress_status(msg_id)))
             .collect();
 
-        let results: Vec<_> = statuses.into_iter().filter_map(get_result).collect();
         if results.len() == message_ids.len() {
             return results;
         }
@@ -45,7 +44,7 @@ fn await_ingress_responses(
     }
 
     panic!(
-        "Ingress responses not received within {} ticks ({:?} elapsed)",
+        "Failed to receive ingress responses within {} ticks ({:?} elapsed)",
         MAX_TICKS,
         start_time.elapsed()
     );
@@ -57,7 +56,7 @@ fn main() {
     const CANISTERS_TO_CREATE: usize = 2;
     let env = StateMachineBuilder::default().build();
 
-    let message_ids: Vec<MessageId> = (0..CANISTERS_TO_CREATE)
+    let message_ids: Vec<_> = (0..CANISTERS_TO_CREATE)
         .map(|_| {
             env.send_ingress(
                 PrincipalId::new_anonymous(),
