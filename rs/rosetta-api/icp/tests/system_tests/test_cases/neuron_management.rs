@@ -6,6 +6,7 @@ use crate::common::{
 };
 use ic_agent::{identity::BasicIdentity, Identity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
+use ic_icp_rosetta_client::RosettaIncreaseNeuronStakeArgs;
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaDisburseNeuronArgs, RosettaSetNeuronDissolveDelayArgs,
 };
@@ -17,6 +18,7 @@ use ic_rosetta_api::{
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
+use rosetta_core::request_types::AccountBalanceRequest;
 use std::{
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
@@ -71,6 +73,115 @@ fn test_create_neuron() {
             n.controller == Some(PrincipalId::from(TEST_IDENTITY.sender().unwrap()))
                 && n.cached_neuron_stake_e8s == staked_amount
         }));
+    });
+}
+
+#[test]
+fn test_increase_neuron_stake() {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let initial_balance = 100_000_000_000;
+        let env = RosettaTestingEnvironment::builder()
+            .with_initial_balances(
+                vec![(
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()),
+                    // A hundred million ICP should be enough
+                    icp_ledger::Tokens::from_e8s(initial_balance),
+                )]
+                .into_iter()
+                .collect(),
+            )
+            .with_governance_canister()
+            .build()
+            .await;
+
+        // Stake the minimum amount 100 million e8s
+        let staked_amount = initial_balance / 10;
+        let neuron_index = 0;
+        let from_subaccount = [0; 32];
+
+        env.rosetta_client
+            .create_neuron(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaCreateNeuronArgs::builder(staked_amount.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        // Try to stake more than the amount of ICP in the account
+        match env
+            .rosetta_client
+            .increase_neuron_stake(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaIncreaseNeuronStakeArgs::builder(u64::MAX.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+        {
+            Err(e)
+                if e.to_string().contains(
+                    "the debit account doesn't have enough funds to complete the transaction",
+                ) => {}
+            Err(e) => panic!("Unexpected error: {}", e),
+            Ok(ok) => panic!("Expected an errorm but got: {:?}", ok),
+        }
+
+        // Now we try with a valid amount
+        let additional_stake = initial_balance / 10;
+        env.rosetta_client
+            .increase_neuron_stake(
+                env.network_identifier.clone(),
+                &(*TEST_IDENTITY).clone(),
+                RosettaIncreaseNeuronStakeArgs::builder(additional_stake.into())
+                    .with_from_subaccount(from_subaccount)
+                    .with_neuron_index(neuron_index)
+                    .build(),
+            )
+            .await
+            .unwrap();
+
+        let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
+        assert_eq!(
+            neuron.cached_neuron_stake_e8s,
+            staked_amount + additional_stake
+        );
+
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &agent,
+        )
+        .await;
+
+        let balance = env
+            .rosetta_client
+            .account_balance(
+                AccountBalanceRequest::builder(
+                    env.network_identifier.clone(),
+                    AccountIdentifier::from(TEST_IDENTITY.sender().unwrap()).into(),
+                )
+                .build(),
+            )
+            .await
+            .unwrap()
+            .balances
+            .first()
+            .unwrap()
+            .value
+            .parse::<u64>()
+            .unwrap();
+        assert_eq!(
+            balance,
+            initial_balance - staked_amount - additional_stake - DEFAULT_TRANSFER_FEE.get_e8s() * 2
+        );
     });
 }
 

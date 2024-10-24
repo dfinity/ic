@@ -1,12 +1,11 @@
 use candid::{CandidType, Nat, Principal};
-use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::{
     fmt,
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]
 pub enum TlaValue {
     Set(BTreeSet<TlaValue>),
     Record(BTreeMap<String, TlaValue>),
@@ -114,7 +113,7 @@ impl fmt::Debug for TlaValue {
     }
 }
 
-#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Debug)]
 pub struct TlaConstantAssignment {
     pub constants: BTreeMap<String, TlaValue>,
 }

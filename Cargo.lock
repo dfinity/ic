@@ -6034,6 +6034,7 @@ dependencies = [
  "memory_tracker",
  "mockall 0.13.0",
  "nix 0.24.3",
+ "num-traits",
  "once_cell",
  "prometheus",
  "rayon",
@@ -20408,7 +20409,6 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "local_key",
- "serde",
  "sha2 0.10.8",
  "tla_instrumentation_proc_macros",
  "tokio-test",

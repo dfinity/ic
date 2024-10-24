@@ -149,6 +149,7 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     for ResolvedStatePair {
         ref mut start,
         ref mut end,
+        ..
     } in trace
     {
         for state in &mut [start, end] {
