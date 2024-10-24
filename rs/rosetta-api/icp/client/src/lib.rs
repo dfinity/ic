@@ -1140,6 +1140,41 @@ impl RosettaIncreaseNeuronStakeArgs {
     }
 }
 
+pub struct RosettaIncreaseNeuronStakeArgsBuilder {
+    additional_stake: Nat,
+    neuron_index: Option<u64>,
+    // The subaccount from which the ICP should be transferred
+    from_subaccount: Option<[u8; 32]>,
+}
+
+impl RosettaIncreaseNeuronStakeArgsBuilder {
+    pub fn new(additional_stake: Nat) -> Self {
+        Self {
+            additional_stake,
+            neuron_index: None,
+            from_subaccount: None,
+        }
+    }
+
+    pub fn with_neuron_index(mut self, neuron_index: u64) -> Self {
+        self.neuron_index = Some(neuron_index);
+        self
+    }
+
+    pub fn with_from_subaccount(mut self, from_subaccount: Subaccount) -> Self {
+        self.from_subaccount = Some(from_subaccount);
+        self
+    }
+
+    pub fn build(self) -> RosettaIncreaseNeuronStakeArgs {
+        RosettaIncreaseNeuronStakeArgs {
+            additional_stake: self.additional_stake,
+            neuron_index: self.neuron_index,
+            from_subaccount: self.from_subaccount,
+        }
+    }
+}
+
 pub struct RosettaChangeAutoStakeMaturityArgs {
     pub neuron_index: Option<u64>,
     pub requested_setting_for_auto_stake_maturity: bool,
