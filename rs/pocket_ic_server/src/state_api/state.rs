@@ -1445,6 +1445,7 @@ impl ApiState {
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
+                            println!("grabbed instance: old={:?} op_id={:?}", old_state_label, op_id);
                             if let InstanceState::Deleted = &instance.state {
                                 error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
