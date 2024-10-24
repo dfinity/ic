@@ -1,6 +1,6 @@
 [Unit]
 Description=Node Exporter
-After=network.target
+After=syslog.target network.target
 
 [Service]
 User=node_exporter
