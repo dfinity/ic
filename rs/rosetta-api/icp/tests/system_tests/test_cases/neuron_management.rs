@@ -446,7 +446,7 @@ fn test_disburse_neuron() {
         .unwrap();
 
         let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        // If we try to disburse the neuron when it is not yet DISSOLVE we expect an error
+        // If we try to disburse the neuron when it is not yet DISSOLVED we expect an error
         match env
             .rosetta_client
             .disburse_neuron(
