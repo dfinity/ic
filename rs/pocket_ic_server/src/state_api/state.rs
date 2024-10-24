@@ -1295,8 +1295,11 @@ impl ApiState {
         let instances = self.instances.read().await;
         let mut res = vec![];
 
+        println!("total instances: {}", instances.len());
         for instance in &*instances {
+            println!("grabbing instance");
             let instance = &*instance.lock().await;
+            println!("grabbed instance");
             match &instance.state {
                 InstanceState::Busy { state_label, op_id } => {
                     res.push(format!("Busy({:?}, {:?})", state_label, op_id))
