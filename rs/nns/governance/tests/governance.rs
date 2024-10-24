@@ -14154,7 +14154,7 @@ fn test_neuron_info_private_enforcement() {
         ];
         main(neuron_id_to_expect_redact);
 
-        // Insepct visibility. This time, the no explicit visibility guy is shown as such.
+        // Insepct visibility. This time, the no explicit visibility neuron is shown as such.
         for (neuron_id, expected_visibility) in [
             (no_explicit_visibility_neuron.id.unwrap(), None),
             (private_neuron.id.unwrap(), Some(Visibility::Private)),
