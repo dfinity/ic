@@ -1,0 +1,37 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/boundary_node/rate_limits/api:rate_limits_api",
+    "//rs/rust_canisters/http_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:bincode",
+    "@crate_index//:candid",
+    "@crate_index//:hex",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:mockall",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:sha2",
+    "@crate_index//:thiserror",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:ic-cdk-macros",
+]
+
+rust_canister(
+    name = "rate_limit_canister",
+    srcs = glob(["canister/**/*.rs"]),
+    crate_name = "rate_limit_canister",
+    crate_root = "canister/lib.rs",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = "canister/interface.did",
+    deps = DEPENDENCIES,
+)

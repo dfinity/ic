@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:regex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "rate_limits_api",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "rate_limits_api",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
