@@ -96,7 +96,7 @@ Verify that the hash of the gzipped WASM for the ledger, index and archive match
 
 ```
 git fetch
-git checkout d4ee25b0865e89d3eaac13a60f0016d5e3296b31
+git checkout e54d3fa34ded227c885d04e64505fa4b5d564743
 ./ci/container/build-ic.sh -c
 sha256sum ./artifacts/canisters/ic-icrc1-ledger-u256.wasm.gz
 sha256sum ./artifacts/canisters/ic-icrc1-index-ng-u256.wasm.gz
