@@ -1,82 +1,64 @@
-pub use ic_error_types::{ErrorCode, UserError};
-use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, CanisterSettingsArgs, InstallCodeArgs, MasterPublicKeyId,
-    Method, Payload,
-};
+use ic_error_types::UserError;
+use ic_management_canister_types::{self as ic00, CanisterSettingsArgs, Payload};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-pub use ic_types::{
-    canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpRequestId,
-        CanisterHttpResponseMetadata,
-    },
-    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
+use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, HttpRequestError, MessageId},
-    signature::BasicSignature,
-    time::Time,
-    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
+    messages::MessageId,
+    PrincipalId,
 };
 use std::time::Instant;
 
-fn await_messages(
+const MAX_TICKS: usize = 100;
+
+fn get_result(status: IngressStatus) -> Option<Result<WasmResult, UserError>> {
+    match status {
+        IngressStatus::Known {
+            state: IngressState::Completed(result),
+            ..
+        } => Some(Ok(result)),
+        IngressStatus::Known {
+            state: IngressState::Failed(error),
+            ..
+        } => Some(Err(error)),
+        _ => None,
+    }
+}
+
+fn await_ingress_responses(
     env: &StateMachine,
     message_ids: &[MessageId],
 ) -> Vec<Result<WasmResult, UserError>> {
-    let max_ticks = 100;
-    let started_at = Instant::now();
-    for _tick in 0..max_ticks {
-        let statuses: Vec<_> = message_ids
+    let start_time = Instant::now();
+
+    for _ in 0..MAX_TICKS {
+        let statuses: Vec<IngressStatus> = message_ids
             .iter()
             .map(|msg_id| env.ingress_status(msg_id))
             .collect();
-        if statuses.iter().all(|status| match status {
-            IngressStatus::Known {
-                state: IngressState::Completed(_),
-                ..
-            } => true,
-            IngressStatus::Known {
-                state: IngressState::Failed(_),
-                ..
-            } => true,
-            _ => false,
-        }) {
-            let results = statuses
-                .into_iter()
-                .map(|status| match status {
-                    IngressStatus::Known {
-                        state: IngressState::Completed(result),
-                        ..
-                    } => Ok(result),
-                    IngressStatus::Known {
-                        state: IngressState::Failed(error),
-                        ..
-                    } => Err(error),
-                    _ => panic!("Unexpected ingress status"),
-                })
-                .collect();
+
+        let results: Vec<_> = statuses.into_iter().filter_map(get_result).collect();
+        if results.len() == message_ids.len() {
             return results;
         }
+
         env.tick();
     }
+
     panic!(
-        "Did not get answer to ingress after {} state machine ticks ({:?} elapsed)",
-        max_ticks,
-        started_at.elapsed()
-    )
+        "Ingress responses not received within {} ticks ({:?} elapsed)",
+        MAX_TICKS,
+        start_time.elapsed()
+    );
 }
 
-/*
-$ bazel run //rs/execution_environment:load_test_bench
-*/
 fn main() {
-    println!("hello, work!");
+    println!("Starting the canister creation process...");
 
-    let canisters_number = 2;
-
+    const CANISTERS_TO_CREATE: usize = 2;
     let env = StateMachineBuilder::default().build();
-
     let settings: Option<CanisterSettingsArgs> = None;
-    let ingress_ids: Vec<_> = (0..canisters_number)
+
+    let message_ids: Vec<MessageId> = (0..CANISTERS_TO_CREATE)
         .map(|_| {
             env.send_ingress(
                 PrincipalId::new_anonymous(),
@@ -93,7 +75,7 @@ fn main() {
         })
         .collect();
 
-    let results = await_messages(&env, &ingress_ids);
+    let results = await_ingress_responses(&env, &message_ids);
 
-    println!("results: {:?}", results);
+    println!("Canister creation results: {:?}", results);
 }
