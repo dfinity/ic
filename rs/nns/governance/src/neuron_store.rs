@@ -350,6 +350,7 @@ impl NeuronStore {
 
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
+            ic_cdk::println!("ID of neuron to be added: {:?}", neuron.id());
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
             // data. This is somewhat what we want - we can never create a neuron as a known neuron,
             // and it requires a proposal to do so. Ideally, the neuron type accepted by
@@ -444,6 +445,14 @@ impl NeuronStore {
         let in_heap = self.heap_neurons.contains_key(&neuron_id.id);
         let in_stable =
             with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.contains(neuron_id));
+
+        ic_cdk::println!(
+            "NeuronStore::contains id: {}: in_heap: {}, in_stable: {}",
+            neuron_id.id,
+            in_heap,
+            in_stable
+        );
+
         in_heap || in_stable
     }
 
@@ -467,6 +476,11 @@ impl NeuronStore {
             })?;
 
         if self.contains(neuron_id) {
+            ic_cdk::println!(
+                "{}WARNING: Attempting to add a neuron with an existing ID: {:?}",
+                LOG_PREFIX,
+                neuron_id
+            );
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 

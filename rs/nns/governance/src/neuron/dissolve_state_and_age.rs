@@ -24,7 +24,7 @@ impl DissolveStateAndAge {
         match self {
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
-                aging_since_timestamp_seconds,
+                aging_since_timestamp_seconds: _,
             } => {
                 if dissolve_delay_seconds == 0 {
                     return Err("Dissolve delay must be greater than 0".to_string());

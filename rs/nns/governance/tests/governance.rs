@@ -93,8 +93,9 @@ use ic_nns_governance::{
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
-    temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
+    temporarily_disable_debug_log, temporarily_disable_private_neuron_enforcement,
+    temporarily_disable_set_visibility_proposals, temporarily_enable_private_neuron_enforcement,
+    temporarily_enable_set_visibility_proposals,
 };
 use ic_nns_governance_api::{
     pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -132,6 +133,7 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla;
+use ic_nns_governance::storage::reset_stable_memory;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -457,6 +459,7 @@ fn check_proposal_status_after_voting_and_after_expiration(
     expected_after_voting: ProposalStatus,
     expected_after_expiration: ProposalStatus,
 ) {
+    reset_stable_memory();
     let expiration_seconds = 17; // Arbitrary duration
     let network_economics = NetworkEconomics {
         reject_cost_e8s: 0,          // It's the default, but specify for emphasis
@@ -3445,6 +3448,7 @@ fn compute_maturities(
     proposals: Vec<impl Into<fake::ProposalNeuronBehavior>>,
     reward_pot_e8s: u64,
 ) -> Vec<u64> {
+    reset_stable_memory();
     let proposals: Vec<fake::ProposalNeuronBehavior> =
         proposals.into_iter().map(|x| x.into()).collect();
 
@@ -3553,6 +3557,10 @@ proptest! {
 /// 3. other proposals yield 1 time the voting power
 #[test]
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
+    // The logs produced by this test are voluminous and largely useless except when there is an
+    // actual failure, in which case this line can be commented to debug.  Not producing them
+    // speeds up the test by
+    temporarily_disable_debug_log();
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a network proposal (1x) and
     // 2. second neuron voting on an exchange proposal (0.01x).
@@ -8972,6 +8980,7 @@ async fn test_id_v1_works() {
 #[test]
 fn test_can_follow_by_subaccount_and_neuron_id() {
     fn test_can_follow_by(make_neuron_id: fn(&Neuron) -> NeuronIdOrSubaccount) {
+        reset_stable_memory();
         let driver = fake::FakeDriver::default();
         let mut gov = Governance::new(
             fixture_for_manage_neuron(),

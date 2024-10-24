@@ -180,6 +180,8 @@ const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 // leave this here indefinitely, but it will just be clutter after a modest
 // amount of time.
 thread_local! {
+
+    static IS_DEBUG_LOG_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
     // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
     // delete. That way, if we need to recall the feature, we can do that via a
     // 1-line change (by replacing true with `cfg!(feature = "test")`). After
@@ -190,6 +192,20 @@ thread_local! {
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_debug_log_enabled() -> bool {
+    IS_DEBUG_LOG_ENABLED.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_debug_log() -> Temporary {
+    Temporary::new(&IS_DEBUG_LOG_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_debug_log() -> Temporary {
+    Temporary::new(&IS_DEBUG_LOG_ENABLED, false)
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
