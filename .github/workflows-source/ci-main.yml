@@ -115,7 +115,9 @@ jobs:
 
           # Determine which tests to skip and append 'long_test' for pull requests or merge groups
           EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
-          [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && EXCLUDED_TEST_TAGS+=(long_test)
+          if [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && [[ "${RUN_LONG_TESTS:-}" != "true" ]]; then
+              EXCLUDED_TEST_TAGS+=(long_test)
+          fi
 
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
           echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
@@ -142,6 +144,8 @@ jobs:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
           RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+          # Run long system tests that are only done on push on master
+          RUN_LONG_TESTS: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_LONG_TESTS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
