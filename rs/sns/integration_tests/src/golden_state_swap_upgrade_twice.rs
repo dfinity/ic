@@ -1,9 +1,10 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_nervous_system_proto::pb::v1::Timers;
 use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm, create_modified_sns_wasm, ensure_sns_wasm_gzipped,
 };
-use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap, Timers};
+use ic_sns_swap::pb::v1::{DerivedState, GetStateRequest, GetStateResponse, Swap};
 use ic_sns_wasm::pb::v1::SnsWasm;
 use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, PrincipalId};

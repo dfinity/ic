@@ -62,7 +62,7 @@ const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
 ///
 /// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
 /// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 50_000;
+const MAX_STREAM_MESSAGES: usize = 10_000;
 
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
