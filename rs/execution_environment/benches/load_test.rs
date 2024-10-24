@@ -1,6 +1,7 @@
 use ic_error_types::UserError;
-use ic_management_canister_types::{self as ic00, Payload};
+use ic_management_canister_types::{self as ic00, CanisterIdRecord, Payload};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_test_utilities_execution_environment::get_reply;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
@@ -53,9 +54,10 @@ fn await_ingress_responses(
 fn main() {
     println!("Starting the canister creation process...");
 
-    const CANISTERS_TO_CREATE: usize = 2;
+    const CANISTERS_TO_CREATE: usize = 1_000;
     let env = StateMachineBuilder::default().build();
 
+    let start = std::time::Instant::now();
     let message_ids: Vec<_> = (0..CANISTERS_TO_CREATE)
         .map(|_| {
             env.send_ingress(
@@ -67,8 +69,29 @@ fn main() {
             )
         })
         .collect();
+    println!(
+        "Sent {} canister creation messages in {:.3} s",
+        CANISTERS_TO_CREATE,
+        start.elapsed().as_secs_f64()
+    );
 
+    let start = std::time::Instant::now();
     let results = await_ingress_responses(&env, &message_ids);
+    println!(
+        "Received {} canister creation responses in {:.3} s",
+        CANISTERS_TO_CREATE,
+        start.elapsed().as_secs_f64()
+    );
 
-    println!("Canister creation results: {:?}", results);
+    let replies: Vec<_> = results.into_iter().map(get_reply).collect();
+    let canister_ids: Vec<_> = replies
+        .iter()
+        .map(|bytes| {
+            CanisterIdRecord::decode(&bytes[..])
+                .expect("failed to decode canister ID record")
+                .get_canister_id()
+        })
+        .collect();
+
+    println!("Created {} canisters", canister_ids.len());
 }
