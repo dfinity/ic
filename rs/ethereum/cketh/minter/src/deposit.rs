@@ -1,5 +1,5 @@
 use crate::eth_logs::{report_transaction_error, ReceivedEvent, ReceivedEventError};
-use crate::eth_rpc::{BlockSpec, HttpOutcallError};
+use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
@@ -13,6 +13,7 @@ use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::cmp::{min, Ordering};
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
@@ -30,6 +31,28 @@ pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
 // Keccak256("ReceivedErc20(address,address,uint256,bytes32,bytes32)")
 pub(crate) const RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
     hex!("aef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf");
+
+pub enum EthEvent {
+    ReceivedEthWithoutSubaccount,
+    ReceivedErc20WithoutSubaccount,
+    ReceivedEthWithSubaccount,
+    ReceivedErc20WithSubaccount,
+}
+
+impl EthEvent {
+    pub fn event_signature(&self) -> FixedSizeData {
+        match self {
+            EthEvent::ReceivedEthWithoutSubaccount => FixedSizeData(RECEIVED_ETH_EVENT_TOPIC),
+            EthEvent::ReceivedErc20WithoutSubaccount => FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC),
+            EthEvent::ReceivedEthWithSubaccount => {
+                FixedSizeData(RECEIVED_ETH_EVENT_WITH_SUBACCOUNT_TOPIC)
+            }
+            EthEvent::ReceivedErc20WithSubaccount => {
+                FixedSizeData(RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC)
+            }
+        }
+    }
+}
 
 async fn mint() {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};

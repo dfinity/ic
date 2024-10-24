@@ -26,6 +26,7 @@ use transactions::EthTransactions;
 pub mod audit;
 pub mod event;
 pub mod transactions;
+pub mod eth_logs_scraping;
 
 #[cfg(test)]
 mod tests;
