@@ -6,13 +6,13 @@ export PATH="$HOME/.local/bin:$PATH"
 PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install pre-commit
 
 if [ "${CI_OVERRIDE_BUF_BREAKING:-false}" = "true" ]; then
-    PRE_COMMIT_CMD="pre-commit run"
+    SKIP_CHECKS="bazel_rust_format_check,bazel_smoke,buf-breaking"
 else
-    PRE_COMMIT_CMD="pre-commit run -a --hook-stage=manual"
+    SKIP_CHECKS="bazel_rust_format_check,bazel_smoke"
 fi
 
 # Make sure CI can pull from the private repo.
-if ! SKIP=bazel_rust_format_check,bazel_smoke $PRE_COMMIT_CMD; then
+if ! SKIP=$SKIP_CHECKS pre-commit run -a --hook-stage=manual; then
     echo "Pre-commit checks failed. Here is the diff of the changes:"
     git diff
     echo
