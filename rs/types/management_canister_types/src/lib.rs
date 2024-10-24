@@ -97,7 +97,9 @@ pub enum Method {
     BitcoinSendTransactionInternal, // API for sending transactions to the network.
     BitcoinGetSuccessors,           // API for fetching blocks from the network.
 
+    // Subnet information
     NodeMetricsHistory,
+    SubnetMetrics,
 
     FetchCanisterLogs,
 
@@ -2585,6 +2587,32 @@ impl Payload<'_> for BitcoinSendTransactionInternalArgs {}
 pub enum QueryMethod {
     FetchCanisterLogs,
 }
+
+/// `CandidType` for `SubnetMetricsArgs`
+/// ```text
+/// record {
+///     subnet_id: principal;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetMetricsArgs {
+    pub subnet_id: PrincipalId,
+}
+
+impl Payload<'_> for SubnetMetricsArgs {}
+
+/// `CandidType` for `SubnetMetricsResponse`
+/// ```text
+/// record {
+///     replica_version: text;
+/// }
+/// ```
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct SubnetMetricsResponse {
+    pub replica_version: String,
+}
+
+impl Payload<'_> for SubnetMetricsResponse {}
 
 /// `CandidType` for `NodeMetricsHistoryArgs`
 /// ```text

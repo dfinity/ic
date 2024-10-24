@@ -255,6 +255,7 @@ impl SystemStateChanges {
             | Ok(Ic00Method::BitcoinSendTransaction)
             | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles)
             | Ok(Ic00Method::NodeMetricsHistory)
+            | Ok(Ic00Method::SubnetMetrics)
             | Ok(Ic00Method::FetchCanisterLogs)
             | Ok(Ic00Method::UploadChunk)
             | Ok(Ic00Method::StoredChunks)

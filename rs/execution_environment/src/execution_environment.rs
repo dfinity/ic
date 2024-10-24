@@ -39,8 +39,8 @@ use ic_management_canister_types::{
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     SchnorrPublicKeyArgs, SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs,
-    SignWithSchnorrArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    SignWithSchnorrArgs, StoredChunksArgs, SubnetMetricsArgs, SubnetMetricsResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1378,6 +1378,15 @@ impl ExecutionEnvironment {
                 }
             }
 
+            Ok(Ic00Method::SubnetMetrics) => {
+                let res = SubnetMetricsArgs::decode(payload)
+                    .and_then(|args| self.subnet_stats(registry_settings, args));
+                ExecuteSubnetMessageResult::Finished {
+                    response: res,
+                    refund: msg.take_cycles(),
+                }
+            }
+
             Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
                 response: Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -2223,6 +2232,27 @@ impl ExecutionEnvironment {
                 args.start_at_timestamp_nanos,
             ));
         Ok(Encode!(&result).unwrap())
+    }
+
+    fn subnet_stats(
+        &self,
+        registry_settings: &RegistryExecutionSettings,
+        args: SubnetMetricsArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        // TODO: Check taken from node_metric_history; but is this actually needed? Can such a call be routed wrong?
+        if args.subnet_id != self.own_subnet_id.get() {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Provided target subnet ID {} does not match current subnet ID {}.",
+                    args.subnet_id, self.own_subnet_id
+                ),
+            ));
+        }
+        let res = SubnetMetricsResponse {
+            replica_version: registry_settings.replica_version.clone(),
+        };
+        Ok(Encode!(&res).unwrap())
     }
 
     // Executes an inter-canister response.
