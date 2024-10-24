@@ -751,9 +751,11 @@ impl ApiState {
             match &instance.state {
                 InstanceState::Available(_) => {
                     let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
+            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Deleted => {
+            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Busy { .. } => {}
