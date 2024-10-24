@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::{FixedSizeData, Hash, LogEntry};
+use crate::checked_amount::CheckedAmountOf;
+use crate::eth_rpc::{Data, FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
@@ -27,6 +28,8 @@ pub struct ReceivedEthEvent {
     pub value: Wei,
     #[cbor(n(5), with = "crate::cbor::principal")]
     pub principal: Principal,
+    #[n(6)]
+    pub subaccount: Option<LedgerSubaccount>,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
@@ -45,6 +48,8 @@ pub struct ReceivedErc20Event {
     pub principal: Principal,
     #[n(6)]
     pub erc20_contract_address: Address,
+    #[n(7)]
+    pub subaccount: Option<LedgerSubaccount>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -307,20 +312,15 @@ impl TryFrom<LogEntry> for ReceivedEvent {
             })
         };
 
-        // We have only one non-indexed data field for both ETH and ERC20 events.
-        let value_bytes: [u8; 32] = entry.data.0.clone().try_into().map_err(|data| {
-            ReceivedEventError::InvalidEventSource {
+        if entry.topics.is_empty() {
+            return Err(ReceivedEventError::InvalidEventSource {
                 source: event_source,
-                error: EventSourceError::InvalidEvent(format!(
-                    "Invalid data length; expected 32-byte value, got {}",
-                    hex::encode(data)
-                )),
-            }
-        })?;
+                error: EventSourceError::InvalidEvent("Expected at least one topic".to_string()),
+            });
+        }
 
-        // We either have 3 indexed topics for ETH events: (hash, from_address, principal),
-        // or 4 indexed topics for ERC20 events: (hash, erc20_contract_address, from_address, principal)
         match entry.topics[0] {
+            // ReceivedEth (index_topic_1 address from, uint256 value, index_topic_2 bytes32 principal)
             FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_TOPIC) => {
                 if entry.topics.len() != 3 {
                     return Err(ReceivedEventError::InvalidEventSource {
@@ -333,6 +333,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 };
                 let from_address = parse_address(&entry.topics[1])?;
                 let principal = parse_principal(&entry.topics[2])?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
                 Ok(ReceivedEthEvent {
                     transaction_hash,
                     block_number,
@@ -340,9 +341,39 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                     from_address,
                     value: Wei::from_be_bytes(value_bytes),
                     principal,
+                    subaccount: None,
                 }
                 .into())
             }
+            // ReceivedEth (index_topic_1 address from, uint256 value, index_topic_2 bytes32 principal, bytes32 subaccount)
+            FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_WITH_SUBACCOUNT_TOPIC) => {
+                if entry.topics.len() != 3 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 3 topics for ReceivedEth event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let from_address = parse_address(&entry.topics[1])?;
+                let principal = parse_principal(&entry.topics[2])?;
+                let [value_bytes, subaccount_bytes] =
+                    parse_data_into_32_byte_words(entry.data, event_source)?;
+                let value = Wei::from_be_bytes(value_bytes);
+                let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
+                Ok(ReceivedEthEvent {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    subaccount,
+                }
+                .into())
+            }
+            // ReceivedErc20 (index_topic_1 address erc20_contract_address, index_topic_2 address owner, uint256 amount, index_topic_3 bytes32 principal)
             FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_TOPIC) => {
                 if entry.topics.len() != 4 {
                     return Err(ReceivedEventError::InvalidEventSource {
@@ -356,6 +387,7 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                 let erc20_contract_address = parse_address(&entry.topics[1])?;
                 let from_address = parse_address(&entry.topics[2])?;
                 let principal = parse_principal(&entry.topics[3])?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
                 Ok(ReceivedErc20Event {
                     transaction_hash,
                     block_number,
@@ -364,6 +396,37 @@ impl TryFrom<LogEntry> for ReceivedEvent {
                     value: Erc20Value::from_be_bytes(value_bytes),
                     principal,
                     erc20_contract_address,
+                    subaccount: None,
+                }
+                .into())
+            }
+            // ReceivedErc20 (index_topic_1 address erc20ContractAddress, index_topic_2 address owner, uint256 amount, index_topic_3 bytes32 principal, bytes32 subaccount)
+            FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC) => {
+                if entry.topics.len() != 4 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 4 topics for ReceivedERC20 event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let erc20_contract_address = parse_address(&entry.topics[1])?;
+                let from_address = parse_address(&entry.topics[2])?;
+                let principal = parse_principal(&entry.topics[3])?;
+                let [value_bytes, subaccount_bytes] =
+                    parse_data_into_32_byte_words(entry.data, event_source)?;
+                let value = Erc20Value::from_be_bytes(value_bytes);
+                let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
+                Ok(ReceivedErc20Event {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    erc20_contract_address,
+                    subaccount,
                 }
                 .into())
             }
@@ -376,6 +439,30 @@ impl TryFrom<LogEntry> for ReceivedEvent {
             }),
         }
     }
+}
+
+fn parse_data_into_32_byte_words<const N: usize>(
+    data: Data,
+    event_source: EventSource,
+) -> Result<[[u8; 32]; N], ReceivedEventError> {
+    let data = data.0;
+    if data.len() != 32 * N {
+        return Err(ReceivedEventError::InvalidEventSource {
+            source: event_source,
+            error: EventSourceError::InvalidEvent(format!(
+                "Expected {} bytes, got {}",
+                32 * N,
+                data.len()
+            )),
+        });
+    }
+    let mut result = Vec::with_capacity(N);
+    for chunk in data.chunks_exact(32) {
+        let mut word = [0; 32];
+        word.copy_from_slice(chunk);
+        result.push(word);
+    }
+    Ok(result.try_into().unwrap())
 }
 
 /// Decode a candid::Principal from a slice of at most 32 bytes
@@ -423,4 +510,28 @@ fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
         return Err("anonymous principal is not allowed".to_string());
     }
     Principal::try_from_slice(principal_bytes).map_err(|err| err.to_string())
+}
+
+enum InternalLedgerSubaccountTag {}
+type InternalLedgerSubaccount = CheckedAmountOf<InternalLedgerSubaccountTag>;
+
+/// Ledger subaccount.
+///
+/// Internally represented as a u256 to optimize cbor encoding for low values,
+/// which can be represented as a u32 or a u64.
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
+pub struct LedgerSubaccount(#[n(0)] InternalLedgerSubaccount);
+
+impl LedgerSubaccount {
+    pub fn from_bytes(bytes: [u8; 32]) -> Option<Self> {
+        const DEFAULT_SUBACCOUNT: [u8; 32] = [0; 32];
+        if bytes == DEFAULT_SUBACCOUNT {
+            return None;
+        }
+        Some(Self(InternalLedgerSubaccount::from_be_bytes(bytes)))
+    }
+
+    pub fn to_bytes(self) -> [u8; 32] {
+        self.0.to_be_bytes()
+    }
 }

@@ -149,6 +149,7 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
     for ResolvedStatePair {
         ref mut start,
         ref mut end,
+        ..
     } in trace
     {
         for state in &mut [start, end] {
@@ -208,6 +209,10 @@ fn get_tla_module_path(module: &str) -> PathBuf {
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
 /// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
+    // Large states make Apalache time and memory consumption explode. We'll look at
+    // improving that later, for now we introduce a hard limit on the state size, and
+    // skip checking states larger than the limit
+    const STATE_SIZE_LIMIT: u64 = 500;
     let traces = {
         // Introduce a scope to drop the write lock immediately, in order
         // not to poison the lock if we panic later
@@ -229,6 +234,7 @@ pub fn check_traces() {
     let all_pairs = traces.into_iter().flat_map(|t| {
         t.state_pairs
             .into_iter()
+            .filter(|p| p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT)
             .map(move |p| (t.update.clone(), t.constants.clone(), p))
     });
     let chunks = all_pairs.chunks(chunk_size);
@@ -241,6 +247,7 @@ pub fn check_traces() {
             // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
             let tla_module = format!("{}_Apalache.tla", update.process_id);
             let tla_module = get_tla_module_path(&tla_module);
+
             let handle = thread::spawn(move || {
                 check_tla_code_link(
                     &apalache,
