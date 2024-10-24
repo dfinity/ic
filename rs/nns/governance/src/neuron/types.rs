@@ -811,13 +811,7 @@ impl Neuron {
             joined_community_fund_timestamp_seconds = self.joined_community_fund_timestamp_seconds;
         }
 
-        let visibility = if !is_private_neuron_enforcement_enabled() {
-            None
-        } else if self.known_neuron_data.is_some() {
-            Some(Visibility::Public as i32)
-        } else {
-            Some(self.visibility.unwrap_or(Visibility::Private) as i32)
-        };
+        let visibility = self.visibility().map(|visibility| visibility as i32);
 
         NeuronInfo {
             retrieved_at_timestamp_seconds: now_seconds,
@@ -1026,6 +1020,8 @@ impl Neuron {
 
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
+        let visibility = neuron.visibility().map(|visibility| visibility as i32);
+
         let Neuron {
             id,
             subaccount,
@@ -1047,7 +1043,7 @@ impl From<Neuron> for NeuronProto {
             joined_community_fund_timestamp_seconds,
             known_neuron_data,
             neuron_type,
-            visibility,
+            visibility: _,
         } = neuron;
 
         let id = Some(id);
@@ -1057,11 +1053,6 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let mut visibility = visibility.map(|visibility| visibility as i32);
-
-        if is_private_neuron_enforcement_enabled() {
-            visibility = visibility.or(Some(Visibility::Private as i32));
-        }
 
         NeuronProto {
             id,
