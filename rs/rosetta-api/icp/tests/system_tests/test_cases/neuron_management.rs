@@ -1,7 +1,5 @@
-use crate::common::utils::query_encoded_blocks;
 use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
-use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
     utils::{get_test_agent, list_neurons, test_identity},
@@ -20,7 +18,7 @@ use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
 use std::{
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
 
@@ -362,7 +360,7 @@ fn test_disburse_neuron() {
             )
             .await
         {
-            Err(e) if e.to_string().contains(&format!("Could not disburse: PreconditionFailed: Neuron {} has NOT been dissolved. It is in state Dissolving",neuron.id.unwrap().id.to_string())) => (),
+            Err(e) if e.to_string().contains(&format!("Could not disburse: PreconditionFailed: Neuron {} has NOT been dissolved. It is in state Dissolving",neuron.id.unwrap().id)) => (),
             Err(e) => panic!("Unexpected error: {}", e),
             Ok(_) => panic!("Expected an error but got success"),
         }
@@ -441,7 +439,7 @@ fn test_disburse_neuron() {
             .first()
             .unwrap().clone()
             .value.parse::<u64>().unwrap();
-
+        // The balance should be the same as before the creation of the neuron minus the transfer fee
         assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
     });
 }

@@ -1,7 +1,6 @@
 use crate::common::utils::get_custom_agent;
 use crate::common::utils::get_test_agent;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
-use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
     utils::test_identity,
@@ -23,7 +22,6 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LIFELINE_CANISTER_ID;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::common::build_governance_wasm;
