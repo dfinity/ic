@@ -907,7 +907,7 @@ impl RosettaClient {
         .await
     }
 
-    /// If a neuron is in the state DISSOLVING you can disburse the neuron with this function.
+    /// If a neuron is in the state DISSOLVED you can disburse the neuron with this function.
     pub async fn disburse_neuron<T>(
         &self,
         network_identifier: NetworkIdentifier,
