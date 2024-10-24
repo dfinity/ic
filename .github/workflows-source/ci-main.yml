@@ -115,7 +115,7 @@ jobs:
 
           # Determine which tests to skip and append 'long_test' for pull requests or merge groups
           EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
-          if [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && [[ "${RUN_ON_DIFF_ONLY:-}" != "true" ]]; then
+          if [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && [[ "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
               EXCLUDED_TEST_TAGS+=(long_test)
           fi
 
