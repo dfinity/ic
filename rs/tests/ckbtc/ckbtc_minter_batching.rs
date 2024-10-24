@@ -1,29 +1,32 @@
-use crate::ckbtc::lib::install_bitcoin_canister;
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, create_canister_at_id, install_kyt, install_ledger, install_minter,
-    set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
-};
-use crate::ckbtc::minter::utils::{
-    ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
-    send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
-    wait_for_update_balance,
-};
+use anyhow::Result;
+
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
+    systest,
     util::{assert_create_agent, block_on, runtime_from_url},
+};
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, create_canister_at_id, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys,
+    utils::{
+        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
+        send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
+        wait_for_update_balance,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -323,4 +326,12 @@ pub fn test_batching(env: TestEnv) {
         // We also check that the destination address have received 20 utxos
         assert_eq!(unspent_result.len(), RETRIEVE_REQUESTS_COUNT_TO_BATCH);
     })
+}
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test_batching))
+        .execute_from_args()?;
+    Ok(())
 }

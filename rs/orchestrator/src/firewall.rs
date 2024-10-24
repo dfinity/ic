@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
