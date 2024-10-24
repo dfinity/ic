@@ -4089,6 +4089,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "financial_integrations-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "assert_matches",
+]
+
+[[package]]
 name = "findshlibs"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
