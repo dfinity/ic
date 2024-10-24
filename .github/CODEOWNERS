@@ -6,7 +6,7 @@
 /.devcontainer/           @dfinity/idx
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
-/hs/                      @dfinity/utopia
+/hs/spec_compliance       @dfinity/research
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
