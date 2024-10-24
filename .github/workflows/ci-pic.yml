@@ -33,4 +33,4 @@ jobs:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         run: |
-          bazel test //packages/pocket-ic:test --cache_test_results=no --test_output=streamed  --test_arg="--nocapture"
+          bazel test //packages/pocket-ic:test --cache_test_results=no --test_output=streamed  --test_arg="--nocapture" --test_env=RUST_LOG=trace
