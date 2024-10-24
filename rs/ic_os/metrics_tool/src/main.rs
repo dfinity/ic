@@ -27,7 +27,7 @@ struct MetricToolArgs {
 
 fn get_sum_tlb_shootdowns() -> Result<u64> {
     let path = Path::new(INTERRUPT_SOURCE);
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let reader = io::BufReader::new(file);
 
     let mut total_tlb_shootdowns = 0;

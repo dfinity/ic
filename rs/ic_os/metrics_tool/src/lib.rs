@@ -74,7 +74,7 @@ impl MetricsWriter {
 
     pub fn write_metrics(&self, metrics: &[Metric]) -> io::Result<()> {
         let path = Path::new(&self.file_path);
-        let mut file = File::create(&path)?;
+        let mut file = File::create(path)?;
         for metric in metrics {
             writeln!(file, "{}", metric.to_prom_string())?;
         }
