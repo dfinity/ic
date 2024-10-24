@@ -114,7 +114,7 @@ where
             subnet_test_id(0),
             (&make_genesis(summary)).into(),
             pool_config.clone(),
-            ic_metrics::MetricsRegistry::new(),
+            &metrics_registry,
             no_op_logger(),
             time_source.clone(),
         );
@@ -135,7 +135,7 @@ where
         let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
             node_test_id(VALIDATOR_NODE_ID),
             pool_config,
-            metrics_registry.clone(),
+            &metrics_registry,
             no_op_logger(),
         )));
 
