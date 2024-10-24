@@ -234,7 +234,6 @@ pub fn generate_testnet_config(args: GenerateTestnetConfigArgs) -> Result<()> {
 
     println!("GuestOSConfig: {:?}", guestos_config);
 
-    // Write the configuration to a file
     serialize_and_write_config(&guestos_config_json_path, &guestos_config)?;
 
     println!(

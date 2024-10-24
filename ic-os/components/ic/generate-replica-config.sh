@@ -107,8 +107,8 @@ function get_if_address_retries() {
 
 function set_default_config_values() {
     [ "${NNS_URLS}" = "null" ] && NNS_URLS="http://[::1]:8080"
-    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default value is 24h
-    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default value is 1h
+    [ "${BACKUP_RETENTION_TIME_SECS}" = "null" ] && BACKUP_RETENTION_TIME_SECS="86400"    # Default is 24h
+    [ "${BACKUP_PURGING_INTERVAL_SECS}" = "null" ] && BACKUP_PURGING_INTERVAL_SECS="3600" # Default is 1h
     [ "${QUERY_STATS_EPOCH_LENGTH}" = "null" ] && QUERY_STATS_EPOCH_LENGTH="600"          # Default is 600 blocks (around 10min)
     [ "${JAEGER_ADDR}" = "null" ] && JAEGER_ADDR=""
 
