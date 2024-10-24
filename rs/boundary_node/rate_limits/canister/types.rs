@@ -93,6 +93,7 @@ impl From<ConfigResponse> for rate_limits_api::ConfigResponse {
 #[derive(Clone)]
 pub struct OutputRuleMetadata {
     pub id: RuleId,
+    pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
     pub disclosed_at: Option<Timestamp>,
@@ -104,6 +105,7 @@ impl From<OutputRuleMetadata> for rate_limits_api::OutputRuleMetadata {
     fn from(value: OutputRuleMetadata) -> Self {
         rate_limits_api::OutputRuleMetadata {
             id: value.id,
+            incident_id: value.incident_id,
             rule_raw: value.rule_raw,
             description: value.description,
             disclosed_at: value.disclosed_at,

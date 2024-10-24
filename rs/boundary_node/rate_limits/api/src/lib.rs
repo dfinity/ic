@@ -60,6 +60,7 @@ pub struct OutputRule {
 #[derive(CandidType, Deserialize, Debug)]
 pub struct OutputRuleMetadata {
     pub id: RuleId,
+    pub incident_id: IncidentId,
     pub rule_raw: Option<Vec<u8>>,
     pub description: Option<String>,
     pub disclosed_at: Option<Timestamp>,

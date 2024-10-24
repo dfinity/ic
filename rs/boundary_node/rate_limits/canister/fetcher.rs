@@ -129,6 +129,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> En
 
         let rule_metadata = OutputRuleMetadata {
             id: rule_id.clone(),
+            incident_id: stored_metadata.incident_id,
             rule_raw: Some(stored_metadata.rule_raw),
             description: Some(stored_metadata.description),
             disclosed_at: stored_metadata.disclosed_at,
