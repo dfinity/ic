@@ -1,32 +1,9 @@
 name: CI PocketIC
 on:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*'
   pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
-  # Used as reusable workflow within release-testing workflow
-  workflow_call:
-# runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref}}
   cancel-in-progress: true
-env:
-  CI_COMMIT_SHA: ${{ github.sha }}
-  CI_JOB_NAME: ${{ github.job }}
-  CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  CI_PIPELINE_SOURCE: ${{ github.event_name }}
-  CI_PROJECT_DIR: ${{ github.workspace }}
-  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
-  CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  BUILDEVENT_DATASET: "github-ci-dfinity"
 jobs:
   pic-test-all:
     name: PocketIC Test
@@ -56,4 +33,4 @@ jobs:
           DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
       - name: Run Bazel Test All
         run: |
-          bazel test //packages/pocket-ic:test --cache_test_results=no --test_output=all  --test_arg="--nocapture"
+          bazel test //packages/pocket-ic:test --cache_test_results=no --test_output=streamed  --test_arg="--nocapture"
