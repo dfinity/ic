@@ -66,7 +66,7 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // Thi
 
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
-pub fn config(
+pub fn setup(
     env: TestEnv,
     nodes_app_subnet: usize,
     use_boundary_node: bool,
