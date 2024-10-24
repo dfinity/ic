@@ -168,12 +168,13 @@ ic_install_single_chunk ic00 mode target_canister store_canister chunk_hash arg 
 
 ic_upload_chunk :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Blob -> IO Blob
 ic_upload_chunk ic00 canister_id chunk = do
-  chunk_hash :: ChunkHash <- callIC ic00 canister_id #upload_chunk $
-    empty
-      .+ #canister_id
-      .== Principal canister_id
-      .+ #chunk
-      .== chunk
+  chunk_hash :: ChunkHash <-
+    callIC ic00 canister_id #upload_chunk $
+      empty
+        .+ #canister_id
+        .== Principal canister_id
+        .+ #chunk
+        .== chunk
   return $ chunk_hash .! #hash
 
 ic_uninstall_with_sender_canister_version :: (HasCallStack, HasAgentConfig) => IC00 -> Blob -> Maybe W.Word64 -> IO ()

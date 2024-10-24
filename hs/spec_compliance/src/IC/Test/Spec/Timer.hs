@@ -26,7 +26,6 @@ import IC.Test.Universal
 import Test.Tasty
 import Test.Tasty.HUnit
 
-
 -- * The test suite (see below for helper functions)
 
 canister_timer_tests :: (HasAgentConfig) => Blob -> [TestTree]
