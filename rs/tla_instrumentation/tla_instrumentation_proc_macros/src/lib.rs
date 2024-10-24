@@ -76,6 +76,16 @@ pub fn tla_update(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
+/// Assumes that the following are in scope:
+/// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a Rc<RefCell<InstrumentationState>>
+/// 2. TLA_TRACES_MUTEX RwLock storing a Vec<UpdateTrace>
+/// 3. TLA_TRACES_LKEY LocalKey storing a RefCell<Vec<UpdateTrace>>
+/// 4. tla_get_globals! a macro which takes a self parameter iff this is a method
+/// 5. tla_instrumentation crate
+///
+/// It records the trace (sequence of states) resulting from `tla_log_request!` and `tla_log_response!`
+/// macro calls in either the
 #[proc_macro_attribute]
 pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
@@ -146,12 +156,21 @@ pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let mut pairs = trace.state_pairs.borrow_mut().clone();
                 let constants = (update.post_process)(&mut pairs);
                 // println!("State pairs in the expanded macro: {:?}", pairs);
-                let mut traces = TLA_TRACES.write().unwrap();
-                traces.push(tla_instrumentation::UpdateTrace {
+                let trace = tla_instrumentation::UpdateTrace {
                     update,
                     state_pairs: pairs,
                     constants,
-                } );
+                };
+                match TLA_TRACES_LKEY.try_with(|t| {
+                    let mut traces = t.borrow_mut();
+                    traces.push(trace.clone());
+                }) {
+                    Ok(_) => (),
+                    Err(_) => {
+                        let mut traces = TLA_TRACES_MUTEX.write().unwrap();
+                        traces.push(trace);
+                    },
+                }
                 res
             }
         }
@@ -247,5 +266,42 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
+    output.into()
+}
+
+/// An annotation for tests whose TLA traces should be checked.
+/// Assumes that the following are in scope:
+/// 1. a LocalKey variable `TLA_TRACES_LKEY` of type Vec<UpdateTrace>,and
+/// 2. a function tla_check_traces() (presumably looking at the `TLA_TRACES_LKEY`
+#[proc_macro_attribute]
+pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Parse the input tokens of the attribute and the function
+    let input_fn = parse_macro_input!(item as ItemFn);
+
+    let mut modified_fn = input_fn.clone();
+
+    // Deconstruct the function elements
+    let ItemFn {
+        attrs,
+        vis,
+        sig,
+        block: _,
+    } = input_fn;
+
+    let mangled_name = syn::Ident::new(&format!("_tla_check_impl_{}", sig.ident), sig.ident.span());
+    modified_fn.sig.ident = mangled_name.clone();
+    let args: Vec<_> = sig.inputs.iter().collect();
+
+    let output = quote! {
+        #modified_fn
+
+        #(#attrs)* #vis #sig {
+            TLA_TRACES_LKEY.sync_scope(std::cell::RefCell::new(Vec::new()), || {
+                let res = #mangled_name(#(#args),*);
+                tla_check_traces();
+                res
+            })
+        }
+    };
     output.into()
 }

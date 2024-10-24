@@ -35,9 +35,10 @@ mod tla_stuff {
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
+        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
     }
 
-    pub static TLA_TRACES: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+    pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
 
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
@@ -110,7 +111,9 @@ mod tla_stuff {
     }
 }
 
-use tla_stuff::{my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+use tla_stuff::{
+    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+};
 
 struct StructCanister {
     pub counter: u64,
@@ -162,7 +165,7 @@ fn multiple_calls_test() {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
     }
-    let trace = &TLA_TRACES.read().unwrap()[0];
+    let trace = &TLA_TRACES_MUTEX.read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
         Some(&3_u64.to_string())

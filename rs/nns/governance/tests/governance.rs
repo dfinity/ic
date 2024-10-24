@@ -131,7 +131,9 @@ use std::{
 };
 
 #[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla;
+use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::with_tla_trace_check;
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
@@ -4650,6 +4652,7 @@ fn claim_neuron_by_memo(
 /// Tests that the controller of a neuron (the principal whose hash was used
 /// to build the subaccount) can claim a neuron just with the memo.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_by_memo_only() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let memo = 1234u64;
@@ -4669,12 +4672,10 @@ fn test_claim_neuron_by_memo_only() {
     let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_without_minimum_stake_fails() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let memo = 1234u64;
@@ -4692,9 +4693,6 @@ fn test_claim_neuron_without_minimum_stake_fails() {
         }
         _ => panic!("Invalid response."),
     };
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 fn do_test_claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: PrincipalId) {
@@ -4731,14 +4729,12 @@ fn do_test_claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: Princ
     let neuron = gov.neuron_store.with_neuron(&nid, |n| n.clone()).unwrap();
     assert_eq!(neuron.controller(), owner);
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 /// Like the above, but explicitly sets the controller in the MemoAndController
 /// struct.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_memo_and_controller_by_controller() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     do_test_claim_neuron_by_memo_and_controller(owner, owner);
@@ -4747,6 +4743,7 @@ fn test_claim_neuron_memo_and_controller_by_controller() {
 /// Tests that a non-controller can claim a neuron for the controller (the
 /// principal whose id was used to build the subaccount).
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_neuron_memo_and_controller_by_proxy() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let caller = *TEST_NEURON_2_OWNER_PRINCIPAL;
@@ -4755,6 +4752,7 @@ fn test_claim_neuron_memo_and_controller_by_proxy() {
 
 /// Tests that a non-controller can't claim a neuron for themselves.
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_non_controller_cant_claim_neuron_for_themselves() {
     let owner = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let claimer = *TEST_NEURON_2_OWNER_PRINCIPAL;
@@ -4783,9 +4781,6 @@ fn test_non_controller_cant_claim_neuron_for_themselves() {
         CommandResponse::Error(_) => (),
         _ => panic!("Claim should have failed."),
     };
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
@@ -4953,6 +4948,7 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_claim_or_refresh_neuron_does_not_overflow() {
     let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
@@ -5017,9 +5013,6 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
             .stake_e8s,
         previous_stake_e8s + 100_000_000_000_000
     );
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 #[test]
@@ -5254,6 +5247,7 @@ fn test_cant_disburse_without_paying_fees() {
 /// * the list of all neurons remained unchanged
 /// * the list of accounts is unchanged
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split_fails() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5376,12 +5370,10 @@ fn test_neuron_split_fails() {
     assert_eq!(gov.neuron_store.len(), 1);
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_neuron_split() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5482,12 +5474,10 @@ fn test_neuron_split() {
     let mut expected_neuron_ids = vec![id, child_nid];
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_seed_neuron_split() {
     let from = *TEST_NEURON_1_OWNER_PRINCIPAL;
     // Compute the subaccount to which the transfer would have been made
@@ -5558,9 +5548,6 @@ fn test_seed_neuron_split() {
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
     assert_eq!(child_neuron.neuron_type, Some(NeuronType::Seed as i32));
-
-    #[cfg(feature = "tla")]
-    tla::check_traces();
 }
 
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
