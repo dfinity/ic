@@ -150,3 +150,76 @@ pub struct Decimal {
     #[prost(string, optional, tag = "1")]
     pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
 }
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersRequest {}
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersResponse {}
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Timers {
+    /// Indicates whether this canister (still) requires (timer-based) periodic tasks.
+    ///
+    /// May be ignored by canisters that never cancel their periodic tasks.
+    #[prost(bool, optional, tag = "1")]
+    pub requires_periodic_tasks: ::core::option::Option<bool>,
+    #[prost(uint64, optional, tag = "2")]
+    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "3")]
+    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
+}
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersRequest {}
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersResponse {
+    #[prost(message, optional, tag = "1")]
+    pub timers: ::core::option::Option<Timers>,
+}
