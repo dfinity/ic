@@ -467,36 +467,26 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             dissolve_delay_seconds: 1_000_000,
             aging_since_timestamp_seconds: timestamp_seconds,
         },
-        timestamp_seconds // created
+        timestamp_seconds, // created
     );
 
     // Case 1: visibility is explicitly set.
-    for set_enforcement in [temporarily_enable_private_neuron_enforcement, temporarily_disable_private_neuron_enforcement] {
+    for set_enforcement in [
+        temporarily_enable_private_neuron_enforcement,
+        temporarily_disable_private_neuron_enforcement,
+    ] {
         let _restore_on_drop = set_enforcement();
 
         for visibility in [Visibility::Public, Visibility::Private] {
-            let neuron = builder
-                .clone()
-                .with_visibility(Some(visibility))
-                .build();
+            let neuron = builder.clone().with_visibility(Some(visibility)).build();
 
-            assert_eq!(
-                neuron.visibility(),
-                Some(visibility),
-            );
+            assert_eq!(neuron.visibility(), Some(visibility),);
 
-            let neuron_info =
-                neuron.get_neuron_info(timestamp_seconds, principal_id);
-            assert_eq!(
-                neuron_info.visibility,
-                Some(visibility as i32),
-            );
+            let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
+            assert_eq!(neuron_info.visibility, Some(visibility as i32),);
 
             let neuron_proto = NeuronProto::from(neuron);
-            assert_eq!(
-                neuron_proto.visibility,
-                Some(visibility as i32),
-            );
+            assert_eq!(neuron_proto.visibility, Some(visibility as i32),);
         }
     }
 
@@ -505,42 +495,24 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
     {
         let _restore_on_drop = temporarily_disable_private_neuron_enforcement();
 
-        assert_eq!(
-            neuron.visibility(),
-            None,
-        );
+        assert_eq!(neuron.visibility(), None,);
 
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
-        assert_eq!(
-            neuron_info.visibility,
-            None,
-        );
+        assert_eq!(neuron_info.visibility, None,);
 
         let neuron_proto = NeuronProto::from(neuron.clone());
-        assert_eq!(
-            neuron_proto.visibility,
-            None,
-        );
+        assert_eq!(neuron_proto.visibility, None,);
     }
     {
         let _restore_on_drop = temporarily_enable_private_neuron_enforcement();
 
-        assert_eq!(
-            neuron.visibility(),
-            Some(Visibility::Private),
-        );
+        assert_eq!(neuron.visibility(), Some(Visibility::Private),);
 
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
-        assert_eq!(
-            neuron_info.visibility,
-            Some(Visibility::Private as i32),
-        );
+        assert_eq!(neuron_info.visibility, Some(Visibility::Private as i32),);
 
         let neuron_proto = NeuronProto::from(neuron);
-        assert_eq!(
-            neuron_proto.visibility,
-            Some(Visibility::Private as i32),
-        );
+        assert_eq!(neuron_proto.visibility, Some(Visibility::Private as i32),);
     }
 
     // Case 3: Known neurons are always public.
@@ -550,24 +522,18 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
             description: Some("neuron description".to_string()),
         }))
         .build();
-    for set_enforcement in [temporarily_enable_private_neuron_enforcement, temporarily_disable_private_neuron_enforcement] {
+    for set_enforcement in [
+        temporarily_enable_private_neuron_enforcement,
+        temporarily_disable_private_neuron_enforcement,
+    ] {
         let _restore_on_drop = set_enforcement();
 
-        assert_eq!(
-            neuron.visibility(),
-            Some(Visibility::Public),
-        );
+        assert_eq!(neuron.visibility(), Some(Visibility::Public),);
 
         let neuron_info = neuron.get_neuron_info(timestamp_seconds, principal_id);
-        assert_eq!(
-            neuron_info.visibility,
-            Some(Visibility::Public as i32),
-        );
+        assert_eq!(neuron_info.visibility, Some(Visibility::Public as i32),);
 
         let neuron_proto = NeuronProto::from(neuron.clone());
-        assert_eq!(
-            neuron_proto.visibility,
-            Some(Visibility::Public as i32),
-        );
+        assert_eq!(neuron_proto.visibility, Some(Visibility::Public as i32),);
     }
 }
