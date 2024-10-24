@@ -1,3 +1,4 @@
+use crate::logs::P0;
 use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
@@ -11,6 +12,7 @@ use ic_btc_kyt::{
     CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
     RETRY_MAX_RESPONSE_BYTES,
 };
+use ic_canister_log::log;
 use std::convert::Infallible;
 
 #[cfg(test)]
@@ -216,14 +218,13 @@ pub trait FetchEnv {
                             state::set_fetched_address(txid, index, address.clone());
                         } else {
                             // This error shouldn't happen unless blockdata is corrupted.
-                            // TODO(XC-205): log this error
-                            return CheckTransactionIrrecoverableError::InvalidTransaction(
-                                format!(
-                                    "Tx {} vout {} has no address, but is vin {} of tx {}",
-                                    input.txid, input.vout, index, txid
-                                ),
-                            )
-                            .into();
+                            let msg = format!(
+                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                input.txid, input.vout, index, txid
+                            );
+                            log!(P0, "{msg}");
+                            return CheckTransactionIrrecoverableError::InvalidTransaction(msg)
+                                .into();
                         }
                     }
                     Pending => {}
@@ -259,13 +260,13 @@ pub trait FetchEnv {
                         state::set_fetched_address(txid, index, address.clone());
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
-                        // TODO(XC-205): log this error
+                        let msg = format!(
+                            "Tx {} vout {} has no address, but is vin {} of tx {}",
+                            input_txid, vout, index, txid
+                        );
+                        log!(P0, "{msg}");
                         error = Some(
-                            CheckTransactionIrrecoverableError::InvalidTransaction(format!(
-                                "Tx {} vout {} has no address, but is vin {} of tx {}",
-                                input_txid, vout, index, txid
-                            ))
-                            .into(),
+                            CheckTransactionIrrecoverableError::InvalidTransaction(msg).into(),
                         );
                     }
                 }
