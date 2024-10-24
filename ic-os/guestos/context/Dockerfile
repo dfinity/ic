@@ -209,13 +209,14 @@ RUN addgroup node_exporter && \
     chmod 0644 /etc/default/node_exporter \
                /etc/node_exporter/web.yml
 
-# The user to run the SOCKS proxy
+# TEMP: this is only for testing and will be removed after PR #2231 has been merged
 RUN \
     apt-get update && \
     apt-get -y dist-upgrade && \
     apt-get -y --no-install-recommends install \
         dante-server
 
+# The user to run the SOCKS proxy
 RUN addgroup socks && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Dante SOCKS Proxy" socks && \
     adduser socks socks && chmod +s /usr/sbin/danted
