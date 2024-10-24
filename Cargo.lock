@@ -5328,6 +5328,7 @@ dependencies = [
  "ic-base-types",
  "ic-consensus-manager",
  "ic-interfaces",
+ "ic-limits",
  "ic-logger",
  "ic-metrics",
  "ic-p2p-test-utils",
