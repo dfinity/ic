@@ -18104,6 +18104,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "research-systests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "spec-compliance",
+]
+
+[[package]]
 name = "resolv-conf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20083,7 +20093,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "slog",
- "spec-compliance",
 ]
 
 [[package]]

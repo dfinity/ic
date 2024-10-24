@@ -205,7 +205,7 @@ pub fn test_subnet(
     } else {
         None
     };
-    let ic_ref_test_path = get_dependency_path("rs/tests/ic-hs/bin/ic-ref-test")
+    let ic_ref_test_path = get_dependency_path("rs/tests/research/ic-hs/bin/ic-ref-test")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -331,7 +331,7 @@ pub fn with_endpoint(
         httpbin_proto,
         httpbin,
         ic_ref_test_path,
-        get_dependency_path("rs/tests/ic-hs/test-data"),
+        get_dependency_path("rs/tests/research/ic-hs/test-data"),
         endpoint,
         test_subnet_config,
         peer_subnet_config,

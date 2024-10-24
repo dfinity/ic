@@ -5,7 +5,7 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
+load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
@@ -384,20 +384,6 @@ run_binary(
     args = ["$(location valid_import.wasm)"],  # passing location of an arbitrary output file is a hack, see https://github.com/bazelbuild/bazel-skylib/blob/288731ef9f7f688932bd50e704a91a45ec185f9b/rules/run_binary.bzl#L29
     target_compatible_with = ["@platforms//os:linux"],
     tool = "//rs/tests/testing_verification/wabt-tests:generator",
-)
-
-symlink_dirs(
-    name = "ic-hs",
-    target_compatible_with = ["@platforms//os:linux"],
-    targets = {
-        "//hs/spec_compliance:ic-ref-test": "bin",
-        "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
-        "//rs/tests:wabt-tests": "test-data",
-    },
-    visibility = [
-        "//rs:system-tests-pkg",
-        "//rs/pocket_ic_server:__pkg__",
-    ],
 )
 
 oci_tar(
