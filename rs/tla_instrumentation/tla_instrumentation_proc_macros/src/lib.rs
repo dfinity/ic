@@ -76,6 +76,16 @@ pub fn tla_update(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Marks the method as the starting point of a TLA transition (or more concretely, a PlusCal process).
+/// Assumes that the following are in scope:
+/// 1. TLA_INSTRUMENTATION_STATE LocalKey storing a Rc<RefCell<InstrumentationState>>
+/// 2. TLA_TRACES_MUTEX RwLock storing a Vec<UpdateTrace>
+/// 3. TLA_TRACES_LKEY LocalKey storing a RefCell<Vec<UpdateTrace>>
+/// 4. tla_get_globals! a macro which takes a self parameter iff this is a method
+/// 5. tla_instrumentation crate
+///
+/// It records the trace (sequence of states) resulting from `tla_log_request!` and `tla_log_response!`
+/// macro calls in either the
 #[proc_macro_attribute]
 pub fn tla_update_method(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
@@ -259,6 +269,10 @@ pub fn tla_function(_attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// An annotation for tests whose TLA traces should be checked.
+/// Assumes that the following are in scope:
+/// 1. a LocalKey variable `TLA_TRACES_LKEY` of type Vec<UpdateTrace>,and
+/// 2. a function tla_check_traces() (presumably looking at the `TLA_TRACES_LKEY`
 #[proc_macro_attribute]
 pub fn with_tla_trace_check(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens of the attribute and the function
