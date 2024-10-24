@@ -1521,6 +1521,7 @@ impl std::fmt::Debug for InstanceState {
 
 impl std::fmt::Debug for ApiState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        /*
         let instances = self.instances.blocking_read();
         let graph = self.graph.blocking_read();
 
@@ -1533,6 +1534,7 @@ impl std::fmt::Debug for ApiState {
         for (k, v) in graph.iter() {
             writeln!(f, "  {k:?} => {v:?}")?;
         }
+        */
         Ok(())
     }
 }
