@@ -1,5 +1,3 @@
-mod icrc1_agent_test;
-
 use anyhow::Result;
 use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
