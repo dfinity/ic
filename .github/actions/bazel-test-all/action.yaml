@@ -9,7 +9,7 @@ inputs:
     default: '//packages/pocket-ic:test'
   BAZEL_CI_CONFIG:
     required: false
-    default: '--config=ci --test_output=streamed'
+    default: '--config=ci --test_output=streamed --test_arg="--nocapture"'
   BAZEL_EXTRA_ARGS:
     required: false
     default: ''
