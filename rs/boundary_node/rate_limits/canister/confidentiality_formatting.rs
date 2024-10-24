@@ -40,7 +40,7 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
         if self.access_resolver.get_access_level() == AccessLevel::FullAccess
             || self.access_resolver.get_access_level() == AccessLevel::FullRead
         {
-            config
+            return config;
         }
         // return the redacted config otherwise
         config.rules.iter_mut().for_each(|rule| {
