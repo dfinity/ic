@@ -105,7 +105,6 @@ fn test_increase_neuron_stake() {
             )
             .await
             .unwrap();
-        env.pocket_ic.tick().await;
 
         // Try to stake more than the amount of ICP in the account
         match env
@@ -141,7 +140,6 @@ fn test_increase_neuron_stake() {
             )
             .await
             .unwrap();
-        env.pocket_ic.tick().await;
 
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
