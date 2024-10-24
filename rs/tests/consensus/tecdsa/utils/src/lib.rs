@@ -301,6 +301,7 @@ pub async fn get_public_key_with_retries(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_public_key_with_retries(key_id, msg_can, logger, retries).await
         }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -507,6 +508,7 @@ pub async fn get_signature_with_logger(
         MasterPublicKeyId::Schnorr(key_id) => {
             get_schnorr_signature_with_logger(message, cycles, key_id, msg_can, logger).await
         }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -809,6 +811,7 @@ pub fn verify_signature(key_id: &MasterPublicKeyId, msg: &[u8], pk: &[u8], sig: 
             SchnorrAlgorithm::Bip340Secp256k1 => verify_bip340_signature(pk, sig, msg),
             SchnorrAlgorithm::Ed25519 => verify_ed25519_signature(pk, sig, msg),
         },
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     };
     assert!(res);
 }
@@ -837,6 +840,7 @@ impl ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(schnorr_key_id) => {
                 Self::schnorr_params(schnorr_key_id, schnorr_message_size)
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let payload = Encode!(&params).unwrap();
 
@@ -901,6 +905,7 @@ impl Request<SignWithChainKeyReply> for ChainSignatureRequest {
             MasterPublicKeyId::Schnorr(_) => {
                 SignWithChainKeyReply::Schnorr(SignWithSchnorrReply::decode(raw_response)?)
             }
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         })
     }
 }

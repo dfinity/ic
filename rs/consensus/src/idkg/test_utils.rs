@@ -17,7 +17,9 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
+};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaArguments, IDkgDealingsContext, SchnorrArguments, SignWithThresholdContext,
@@ -97,6 +99,7 @@ fn fake_signature_request_args(key_id: MasterPublicKeyId) -> ThresholdArguments 
             key_id,
             message: Arc::new(vec![1; 48]),
         }),
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1152,6 +1155,7 @@ pub(crate) fn create_sig_inputs_with_args(
         MasterPublicKeyId::Schnorr(key_id) => {
             create_schnorr_sig_inputs_with_args(caller, receivers, key_unmasked, height, key_id)
         }
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1356,6 +1360,7 @@ pub(crate) fn create_signature_share_with_nonce(
                 sig_share_raw: vec![nonce],
             },
         }),
+        MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
     }
 }
 
@@ -1617,6 +1622,7 @@ pub(crate) fn key_id_with_name(key_id: &MasterPublicKeyId, name: &str) -> Master
     match key_id {
         MasterPublicKeyId::Ecdsa(ref mut key_id) => key_id.name = name.into(),
         MasterPublicKeyId::Schnorr(ref mut key_id) => key_id.name = name.into(),
+        MasterPublicKeyId::VetKd(ref mut key_id) => key_id.name = name.into(),
     }
     key_id
 }
@@ -1646,6 +1652,14 @@ pub(crate) fn schnorr_algorithm(algorithm: AlgorithmId) -> SchnorrAlgorithm {
         AlgorithmId::ThresholdEd25519 => SchnorrAlgorithm::Ed25519,
         other => panic!("Unexpected algorithm: {other:?}"),
     }
+}
+
+pub(crate) fn fake_vetkd_key_id() -> VetKdKeyId {
+    VetKdKeyId::from_str("Bls12_381:some_key").unwrap()
+}
+
+pub(crate) fn fake_vetkd_master_public_key_id() -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(fake_vetkd_key_id())
 }
 
 pub(crate) fn fake_master_public_key_ids_for_all_algorithms() -> Vec<MasterPublicKeyId> {

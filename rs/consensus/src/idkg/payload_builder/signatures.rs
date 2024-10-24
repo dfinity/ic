@@ -311,6 +311,7 @@ mod tests {
                             signature: vec![i as u8; 32],
                         })
                     }
+                    MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
                 },
             );
         }
