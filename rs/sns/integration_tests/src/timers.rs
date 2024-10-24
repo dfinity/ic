@@ -1,10 +1,9 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Principal};
-use ic_nervous_system_proto::pb::v1::{ResetTimersRequest, ResetTimersResponse, Timers};
 use ic_nns_test_utils::sns_wasm::build_governance_sns_wasm;
 use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1 as governance_pb};
 use ic_sns_swap::pb::v1::{
-    GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
+    self as swap_pb, GetStateRequest, Init, Lifecycle, NeuronBasketConstructionParameters,
 };
 use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
 use ic_types::PrincipalId;
@@ -75,7 +74,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
         let response = state_machine
             .execute_ingress(canister_id, "get_state", payload)
             .expect("Unable to call get_state on the Swap canister");
-        let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+        let response = Decode!(&response.bytes(), swap_pb::GetStateResponse).unwrap();
         let swap_state = response.swap.unwrap();
         (
             swap_state.timers,
@@ -92,7 +91,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     assert_matches!(
         get_relevant_state_components(),
         (
-            Some(Timers {
+            Some(swap_pb::Timers {
                 requires_periodic_tasks: Some(true),
                 last_reset_timestamp_seconds: Some(_),
                 last_spawned_timestamp_seconds: Some(_),
@@ -118,7 +117,7 @@ fn test_swap_periodic_tasks_disabled_eventually() {
     assert_matches!(
         get_relevant_state_components(),
         (
-            Some(Timers {
+            Some(swap_pb::Timers {
                 requires_periodic_tasks: Some(false),
                 last_reset_timestamp_seconds: Some(_),
                 last_spawned_timestamp_seconds: Some(_),
@@ -146,12 +145,12 @@ fn test_swap_reset_timers() {
         let response = state_machine
             .execute_ingress(canister_id, "get_state", payload)
             .expect("Unable to call get_state on the Swap canister");
-        let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+        let response = Decode!(&response.bytes(), swap_pb::GetStateResponse).unwrap();
         response.swap.unwrap().timers
     };
 
     let last_spawned_timestamp_seconds = {
-        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(swap_pb::Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
@@ -162,7 +161,7 @@ fn test_swap_reset_timers() {
         state_machine.advance_time(Duration::from_secs(1000));
         state_machine.tick();
 
-        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(swap_pb::Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
@@ -180,18 +179,18 @@ fn test_swap_reset_timers() {
 
     // Reset the timers.
     {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine
             .execute_ingress(canister_id, "reset_timers", payload)
             .expect("Unable to call reset_timers on the Swap canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+        Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap();
     }
 
     // Inspect the sate after resetting the timers.
     {
         let last_spawned_before_reset_timestamp_seconds = last_spawned_timestamp_seconds;
 
-        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(swap_pb::Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
@@ -207,7 +206,7 @@ fn test_swap_reset_timers() {
         state_machine.advance_time(Duration::from_secs(100));
         state_machine.tick();
 
-        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(swap_pb::Timers {
             requires_periodic_tasks: Some(true),
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
@@ -273,11 +272,11 @@ fn test_governance_reset_timers() {
 
     // Reset the timers.
     {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine
             .execute_ingress(canister_id, "reset_timers", payload)
             .expect("Unable to call reset_timers on the Governance canister");
-        Decode!(&response.bytes(), ResetTimersResponse).unwrap();
+        Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap();
     }
 
     // Inspect the sate after resetting the timers.
@@ -326,11 +325,11 @@ fn test_swap_reset_timers_cannot_be_spammed() {
         .unwrap();
 
     // Helpers.
-    let try_reset_timers = || -> Result<ResetTimersResponse, String> {
-        let payload = Encode!(&ResetTimersRequest {}).unwrap();
+    let try_reset_timers = || -> Result<swap_pb::ResetTimersResponse, String> {
+        let payload = Encode!(&swap_pb::ResetTimersRequest {}).unwrap();
         let response = state_machine.execute_ingress(canister_id, "reset_timers", payload);
         match response {
-            Ok(response) => Ok(Decode!(&response.bytes(), ResetTimersResponse).unwrap()),
+            Ok(response) => Ok(Decode!(&response.bytes(), swap_pb::ResetTimersResponse).unwrap()),
             Err(err) => Err(err.to_string()),
         }
     };
@@ -344,11 +343,11 @@ fn test_swap_reset_timers_cannot_be_spammed() {
             let response = state_machine
                 .execute_ingress(canister_id, "get_state", payload)
                 .expect("Unable to call get_state on the Swap canister");
-            let response = Decode!(&response.bytes(), GetStateResponse).unwrap();
+            let response = Decode!(&response.bytes(), swap_pb::GetStateResponse).unwrap();
             response.swap.unwrap().timers
         };
 
-        let last_reset_timestamp_seconds = assert_matches!(timers, Some(Timers {
+        let last_reset_timestamp_seconds = assert_matches!(timers, Some(swap_pb::Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             ..
         }) => last_reset_timestamp_seconds);
