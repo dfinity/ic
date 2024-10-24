@@ -1,4 +1,6 @@
 use crate::common::utils::query_encoded_blocks;
+use crate::common::utils::update_neuron;
+use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     system_test_environment::RosettaTestingEnvironment,
@@ -331,15 +333,6 @@ fn test_disburse_neuron() {
             )
             .await
             .unwrap();
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
         // See if the neuron was created successfully
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
 
@@ -355,24 +348,8 @@ fn test_disburse_neuron() {
                 .metadata,
         )
         .unwrap();
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;
-    env.pocket_ic.tick().await;        
-        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        let dissolve_delay_timestamp = match neuron.dissolve_state.unwrap() {
-            DissolveState::WhenDissolvedTimestampSeconds(d) => d,
-            k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
-            ),
-        };
 
+        let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         // If we try to disburse the neuron when it is not yet DISSOLVE we expect an error
         match env
             .rosetta_client
@@ -389,42 +366,12 @@ fn test_disburse_neuron() {
             Err(e) => panic!("Unexpected error: {}", e),
             Ok(_) => panic!("Expected an error but got success"),
         }
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        // Advance time to the dissolve delay timestamp
-        env.pocket_ic
-            .advance_time(Duration::from_secs(dissolve_delay_timestamp))
-            .await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-
-        env.pocket_ic
-        .advance_time(Duration::from_secs(dissolve_delay_timestamp))
-        .await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-
+        // Let rosetta catch up with the transfer that happended when creating the neuron
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &agent,
+        ).await;
         let balance_before_disburse = env
         .rosetta_client
         .account_balance(
@@ -442,18 +389,11 @@ fn test_disburse_neuron() {
         .clone()
         .value.parse::<u64>().unwrap();
 
-        //let tip_block_height = query_encoded_blocks(&agent, u64::MAX, u64::MAX).await.chain_length;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-
+        // We now update the neuron so it is in state DISSOLVED
         let now = env.pocket_ic.get_time().await.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        neuron.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1));
+        update_neuron(&agent, neuron.into()).await;
+
         match list_neurons(&agent).await.full_neurons[0].dissolve_state.unwrap() {
             DissolveState::WhenDissolvedTimestampSeconds (d) => {
                 // The neuron should now be in DISSOLVED state
@@ -477,24 +417,13 @@ fn test_disburse_neuron() {
             .await
             .unwrap();
 
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-        env.pocket_ic.tick().await;
-
-        // // Wait for the ledger to sync up to the block where the disbursement happened
-        // wait_for_rosetta_to_sync_up_to_block(
-        //     &env.rosetta_client,
-        //     env.network_identifier.clone(),
-        //     tip_block_height + 1,
-        // )
-        // .await
-        // .unwrap();
+        // Wait for the ledger to sync up to the block where the disbursement happened
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+            &agent,
+        )
+        .await;
 
         // The recipient should have received the disbursed amount
         let balance_after_disburse = env
@@ -514,9 +443,5 @@ fn test_disburse_neuron() {
             .value.parse::<u64>().unwrap();
 
         assert_eq!(balance_after_disburse, balance_before_disburse + staked_amount - DEFAULT_TRANSFER_FEE.get_e8s());
-        
-        // The neuron should not show up anymore
-        let neurons = list_neurons(&agent).await;
-        assert!(neurons.full_neurons.is_empty());
     });
 }

@@ -1,4 +1,6 @@
 use crate::common::utils::get_custom_agent;
+use crate::common::utils::get_test_agent;
+use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use crate::common::{
     constants::{DEFAULT_INITIAL_BALANCE, STARTING_CYCLES_PER_CANISTER},
@@ -21,6 +23,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LIFELINE_CANISTER_ID;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance_api::pb::v1::Neuron;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::common::build_governance_wasm;
@@ -137,14 +140,6 @@ impl RosettaTestingEnvironment {
     }
 
     pub async fn restart_rosetta_node(mut self, options: RosettaOptions) -> Self {
-        let ledger_tip = self
-            .rosetta_client
-            .network_status(self.network_identifier.clone())
-            .await
-            .unwrap()
-            .current_block_identifier
-            .index;
-
         self.rosetta_context.kill_rosetta_process();
 
         let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
@@ -154,13 +149,12 @@ impl RosettaTestingEnvironment {
         self.rosetta_client =
             RosettaClient::from_str_url(&format!("http://localhost:{}", self.rosetta_context.port))
                 .expect("Unable to parse url");
-        wait_for_rosetta_to_sync_up_to_block(
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
             &self.rosetta_client,
             self.network_identifier.clone(),
-            ledger_tip,
+            &get_test_agent(self.pocket_ic.url().unwrap().port().unwrap()).await,
         )
-        .await
-        .unwrap();
+        .await;
         self
     }
 }
@@ -446,19 +440,12 @@ impl RosettaTestingEnvironmentBuilder {
             .unwrap();
 
         // Wait for rosetta to catch up with the ledger
-        if let Some(last_block_idx) = block_idxes.last() {
-            let rosetta_last_block_idx = wait_for_rosetta_to_sync_up_to_block(
-                &rosetta_client,
-                network_identifier.clone(),
-                *last_block_idx,
-            )
-            .await;
-            assert_eq!(
-                Some(*last_block_idx),
-                rosetta_last_block_idx,
-                "Wait for rosetta sync failed."
-            );
-        }
+        wait_for_rosetta_to_catch_up_with_icp_ledger(
+            &rosetta_client,
+            network_identifier.clone(),
+            &get_test_agent(replica_port).await,
+        )
+        .await;
 
         RosettaTestingEnvironment {
             pocket_ic,
