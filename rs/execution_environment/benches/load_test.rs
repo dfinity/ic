@@ -56,7 +56,6 @@ fn main() {
 
     const CANISTERS_TO_CREATE: usize = 2;
     let env = StateMachineBuilder::default().build();
-    let settings: Option<CanisterSettingsArgs> = None;
 
     let message_ids: Vec<MessageId> = (0..CANISTERS_TO_CREATE)
         .map(|_| {
@@ -64,13 +63,8 @@ fn main() {
                 PrincipalId::new_anonymous(),
                 ic00::IC_00,
                 ic00::Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some((u128::MAX / 2).into()),
-                    settings: settings.clone(),
-                    specified_id: None,
-                    sender_canister_version: None,
-                }
-                .encode(),
+                ic00::ProvisionalCreateCanisterWithCyclesArgs::new(Some(u128::MAX / 2), None)
+                    .encode(),
             )
         })
         .collect();
