@@ -410,7 +410,6 @@ pub async fn install_icrc1_ledger<'a>(canister: &mut Canister<'a>, args: &Ledger
     .await
 }
 
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
