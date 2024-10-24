@@ -1,7 +1,13 @@
+#[rustfmt::skip]
+
+use anyhow::{bail, Result};
+use ic_agent::Agent;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
+        group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
@@ -12,17 +18,27 @@ use ic_system_test_driver::{
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
+    systest,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
-
-use anyhow::bail;
-use ic_agent::Agent;
-use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
 use std::{
     net::{IpAddr, SocketAddr},
     time::Duration,
 };
+
+// Test parameters
+const RPS: usize = 10;
+const PAYLOAD_SIZE_BYTES: usize = 1024 * 1024;
+const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
+const NNS_SUBNET_MAX_SIZE: usize = 1;
+const APP_SUBNET_MAX_SIZE: usize = 13;
+const DOWNLOAD_PROMETHEUS_DATA: bool = true;
+// Timeout parameters
+const TASK_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
+const OVERALL_TIMEOUT_DELTA: Duration = Duration::from_secs(3600);
+// Network topology
+const NETWORK_SIMULATION: Option<ProductionSubnetTopology> = Some(ProductionSubnetTopology::IO67);
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "write";
@@ -36,9 +52,7 @@ const JAEGER_VM_NAME: &str = "jaeger-vm";
 // 5 minutes
 const DOWNLOAD_PROMETHEUS_WAIT_TIME: Duration = Duration::from_secs(60 * 60);
 
-// Create an IC with two subnets, with variable number of nodes.
-// Install NNS canister on system subnet.
-pub fn config(
+pub fn setup(
     env: TestEnv,
     nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
@@ -259,4 +273,34 @@ fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent>
             node.build_default_agent()
         })
         .collect::<_>()
+}
+
+fn main() -> Result<()> {
+    let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
+    let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
+    let setup = |env| {
+        setup(
+            env,
+            NNS_SUBNET_MAX_SIZE,
+            APP_SUBNET_MAX_SIZE,
+            NETWORK_SIMULATION,
+            None,
+        )
+    };
+    let test = |env| {
+        test(
+            env,
+            RPS,
+            PAYLOAD_SIZE_BYTES,
+            WORKLOAD_RUNTIME,
+            DOWNLOAD_PROMETHEUS_DATA,
+        )
+    };
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test))
+        .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
+        .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
+        .execute_from_args()?;
+    Ok(())
 }
