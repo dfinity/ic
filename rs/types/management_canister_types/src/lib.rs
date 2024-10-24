@@ -2321,7 +2321,7 @@ impl FromStr for VetKdCurve {
 /// some information about the key (e.g. that the key is meant to be used for
 /// testing purposes).
 /// ```text
-/// (record { curve: ecdsa_curve; name: text})
+/// (record { curve: vetkd_curve; name: text})
 /// ```
 #[derive(
     Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Deserialize, Serialize,
