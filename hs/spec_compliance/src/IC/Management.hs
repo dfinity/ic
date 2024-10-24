@@ -62,6 +62,14 @@ type InstallMode = V.Var ("install" R..== () R..+ "reinstall" R..== () R..+ "upg
 
 type InstallCodeArgs = R.Rec ("mode" R..== InstallMode R..+ "canister_id" R..== Principal R..+ "wasm_module" R..== Blob R..+ "arg" R..== Blob R..+ "sender_canister_version" R..== Maybe W.Word64)
 
+-- Canister installation using WASM chunks
+
+type ChunkHash = R.Rec ("hash" R..== Blob)
+
+type InstallChunkedCodeArgs = R.Rec ("mode" R..== InstallMode R..+ "target_canister" R..== Principal R..+ "store_canister" R..== Principal R..+ "chunk_hashes_list" R..== Vec.Vector ChunkHash R..+ "wasm_module_hash" R..== Blob R..+ "arg" R..== Blob R..+ "sender_canister_version" R..== Maybe W.Word64)
+
+type UploadChunkArgs = R.Rec ("canister_id" R..== Principal R..+ "chunk" R..== Blob)
+
 -- Canister history
 
 type CandidChangeFromUser = R.Rec ("user_id" R..== Principal)

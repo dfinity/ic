@@ -47,23 +47,23 @@ canister_history_tests ecid =
                     c .! #origin @?= mapChangeOrigin o
                     c .! #details @?= mapChangeDetails d
            in [ simpleTestCase "after creation and code deployments" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                  let Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
 
                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 1 [(0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)])]
 
-                  ic_install ic00 (enum #install) cid universal_wasm (run no_heartbeat)
+                  installAt cid no_heartbeat
                   info <- get_canister_info unican cid (Just 1)
-                  void $ check_history info 2 [(1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install (sha256 universal_wasm))]
+                  void $ check_history info 2 [(1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install ucan_chunk_hash)]
 
                   ic_install_with_sender_canister_version ic00 (enum #reinstall) cid trivialWasmModule "" (Just 666) -- sender_canister_version in ingress message is ignored
                   info <- get_canister_info unican cid (Just 1)
                   void $ check_history info 3 [(2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 trivialWasmModule))]
 
-                  ic_install ic00 (enumNothing #upgrade) cid universal_wasm (run no_heartbeat)
+                  upgrade cid no_heartbeat
                   info <- get_canister_info unican cid (Just 1)
-                  void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 universal_wasm))]
+                  void $ check_history info 4 [(3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade ucan_chunk_hash)]
 
                   return (),
                 simpleTestCase "after uninstall" ecid $ \unican -> do
@@ -129,15 +129,15 @@ canister_history_tests ecid =
                 simpleTestCase "user call to canister_info" ecid $ \cid ->
                   ic_canister_info'' defaultUser cid Nothing >>= is2xx >>= isReject [4],
                 simpleTestCase "calling canister_info" ecid $ \unican -> do
-                  universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                  let Just ucan_chunk_hash = tc_ucan_chunk_hash agentConfig
 
                   cid <- ic_provisional_create ic00 ecid Nothing Nothing Nothing
                   ic_install ic00 (enum #install) cid trivialWasmModule ""
-                  ic_install ic00 (enum #reinstall) cid universal_wasm (run no_heartbeat)
+                  reinstall cid no_heartbeat
 
                   info <- get_canister_info unican cid Nothing
                   info .! #controllers @?= (Vec.fromList [Principal defaultUser])
-                  info .! #module_hash @?= (Just $ sha256 universal_wasm)
+                  info .! #module_hash @?= (Just $ ucan_chunk_hash)
 
                   ic_install ic00 (enumNothing #upgrade) cid trivialWasmModule ""
 
@@ -156,7 +156,7 @@ canister_history_tests ecid =
                   let hist =
                         [ (0, ChangeFromUser (EntityId defaultUser), Creation [(EntityId defaultUser)]),
                           (1, ChangeFromUser (EntityId defaultUser), CodeDeployment Install (sha256 trivialWasmModule)),
-                          (2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall (sha256 universal_wasm)),
+                          (2, ChangeFromUser (EntityId defaultUser), CodeDeployment Reinstall ucan_chunk_hash),
                           (3, ChangeFromUser (EntityId defaultUser), CodeDeployment Upgrade (sha256 trivialWasmModule)),
                           (4, ChangeFromUser (EntityId defaultUser), CodeUninstall),
                           (5, ChangeFromUser (EntityId defaultUser), ControllersChange [EntityId otherUser, EntityId defaultUser])
