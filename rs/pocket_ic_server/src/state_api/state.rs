@@ -1435,7 +1435,9 @@ impl ApiState {
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
+                            println!("waiting to grab graph: old={} op_id={}", old_state_label, op_id);
                             let mut graph_guard = graph.blocking_write();
+                            println!("grabbed graph: old={} op_id={}", old_state_label, op_id);
                             let cached_computations =
                                 graph_guard.entry(old_state_label.clone()).or_default();
                             cached_computations
