@@ -370,6 +370,7 @@ members = [
     "rs/tests/crypto",
     "rs/tests/driver",
     "rs/tests/execution",
+    "rs/tests/financial_integrations",
     "rs/tests/message_routing",
     "rs/tests/message_routing/common",
     "rs/tests/message_routing/rejoin_test_lib",
