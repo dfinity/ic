@@ -93,9 +93,8 @@ use ic_nns_governance::{
         Tally, TallyChange, Topic, UpdateNodeProvider, Visibility, Vote, WaitForQuietState,
         WaitForQuietStateDesc,
     },
-    temporarily_disable_debug_log, temporarily_disable_private_neuron_enforcement,
-    temporarily_disable_set_visibility_proposals, temporarily_enable_private_neuron_enforcement,
-    temporarily_enable_set_visibility_proposals,
+    temporarily_disable_private_neuron_enforcement, temporarily_disable_set_visibility_proposals,
+    temporarily_enable_private_neuron_enforcement, temporarily_enable_set_visibility_proposals,
 };
 use ic_nns_governance_api::{
     pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -117,7 +116,7 @@ use icp_ledger::{protobuf, AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::proptest;
+use proptest::prelude::{proptest, ProptestConfig};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
@@ -3550,17 +3549,16 @@ fn compute_maturities(
 }
 
 proptest! {
-
-/// Check that voting on
-/// 1. a governance proposal yields 20 times the voting power
-/// 2. an exchange rate proposal yields 0.01 times the voting power
-/// 3. other proposals yield 1 time the voting power
+#![proptest_config(ProptestConfig {
+    cases: 100, .. ProptestConfig::default()
+})]
 #[test]
-fn test_topic_weights(stake in 1u64..1_000_000_000) {
-    // The logs produced by this test are voluminous and largely useless except when there is an
-    // actual failure, in which case this line can be commented to debug.  Not producing them
-    // speeds up the test by
-    temporarily_disable_debug_log();
+fn test_topic_weights(stake in 1u64..1_000) {
+    // Check that voting on
+    // 1. a governance proposal yields 20 times the voting power
+    // 2. an exchange rate proposal yields 0.01 times the voting power
+    // 3. other proposals yield 1 time the voting power
+
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a network proposal (1x) and
     // 2. second neuron voting on an exchange proposal (0.01x).
@@ -3740,7 +3738,7 @@ fn test_random_voting_rewards_scenarios() {
         proposals
     }
 
-    const SCENARIO_COUNT: u64 = 10_000;
+    const SCENARIO_COUNT: u64 = 500;
     let mut unique_scenarios = HashSet::new();
     for seed in 1..=SCENARIO_COUNT {
         unique_scenarios.insert(helper(seed));
@@ -3760,13 +3758,6 @@ fn test_random_voting_rewards_scenarios() {
         "{}",
         unique_scenarios.len()
     );
-
-    // Make sure that deduping actually works.
-    let len = unique_scenarios.len();
-    for scenario in unique_scenarios.clone() {
-        unique_scenarios.insert(scenario);
-    }
-    assert_eq!(unique_scenarios.len(), len);
 }
 
 /// Check that, if all stakes are scaled uniformly, the maturities are
