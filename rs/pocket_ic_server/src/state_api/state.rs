@@ -1389,7 +1389,9 @@ impl ApiState {
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
+            println!("waiting to grab instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             let mut instance = instance_mutex.lock().await;
+            println!("grabbed instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             // If this instance is busy, return the running op and initial state
             match &instance.state {
                 InstanceState::Deleted => {
