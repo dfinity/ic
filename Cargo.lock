@@ -19146,6 +19146,7 @@ dependencies = [
  "clap 4.5.20",
  "indoc",
  "partition_tools",
+ "regex",
  "tempfile",
  "tokio",
 ]
