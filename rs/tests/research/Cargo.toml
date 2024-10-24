@@ -10,7 +10,6 @@ documentation.workspace = true
 anyhow = { workspace = true }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
-slog = { workspace = true }
 spec-compliance = { path = "./spec_compliance" }
 
 [[bin]]
