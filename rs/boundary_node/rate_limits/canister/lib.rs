@@ -16,3 +16,6 @@ mod metrics;
 mod state;
 mod storage;
 mod types;
+
+#[allow(dead_code)]
+fn main() {}
