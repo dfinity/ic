@@ -14,14 +14,29 @@ system_test(
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     },
     flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "k8s",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//packages/icrc-ledger-agent:icrc_ledger_agent",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/crypto/tree_hash",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/nns/test_utils",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/on_wire",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 system_test_nns(
