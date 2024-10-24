@@ -234,6 +234,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/dashboards/IC/bitcoin.json                    @dfinity/execution @dfinity/idx
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/networking
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node @dfinity/idx
+/rs/tests/ckbtc/                                        @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/consensus/                                    @dfinity/consensus @dfinity/idx
 /rs/tests/crypto/                                       @dfinity/crypto-team @dfinity/idx
 /rs/tests/dre/                                          @dfinity/dre @dfinity/idx
@@ -250,7 +251,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
 /rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx
 /rs/tests/src/certificate_orchestrator.rs               @dfinity/boundary-node @dfinity/idx
-/rs/tests/src/ckbtc/                                    @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/src/consensus/                                @dfinity/consensus @dfinity/idx
 /rs/tests/src/cross_chain/                              @dfinity/cross-chain-team @dfinity/idx
 /rs/tests/src/crypto/                                   @dfinity/crypto-team @dfinity/idx

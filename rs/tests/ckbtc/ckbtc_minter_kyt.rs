@@ -1,33 +1,38 @@
-use crate::ckbtc::lib::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
-    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
-};
-use crate::ckbtc::minter::utils::{
-    assert_account_balance, assert_burn_transaction, assert_mint_transaction, assert_no_new_utxo,
-    assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address, get_btc_client,
-    send_to_btc_address, start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
-    wait_for_ledger_balance, wait_for_mempool_change, BTC_BLOCK_REWARD,
-};
+use anyhow::Result;
+
 use bitcoincore_rpc::RpcApi;
-use candid::Nat;
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_kyt::KytMode;
-use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
-use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_ckbtc_minter::updates::{
+    get_withdrawal_account::compute_subaccount,
+    retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
+    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
+};
 use ic_system_test_driver::{
     driver::{
+        group::SystemTestGroup,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
+    systest,
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
+use ic_tests_ckbtc::{
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys, upgrade_kyt,
+    utils::{
+        assert_account_balance, assert_burn_transaction, assert_mint_transaction,
+        assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
+        get_btc_client, send_to_btc_address, start_canister, stop_canister, upgrade_canister,
+        wait_for_bitcoin_balance, wait_for_ledger_balance, wait_for_mempool_change,
+        BTC_BLOCK_REWARD,
+    },
+    BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use slog::debug;
 
 /// Test update_balance method of the minter canister.
@@ -388,4 +393,11 @@ pub fn test_kyt(env: TestEnv) {
         let owed_kyt_amount = metrics.get("ckbtc_minter_owed_kyt_amount").unwrap().value;
         assert_eq!(owed_kyt_amount, 0_f64);
     });
+}
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test_kyt))
+        .execute_from_args()?;
+    Ok(())
 }
