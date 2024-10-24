@@ -1,6 +1,4 @@
 pub mod api_test;
-pub mod btc_integration;
-pub mod ckbtc;
 pub mod ledger_tests;
 pub mod networking;
 pub mod nns_tests;
