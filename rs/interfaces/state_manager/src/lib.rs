@@ -1,10 +1,12 @@
 //! The state manager public interface.
+
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_types::{
     batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
     CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -233,7 +235,8 @@ pub trait StateManager: StateReader {
     fn remove_states_below(&self, height: Height);
 
     /// Notify the state manager that states committed with partial certification
-    /// state and heights strictly less than specified `height` can be removed.
+    /// state and heights strictly less than the specified `height` can be removed, except
+    /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
     ///
     /// Note that:
     ///  * The initial state (height = 0) cannot be removed.
@@ -241,7 +244,11 @@ pub trait StateManager: StateReader {
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
     ///  * No checkpoints are removed, see also `remove_states_below()`
-    fn remove_inmemory_states_below(&self, height: Height);
+    fn remove_inmemory_states_below(
+        &self,
+        height: Height,
+        extra_heights_to_keep: &BTreeSet<Height>,
+    );
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to
