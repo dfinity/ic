@@ -181,7 +181,7 @@ impl AdapterState {
     }
 
     /// A future that returns when/if the adapter becomes/is awake.
-    pub async fn become_awake(&self) {
+    pub async fn active(&self) {
         let mut last_received_rx = self.last_received_tx.subscribe();
         loop {
             if let Some(last) = *last_received_rx.borrow() {
@@ -195,7 +195,7 @@ impl AdapterState {
     }
 
     /// A future that returns when/if the adapter becomes/is idle.
-    pub async fn become_idle(&self) {
+    pub async fn idle(&self) {
         let mut last_received_rx = self.last_received_tx.subscribe();
         loop {
             let last_received = *last_received_rx.borrow();

@@ -50,13 +50,13 @@ pub fn start_main_event_loop(
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
         loop {
-            adapter_state.become_awake().await;
+            adapter_state.active().await;
 
             // We do a select over tokio::sync::mpsc::Receiver::recv, tokio::sync::mpsc::UnboundedReceiver::recv,
             // tokio::time::Interval::tick which are all cancellation safe.
             loop {
                 tokio::select! {
-                    _ = adapter_state.become_idle() => {
+                    _ = adapter_state.idle() => {
                         break;
                     },
                     event = connection_manager.receive_stream_event() => {
