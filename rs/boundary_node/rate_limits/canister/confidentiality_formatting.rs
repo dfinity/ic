@@ -9,11 +9,8 @@ use crate::{
 pub trait ConfidentialityFormatting {
     type Input: Clone;
 
-    fn format(&self, value: &Self::Input) -> Result<Self::Input, ConfidentialityFormattingrError>;
+    fn format(&self, value: &Self::Input) -> Self::Input;
 }
-
-#[derive(Debug, thiserror::Error)]
-pub enum ConfidentialityFormattingrError {}
 
 /// A generic confidentiality formatter for various data types
 pub struct ConfidentialityFormatter<A, T> {
@@ -35,10 +32,7 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
 {
     type Input = OutputConfig;
 
-    fn format(
-        &self,
-        config: &OutputConfig,
-    ) -> Result<OutputConfig, ConfidentialityFormattingrError> {
+    fn format(&self, config: &OutputConfig) -> OutputConfig {
         let mut config = config.clone();
         if self.access_resolver.get_access_level() == AccessLevel::RestrictedRead {
             config.rules.iter_mut().for_each(|rule| {
@@ -48,7 +42,7 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
                 }
             });
         }
-        Ok(config)
+        config
     }
 }
 
@@ -57,10 +51,7 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
 {
     type Input = OutputRuleMetadata;
 
-    fn format(
-        &self,
-        rule: &OutputRuleMetadata,
-    ) -> Result<OutputRuleMetadata, ConfidentialityFormattingrError> {
+    fn format(&self, rule: &OutputRuleMetadata) -> OutputRuleMetadata {
         let mut rule = rule.clone();
         if self.access_resolver.get_access_level() == AccessLevel::RestrictedRead
             && rule.disclosed_at.is_none()
@@ -68,7 +59,7 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
             rule.description = None;
             rule.rule_raw = None;
         }
-        Ok(rule)
+        rule
     }
 }
 

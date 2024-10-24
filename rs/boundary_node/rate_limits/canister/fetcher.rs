@@ -100,9 +100,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputConfig>> EntityFe
             rules,
         };
 
-        let formatted_config = self.formatter.format(&config).map_err(|err| {
-            anyhow::anyhow!("Failed to format config with confidentially constraints: {err}")
-        })?;
+        let formatted_config = self.formatter.format(&config);
 
         let config = ConfigResponse {
             version,
@@ -137,9 +135,7 @@ impl<R: Repository, F: ConfidentialityFormatting<Input = OutputRuleMetadata>> En
             removed_in_version: stored_metadata.removed_in_version,
         };
 
-        let formatted_rule = self.formatter.format(&rule_metadata).map_err(|_| {
-            anyhow::anyhow!("Failed to format rule with confidentially constraints")
-        })?;
+        let formatted_rule = self.formatter.format(&rule_metadata);
 
         Ok(formatted_rule)
     }

@@ -10,9 +10,6 @@ pub trait ResolveAccessLevel {
     fn get_access_level(&self) -> AccessLevel;
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum AccessLevelError {}
-
 #[derive(PartialEq, Eq)]
 pub enum AccessLevel {
     FullAccess,
