@@ -199,7 +199,7 @@ rust_test(
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/research:ic-hs",
+        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
     },
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
