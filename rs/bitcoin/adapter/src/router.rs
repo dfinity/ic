@@ -108,11 +108,9 @@ pub fn start_main_event_loop(
                         transaction_manager.advertise_txids(&mut connection_manager);
                     }
                 };
-            }   
+            }
             connection_manager.make_idle();
             blockchain_manager.make_idle();
         }
     });
 }
-
-

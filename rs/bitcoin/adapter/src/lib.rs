@@ -5,15 +5,19 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
-use std::time::Duration;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use std::time::Duration;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::{select, sync::{mpsc::channel, watch}, time::sleep};
+use tokio::{
+    select,
+    sync::{mpsc::channel, watch},
+    time::sleep,
+};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -155,7 +159,7 @@ pub struct AdapterState {
     /// This way the adapter would always be in idle when starting since 'elapsed()' is greater than 'idle_seconds'.
     /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
     /// 'idle_seconds' we encountered an underflow and panicked.
-    /// 
+    ///
     /// I't simportant that this value is set to None on startup.
     last_received_tx: watch::Sender<Option<Instant>>,
 }
@@ -180,14 +184,10 @@ impl AdapterState {
     pub async fn become_awake(&self) {
         let mut last_received_rx = self.last_received_tx.subscribe();
         loop {
-            match *last_received_rx.borrow() {
-                Some(last) => {
-                    if last.elapsed().as_secs() < self.idle_seconds {
-                        return;
-                    }
+            if let Some(last) = *last_received_rx.borrow() {
+                if last.elapsed().as_secs() < self.idle_seconds {
+                    return;
                 }
-                // No requests received yet; the adapter is idle.
-                None => {}
             }
             // Wait for a change in the last received time.
             let _ = last_received_rx.changed().await;
