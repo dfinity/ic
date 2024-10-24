@@ -350,7 +350,6 @@ impl NeuronStore {
 
         // Adds the neurons one by one into neuron store.
         for neuron in neurons.into_values() {
-            ic_cdk::println!("ID of neuron to be added: {:?}", neuron.id());
             // We are not adding the neuron into the known_neuron_index even if it has known neuron
             // data. This is somewhat what we want - we can never create a neuron as a known neuron,
             // and it requires a proposal to do so. Ideally, the neuron type accepted by
@@ -429,11 +428,21 @@ impl NeuronStore {
 
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
-    pub fn clone_neurons(&self) -> BTreeMap<u64, NeuronProto> {
-        self.heap_neurons
+    pub fn __get_neurons_for_tests(&self) -> BTreeMap<u64, NeuronProto> {
+        let mut stable_neurons = with_stable_neuron_store(|stable_store| {
+            stable_store
+                .range_neurons(..)
+                .map(|neuron| (neuron.id().id, neuron.into()))
+                .collect::<BTreeMap<u64, NeuronProto>>()
+        });
+        let heap_neurons = self
+            .heap_neurons
             .iter()
             .map(|(id, neuron)| (*id, neuron.clone().into()))
-            .collect()
+            .collect::<BTreeMap<u64, NeuronProto>>();
+
+        stable_neurons.extend(heap_neurons);
+        stable_neurons
     }
 
     pub fn clone_topic_followee_index(&self) -> HashMap<i32, FollowersMap> {
@@ -445,14 +454,6 @@ impl NeuronStore {
         let in_heap = self.heap_neurons.contains_key(&neuron_id.id);
         let in_stable =
             with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.contains(neuron_id));
-
-        ic_cdk::println!(
-            "NeuronStore::contains id: {}: in_heap: {}, in_stable: {}",
-            neuron_id.id,
-            in_heap,
-            in_stable
-        );
-
         in_heap || in_stable
     }
 
@@ -476,11 +477,6 @@ impl NeuronStore {
             })?;
 
         if self.contains(neuron_id) {
-            ic_cdk::println!(
-                "{}WARNING: Attempting to add a neuron with an existing ID: {:?}",
-                LOG_PREFIX,
-                neuron_id
-            );
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
 

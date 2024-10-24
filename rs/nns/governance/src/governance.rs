@@ -1907,8 +1907,8 @@ impl Governance {
         )
     }
 
-    pub fn clone_proto(&self) -> GovernanceProto {
-        let neurons = self.neuron_store.clone_neurons();
+    pub fn __get_state_for_test(&self) -> GovernanceProto {
+        let neurons = self.neuron_store.__get_neurons_for_tests();
         let heap_topic_followee_index = self.neuron_store.clone_topic_followee_index();
         let heap_governance_proto = self.heap_data.clone();
         let rng_seed = self.env.get_rng_seed();

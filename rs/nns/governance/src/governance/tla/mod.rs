@@ -33,8 +33,7 @@ pub use claim_neuron::claim_neuron_desc;
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
         gov.neuron_store.with_active_neurons_iter(|iter| {
-            iter.cloned()
-                .chain(store.range_neurons(std::ops::RangeFull))
+            iter.chain(store.range_neurons(std::ops::RangeFull))
                 .map(|neuron| {
                     (
                         neuron.id().id,
