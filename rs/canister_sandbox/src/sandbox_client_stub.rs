@@ -129,4 +129,14 @@ impl SandboxService for SandboxClientStub {
         );
         Call::new(cell)
     }
+
+    fn memory_usage(&self, req: MemoryUsageRequest) -> Call<MemoryUsageReply> {
+        let cell = self
+            .channel
+            .call(Request::MemoryUsage(req), |rep| match rep {
+                Reply::MemoryUsage(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
 }
