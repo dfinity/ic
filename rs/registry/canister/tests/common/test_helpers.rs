@@ -347,7 +347,7 @@ pub async fn wait_for_chain_key_setup(
             wait_for_schnorr_setup(runtime, calling_canister, key_id).await;
         }
         MasterPublicKeyId::VetKd(_key_id) => {
-            todo!("CRP-YYYY Extend registry canister tests")
+            todo!("CRP-2632 Extend registry canister tests")
         }
     }
 }
