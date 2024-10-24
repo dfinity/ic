@@ -292,7 +292,7 @@ type Governance = record {
   genesis_timestamp_seconds : nat64;
   target_version : opt Version;
   timers : opt Timers;
-  upgrade_journal : opt UpgradeJournalEntries;
+  upgrade_journal : opt UpgradeJournal;
 };
 
 type Timers = record {
@@ -721,8 +721,8 @@ type WaitForQuietState = record {
 };
 
 type UpgradeJournalEntry = record {
-  entry : opt variant {
-    UpgradeStepsRefresh : UpgradeStepsRefresh;
+  event : opt variant {
+    UpgradeStepsRefreshed : UpgradeStepsRefreshed;
     TargetVersionSet : TargetVersionSet;
     UpgradeStarted : UpgradeStarted;
     UpgradeCompleted : UpgradeCompleted;
@@ -730,7 +730,7 @@ type UpgradeJournalEntry = record {
   timestamp_seconds : opt nat64;
 };
 
-type UpgradeStepsRefresh = record {
+type UpgradeStepsRefreshed = record {
   upgrade_steps : opt Versions;
 };
 
@@ -741,18 +741,23 @@ type TargetVersionSet = record {
 type UpgradeStarted = record {
   current_version : opt Version;
   expected_version : opt Version;
+  triggerer : opt variant {
+    UpgradeSnsToNextVersion : ProposalId;
+    BehindTargetVersion : record {};
+  }
 };
 
 type UpgradeCompleted = record {
+  human_readable : opt text;
   status : opt variant {
     Succeeded : record {};
     TimedOut : record {};
-    InvalidState : Version;
+    InvalidState : record { version : opt Version };
     CanisterCallFailure : record {};
   };
 };
 
-type UpgradeJournalEntries = record {
+type UpgradeJournal = record {
   entries : vec UpgradeJournalEntry;
 };
 
@@ -762,7 +767,7 @@ type GetUpgradeJournalResponse = record {
   upgrade_steps : opt Versions;
   response_timestamp_seconds : opt nat64;
   target_version : opt Version;
-  journal : opt UpgradeJournalEntries;
+  upgrade_journal : opt UpgradeJournal;
 };
 
 service : (Governance) -> {

@@ -1474,7 +1474,7 @@ message Governance {
   // Information about the timers that perform periodic tasks of this Governance canister.
   optional ic_nervous_system.pb.v1.Timers timers = 31;
 
-  UpgradeJournalEntries upgrade_journal = 32;
+  UpgradeJournal upgrade_journal = 32;
 }
 
 message Timers {
@@ -2157,40 +2157,50 @@ message AdvanceTargetVersionResponse {}
 
 // Represents a single entry in the upgrade journal.
 message UpgradeJournalEntry {
-  oneof entry {
-    UpgradeStepsRefresh upgrade_steps_refresh = 1;
+  oneof event {
+    UpgradeStepsRefreshed upgrade_steps_refreshed = 1;
     TargetVersionSet target_version_set = 2;
     UpgradeStarted upgrade_started = 3;
     UpgradeCompleted upgrade_completed = 4;
   }
   optional uint64 timestamp_seconds = 5;
 
-  message UpgradeStepsRefresh {
+  message UpgradeStepsRefreshed {
     optional Governance.Versions upgrade_steps = 2;
   }
 
   message TargetVersionSet {
-    optional Governance.Version version = 2;
+    optional Governance.Version version = 1;
   }
 
   message UpgradeStarted {
-    optional Governance.Version current_version = 2;
-    optional Governance.Version expected_version = 3;
+    optional Governance.Version current_version = 1;
+    optional Governance.Version expected_version = 2;
+    oneof triggerer {
+      ProposalId upgrade_sns_to_next_version = 3;
+      Empty behind_target_version = 4;
+    }
   }
 
   message UpgradeCompleted {
+    optional string human_readable = 1;
+
     oneof status {
-      Empty succeeded = 1;
-      Empty timed_out = 2;
+      Empty succeeded = 2;
+      Empty timed_out = 3;
       // The SNS ended up being upgraded to a version that was not the expected one.
-      Governance.Version invalid_state = 3;
-      Empty canister_call_failure = 4;
+      InvalidState invalid_state = 4;
+      Empty canister_call_failure = 5;
+    }
+
+    message InvalidState {
+      Governance.Version version = 1;
     }
   }
 }
 
 // Needed to cause prost to generate a type isomorphic to Option<Vec<UpgradeJournalEntry>>.
-message UpgradeJournalEntries {
+message UpgradeJournal {
   // The entries in the upgrade journal.
   repeated UpgradeJournalEntry entries = 1;
 }
@@ -2207,7 +2217,7 @@ message GetUpgradeJournalResponse {
   // feature, it reflect the version of the SNS that the community has decided to upgrade to.
   Governance.Version target_version = 3;
 
-  UpgradeJournalEntries journal = 4;
+  UpgradeJournal upgrade_journal = 4;
 }
 
 // A request to mint tokens for a particular principal. The associated endpoint

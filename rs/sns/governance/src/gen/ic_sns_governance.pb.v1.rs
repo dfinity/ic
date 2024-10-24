@@ -1651,7 +1651,7 @@ pub struct Governance {
     #[prost(message, optional, tag = "31")]
     pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
     #[prost(message, optional, tag = "32")]
-    pub upgrade_journal: ::core::option::Option<UpgradeJournalEntries>,
+    pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -3406,8 +3406,8 @@ pub struct AdvanceTargetVersionResponse {}
 pub struct UpgradeJournalEntry {
     #[prost(uint64, optional, tag = "5")]
     pub timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(oneof = "upgrade_journal_entry::Entry", tags = "1, 2, 3, 4")]
-    pub entry: ::core::option::Option<upgrade_journal_entry::Entry>,
+    #[prost(oneof = "upgrade_journal_entry::Event", tags = "1, 2, 3, 4")]
+    pub event: ::core::option::Option<upgrade_journal_entry::Event>,
 }
 /// Nested message and enum types in `UpgradeJournalEntry`.
 pub mod upgrade_journal_entry {
@@ -3419,7 +3419,7 @@ pub mod upgrade_journal_entry {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct UpgradeStepsRefresh {
+    pub struct UpgradeStepsRefreshed {
         #[prost(message, optional, tag = "2")]
         pub upgrade_steps: ::core::option::Option<super::governance::Versions>,
     }
@@ -3432,7 +3432,7 @@ pub mod upgrade_journal_entry {
         ::prost::Message,
     )]
     pub struct TargetVersionSet {
-        #[prost(message, optional, tag = "2")]
+        #[prost(message, optional, tag = "1")]
         pub version: ::core::option::Option<super::governance::Version>,
     }
     #[derive(
@@ -3444,10 +3444,30 @@ pub mod upgrade_journal_entry {
         ::prost::Message,
     )]
     pub struct UpgradeStarted {
-        #[prost(message, optional, tag = "2")]
+        #[prost(message, optional, tag = "1")]
         pub current_version: ::core::option::Option<super::governance::Version>,
-        #[prost(message, optional, tag = "3")]
+        #[prost(message, optional, tag = "2")]
         pub expected_version: ::core::option::Option<super::governance::Version>,
+        #[prost(oneof = "upgrade_started::Triggerer", tags = "3, 4")]
+        pub triggerer: ::core::option::Option<upgrade_started::Triggerer>,
+    }
+    /// Nested message and enum types in `UpgradeStarted`.
+    pub mod upgrade_started {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            Copy,
+            PartialEq,
+            ::prost::Oneof,
+        )]
+        pub enum Triggerer {
+            #[prost(message, tag = "3")]
+            UpgradeSnsToNextVersion(super::super::ProposalId),
+            #[prost(message, tag = "4")]
+            BehindTargetVersion(super::super::Empty),
+        }
     }
     #[derive(
         candid::CandidType,
@@ -3458,7 +3478,9 @@ pub mod upgrade_journal_entry {
         ::prost::Message,
     )]
     pub struct UpgradeCompleted {
-        #[prost(oneof = "upgrade_completed::Status", tags = "1, 2, 3, 4")]
+        #[prost(string, optional, tag = "1")]
+        pub human_readable: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(oneof = "upgrade_completed::Status", tags = "2, 3, 4, 5")]
         pub status: ::core::option::Option<upgrade_completed::Status>,
     }
     /// Nested message and enum types in `UpgradeCompleted`.
@@ -3469,17 +3491,29 @@ pub mod upgrade_journal_entry {
             comparable::Comparable,
             Clone,
             PartialEq,
+            ::prost::Message,
+        )]
+        pub struct InvalidState {
+            #[prost(message, optional, tag = "1")]
+            pub version: ::core::option::Option<super::super::governance::Version>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
             ::prost::Oneof,
         )]
         pub enum Status {
-            #[prost(message, tag = "1")]
-            Succeeded(super::super::Empty),
             #[prost(message, tag = "2")]
+            Succeeded(super::super::Empty),
+            #[prost(message, tag = "3")]
             TimedOut(super::super::Empty),
             /// The SNS ended up being upgraded to a version that was not the expected one.
-            #[prost(message, tag = "3")]
-            InvalidState(super::super::governance::Version),
             #[prost(message, tag = "4")]
+            InvalidState(InvalidState),
+            #[prost(message, tag = "5")]
             CanisterCallFailure(super::super::Empty),
         }
     }
@@ -3491,9 +3525,9 @@ pub mod upgrade_journal_entry {
         PartialEq,
         ::prost::Oneof,
     )]
-    pub enum Entry {
+    pub enum Event {
         #[prost(message, tag = "1")]
-        UpgradeStepsRefresh(UpgradeStepsRefresh),
+        UpgradeStepsRefreshed(UpgradeStepsRefreshed),
         #[prost(message, tag = "2")]
         TargetVersionSet(TargetVersionSet),
         #[prost(message, tag = "3")]
@@ -3511,7 +3545,7 @@ pub mod upgrade_journal_entry {
     PartialEq,
     ::prost::Message,
 )]
-pub struct UpgradeJournalEntries {
+pub struct UpgradeJournal {
     /// The entries in the upgrade journal.
     #[prost(message, repeated, tag = "1")]
     pub entries: ::prost::alloc::vec::Vec<UpgradeJournalEntry>,
@@ -3547,7 +3581,7 @@ pub struct GetUpgradeJournalResponse {
     #[prost(message, optional, tag = "3")]
     pub target_version: ::core::option::Option<governance::Version>,
     #[prost(message, optional, tag = "4")]
-    pub journal: ::core::option::Option<UpgradeJournalEntries>,
+    pub upgrade_journal: ::core::option::Option<UpgradeJournal>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
