@@ -17,10 +17,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use spec_compliance::{config_impl, test_subnet};
+use spec_compliance::{setup_impl, test_subnet};
 
-pub fn config(env: TestEnv) {
-    config_impl(env, true, true);
+pub fn setup(env: TestEnv) {
+    setup_impl(env, true, true);
 }
 
 pub fn test(env: TestEnv) {
@@ -43,7 +43,7 @@ pub fn test(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
 
