@@ -6,7 +6,7 @@ export PATH="$HOME/.local/bin:$PATH"
 PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install pre-commit
 
 if [ "${CI_OVERRIDE_BUF_BREAKING:-false}" = "true" ]; then
-    PRE_COMMIT_CMD="pre-commit run -a"
+    PRE_COMMIT_CMD="pre-commit run"
 else
     PRE_COMMIT_CMD="pre-commit run -a --hook-stage=manual"
 fi
