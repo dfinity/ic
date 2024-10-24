@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use config::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::deployment_json::get_deployment_settings;
 use config::serialize_and_write_config;
+use mac_address::mac_address::{get_ipmi_mac, FormattedMacAddress};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
@@ -106,22 +107,31 @@ pub fn main() -> Result<()> {
                 elasticsearch_tags: None,
             };
 
-            let icos_dev_settings = ICOSDevSettings {
-                mgmt_mac: deployment_json_settings.deployment.mgmt_mac,
+            let mgmt_mac = match deployment_json_settings.deployment.mgmt_mac {
+                Some(config_mac) => {
+                    let mgmt_mac = FormattedMacAddress::try_from(config_mac.as_str())?;
+                    println!(
+                        "Using mgmt_mac address found in deployment.json: {}",
+                        mgmt_mac
+                    );
+                    mgmt_mac
+                }
+                None => get_ipmi_mac()?,
             };
 
             let icos_settings = ICOSSettings {
+                mgmt_mac,
+                deployment_environment: deployment_json_settings.deployment.name,
                 logging,
                 nns_public_key_path: nns_public_key_path.to_path_buf(),
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                hostname: deployment_json_settings.deployment.name.to_string(),
                 node_operator_private_key_path: node_operator_private_key_path
                     .exists()
                     .then_some(node_operator_private_key_path),
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
-                icos_dev_settings,
+                icos_dev_settings: ICOSDevSettings::default(),
             };
 
             let setupos_settings = SetupOSSettings;
@@ -166,9 +176,21 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
+            // update select file paths for HostOS
+            let mut hostos_icos_settings = setupos_config.icos_settings;
+            let hostos_config_path = Path::new("/boot/config");
+            if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
+                *path = hostos_config_path.join("ssh_authorized_keys");
+            }
+            if let Some(ref mut path) = hostos_icos_settings.node_operator_private_key_path {
+                *path = hostos_config_path.join("node_operator_private_key.pem");
+            }
+            hostos_icos_settings.nns_public_key_path =
+                hostos_config_path.join("nns_public_key.pem");
+
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
-                icos_settings: setupos_config.icos_settings,
+                icos_settings: hostos_icos_settings,
                 hostos_settings: setupos_config.hostos_settings,
                 guestos_settings: setupos_config.guestos_settings,
             };

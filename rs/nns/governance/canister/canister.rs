@@ -7,7 +7,7 @@ use ic_cdk::{
     println, query, spawn, update,
 };
 use ic_management_canister_types::IC_00;
-use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
+use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_common::{
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     serve_metrics,
@@ -60,6 +60,14 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
+
+#[cfg(not(feature = "tla"))]
+use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
+
+#[cfg(feature = "tla")]
+mod tla_ledger;
+#[cfg(feature = "tla")]
+use tla_ledger::LoggingIcpLedgerCanister as IcpLedgerCanister;
 
 /// WASM memory equivalent to 4GiB, which we want to reserve for upgrades memory. The heap memory
 /// limit is 4GiB but its serialized form with prost should be smaller, so we reserve for 4GiB. This
@@ -1071,18 +1079,6 @@ fn add_proposal_id_to_add_wasm_request(
     let payload = Encode!(&add_wasm_request).unwrap();
 
     Ok(payload)
-}
-
-/// Deprecated: The blessed alternative is to do (the equivalent of)
-/// `dfx canister metadata $CANISTER 'candid:service'`.
-#[query(hidden = true)]
-fn __get_candid_interface_tmp_hack() -> String {
-    #[cfg(not(feature = "test"))]
-    let declared_interface = include_str!("governance.did");
-    #[cfg(feature = "test")]
-    let declared_interface = include_str!("governance_test.did");
-
-    declared_interface.to_string()
 }
 
 fn main() {

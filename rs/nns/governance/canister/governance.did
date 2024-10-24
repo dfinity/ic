@@ -44,7 +44,7 @@ type Ballot = record {
 
 type BallotInfo = record {
   vote : int32;
-  proposal_id : opt NeuronId;
+  proposal_id : opt ProposalId;
 };
 
 type By = variant {
@@ -253,7 +253,7 @@ type FollowersMap = record {
 };
 
 type GetNeuronsFundAuditInfoRequest = record {
-  nns_proposal_id : opt NeuronId;
+  nns_proposal_id : opt ProposalId;
 };
 
 type GetNeuronsFundAuditInfoResponse = record {
@@ -437,7 +437,7 @@ type ListNodeProvidersResponse = record {
 type ListProposalInfo = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
-  before_proposal : opt NeuronId;
+  before_proposal : opt ProposalId;
   limit : nat32;
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
@@ -457,7 +457,7 @@ type MakeProposalRequest = record {
 
 type MakeProposalResponse = record {
   message : opt text;
-  proposal_id : opt NeuronId;
+  proposal_id : opt ProposalId;
 };
 
 type MakingSnsProposal = record {
@@ -598,6 +598,10 @@ type NeuronDistribution = record {
 };
 
 type NeuronId = record {
+  id : nat64;
+};
+
+type ProposalId = record {
   id : nat64;
 };
 
@@ -788,7 +792,7 @@ type ProposalActionRequest = variant {
 };
 
 type ProposalData = record {
-  id : opt NeuronId;
+  id : opt ProposalId;
   failure_reason : opt GovernanceError;
   ballots : vec record { nat64; Ballot };
   proposal_timestamp_seconds : nat64;
@@ -808,7 +812,7 @@ type ProposalData = record {
 };
 
 type ProposalInfo = record {
-  id : opt NeuronId;
+  id : opt ProposalId;
   status : int32;
   topic : int32;
   failure_reason : opt GovernanceError;
@@ -829,7 +833,7 @@ type ProposalInfo = record {
 
 type RegisterVote = record {
   vote : int32;
-  proposal : opt NeuronId;
+  proposal : opt ProposalId;
 };
 
 type RemoveHotKey = record {
@@ -908,7 +912,7 @@ type RewardEvent = record {
   total_available_e8s_equivalent : nat64;
   latest_round_available_e8s_equivalent : opt nat64;
   distributed_e8s_equivalent : nat64;
-  settled_proposals : vec NeuronId;
+  settled_proposals : vec ProposalId;
 };
 
 type RewardMode = variant {

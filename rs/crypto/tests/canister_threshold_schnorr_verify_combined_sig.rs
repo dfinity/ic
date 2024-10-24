@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_crypto::get_master_public_key_from_transcript;
-use ic_crypto_internal_threshold_sig_ecdsa_test_utils::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig_test_utils::{
     verify_bip340_signature_using_third_party, verify_ed25519_signature_using_third_party,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{

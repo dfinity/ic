@@ -884,11 +884,8 @@ fn test_message_limit_from_message_overhead() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let number_of_messages = test
-        .scheduler()
-        .metrics
-        .msg_execution_duration
-        .get_sample_count();
+    // All messages are zero instruction messages so use  this metric to get their count.
+    let number_of_messages = test.scheduler().metrics.zero_instruction_messages.get();
     assert_eq!(number_of_messages, expected_number_of_messages);
     assert_eq!(
         test.state()
@@ -2595,6 +2592,59 @@ fn can_record_metrics_for_a_round() {
     );
 }
 
+/// Check that when a canister is scheduled and can't prepay for execution, the
+/// message time isn't recorded, but the metric for zero instruction messages is
+/// incremented.
+#[test]
+fn prepay_failures_counted() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_message: NumInstructions::from(100),
+            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_slice: NumInstructions::from(100),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let canister_with_cycles = test.create_canister_with(
+        Cycles::new(1_000_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        None,
+        None,
+        None,
+    );
+    let canister_without_cycles = test.create_canister_with(
+        Cycles::new(10),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        None,
+        None,
+        None,
+    );
+    test.send_ingress(canister_with_cycles, ingress(5));
+    test.send_ingress(canister_without_cycles, ingress(5));
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let metrics = &test.scheduler().metrics;
+    // We should have one entry for the canister with cycles which ran.
+    assert_eq!(
+        metrics
+            .round_inner_iteration_thread_message
+            .duration
+            .get_sample_count(),
+        1
+    );
+    // We should have one count for the canister which couldn't prepay.
+    assert_eq!(metrics.zero_instruction_messages.get(), 1);
+}
+
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn heap_delta_rate_limiting_metrics_recorded() {
@@ -4046,7 +4096,7 @@ fn construct_scheduler_for_prop_test(
         .build();
 
     // Ensure that compute allocation of canisters doesn't exceed the capacity.
-    let capacity = RoundSchedule::compute_capacity_percent(scheduler_cores) as u64 - 1;
+    let capacity = SchedulerImpl::compute_capacity_percent(scheduler_cores) as u64 - 1;
     let total = canister_params
         .iter()
         .fold(0, |acc, (ca, _)| acc + ca.as_percent());
@@ -5318,16 +5368,6 @@ fn test_is_next_method_added_to_task_queue() {
         .is_empty());
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
-
-    // Add a mock task, to know if new tasks are added
-    // at the front or back of the queue.
-    test.canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .enqueue(ExecutionTask::PausedExecution {
-            id: PausedExecutionId(1),
-            input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        });
 
     while test
         .canister_state_mut(canister)

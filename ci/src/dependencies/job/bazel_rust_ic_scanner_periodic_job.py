@@ -52,6 +52,11 @@ REPOS_TO_SCAN = [
         "https://github.com/dfinity/ic-gateway",
         [Project(name="ic-gateway", path="ic-gateway", owner=Team.BOUNDARY_NODE_TEAM)],
     ),
+    Repository(
+        "papi",
+        "https://github.com/dfinity/papi",
+        [Project(name="papi", path="papi", owner=Team.GIX_TEAM)],
+    ),
 ]
 
 

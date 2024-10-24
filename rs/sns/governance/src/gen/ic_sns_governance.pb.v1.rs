@@ -1393,10 +1393,9 @@ pub struct VotingRewardsParameters {
     ///
     /// Must be > 0.
     ///
-    /// During such periods, proposals enter the ReadyToSettle state. Once the
-    /// round is over, voting for those proposals entitle voters to voting
-    /// rewards. Such rewards are calculated by the governance canister's
-    /// heartbeat.
+    /// During such periods, proposals enter the ReadyToSettle state. Once the round is over, voting
+    /// for those proposals entitle voters to voting rewards. Such rewards are calculated in
+    /// the governance canister's run_periodic_tasks function.
     ///
     /// This is a nominal amount. That is, the actual time between reward
     /// calculations and distribution cannot be guaranteed to be perfectly
@@ -1531,8 +1530,8 @@ pub struct RewardEvent {
     /// reasons that rewards might not be distributed in a given round.
     ///
     /// 1. "Missed" rounds: there was a long period when we did calculate rewards
-    ///     (longer than 1 round). (I.e. distribute_rewards was not called by
-    ///     heartbeat for whatever reason, most likely some kind of bug.)
+    ///     (longer than 1 round). (I.e. distribute_rewards was not called from
+    ///     run_periodic_tasks, for whatever reason, most likely some kind of bug.)
     ///
     /// 2. Rollover: We tried to distribute rewards, but there were no proposals
     ///     settled to distribute rewards for.
@@ -1638,7 +1637,9 @@ pub struct Governance {
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
-    /// True if the heartbeat function is currently finalizing disburse maturity, meaning
+    #[prost(message, optional, tag = "30")]
+    pub target_version: ::core::option::Option<governance::Version>,
+    /// True if the run_periodic_tasks function is currently finalizing disburse maturity, meaning
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
@@ -1646,6 +1647,9 @@ pub struct Governance {
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
     #[prost(message, optional, tag = "29")]
     pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
+    /// Information about the timers that perform periodic tasks of this Governance canister.
+    #[prost(message, optional, tag = "31")]
+    pub timers: ::core::option::Option<Timers>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1991,6 +1995,64 @@ pub mod governance {
             }
         }
     }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Timers {
+    #[prost(uint64, optional, tag = "1")]
+    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "2")]
+    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ResetTimersResponse {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetTimersResponse {
+    #[prost(message, optional, tag = "1")]
+    pub timers: ::core::option::Option<Timers>,
 }
 /// Request message for 'get_metadata'.
 #[derive(
@@ -3306,6 +3368,32 @@ pub struct AddMaturityResponse {
     #[prost(uint64, optional, tag = "1")]
     pub new_maturity_e8s: ::core::option::Option<u64>,
 }
+/// A test-only API that advances the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub target_version: ::core::option::Option<governance::Version>,
+}
+/// The response to a request to advance the target version of the SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AdvanceTargetVersionResponse {}
+/// The upgrade journal contains all the information neede to audit previous SNS upgrades and understand its current state.
+/// It is being implemented as part of the "effortless SNS upgrade" feature.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3329,6 +3417,11 @@ pub struct GetUpgradeJournalResponse {
     pub upgrade_steps: ::core::option::Option<governance::Versions>,
     #[prost(uint64, optional, tag = "2")]
     pub response_timestamp_seconds: ::core::option::Option<u64>,
+    /// The target version that the SNS will be upgraded to.
+    /// Currently, this field is always None, but in the "effortless SNS upgrade"
+    /// feature, it reflect the version of the SNS that the community has decided to upgrade to.
+    #[prost(message, optional, tag = "3")]
+    pub target_version: ::core::option::Option<governance::Version>,
 }
 /// A request to mint tokens for a particular principal. The associated endpoint
 /// is only available on SNS governance, and only then when SNS governance is
@@ -3400,7 +3493,7 @@ pub struct Account {
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
-    clap::ArgEnum,
+    clap::ValueEnum,
     strum_macros::EnumIter,
     Clone,
     Copy,

@@ -17,7 +17,6 @@ rust_library(
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
-        "//rs/tests",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/canister_http",
         "//rs/types/types",

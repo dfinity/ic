@@ -236,6 +236,9 @@ pub struct Swap {
     /// Amount of contributions from the Neurons' Fund committed to this SNS so far.
     #[prost(uint64, optional, tag = "20")]
     pub neurons_fund_participation_icp_e8s: ::core::option::Option<u64>,
+    /// Information about the timers that perform periodic tasks of this Swap canister.
+    #[prost(message, optional, tag = "22")]
+    pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.

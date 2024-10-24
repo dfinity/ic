@@ -2014,6 +2014,13 @@ pub struct LedgerUpdateLock {
 impl Drop for LedgerUpdateLock {
     /// Drops the lock on the neuron.
     fn drop(&mut self) {
+        // In the case of a panic, the state of the ledger account representing the neuron's stake
+        // may be inconsistent with the internal state of governance.  In that case,
+        // we want to prevent further operations with that neuron until the issue can be
+        // investigated and resolved, which will require code changes.
+        if ic_cdk::api::call::is_recovering_from_trap() {
+            return;
+        }
         // It's always ok to dereference the governance when a LedgerUpdateLock
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
@@ -2551,7 +2558,11 @@ pub mod test_helpers {
         /// Map of expected calls to a result, where key is hash of arguments (See `compute_call_canister_key`).
         #[allow(clippy::type_complexity)]
         pub canister_calls_map: HashMap<
-            (dfn_core::CanisterId, std::string::String, std::vec::Vec<u8>),
+            (
+                ic_base_types::CanisterId,
+                std::string::String,
+                std::vec::Vec<u8>,
+            ),
             CanisterCallResult,
         >,
 

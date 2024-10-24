@@ -43,6 +43,10 @@ system_test_nns(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        # TODO(https://dfinity.atlassian.net/browse/NODE-1500):
+        # The nested tests are very unstable and cause the "Schedule Hourly" workflow to fail often.
+        # So let's disable them to give us time to debug why they fail.
+        "manual",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
@@ -58,6 +62,10 @@ system_test_nns(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        # TODO(https://dfinity.atlassian.net/browse/NODE-1500):
+        # The nested tests are very unstable and cause the "Schedule Hourly" workflow to fail often.
+        # So let's disable them to give us time to debug why they fail.
+        "manual",
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

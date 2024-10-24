@@ -44,11 +44,12 @@ candid_parser = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-error-types = { path = "../../../types/error_types" }
-ic-icrc1-ledger-sm-tests = { path = "../../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 
 [features]
 notify-method = []
+icp-allowance-getter = []
 upgrade-to-memory-manager = []

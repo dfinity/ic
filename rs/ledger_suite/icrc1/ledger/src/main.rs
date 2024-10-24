@@ -14,8 +14,8 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::UPGRADES_MEMORY;
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -202,6 +202,16 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
     }
 
+    Access::with_ledger_mut(|ledger| {
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
+            );
+        }
+        ledger.ledger_version = LEDGER_VERSION;
+    });
+
     if let Some(args) = args {
         match args {
             LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
@@ -223,12 +233,12 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable64_size() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "ledger_stable_memory_bytes",
-        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(

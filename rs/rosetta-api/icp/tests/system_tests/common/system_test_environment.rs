@@ -124,7 +124,7 @@ impl RosettaTestingEnvironment {
                 .transfer(
                     args_builder.build(),
                     self.network_identifier.clone(),
-                    arg_with_caller.caller,
+                    &arg_with_caller.caller,
                 )
                 .await
                 .unwrap();
@@ -212,8 +212,6 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub async fn build(self) -> RosettaTestingEnvironment {
         let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-        let replica_url = pocket_ic.make_live(None).await;
-        let replica_port = replica_url.port().unwrap();
 
         let ledger_canister_id = Principal::from(LEDGER_CANISTER_ID);
         let canister_id = pocket_ic
@@ -310,7 +308,18 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .add_cycles(governance_canister_id, STARTING_CYCLES_PER_CANISTER)
                 .await;
+            // Give the governance canister some time to initialize so that we do not hit the
+            // following error:
+            // Could not claim neuron: Unavailable: Neuron ID generation is not available
+            // currently. Likely due to uninitialized RNG.
+            pocket_ic
+                .advance_time(std::time::Duration::from_secs(60))
+                .await;
+            pocket_ic.tick().await;
         }
+
+        let replica_url = pocket_ic.make_live(None).await;
+        let replica_port = replica_url.port().unwrap();
 
         let mut block_idxes = vec![];
         if let Some(args) = &self.transfer_args_for_block_generating {

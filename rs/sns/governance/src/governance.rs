@@ -73,10 +73,13 @@ use crate::{
     },
 };
 use candid::{Decode, Encode};
-use dfn_core::api::{spawn, CanisterId};
-use ic_base_types::PrincipalId;
+#[cfg(not(target_arch = "wasm32"))]
+use futures::FutureExt;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
+#[cfg(target_arch = "wasm32")]
+use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -113,6 +116,7 @@ use std::{
         HashMap, HashSet,
     },
     convert::{TryFrom, TryInto},
+    future::Future,
     ops::Bound::{Excluded, Unbounded},
     str::FromStr,
     string::ToString,
@@ -699,6 +703,24 @@ pub struct Governance {
     pub test_features_enabled: bool,
 }
 
+/// This function is used to spawn a future in a way that is compatible with both the WASM and
+/// non-WASM environments that are used for testing.  This only actually spawns in the case where
+/// the WASM is running in the IC, or has some other source of asynchrony.  Otherwise, it
+/// immediately executes.
+fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        spawn(future);
+    }
+    // This is needed for tests
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        future
+            .now_or_never()
+            .expect("Future could not execute in non-WASM environment");
+    }
+}
+
 impl Governance {
     pub fn new(
         proto: ValidGovernanceProto,
@@ -916,15 +938,11 @@ impl Governance {
 
     /// Releases the lock on a given neuron.
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
-        match self.proto.in_flight_commands.remove(id) {
-            None => {
-                log!(ERROR,
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case...
-            Some(_) => (),
+        if self.proto.in_flight_commands.remove(id).is_none() {
+            log!(ERROR,
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
@@ -2013,7 +2031,7 @@ impl Governance {
         // - in prod, "self" is a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
-        spawn(governance.perform_action(proposal_id, action));
+        spawn_in_canister_env(governance.perform_action(proposal_id, action));
     }
 
     /// For a given proposal (given by its ID), selects and performs the right 'action',
@@ -2039,11 +2057,12 @@ impl Governance {
                 // If the upgrade returned `Ok(true)` that means the upgrade completed successfully
                 // and the proposal can be marked as "executed". If the upgrade returned `Ok(false)`
                 // that means the upgrade has successfully been kicked-off asynchronously, but not
-                // completed. Governance's heartbeat logic will continuously check the status of the
-                // upgrade and mark the proposal as either executed or failed. So we call `return`
-                // in the `Ok(false)` branch so that `set_proposal_execution_status` doesn't get
-                // called and set the proposal status prematurely. If the result is `Err`, we do
-                // want to set the proposal status, and passing the value through is sufficient.
+                // completed. Governance's run_periodic_tasks logic will continuously check
+                // the status of the upgrade and mark the proposal as either executed or failed.
+                // So we call `return` in the `Ok(false)` branch so that
+                // `set_proposal_execution_status` doesn't get called and set the proposal status
+                // prematurely. If the result is `Err`, we do want to set the proposal status,
+                // and passing the value through is sufficient.
                 match upgrade_sns_result {
                     Ok(true) => Ok(()),
                     Ok(false) => return,
@@ -2565,7 +2584,8 @@ impl Governance {
         }
 
         // A canister upgrade has been successfully kicked-off. Set the pending upgrade-in-progress
-        // field so that Governance's heartbeat logic can check on the status of this upgrade.
+        // field so that Governance's run_periodic_tasks logic can check on the status of
+        // this upgrade.
         self.proto.pending_version = Some(UpgradeInProgress {
             target_version: Some(next_version),
             mark_failed_at_seconds: self.env.now() + 5 * 60,
@@ -4265,7 +4285,7 @@ impl Governance {
                 .remove_neuron_permissions(&neuron_id, caller, r)
                 .map(|_| ManageNeuronResponse::remove_neuron_permissions_response()),
             C::ClaimOrRefresh(claim_or_refresh) => self
-                .claim_or_refresh_neuron(&neuron_id, claim_or_refresh)
+                .claim_or_refresh_neuron(&neuron_id, caller, claim_or_refresh)
                 .await
                 .map(|_| ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id)),
         }
@@ -4323,10 +4343,10 @@ impl Governance {
         }
     }
 
-    /// Calls dfn_core::api::caller.
     async fn claim_or_refresh_neuron(
         &mut self,
         neuron_id: &NeuronId,
+        caller: &PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<(), GovernanceError> {
         let locator = &claim_or_refresh.by.as_ref().ok_or_else(|| {
@@ -4338,11 +4358,8 @@ impl Governance {
 
         match locator {
             By::MemoAndController(memo_and_controller) => {
-                self.claim_or_refresh_neuron_by_memo_and_controller(
-                    &dfn_core::api::caller(),
-                    memo_and_controller,
-                )
-                .await
+                self.claim_or_refresh_neuron_by_memo_and_controller(caller, memo_and_controller)
+                    .await
             }
 
             By::NeuronId(_) => self.refresh_neuron(neuron_id).await,
@@ -4601,8 +4618,8 @@ impl Governance {
     }
 
     /// Runs periodic tasks that are not directly triggered by user input.
-    pub async fn heartbeat(&mut self) {
-        use dfn_core::println;
+    pub async fn run_periodic_tasks(&mut self) {
+        use ic_cdk::println;
 
         self.process_proposals();
 
@@ -4613,7 +4630,7 @@ impl Governance {
         let should_distribute_rewards = self.should_distribute_rewards();
 
         // Getting the total governance token supply from the ledger is expensive enough
-        // that we don't want to do it on every call to `heartbeat`. So
+        // that we don't want to do it on every call to `run_periodic_tasks`. So
         // we only fetch it when it's needed, which is when rewards should be
         // distributed
         if should_distribute_rewards {
@@ -4640,20 +4657,10 @@ impl Governance {
 
         self.maybe_gc();
 
-        log!(INFO, "AAA");
-        println!("AAA");
         if self.should_refresh_cached_upgrade_steps() {
-            log!(INFO, "BBB");
-            println!("BBB");
             self.temporarily_lock_refresh_cached_upgrade_steps();
-            log!(INFO, "CCC");
-            println!("CCC");
             self.refresh_cached_upgrade_steps().await;
-            log!(INFO, "DDD");
-            println!("DDD");
         }
-        log!(INFO, "EEE");
-        println!("EEE");
     }
 
     pub fn temporarily_lock_refresh_cached_upgrade_steps(&mut self) {
@@ -4739,10 +4746,12 @@ impl Governance {
             Some(cached_upgrade_steps) => GetUpgradeJournalResponse {
                 upgrade_steps: cached_upgrade_steps.upgrade_steps,
                 response_timestamp_seconds: cached_upgrade_steps.response_timestamp_seconds,
+                target_version: self.proto.target_version.clone(),
             },
             None => GetUpgradeJournalResponse {
                 upgrade_steps: None,
                 response_timestamp_seconds: None,
+                target_version: None,
             },
         }
     }
@@ -4876,7 +4885,7 @@ impl Governance {
         // This guard is needed, because we'll divide by this amount shortly.
         if round_duration_seconds == 0 {
             // This is important, but emitting this every time will be spammy, because this gets
-            // called during heartbeat.
+            // called during run_periodic_tasks.
             log!(
                 ERROR,
                 "round_duration_seconds ({}) is not positive. \
@@ -7458,7 +7467,7 @@ mod tests {
         // Assert that the rewards should not be distributed, and trigger the periodic tasks to
         // try to distribute them.
         assert!(!governance.should_distribute_rewards());
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // Get the latest reward event and assert that its equal to the initial reward event. This
         // puts governance in the state that the OC-SNS was in for NNS1-2105.
@@ -7495,11 +7504,11 @@ mod tests {
             current_version.into()
         );
 
-        // Check that both conditions in `heartbeat` will be triggered on this heartbeat
+        // Check that both conditions in `run_periodic_tasks` will be triggered on this instance.
         // and run the tasks.
         assert!(governance.should_distribute_rewards());
         assert!(governance.should_check_upgrade_status());
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // These asserts would fail before the change in NNS1-2105. Now, even though
         // there was an attempt to distribute rewards, the status of the upgrade was still checked.
@@ -7586,7 +7595,7 @@ mod tests {
         );
         // After we run our periodic tasks, the version should be marked as failed because of time
         // constraint.
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // A failed deployment is when pending is erased but deployed_version is not updated.
         assert!(governance.proto.pending_version.is_none());
@@ -7692,7 +7701,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -7817,7 +7826,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         // We still have pending version
         assert_eq!(
@@ -7950,7 +7959,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -8069,7 +8078,7 @@ mod tests {
         );
 
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -8195,7 +8204,7 @@ mod tests {
 
         assert_eq!(governance.proto.deployed_version, None);
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         // This is set to the running version to avoid non-recoverable state
@@ -8303,7 +8312,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should succeed
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -8381,7 +8390,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.heartbeat().now_or_never();
+        governance.run_periodic_tasks().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(

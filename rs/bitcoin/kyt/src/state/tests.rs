@@ -57,7 +57,7 @@ fn test_fetch_status() {
     set_fetch_status(
         txid_1,
         FetchTxStatus::Fetched(FetchedTx {
-            tx: tx.clone(),
+            tx: tx.clone().try_into().unwrap(),
             input_addresses: vec![None; 2],
         }),
     );

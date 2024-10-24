@@ -15,7 +15,6 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 reqwest = { workspace = true }
 slog = { workspace = true }
-tests = { path = "../../" }
 
 [lib]
 name = "spec_compliance"

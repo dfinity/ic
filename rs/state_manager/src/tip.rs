@@ -1048,13 +1048,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state
-                .system_state
-                .task_queue
-                .get_queue()
-                .clone()
-                .into_iter()
-                .collect(),
+            task_queue: canister_state.system_state.task_queue.get_queue().into(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer

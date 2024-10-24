@@ -35,10 +35,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
                     CreateCanisterArgument {
                         settings: Some(CanisterSettings {
                             controllers: Some(vec![ic_cdk::api::id()]),
-                            compute_allocation: None,
-                            memory_allocation: None,
-                            freezing_threshold: None,
-                            reserved_cycles_limit: None,
+                            ..CanisterSettings::default()
                         }),
                     },
                     args.initial_cycles,
@@ -112,10 +109,7 @@ async fn update_settings(args: UpdateSettingsArgs) {
                 canister_id,
                 settings: CanisterSettings {
                     controllers: Some(controllers.clone()),
-                    compute_allocation: None,
-                    memory_allocation: None,
-                    freezing_threshold: None,
-                    reserved_cycles_limit: None,
+                    ..CanisterSettings::default()
                 },
             })
         })
