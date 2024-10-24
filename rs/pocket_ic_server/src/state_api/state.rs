@@ -1434,6 +1434,7 @@ impl ApiState {
                             pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
+                            println!("waiting to grab instane: old={:?} op_id={:?}", old_state_label, op_id);
                             let instances = instances.blocking_read();
                             println!("waiting to grab graph: old={:?} op_id={:?}", old_state_label, op_id);
                             let mut graph_guard = graph.blocking_write();
