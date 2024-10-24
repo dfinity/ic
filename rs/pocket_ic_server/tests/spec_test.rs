@@ -161,7 +161,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
         peer_subnet_config,
         excluded_tests,
         included_tests,
-        16,
+        32,
     );
 }
 

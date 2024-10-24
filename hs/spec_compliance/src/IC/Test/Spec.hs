@@ -60,7 +60,7 @@ import Test.Tasty.HUnit
 -- * The test suite (see below for helper functions)
 
 icTests :: TestSubnetConfig -> TestSubnetConfig -> AgentConfig -> IO TestTree
-icTests my_sub other_sub =
+icTests my_sub other_sub conf =
   let (my_subnet_id_as_entity, my_type, my_nodes, my_ranges, _) = my_sub
    in let ((ecid_as_word64, last_canister_id_as_word64) : _) = my_ranges
        in let (_, last_canister_id_as_word64) = last my_ranges
@@ -76,12 +76,15 @@ icTests my_sub other_sub =
                                            in let initial_cycles = case my_type of
                                                     System -> 0
                                                     _ -> (2 ^ (60 :: Int))
-                                               in withAgentConfig $ do
-                                                    universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                    _ <- ic_provisional_create ic00 ecid (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
-                                                    ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
-                                                    ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
-                                                    return $ testGroup "Interface Spec acceptance tests" $
+                                               in do
+                                                    ucan_chunk_hash <- withAgentConfig conf $ do
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                      _ <- ic_provisional_create ic00 ecid (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
+                                                      ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
+                                                      ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
+                                                      return ucan_chunk_hash
+                                                    let extended_conf = conf { tc_ucan_chunk_hash = Just ucan_chunk_hash, tc_store_canister_id = Just store_canister_id }
+                                                    return $ withAgentConfig extended_conf $ testGroup "Interface Spec acceptance tests" $
                                                       let test_subnet_msg sub subnet_id subnet_id' cid = do
                                                             cid2 <- ic_create (ic00viaWithCyclesSubnet subnet_id cid 20_000_000_000_000) ecid Nothing
                                                             ic_install (ic00viaWithCyclesSubnet subnet_id cid 0) (enum #install) cid2 trivialWasmModule ""
@@ -107,7 +110,8 @@ icTests my_sub other_sub =
                                                                             let specified_id = entityIdToPrincipal $ EntityId ecid
                                                                             cid <- ic_provisional_create ic00 ecid (Just specified_id) (Just cycles) Nothing
                                                                             assertBool "canister was not created at its specified ID" $ ecid == cid
-                                                                            installAt cid prog
+                                                                            universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                                            ic_install ic00 (enum #install) cid universal_wasm (run prog)
                                                                             return cid
                                                                        in [ testCase "NNS canisters" $ do
                                                                               registry <- install_with_cycles_at_id 0 initial_cycles noop
