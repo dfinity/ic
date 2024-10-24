@@ -36,14 +36,17 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
 
     fn format(&self, config: &OutputConfig) -> OutputConfig {
         let mut config = config.clone();
-        if self.access_resolver.get_access_level() == AccessLevel::RestrictedRead {
-            config.rules.iter_mut().for_each(|rule| {
-                if rule.disclosed_at.is_none() {
-                    rule.description = None;
-                    rule.rule_raw = None;
-                }
-            });
+        // return full config if authorized
+        if self.access_resolver.get_access_level() == AccessLevel::FullAccess || self.access_resolver.get_access_level() == AccessLevel::FullRead {
+            config
         }
+        // return the redacted config otherwise
+        config.rules.iter_mut().for_each(|rule| {
+            if rule.disclosed_at.is_none() {
+                rule.description = None;
+                rule.rule_raw = None;
+            }
+        });
         config
     }
 }
