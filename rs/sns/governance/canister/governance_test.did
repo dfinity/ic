@@ -304,6 +304,7 @@ type Governance = record {
 };
 
 type Timers = record {
+  requires_periodic_tasks : opt bool;
   last_reset_timestamp_seconds : opt nat64;
   last_spawned_timestamp_seconds : opt nat64;
 };

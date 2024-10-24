@@ -1,8 +1,10 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Principal};
-use ic_nervous_system_proto::pb::v1::{ResetTimersRequest, ResetTimersResponse, Timers};
+use ic_nervous_system_proto::pb::v1::{
+    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
+};
 use ic_nns_test_utils::sns_wasm::build_governance_sns_wasm;
-use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1 as governance_pb};
+use ic_sns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, Lifecycle, NeuronBasketConstructionParameters,
 };
@@ -49,7 +51,7 @@ fn swap_init(now: SystemTime) -> Init {
     }
 }
 
-fn governance_proto() -> governance_pb::Governance {
+fn governance_proto() -> Governance {
     GovernanceCanisterInitPayloadBuilder::new()
         .with_root_canister_id(PrincipalId::new_anonymous())
         .with_ledger_canister_id(PrincipalId::new_anonymous())
@@ -237,18 +239,19 @@ fn test_governance_reset_timers() {
 
     // Helpers.
     let get_timers = || {
-        let payload = Encode!(&governance_pb::GetTimersRequest {}).unwrap();
+        let payload = Encode!(&GetTimersRequest {}).unwrap();
         let response = state_machine
             .execute_ingress(canister_id, "get_timers", payload)
             .expect("Unable to call get_timers on the Governance canister");
-        let response = Decode!(&response.bytes(), governance_pb::GetTimersResponse).unwrap();
+        let response = Decode!(&response.bytes(), GetTimersResponse).unwrap();
         response.timers
     };
 
     let last_spawned_timestamp_seconds = {
-        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(governance_pb::Timers {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
+            ..
         }) => last_reset_timestamp_seconds);
 
         // Resetting the timers cannot be done sooner than `RESET_TIMERS_COOL_DOWN_INTERVAL` after
@@ -256,9 +259,10 @@ fn test_governance_reset_timers() {
         state_machine.advance_time(Duration::from_secs(1000));
         state_machine.tick();
 
-        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(governance_pb::Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
+            ..
         }) => {
             assert_eq!(last_reset_timestamp_seconds_1, last_reset_timestamp_seconds);
             last_spawned_timestamp_seconds
@@ -284,9 +288,10 @@ fn test_governance_reset_timers() {
     {
         let last_spawned_before_reset_timestamp_seconds = last_spawned_timestamp_seconds;
 
-        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(governance_pb::Timers {
+        let last_reset_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             last_spawned_timestamp_seconds: None,
+            ..
         }) => last_reset_timestamp_seconds);
 
         // last_spawned_before_reset_timestamp_seconds is from before the reset, as time did not yet
@@ -299,9 +304,10 @@ fn test_governance_reset_timers() {
         state_machine.advance_time(Duration::from_secs(100));
         state_machine.tick();
 
-        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(governance_pb::Timers {
+        let last_spawned_timestamp_seconds = assert_matches!(get_timers(), Some(Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds_1),
             last_spawned_timestamp_seconds: Some(last_spawned_timestamp_seconds),
+            ..
         }) => {
             assert_eq!(last_reset_timestamp_seconds_1, last_reset_timestamp_seconds);
             last_spawned_timestamp_seconds
@@ -405,13 +411,11 @@ fn test_governance_reset_timers_cannot_be_spammed() {
         .unwrap();
 
     // Helpers.
-    let try_reset_timers = || -> Result<governance_pb::ResetTimersResponse, String> {
-        let payload = Encode!(&governance_pb::ResetTimersRequest {}).unwrap();
+    let try_reset_timers = || -> Result<ResetTimersResponse, String> {
+        let payload = Encode!(&ResetTimersRequest {}).unwrap();
         let response = state_machine.execute_ingress(canister_id, "reset_timers", payload);
         match response {
-            Ok(response) => {
-                Ok(Decode!(&response.bytes(), governance_pb::ResetTimersResponse).unwrap())
-            }
+            Ok(response) => Ok(Decode!(&response.bytes(), ResetTimersResponse).unwrap()),
             Err(err) => Err(err.to_string()),
         }
     };
@@ -421,15 +425,15 @@ fn test_governance_reset_timers_cannot_be_spammed() {
 
     let get_last_spawned_timestamp_seconds = || {
         let timers = {
-            let payload = Encode!(&governance_pb::GetTimersRequest {}).unwrap();
+            let payload = Encode!(&GetTimersRequest {}).unwrap();
             let response = state_machine
                 .execute_ingress(canister_id, "get_timers", payload)
                 .expect("Unable to call get_state on the Governance canister");
-            let response = Decode!(&response.bytes(), governance_pb::GetTimersResponse).unwrap();
+            let response = Decode!(&response.bytes(), GetTimersResponse).unwrap();
             response.timers
         };
 
-        let last_reset_timestamp_seconds = assert_matches!(timers, Some(governance_pb::Timers {
+        let last_reset_timestamp_seconds = assert_matches!(timers, Some(Timers {
             last_reset_timestamp_seconds: Some(last_reset_timestamp_seconds),
             ..
         }) => last_reset_timestamp_seconds);
