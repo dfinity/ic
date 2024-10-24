@@ -48,6 +48,26 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     agent
 }
 
+pub async fn wait_for_rosetta_to_catch_up_with_icp_ledger(
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+    agent: &Agent,
+) {
+    let chain_length = query_encoded_blocks(agent, u64::MAX, 1).await.chain_length;
+    let last_block = wait_for_rosetta_to_sync_up_to_block(
+        rosetta_client,
+        network_identifier,
+        chain_length.saturating_sub(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        chain_length.saturating_sub(1),
+        last_block,
+        "Failed to sync with the ledger"
+    );
+}
+
 pub async fn wait_for_rosetta_to_sync_up_to_block(
     rosetta_client: &RosettaClient,
     network_identifier: NetworkIdentifier,
