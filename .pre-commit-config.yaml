@@ -1,3 +1,5 @@
+default_stages: [commit, push, manual, buf-breaking]
+
 repos:
 - repo: local
   hooks:
@@ -63,7 +65,7 @@ repos:
     name: Check no breaking changes were introduced
     entry: ./pre-commit/check-incompatibilities.sh
     language: script
-    stages: [manual]
+    stages: [buf-breaking]
     pass_filenames: false
 
 - repo: https://github.com/willthames/ansible-lint.git
