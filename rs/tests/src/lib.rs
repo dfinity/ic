@@ -1,13 +1,6 @@
 pub mod api_test;
-pub mod btc_integration;
-pub mod canister_sig_verification_cache_test;
-pub mod ckbtc;
-pub mod crypto;
-pub mod custom_domains_integration;
-pub mod execution;
 pub mod icrc1_agent_test;
 pub mod ledger_tests;
-pub mod message_routing;
 pub mod networking;
 pub mod nns_tests;
 pub mod rosetta_test;

@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,

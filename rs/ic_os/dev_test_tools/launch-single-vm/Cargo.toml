@@ -11,7 +11,7 @@ ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../../tests/driver" }
 ic-types = { path = "../../../types/types" }
 
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 slog-async = { workspace = true }

@@ -65,6 +65,7 @@ fn encode_mint_convert_memo_is_stable() {
         from_address,
         value: Wei::from(10_000_000_000_000_000_u128),
         principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+        subaccount: None,
     };
     let memo: Memo = (&ReceivedEvent::from(event)).into();
 

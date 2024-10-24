@@ -22,9 +22,11 @@ paramiko>=2.11.0
 parse>=1.19.0
 pytest
 pytest-cov
-PyYAML>=5.4.1
+PyYAML>=6.0.2
 requests>=2.26.0
 simple-parsing
 tqdm
 uuid
 PyGithub>=2.3.0
+# packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
+typing_extensions>=4.6.0

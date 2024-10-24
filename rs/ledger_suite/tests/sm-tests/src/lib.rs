@@ -2644,7 +2644,7 @@ pub fn test_upgrade_serialization(
                     // Test upgrade to memory manager again
                     test_upgrade(ledger_wasm_nextmigrationversionmemorymanager.clone());
 
-                    // Current mainnet ICP wasm (V0) cannot deserialize from memory manager, but ICRC (V1) can
+                    // Current mainnet ICP and ICRC wasms (V1) can both deserialize from memory manager
                     match env.upgrade_canister(
                         ledger_id,
                         ledger_wasm_mainnet.clone(),
@@ -2652,7 +2652,7 @@ pub fn test_upgrade_serialization(
                     ) {
                         Ok(_) => {
                             if !downgrade_to_mainnet_should_succeed {
-                                panic!("Downgrade from memory manager directly to mainnet should fail (since mainnet is V0)!")
+                                panic!("Downgrade from memory manager directly to mainnet should fail!")
                             } else {
                                 // In case this succeeded, we need to upgrade the ledger back to
                                 // the next version (via the current version), so that the
@@ -2821,6 +2821,70 @@ pub fn icrc1_test_upgrade_serialization_fixed_tx<T>(
             assert_eq!(allowance.expires_at, Some(expiration));
         }
     }
+}
+
+pub fn test_downgrade_from_incompatible_version<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_nextledgerversion: Vec<u8>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    // Setup ledger with unsupported future version.
+    let (env, canister_id) = setup(
+        ledger_wasm_nextledgerversion.clone(),
+        encode_init_args,
+        vec![],
+    );
+
+    // For now the mainnet ledger does not perform the check and downgrade is possible.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_mainnet,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to downgrade to mainnet");
+
+    // Upgrade to current version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the same verison.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to current version");
+
+    // Upgrade to the next version.
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_nextledgerversion,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .expect("failed to upgrade to next version");
+
+    // Downgrade not possible.
+    match env.upgrade_canister(
+        canister_id,
+        ledger_wasm,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    ) {
+        Ok(_) => {
+            panic!("Upgrade from future ledger version should fail!")
+        }
+        Err(e) => {
+            assert!(e
+                .description()
+                .contains("Trying to downgrade from incompatible version"))
+        }
+    };
 }
 
 pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
