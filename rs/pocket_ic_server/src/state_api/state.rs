@@ -1296,7 +1296,6 @@ impl ApiState {
         drop(instance);
         drop(instances);
         trace!("stop_progress: released instances; instance_id={}", instance_id);
-        let mut instance = instances[instance_id].lock().await;
         if let Some(t) = progress_thread {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
@@ -1400,7 +1399,6 @@ impl ApiState {
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
         trace!("update_instances_with_timeout: grabbed instances; instance_id={}", instance_id);
-        let mut instance = instances[instance_id].lock().await;
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
