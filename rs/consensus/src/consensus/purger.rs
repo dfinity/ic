@@ -324,8 +324,29 @@ impl Purger {
             .certified_height
             .min(self.state_manager.latest_state_height());
 
+        fn get_blocks_to_consider_for_cup(pool: &PoolReader<'_>) -> BTreeSet<Height> {
+            let mut blocks_to_consider_for_cup = BTreeSet::new();
+            let current_cup_height = pool.get_catch_up_height();
+            let mut block = pool.get_highest_summary_block();
+            while block.height() > current_cup_height {
+                if block.payload.as_ref().as_summary().idkg.is_some() {
+                    blocks_to_consider_for_cup.insert(block.height());
+                }
+                let Some(parent_block) = pool.get_finalized_block(block.height.decrement()) else {
+                    break;
+                };
+                let next_start_height = parent_block.payload.as_ref().dkg_interval_start_height();
+                if let Some(start_block) = pool.get_finalized_block(next_start_height) {
+                    block = start_block;
+                } else {
+                    break;
+                }
+            }
+            blocks_to_consider_for_cup
+        }
+
         self.state_manager
-            .remove_inmemory_states_below(height, &BTreeSet::new());
+            .remove_inmemory_states_below(height, &get_blocks_to_consider_for_cup(pool));
         trace!(
             self.log,
             "Purge replicated states below [memory] {:?}",
