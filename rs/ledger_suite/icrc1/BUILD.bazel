@@ -145,6 +145,7 @@ rust_test(
         ],
         deps = [
             # Keep sorted.
+            ":icrc1",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/ledger_suite/icrc1/index-ng",
             "//rs/ledger_suite/icrc1/ledger",
