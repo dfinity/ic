@@ -816,27 +816,27 @@ pub mod node {
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn filter_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
-            &'a self,
+        pub fn filter_by_receivers<T: AsRef<IDkgReceivers>>(
+            &self,
             idkg_receivers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &Node> {
             self.iter()
                 .filter(move |node| idkg_receivers.as_ref().contains(node.id))
         }
 
-        pub fn filter_by_dealers<'a, T: AsRef<IDkgDealers> + 'a>(
-            &'a self,
+        pub fn filter_by_dealers<T: AsRef<IDkgDealers>>(
+            &self,
             idkg_dealers: T,
-        ) -> impl Iterator<Item = &Node> + 'a {
+        ) -> impl Iterator<Item = &Node> {
             self.iter()
                 .filter(move |node| idkg_dealers.as_ref().contains(node.id))
         }
 
-        pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
-            &'a self,
+        pub fn random_subset_with_min_size<R: RngCore + CryptoRng>(
+            &self,
             minimum_size: usize,
-            rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+            rng: &mut R,
+        ) -> impl Iterator<Item = &Node> {
             assert!(
                 minimum_size <= self.len(),
                 "Requested a random subset with at least {} elements but there are only {} elements",
@@ -847,11 +847,11 @@ pub mod node {
             self.iter().choose_multiple(rng, subset_size).into_iter()
         }
 
-        pub fn random_subset<'a, R: RngCore + CryptoRng>(
-            &'a self,
+        pub fn random_subset<R: RngCore + CryptoRng>(
+            &self,
             size: usize,
-            rng: &'a mut R,
-        ) -> impl Iterator<Item = &Node> + 'a {
+            rng: &mut R,
+        ) -> impl Iterator<Item = &Node> {
             assert!(
                 size <= self.len(),
                 "Requested a random subset with {} elements but there are only {} elements",
@@ -861,8 +861,8 @@ pub mod node {
             self.iter().choose_multiple(rng, size).into_iter()
         }
 
-        pub fn random_filtered_by_receivers<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
-            &'a self,
+        pub fn random_filtered_by_receivers<T: AsRef<IDkgReceivers>, R: Rng>(
+            &self,
             idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
@@ -871,8 +871,8 @@ pub mod node {
                 .expect("empty receivers")
         }
 
-        pub fn random_filtered_by_receivers_excluding<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
-            &'a self,
+        pub fn random_filtered_by_receivers_excluding<T: AsRef<IDkgReceivers>, R: Rng>(
+            &self,
             exclusion: &Node,
             idkg_receivers: T,
             rng: &mut R,
@@ -883,11 +883,7 @@ pub mod node {
                 .expect("empty receivers")
         }
 
-        pub fn random_dealer<'a, R: Rng>(
-            &'a self,
-            params: &'a IDkgTranscriptParams,
-            rng: &mut R,
-        ) -> &Node {
+        pub fn random_dealer<R: Rng>(&self, params: &IDkgTranscriptParams, rng: &mut R) -> &Node {
             self.filter_by_dealers(params)
                 .choose(rng)
                 .expect("empty dealers")
