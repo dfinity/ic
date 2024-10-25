@@ -89,11 +89,8 @@ impl TransactionKytData {
             // Some outputs do not have addresses. These outputs will never be
             // inputs of other transactions, so it is okay to treat them as `None`.
             outputs.push(
-                Address::from_script(
-                    &output.script_pubkey,
-                    bitcoin::Network::from(btc_network.clone()),
-                )
-                .ok(),
+                Address::from_script(&output.script_pubkey, bitcoin::Network::from(*btc_network))
+                    .ok(),
             )
         }
         Ok(Self { inputs, outputs })
