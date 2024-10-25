@@ -305,6 +305,8 @@ pub fn main() -> Result<()> {
                 *path = guestos_config_path.join("accounts_ssh_authorized_keys");
             }
 
+            // TODO: We won't have to modify networking between the hostos and
+            // guestos config after completing the networking revamp (NODE-1327)
             let mut guestos_network_settings = hostos_config.network_settings;
             // Update the GuestOS networking if `guestos_ipv6_address` is provided
             match &guestos_network_settings.ipv6_config {
