@@ -8,10 +8,10 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/bitcoin/kyt:btc_kyt_lib",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
+    "//rs/bitcoin/kyt:btc_kyt_lib",
     "//rs/canister_client",
     "//rs/config",
     "//rs/ledger_suite/icp:icp_ledger",

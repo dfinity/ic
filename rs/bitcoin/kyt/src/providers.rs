@@ -75,21 +75,26 @@ impl Provider {
         &self,
         txid: Txid,
         max_response_bytes: u32,
-    ) -> CanisterHttpRequestArgument {
+    ) -> Result<CanisterHttpRequestArgument, String> {
         match (self.provider_id, &self.btc_network) {
             (_, BtcNetwork::Regtest { json_rpc_url }) => {
                 make_post_request(json_rpc_url, txid, max_response_bytes)
             }
-            (ProviderId::Blockstream, _) => make_get_request(
+            (ProviderId::Blockstream, _) => Ok(make_get_request(
                 "blockstream.info",
                 &self.btc_network,
                 txid,
                 max_response_bytes,
-            ),
-            (ProviderId::MempoolSpace, _) => {
-                make_get_request("mempool.space", &self.btc_network, txid, max_response_bytes)
+            )),
+            (ProviderId::MempoolSpace, _) => Ok(make_get_request(
+                "mempool.space",
+                &self.btc_network,
+                txid,
+                max_response_bytes,
+            )),
+            (ProviderId::Btcscan, BtcNetwork::Mainnet) => {
+                Ok(btcscan_request(txid, max_response_bytes))
             }
-            (ProviderId::Btcscan, BtcNetwork::Mainnet) => btcscan_request(txid, max_response_bytes),
             (provider, btc_network) => {
                 panic!(
                     "Provider {} does not support bitcoin {}",
@@ -152,23 +157,41 @@ fn make_post_request(
     json_rpc_url: &str,
     txid: Txid,
     max_response_bytes: u32,
-) -> CanisterHttpRequestArgument {
+) -> Result<CanisterHttpRequestArgument, String> {
+    let mut url = url::Url::parse(json_rpc_url).map_err(|err| err.to_string())?;
+    let username = url.username();
+    let password = url.password().unwrap_or_default();
+    let authorization = base64::encode(format!(
+        "{}:{}",
+        url::form_urlencoded::parse(username.as_bytes())
+            .next()
+            .ok_or(format!("Failed to url_decode {}", username))?
+            .0,
+        url::form_urlencoded::parse(password.as_bytes())
+            .next()
+            .ok_or(format!("Failed to url_decode {}", password))?
+            .0,
+    ));
+    url.set_username("")
+        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
+    url.set_password(None)
+        .map_err(|()| format!("Invalid JSON RPC URL {}", json_rpc_url))?;
     let request_headers = vec![HttpHeader {
         name: "Authorization".to_string(),
-        value: "Basic aWMtYnRjLWludGVncmF0aW9uOlFQUWlOYXBoMTlGcVVzQ3JCUk4wRklJN2x5TTI2QjUxZkFNZUJRekNiLUU9".to_string(),
+        value: format!("Basic {}", authorization),
     }];
     let body = format!(
         "{{\"method\": \"gettransaction\", \"params\": [\"{}\"]}}",
         txid
     );
-    CanisterHttpRequestArgument {
-        url: json_rpc_url.to_string(),
+    Ok(CanisterHttpRequestArgument {
+        url: url.to_string(),
         method: HttpMethod::POST,
         body: Some(body.as_bytes().to_vec()),
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
-    }
+    })
 }
 
 fn param_transform() -> Option<TransformContext> {

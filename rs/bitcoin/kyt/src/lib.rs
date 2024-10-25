@@ -64,10 +64,15 @@ impl FetchEnv for KytCanisterEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
-        let request = provider.create_request(txid, max_response_bytes);
+        let request = provider
+            .create_request(txid, max_response_bytes)
+            .map_err(|err| HttpGetTxError::Rejected {
+                code: RejectionCode::SysFatal,
+                message: err,
+            })?;
         let url = request.url.clone();
         let cycles = get_tx_cycle_cost(max_response_bytes);
-        match http_request(request, cycles).await {
+        match http_request(request.clone(), cycles).await {
             Ok((response,)) => {
                 // Ensure response is 200 before decoding
                 if response.status != 200u32 {
