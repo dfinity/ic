@@ -72,7 +72,10 @@ async fn query_certified_changes_since(
 }
 
 fn changes_since(version: u64) -> RegistryGetChangesSinceRequest {
-    RegistryGetChangesSinceRequest { version, limit: None }
+    RegistryGetChangesSinceRequest {
+        version,
+        limit: None,
+    }
 }
 
 fn data_part(certified_response: &CertifiedResponse) -> LabeledTree<Vec<u8>> {
