@@ -482,7 +482,7 @@ fn icrc3_get_blocks(
     env: &StateMachine,
     canister_id: CanisterId,
     start: u64,
-    length: u64,
+    length: usize,
 ) -> GetBlocksResult {
     Decode!(
         &env.query(
