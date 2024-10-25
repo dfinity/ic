@@ -51,10 +51,14 @@ function validate_arguments() {
 function read_config_variables() {
     mgmt_mac=$(get_config_value '.icos_settings.mgmt_mac')
     mgmt_mac=${mgmt_mac//:/} # Remove colons from mgmt_mac
+    config_hostname=$(get_config_value '.guestos_settings.guestos_dev_settings.hostname')
 }
 
 function construct_hostname() {
-    if [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
+    if [ "${config_hostname}" != "" ] && [ "${config_hostname}" != "null" ]; then
+        HOSTNAME=${config_hostname}
+        write_log "Using manually configured hostname: ${HOSTNAME}"
+    elif [[ -r ${FILE} && $(cat ${FILE}) != "" ]]; then
         HOSTNAME=$(echo ${TYPE}-${mgmt_mac}-$(cat ${FILE}))
         write_log "Using hostname: ${HOSTNAME}"
         write_metric "setup_hostname" \

@@ -232,11 +232,12 @@ fn main() {
             bitcoind_addr: None,
             jaeger_addr: None,
             socks_proxy: None,
+            hostname: None,
         };
 
         // populate guestos_config_json_path with serialized guestos config object
         let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
-        let _ = generate_testnet_config(config, guestos_config_json_path);
+        let _ = generate_testnet_config(config, guestos_config_json_path.clone());
 
         // Build config image
         let filename = "config.tar.gz";

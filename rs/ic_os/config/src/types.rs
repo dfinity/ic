@@ -71,6 +71,8 @@ pub struct GuestOSDevSettings {
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
+    // An optional hostname to override the deterministically generated hostname
+    pub hostname: Option<String>,
 }
 
 /// Configures the usage of the backup spool directory.

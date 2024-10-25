@@ -442,6 +442,7 @@ fn create_config_disk_image(
         bitcoind_addr: None,
         jaeger_addr: None,
         socks_proxy: None,
+        hostname: None,
     };
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
@@ -522,9 +523,11 @@ fn create_config_disk_image(
         config.socks_proxy = Some(socks_proxy);
     }
 
+    config.hostname = Some(node.node_id.to_string());
+
     // populate guestos_config_json_path with serialized guestos config object
     let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
-    generate_testnet_config(config, guestos_config_json_path)?;
+    generate_testnet_config(config, guestos_config_json_path.clone())?;
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
     let script_path =

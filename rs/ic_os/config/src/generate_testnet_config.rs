@@ -43,6 +43,7 @@ pub struct GenerateTestnetConfigArgs {
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
+    pub hostname: Option<String>,
 }
 
 /// Generates a writes a serialized GuestOSConfig to guestos_config_json_path
@@ -80,6 +81,7 @@ pub fn generate_testnet_config(
         bitcoind_addr,
         jaeger_addr,
         socks_proxy,
+        hostname,
     } = config;
 
     // Construct the NetworkSettings
@@ -214,6 +216,7 @@ pub fn generate_testnet_config(
         bitcoind_addr,
         jaeger_addr,
         socks_proxy,
+        hostname,
     };
 
     // Construct GuestOSSettings

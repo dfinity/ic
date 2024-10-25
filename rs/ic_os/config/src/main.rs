@@ -124,6 +124,8 @@ pub struct GenerateTestnetConfigClapArgs {
     pub jaeger_addr: Option<String>,
     #[arg(long)]
     pub socks_proxy: Option<String>,
+    #[arg(long)]
+    pub hostname: Option<String>,
 
     // Output path
     #[arg(long)]
@@ -370,6 +372,7 @@ pub fn main() -> Result<()> {
                 bitcoind_addr: clap_args.bitcoind_addr,
                 jaeger_addr: clap_args.jaeger_addr,
                 socks_proxy: clap_args.socks_proxy,
+                hostname: clap_args.hostname,
             };
 
             generate_testnet_config(args, clap_args.guestos_config_json_path)
