@@ -1,4 +1,6 @@
-use crate::{governance::MAX_DISSOLVE_DELAY_SECONDS, pb::v1::NeuronState};
+use crate::{
+    governance::MAX_DISSOLVE_DELAY_SECONDS, neuron::StoredDissolveStateAndAge, pb::v1::NeuronState,
+};
 
 /// An enum to represent different combinations of a neurons dissolve_state and
 /// aging_since_timestamp_seconds. Currently, the back-and-forth conversions should make sure the
@@ -21,17 +23,18 @@ pub enum DissolveStateAndAge {
 
 impl DissolveStateAndAge {
     pub fn validate(self) -> Result<Self, String> {
-        match self {
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds: _,
-            } => {
-                if dissolve_delay_seconds == 0 {
-                    return Err("Dissolve delay must be greater than 0".to_string());
-                }
-            }
-            DissolveStateAndAge::DissolvingOrDissolved { .. } => {}
-        };
+        let original = self;
+        let stored_dissolve_state_and_age = StoredDissolveStateAndAge::from(self);
+
+        let validated_dissolve_state_and_age = Self::try_from(stored_dissolve_state_and_age)
+            .map_err(|e| format!("Invalid dissolve state and age: {}", e))?;
+
+        if validated_dissolve_state_and_age != original {
+            return Err( format!(
+                    "Dissolve state and age is not valid, as it does not serialize/deserialize symmetrically. In: {:?}, Out: {:?}",
+                    original, validated_dissolve_state_and_age
+                ));
+        }
 
         Ok(self)
     }

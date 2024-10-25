@@ -4213,15 +4213,24 @@ impl Governance {
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
                 );
+
+                let dissolve_state_and_age = if dissolve_delay_seconds > 0 {
+                    DissolveStateAndAge::NotDissolving {
+                        dissolve_delay_seconds,
+                        aging_since_timestamp_seconds: now,
+                    }
+                } else {
+                    DissolveStateAndAge::DissolvingOrDissolved {
+                        when_dissolved_timestamp_seconds: now,
+                    }
+                };
+
                 // Transfer successful.
                 let neuron = NeuronBuilder::new(
                     nid,
                     to_subaccount,
                     *np_principal,
-                    DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds,
-                        aging_since_timestamp_seconds: now,
-                    },
+                    dissolve_state_and_age,
                     now,
                 )
                 .with_followees(self.heap_data.default_followees.clone())
