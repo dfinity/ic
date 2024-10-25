@@ -16,11 +16,13 @@ bitcoin = { version = "0.32.2", default-features = false }
 candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-stable-structures = { workspace = true }
 serde = { workspace = true }
+serde_json = {workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
