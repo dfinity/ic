@@ -184,22 +184,6 @@ name = "ic-systest-rosetta"
 path = "financial_integrations/rosetta/rosetta_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-derive-test"
-path = "financial_integrations/rosetta/rosetta_derive_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-make-transactions-test"
-path = "financial_integrations/rosetta/rosetta_make_transactions_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-network-test"
-path = "financial_integrations/rosetta/rosetta_network_test.rs"
-
-[[bin]]
-name = "ic-systest-rosetta-neuron-dissolve-test"
-path = "financial_integrations/rosetta/rosetta_neuron_dissolve_test.rs"
-
-[[bin]]
 name = "ic-systest-rosetta-neuron-follow-test"
 path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
 
