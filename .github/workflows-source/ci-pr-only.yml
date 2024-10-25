@@ -120,6 +120,8 @@ jobs:
         id: pre-commit
         shell: bash
         run: ./ci/scripts/pre-commit.sh
+        env:
+          CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
 
   dependencies-check:
     name: Dependency Scan for PR

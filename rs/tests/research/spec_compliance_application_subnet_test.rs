@@ -12,38 +12,38 @@ Success:: The ic-ref-test binary does not return an error.
 end::catalog[] */
 
 use anyhow::Result;
-
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
-use spec_compliance::{config_impl, test_subnet};
+use spec_compliance::{setup_impl, test_subnet};
 
-pub fn config(env: TestEnv) {
-    config_impl(env, true, true);
+pub fn setup(env: TestEnv) {
+    setup_impl(env, true, true);
 }
 
 pub fn test(env: TestEnv) {
     test_subnet(
         env,
         true,
-        true,
+        false,
         Some(SubnetType::Application),
         None,
-        vec![],
         vec![
+            "($0 ~ /NNS canisters/)",
             "($0 ~ /canister history/)",
             "($0 ~ /canister version/)",
             "($0 ~ /canister global timer/)",
             "($0 ~ /canister http outcalls/)",
             "($0 ~ /WebAssembly module validation/)",
         ],
+        vec![],
     );
 }
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(config)
+        .with_setup(setup)
         .add_test(systest!(test))
         .execute_from_args()?;
 
