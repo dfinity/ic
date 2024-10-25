@@ -6,12 +6,12 @@ use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::common::rest::DtsFlag;
 use pocket_ic::PocketIcBuilder;
+use rcgen::{CertificateParams, KeyPair};
 use spec_compliance::run_ic_ref_test;
+use std::io::Write;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::NamedTempFile;
-
-const LOCALHOST: &str = "127.0.0.1";
 
 const EXCLUDED: &[&str] = &[
     // we do not enforce https in PocketIC
@@ -53,7 +53,29 @@ fn subnet_config(
     )
 }
 
-fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
+fn setup_and_run_ic_ref_test(
+    test_nns: bool,
+    excluded_tests: Vec<&str>,
+    _included_tests: Vec<&str>,
+) {
+    // generate root TLS certificate (only used if `https` is set to `true`,
+    // but defining it here unconditionally simplifies the test)
+    let root_key_pair = KeyPair::generate().unwrap();
+    let root_cert = CertificateParams::new(vec!["localhost".to_string()])
+        .unwrap()
+        .self_signed(&root_key_pair)
+        .unwrap();
+    let (mut cert_file, cert_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    cert_file.write_all(root_cert.pem().as_bytes()).unwrap();
+    let (mut key_file, key_path) = NamedTempFile::new().unwrap().keep().unwrap();
+    key_file
+        .write_all(root_key_pair.serialize_pem().as_bytes())
+        .unwrap();
+
+    // set `SSL_CERT_FILE` so that the canister http outcalls adapter accepts the self-signed certificate
+    std::env::set_var("SSL_CERT_FILE", cert_path.clone());
+    std::env::remove_var("NIX_SSL_CERT_FILE");
+
     // start httpbin webserver to test canister HTTP outcalls
     let httpbin_path = std::env::var_os("HTTPBIN_BIN").expect("Missing httpbin binary path");
     let mut cmd = Command::new(httpbin_path);
@@ -61,6 +83,8 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     let port_file_path = port_file.path().to_path_buf();
     cmd.arg("--port-file")
         .arg(port_file_path.as_os_str().to_str().unwrap());
+    cmd.arg("--cert-file").arg(cert_path);
+    cmd.arg("--key-file").arg(key_path);
     cmd.stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
@@ -73,7 +97,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
                 .trim_end()
                 .parse()
                 .expect("Failed to parse port to number");
-            break format!("{}:{}", LOCALHOST, port);
+            break format!("localhost:{}", port);
         }
         std::thread::sleep(Duration::from_millis(20));
     };
@@ -152,7 +176,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     };
 
     run_ic_ref_test(
-        Some("http://".to_string()),
+        Some("https://".to_string()),
         Some(httpbin_url),
         ic_ref_test_path.into_os_string().into_string().unwrap(),
         ic_test_data_path,
@@ -160,7 +184,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
         test_subnet_config,
         peer_subnet_config,
         excluded_tests,
-        included_tests,
+        vec!["$0 ~ /canister http/"],
         16,
     );
 }
