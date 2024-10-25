@@ -119,8 +119,9 @@ icTests my_sub other_sub conf =
                                                                                             ic_install_single_chunk ic00 (enum #install) cid nns_store_canister_id ucan_chunk_hash (run prog)
                                                                                             return cid
                                                                                        in [ testCase "NNS canisters" $ do
-                                                                                              nns_store_canister_id <- if checkCanisterIdInRanges my_ranges (wordToId 0) then
-                                                                                                    return store_canister_id
+                                                                                              nns_store_canister_id <-
+                                                                                                if checkCanisterIdInRanges my_ranges (wordToId 0)
+                                                                                                  then return store_canister_id
                                                                                                   else do
                                                                                                     ucan_chunk_hash' <- initialize_store_canister other_store_canister_id
                                                                                                     assertBool "universal canister chunk hashes should match for the test and other subnets" $ ucan_chunk_hash == ucan_chunk_hash'
