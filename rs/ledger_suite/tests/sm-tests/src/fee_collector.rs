@@ -148,8 +148,8 @@ pub fn test_fee_collector_blocks<T>(
         block_retrieval: &BlockRetrieval,
     ) -> Vec<GenericBlock> {
         match block_retrieval {
-            BlockRetrieval::Legacy => get_blocks(&env, ledger_id.get().0, start, length).blocks,
-            BlockRetrieval::Icrc3 => icrc3_get_blocks(&env, ledger_id, start, length)
+            BlockRetrieval::Legacy => get_blocks(env, ledger_id.get().0, start, length).blocks,
+            BlockRetrieval::Icrc3 => icrc3_get_blocks(env, ledger_id, start, length)
                 .blocks
                 .into_iter()
                 .map(|b| GenericBlock::from(b.block))
@@ -196,12 +196,8 @@ pub fn test_fee_collector_blocks<T>(
     ) -> (Option<Account>, Option<u64>) {
         match block {
             icrc_ledger_types::icrc::generic_value::Value::Map(block_map) => {
-                let fee_collector = block_map
-                    .get("fee_col")
-                    .map(|fee_collector| value_as_account(fee_collector));
-                let fee_collector_block_index = block_map
-                    .get("fee_col_block")
-                    .map(|value| value_as_u64(value));
+                let fee_collector = block_map.get("fee_col").map(value_as_account);
+                let fee_collector_block_index = block_map.get("fee_col_block").map(value_as_u64);
                 (fee_collector, fee_collector_block_index)
             }
             _ => panic!("A block should be a map!"),
