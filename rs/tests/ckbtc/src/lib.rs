@@ -82,6 +82,14 @@ pub const KYT_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
+const BITCOIND_RPC_USER: &str = "btc-dev-preview";
+
+const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=";
+
+const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
+
+const BITCOIND_RPC_PORT: u32 = 8332;
+
 pub fn btc_config(env: TestEnv) {
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -99,7 +107,10 @@ docker run  --name=bitcoind-node -d \
 
     let bitcoin_conf_path = config_dir.join("bitcoin.conf");
     let mut bitcoin_conf = File::create(bitcoin_conf_path).unwrap();
-    bitcoin_conf.write_all(r#"
+    bitcoin_conf
+        .write_all(
+            format!(
+                r#"
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1
     debug=1
@@ -107,11 +118,14 @@ docker run  --name=bitcoind-node -d \
     fallbackfee=0.0002
 
     # Dummy credentials that are required by `bitcoin-cli`.
-    rpcuser=btc-dev-preview
-    rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
-    rpcauth=btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb
+    rpcuser={BITCOIND_RPC_USER}
+    rpcpassword={BITCOIND_RPC_PASSWORD}
+    rpcauth={BITCOIND_RPC_AUTH}
     "#
-    .as_bytes()).unwrap();
+            )
+            .as_bytes(),
+        )
+        .unwrap();
     bitcoin_conf.sync_all().unwrap();
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
@@ -414,10 +428,18 @@ pub async fn install_kyt(
     kyt_canister.canister_id()
 }
 
-pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, logger: &Logger) -> CanisterId {
-    info!(&logger, "Installing kyt canister ...");
+pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
+    let logger = env.logger();
+    info!(logger, "Installing kyt canister ...");
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let btc_node_ipv6 = universal_vm.ipv6;
+    let json_rpc_url = format!(
+        "http://{}:{}@[{}]:{}",
+        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, BITCOIND_RPC_PORT
+    );
     let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
-        btc_network: BtcNetwork::Mainnet,
+        btc_network: BtcNetwork::Regtest { json_rpc_url },
     });
 
     install_rust_canister_from_path(

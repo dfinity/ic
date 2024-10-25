@@ -71,7 +71,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &logger).await;
+        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
 
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching

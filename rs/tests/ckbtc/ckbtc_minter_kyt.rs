@@ -80,7 +80,7 @@ pub fn test_kyt(env: TestEnv) {
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
-        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &logger).await;
+        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         let minter_id = install_minter(
             &mut minter_canister,
