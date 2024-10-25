@@ -86,8 +86,6 @@ icTests my_sub other_sub conf =
                                                            in do
                                                                 ucan_chunk_hash <- withAgentConfig conf $ do
                                                                   ucan_chunk_hash <- initialize_store_canister store_canister_id
-                                                                  ucan_chunk_hash' <- initialize_store_canister other_store_canister_id
-                                                                  assertBool "universal canister chunk hashes should match for the test and other subnets" $ ucan_chunk_hash == ucan_chunk_hash'
                                                                   return ucan_chunk_hash
                                                                 let extended_conf = conf {tc_ucan_chunk_hash = Just ucan_chunk_hash, tc_store_canister_id = Just store_canister_id}
                                                                 return $
@@ -113,27 +111,32 @@ icTests my_sub other_sub conf =
                                                                                     ic_raw_rand' (ic00viaWithCyclesSubnet' subnet_id cid 0) ecid >>= isReject [3]
                                                                                in let test_subnet_msg_canister_http' sub subnet_id cid = do
                                                                                         ic_http_get_request' (ic00viaWithCyclesSubnet' subnet_id cid) sub httpbin_proto ("equal_bytes/8") Nothing Nothing cid >>= isReject [3]
-                                                                                   in let install_with_cycles_at_id n cycles prog = do
+                                                                                   in let install_with_cycles_at_id n nns_store_canister_id cycles prog = do
                                                                                             let specified_raw_id = rawEntityId $ wordToId n
                                                                                             let specified_id = entityIdToPrincipal $ EntityId specified_raw_id
-                                                                                            let nns_store_canister_id = if checkCanisterIdInRanges my_ranges (EntityId specified_raw_id) then store_canister_id else other_store_canister_id
                                                                                             cid <- ic_provisional_create ic00 specified_raw_id (Just specified_id) (Just cycles) Nothing
                                                                                             assertBool "canister was not created at its specified ID" $ cid == specified_raw_id
                                                                                             ic_install_single_chunk ic00 (enum #install) cid nns_store_canister_id ucan_chunk_hash (run prog)
                                                                                             return cid
                                                                                        in [ testCase "NNS canisters" $ do
-                                                                                              registry <- install_with_cycles_at_id 0 initial_cycles noop
-                                                                                              governance <- install_with_cycles_at_id 1 initial_cycles noop
-                                                                                              ledger <- install_with_cycles_at_id 2 initial_cycles noop
-                                                                                              root <- install_with_cycles_at_id 3 initial_cycles noop
-                                                                                              cmc <- install_with_cycles_at_id 4 initial_cycles noop
-                                                                                              lifeline <- install_with_cycles_at_id 5 initial_cycles noop
-                                                                                              genesis <- install_with_cycles_at_id 6 initial_cycles noop
-                                                                                              sns <- install_with_cycles_at_id 7 initial_cycles noop
-                                                                                              identity <- install_with_cycles_at_id 8 initial_cycles noop
-                                                                                              ui <- install_with_cycles_at_id 9 initial_cycles noop
+                                                                                              nns_store_canister_id <- if checkCanisterIdInRanges my_ranges (wordToId 0) then
+                                                                                                    return store_canister_id
+                                                                                                  else do
+                                                                                                    ucan_chunk_hash' <- initialize_store_canister other_store_canister_id
+                                                                                                    assertBool "universal canister chunk hashes should match for the test and other subnets" $ ucan_chunk_hash == ucan_chunk_hash'
+                                                                                                    return other_store_canister_id
+                                                                                              registry <- install_with_cycles_at_id 0 nns_store_canister_id initial_cycles noop
+                                                                                              governance <- install_with_cycles_at_id 1 nns_store_canister_id initial_cycles noop
+                                                                                              ledger <- install_with_cycles_at_id 2 nns_store_canister_id initial_cycles noop
+                                                                                              root <- install_with_cycles_at_id 3 nns_store_canister_id initial_cycles noop
+                                                                                              cmc <- install_with_cycles_at_id 4 nns_store_canister_id initial_cycles noop
+                                                                                              lifeline <- install_with_cycles_at_id 5 nns_store_canister_id initial_cycles noop
+                                                                                              genesis <- install_with_cycles_at_id 6 nns_store_canister_id initial_cycles noop
+                                                                                              sns <- install_with_cycles_at_id 7 nns_store_canister_id initial_cycles noop
+                                                                                              identity <- install_with_cycles_at_id 8 nns_store_canister_id initial_cycles noop
+                                                                                              ui <- install_with_cycles_at_id 9 nns_store_canister_id initial_cycles noop
 
-                                                                                              cid <- install_with_cycles_at_id 10 initial_cycles noop
+                                                                                              cid <- install_with_cycles_at_id 10 nns_store_canister_id initial_cycles noop
 
                                                                                               let mint = replyData . i64tob . mintCycles . int64
                                                                                               call' root (mint 0) >>= isReject [5]
