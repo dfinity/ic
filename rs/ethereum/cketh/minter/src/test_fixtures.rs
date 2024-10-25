@@ -28,11 +28,10 @@ pub mod arb {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::{Block, Data, FeeHistory, FixedSizeData, Hash, LogEntry};
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use candid::Nat;
-    use evm_rpc_client::types::candid::{
-        HttpOutcallError as EvmHttpOutcallError, JsonRpcError as EvmJsonRpcError,
-        ProviderError as EvmProviderError, RpcError as EvmRpcError,
-        ValidationError as EvmValidationError,
+    use evm_rpc_client::{
+        Hex, Hex20, Hex256, Hex32, HexByte, HttpOutcallError as EvmHttpOutcallError,
+        JsonRpcError as EvmJsonRpcError, Nat256, ProviderError as EvmProviderError,
+        RpcError as EvmRpcError, ValidationError as EvmValidationError,
     };
     use ic_cdk::api::call::RejectionCode;
     use ic_ethereum_types::Address;
@@ -50,9 +49,40 @@ pub mod arb {
         uniform32(any::<u8>()).prop_map(CheckedAmountOf::from_be_bytes)
     }
 
-    pub fn arb_nat_256() -> impl Strategy<Value = Nat> {
-        arb_checked_amount_of()
-            .prop_map(|checked_amount: CheckedAmountOf<()>| Nat::from(checked_amount))
+    pub fn arb_nat_256() -> impl Strategy<Value = Nat256> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(Nat256::from_be_bytes)
+    }
+
+    pub fn arb_hex_byte() -> impl Strategy<Value = HexByte> {
+        use proptest::arbitrary::any;
+        any::<u8>().prop_map(HexByte::from)
+    }
+
+    pub fn arb_hex20() -> impl Strategy<Value = Hex20> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform20;
+        uniform20(any::<u8>()).prop_map(Hex20::from)
+    }
+
+    pub fn arb_hex32() -> impl Strategy<Value = Hex32> {
+        use proptest::arbitrary::any;
+        use proptest::array::uniform32;
+        uniform32(any::<u8>()).prop_map(Hex32::from)
+    }
+
+    pub fn arb_hex256() -> impl Strategy<Value = Hex256> {
+        use proptest::arbitrary::any;
+        vec(any::<u8>(), 256..=256).prop_map(|bytes| {
+            let array: [u8; 256] = bytes.try_into().unwrap();
+            Hex256::from(array)
+        })
+    }
+
+    pub fn arb_hex() -> impl Strategy<Value = Hex> {
+        use proptest::arbitrary::any;
+        vec(any::<u8>(), 0..100).prop_map(Hex::from)
     }
 
     pub fn arb_address() -> impl Strategy<Value = Address> {
@@ -219,10 +249,6 @@ pub mod arb {
         prop_oneof![
             ".*".prop_map(EvmValidationError::Custom),
             ".*".prop_map(EvmValidationError::InvalidHex),
-            ".*".prop_map(EvmValidationError::UrlParseError),
-            ".*".prop_map(EvmValidationError::HostNotAllowed),
-            Just(EvmValidationError::CredentialPathNotAllowed),
-            Just(EvmValidationError::CredentialHeaderNotAllowed)
         ]
     }
 }

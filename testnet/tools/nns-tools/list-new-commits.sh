@@ -78,10 +78,14 @@ list_new_canister_commits() {
         print_cyan "${HEADING}"
     fi
 
-    # Print commits.
-    if [[ "${INTERESTING_COMMITS}" != "" ]]; then
-        echo "${INTERESTING_COMMITS}"
-    fi
+    while IFS= read -r COMMIT_MESSAGE; do
+        if [[ $(echo "$COMMIT_MESSAGE" | grep -v -E ' .{10} (chore|refactor|test)\b' | wc -l) -gt 0 ]]; then
+            print_blue "${COMMIT_MESSAGE}"
+        else
+            print_light_gray "${COMMIT_MESSAGE}"
+        fi
+    done <<<"${NEW_COMMITS}"
+
 }
 
 # Begin main.

@@ -1021,7 +1021,7 @@ fn serialize_canister_to_tip(
             reserved_balance: canister_state.system_state.reserved_balance(),
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
-            status: canister_state.system_state.status.clone(),
+            status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics
@@ -1048,13 +1048,7 @@ fn serialize_canister_to_tip(
                 .scheduler_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
-            task_queue: canister_state
-                .system_state
-                .task_queue
-                .get_queue()
-                .clone()
-                .into_iter()
-                .collect(),
+            task_queue: canister_state.system_state.task_queue.get_queue().into(),
             global_timer_nanos: canister_state
                 .system_state
                 .global_timer

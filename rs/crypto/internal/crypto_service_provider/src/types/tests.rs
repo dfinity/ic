@@ -12,7 +12,7 @@ use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types:
     BTENodeBytes, FsEncryptionKeySetWithPop, FsEncryptionSecretKey,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
-use ic_crypto_internal_threshold_sig_ecdsa::{
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     EccCurveType, MEGaPrivateKey, MEGaPrivateKeyK256Bytes, MEGaPublicKeyK256Bytes,
 };
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};

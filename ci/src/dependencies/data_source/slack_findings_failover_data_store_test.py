@@ -20,7 +20,7 @@ from model.vulnerability import Vulnerability
 
 
 def test_can_handle_finding():
-    fo_finding = Finding(
+    fo_finding1 = Finding(
         "ic",
         "BAZEL_TRIVY_CS",
         Dependency("linux-libc-dev", "linux-libc-dev", "1.0"),
@@ -29,9 +29,21 @@ def test_can_handle_finding():
         ["ic/proj1", "ic/proj1/subproj/foo"],
         [],
     )
+    fo_finding2 = Finding(
+        "ic",
+        "BAZEL_TRIVY_CS",
+        Dependency("linux-modules-0.8.15", "linux-modules-0.8.15", "1.0"),
+        [Vulnerability("vid", "vname", "vdesc")],
+        [],
+        ["ic/proj1", "ic/proj1/subproj/foo"],
+        [],
+    )
 
-    assert SlackFindingsFailoverDataStore([Project("ic", "ic/proj1", None, Team.NODE_TEAM)]).can_handle(fo_finding)
-    assert SlackFindingsFailoverDataStore(
+    ds = SlackFindingsFailoverDataStore([Project("ic", "ic/proj1", None, Team.NODE_TEAM)])
+    assert ds.can_handle(fo_finding1)
+    assert ds.can_handle(fo_finding2)
+
+    ds = SlackFindingsFailoverDataStore(
         [
             Project(
                 "ic",
@@ -41,7 +53,9 @@ def test_can_handle_finding():
                 {"ic/proj1/subproj": [Team.BOUNDARY_NODE_TEAM], "ic/proj1": [Team.BOUNDARY_NODE_TEAM]},
             )
         ]
-    ).can_handle(fo_finding)
+    )
+    assert ds.can_handle(fo_finding1)
+    assert ds.can_handle(fo_finding2)
 
 
 def test_can_not_handle_finding():

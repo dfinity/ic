@@ -92,8 +92,6 @@ pub fn assert_existence_of_ledger_total_transactions_metric<T>(
         transfer(&env, ledger_id, MINTER, p1.0, 10_000_000).expect("mint failed");
     }
 
-    env.run_until_completion(/*max_ticks=*/ 10);
-
     assert_eq!(
         NUM_MINT_TRANSACTIONS,
         parse_metric(

@@ -6,8 +6,6 @@ use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::StableReader;
-#[cfg(not(feature = "next-migration-version-memory-manager"))]
-use ic_cdk::api::stable::StableWriter;
 
 #[cfg(not(feature = "canbench-rs"))]
 use ic_cdk_macros::init;
@@ -16,8 +14,8 @@ use ic_icrc1::{
     endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
-use ic_icrc1_ledger::UPGRADES_MEMORY;
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument};
+use ic_icrc1_ledger::{LEDGER_VERSION, UPGRADES_MEMORY};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -27,7 +25,6 @@ use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
-#[cfg(feature = "next-migration-version-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc21::{
@@ -124,28 +121,9 @@ fn init_state(init_args: InitArgs) {
     })
 }
 
-#[cfg(not(feature = "next-migration-version-memory-manager"))]
-#[pre_upgrade]
-fn pre_upgrade() {
-    #[cfg(feature = "canbench-rs")]
-    let _p = canbench_rs::bench_scope("pre_upgrade");
-
-    let start = ic_cdk::api::instruction_counter();
-    let mut stable_writer = StableWriter::default();
-    Access::with_ledger(|ledger| ciborium::ser::into_writer(ledger, &mut stable_writer))
-        .expect("failed to encode ledger state");
-    let end = ic_cdk::api::instruction_counter();
-    let instructions_consumed = end - start;
-    let counter_bytes: [u8; 8] = instructions_consumed.to_le_bytes();
-    stable_writer
-        .write_all(&counter_bytes)
-        .expect("failed to write instructions consumed to stable memory");
-}
-
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
 
-#[cfg(feature = "next-migration-version-memory-manager")]
 #[pre_upgrade]
 fn pre_upgrade() {
     #[cfg(feature = "canbench-rs")]
@@ -224,6 +202,16 @@ fn post_upgrade(args: Option<LedgerArgument>) {
         LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
     }
 
+    Access::with_ledger_mut(|ledger| {
+        if ledger.ledger_version > LEDGER_VERSION {
+            panic!(
+                "Trying to downgrade from incompatible version {}. Current version is {}.",
+                ledger.ledger_version, LEDGER_VERSION
+            );
+        }
+        ledger.ledger_version = LEDGER_VERSION;
+    });
+
     if let Some(args) = args {
         match args {
             LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
@@ -245,12 +233,12 @@ fn post_upgrade(args: Option<LedgerArgument>) {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "ledger_stable_memory_pages",
-        ic_cdk::api::stable::stable64_size() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "ledger_stable_memory_bytes",
-        (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
     w.encode_gauge(

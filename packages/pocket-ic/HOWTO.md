@@ -355,7 +355,7 @@ Here is a sketch of a test for a canister making canister HTTP outcalls in the l
 #[tokio::test]
 async fn test_canister_http_live() {
     use candid::{Decode, Encode, Principal};
-    use ic_cdk::api::management_canister::http_request::HttpResponse;
+    use pocket_ic::management_canister::HttpRequestResult;
     use ic_utils::interfaces::ManagementCanister;
 
     let mut pic = PocketIcBuilder::new()
@@ -365,15 +365,9 @@ async fn test_canister_http_live() {
         .await;
     let endpoint = pic.make_live(None).await;
 
-    // Retrieve the first canister ID on the application subnet
-    // which will be the effective canister ID for canister creation.
-    let topology = pic.topology().await;
-    let app_subnet = topology.get_app_subnets()[0];
-    let effective_canister_id = Principal::from_slice(
-        &topology.0.get(&app_subnet).unwrap().canister_ranges[0]
-            .start
-            .canister_id,
-    );
+    // Retrieve effective canister id for canister creation.
+    let topology = pic.topology();
+    let effective_canister_id: Principal = topology.default_effective_canister_id.into();
 
     // Create an agent for the PocketIC instance.
     let agent = ic_agent::Agent::builder()

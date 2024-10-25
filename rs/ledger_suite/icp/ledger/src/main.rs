@@ -28,6 +28,8 @@ use ic_ledger_core::{
 use ic_stable_structures::reader::{BufferedReader, Reader};
 #[cfg(feature = "upgrade-to-memory-manager")]
 use ic_stable_structures::writer::{BufferedWriter, Writer};
+#[cfg(feature = "icp-allowance-getter")]
+use icp_ledger::IcpAllowanceArgs;
 use icp_ledger::{
     max_blocks_per_request, protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdBlob,
     AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
@@ -1620,25 +1622,41 @@ fn icrc2_approve_candid() {
     })
 }
 
-#[candid_method(query, rename = "icrc2_allowance")]
-fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
-    if !LEDGER.read().unwrap().feature_flags.icrc2 {
-        trap_with("ICRC-2 features are not enabled on the ledger.");
-    }
+fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let ledger = LEDGER.read().unwrap();
-    let account = AccountIdentifier::from(arg.account);
-    let spender = AccountIdentifier::from(arg.spender);
-    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    let allowance = ledger.approvals.allowance(&from, &spender, now);
     Allowance {
         allowance: Nat::from(allowance.amount.get_e8s()),
         expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
     }
 }
 
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let from = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    get_allowance(from, spender)
+}
+
 #[export_name = "canister_query icrc2_allowance"]
 fn icrc2_allowance_candid() {
     over(candid_one, icrc2_allowance)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[candid_method(query, rename = "allowance")]
+fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
+    get_allowance(arg.account, arg.spender)
+}
+
+#[cfg(feature = "icp-allowance-getter")]
+#[export_name = "canister_query allowance"]
+fn allowance_candid() {
+    over(candid_one, icp_allowance)
 }
 
 #[candid_method(update, rename = "icrc21_canister_call_consent_message")]

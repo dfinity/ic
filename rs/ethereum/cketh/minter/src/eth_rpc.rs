@@ -10,7 +10,7 @@ use crate::numeric::{BlockNumber, LogIndex, TransactionCount, Wei, WeiPerGas};
 use crate::state::{mutate_state, State};
 use candid::{candid_method, CandidType, Principal};
 use ethnum;
-use evm_rpc_client::types::candid::{
+use evm_rpc_client::{
     HttpOutcallError as EvmHttpOutcallError,
     SendRawTransactionStatus as EvmSendRawTransactionStatus,
 };

@@ -37,9 +37,9 @@ const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 // to enter and exit the Wasm engine.
 const INSTRUCTION_OVERHEAD_PER_EXECUTION: NumInstructions = NumInstructions::new(2 * M);
 
-// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 2ms
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
 // to prepare execution of a canister.
-const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(4 * M);
+const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(8 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
@@ -422,13 +422,6 @@ pub struct CyclesAccountManagerConfig {
 impl CyclesAccountManagerConfig {
     pub fn application_subnet() -> Self {
         Self {
-            max_storage_reservation_period: Duration::from_secs(300_000_000),
-            ..Self::verified_application_subnet()
-        }
-    }
-
-    pub fn verified_application_subnet() -> Self {
-        Self {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
             canister_creation_fee: Cycles::new(100_000_000_000),
             compute_percent_allocated_per_second_fee: Cycles::new(10_000_000),
@@ -451,11 +444,13 @@ impl CyclesAccountManagerConfig {
             http_request_quadratic_baseline_fee: Cycles::new(60_000),
             http_request_per_byte_fee: Cycles::new(400),
             http_response_per_byte_fee: Cycles::new(800),
-            // This effectively disables the storage reservation mechanism on
-            // verified application subnets.
-            max_storage_reservation_period: Duration::from_secs(0),
+            max_storage_reservation_period: Duration::from_secs(300_000_000),
             default_reserved_balance_limit: DEFAULT_RESERVED_BALANCE_LIMIT,
         }
+    }
+
+    pub fn verified_application_subnet() -> Self {
+        Self::application_subnet()
     }
 
     /// All processing is free on system subnets

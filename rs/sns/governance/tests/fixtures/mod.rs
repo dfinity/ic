@@ -38,7 +38,7 @@ use std::{
 
 pub mod environment_fixture;
 
-const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+pub const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
 /// Constructs a neuron id from a principal_id and memo. This is a
 /// convenient helper method in tests.
@@ -465,8 +465,8 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn heartbeat(&mut self) -> &mut Self {
-        self.governance.heartbeat().now_or_never();
+    pub fn run_periodic_tasks_now(&mut self) -> &mut Self {
+        self.governance.run_periodic_tasks().now_or_never();
         self
     }
 
