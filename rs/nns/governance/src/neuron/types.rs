@@ -1598,7 +1598,8 @@ impl NeuronBuilder {
 
     #[cfg(test)]
     pub fn clear_following_refreshed_timestamp_seconds(mut self) {
-        self.following_refreshed_timestamp_seconds = GRANDFATHERED_FOLLOWING_REFRESHED_TIMESTAMP_SECONDS;
+        self.following_refreshed_timestamp_seconds =
+            GRANDFATHERED_FOLLOWING_REFRESHED_TIMESTAMP_SECONDS;
         self
     }
 
