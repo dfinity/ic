@@ -729,11 +729,8 @@ impl ApiState {
             .await
             .expect("Failed to create PocketIC instance");
         let topology = instance.topology();
-        trace!("add_instance:start");
         let mut instances = self.instances.write().await;
-        trace!("add_instance:locked");
         let instance_id = instances.len();
-        trace!("add_instance:done_blocking");
         instances.push(Mutex::new(Instance {
             progress_thread: None,
             state: InstanceState::Available(instance),
@@ -745,23 +742,19 @@ impl ApiState {
         self.stop_progress(instance_id).await;
         loop {
             let instances = self.instances.read().await;
-            trace!("grabbed instances in delete_instance; instance_id={}", instance_id);
             let mut instance = instances[instance_id].lock().await;
             match &instance.state {
                 InstanceState::Available(_) => {
                     let _ = std::mem::replace(&mut instance.state, InstanceState::Deleted);
-            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Deleted => {
-            trace!("released instances in delete_instance; instance_id={}", instance_id);
                     break;
                 }
                 InstanceState::Busy { .. } => {}
             }
             drop(instance);
             drop(instances);
-            trace!("released instances in delete_instance; instance_id={}", instance_id);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
     }
@@ -769,10 +762,8 @@ impl ApiState {
     pub async fn delete_all_instances(arc_self: Arc<ApiState>) {
         let mut tasks = JoinSet::new();
         let instances = arc_self.instances.read().await;
-        trace!("delete_all_instances: grabbed instances");
         let num_instances = instances.len();
         drop(instances);
-        trace!("delete_all_instances: released instances");
         for instance_id in 0..num_instances {
             let arc_self_clone = arc_self.clone();
             tasks.spawn(async move { arc_self_clone.delete_instance(instance_id).await });
@@ -1174,7 +1165,6 @@ impl ApiState {
             let request_id = canister_http_request.request_id;
             let response = loop {
                 let instances = instances.read().await;
-                trace!("process_canister_http_requests: grabbed instances; instance_id={}", instance_id);
                 let instance = instances[instance_id].lock().await;
                 if let InstanceState::Available(pocket_ic) = &instance.state {
                     let canister_http_adapters = pocket_ic.canister_http_adapters();
@@ -1199,7 +1189,6 @@ impl ApiState {
                 }
                 drop(instance);
                 drop(instances);
-                trace!("process_canister_http_requests: released instances; instance_id={}", instance_id);
                 tokio::time::sleep(Duration::from_millis(10)).await;
             };
             let mock_canister_http_response = MockCanisterHttpResponse {
@@ -1235,7 +1224,6 @@ impl ApiState {
         let instances_clone = self.instances.clone();
         let graph = self.graph.clone();
         let instances = self.instances.read().await;
-        trace!("auto_progress: grabbed instances; instance_id={}", instance_id);
         let mut instance = instances[instance_id].lock().await;
         if instance.progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
@@ -1280,23 +1268,19 @@ impl ApiState {
                 }
             });
             instance.progress_thread = Some(ProgressThread { handle, sender: tx });
-        trace!("auto_progress: released instances; instance_id={}", instance_id);
             Ok(())
         } else {
-        trace!("auto_progress: released instances; instance_id={}", instance_id);
             Err("Auto progress mode has already been enabled.".to_string())
         }
     }
 
     pub async fn stop_progress(&self, instance_id: InstanceId) {
         let instances = self.instances.read().await;
-        trace!("stop_progress: grabbed instances; instance_id={}", instance_id);
         let mut instance = instances[instance_id].lock().await;
         let progress_thread = instance.progress_thread.take();
         // drop locks otherwise we might end up with a deadlock
         drop(instance);
         drop(instances);
-        trace!("stop_progress: released instances; instance_id={}", instance_id);
         if let Some(t) = progress_thread {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
@@ -1307,11 +1291,8 @@ impl ApiState {
         let instances = self.instances.read().await;
         let mut res = vec![];
 
-        println!("total instances: {}", instances.len());
         for instance in &*instances {
-            println!("grabbing instance");
             let instance = &*instance.lock().await;
-            println!("grabbed instance");
             match &instance.state {
                 InstanceState::Busy { state_label, op_id } => {
                     res.push(format!("Busy({:?}, {:?})", state_label, op_id))
@@ -1398,13 +1379,10 @@ impl ApiState {
         );
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
-        trace!("update_instances_with_timeout: grabbed instances; instance_id={}", instance_id);
         let (bg_task, busy_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
-            println!("waiting to grab instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             let mut instance = instance_mutex.lock().await;
-            println!("grabbed instance mutex; instance_id={:?}, op_id={:?}", instance_id, op_id);
             // If this instance is busy, return the running op and initial state
             match &instance.state {
                 InstanceState::Deleted => {
@@ -1449,19 +1427,14 @@ impl ApiState {
                             pocket_ic.bump_state_label();
                             let new_state_label = pocket_ic.get_state_label();
                             // add result to graph, but grab instance lock first!
-                            println!("waiting to grab instane: old={:?} op_id={:?}", old_state_label, op_id);
                             let instances = instances.blocking_read();
-                            trace!("update_instances_with_timeout-thread: grabbed instances; instance_id={}", instance_id);
-                            println!("waiting to grab graph: old={:?} op_id={:?}", old_state_label, op_id);
                             let mut graph_guard = graph.blocking_write();
-                            println!("grabbed graph: old={:?} op_id={:?}", old_state_label, op_id);
                             let cached_computations =
                                 graph_guard.entry(old_state_label.clone()).or_default();
                             cached_computations
                                 .insert(op_id.clone(), (new_state_label, result.clone()));
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
-                            println!("grabbed instance: old={:?} op_id={:?}", old_state_label, op_id);
                             if let InstanceState::Deleted = &instance.state {
                                 error!("The instance is deleted immediately after an operation. This is a bug!");
                                 std::mem::drop(pocket_ic);
@@ -1469,7 +1442,6 @@ impl ApiState {
                                 instance.state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-        trace!("update_instances_with_timeout-thread: released instances; instance_id={}", instance_id);
                             result
                         }
                     };
@@ -1485,7 +1457,6 @@ impl ApiState {
         };
         // drop lock, otherwise we end up with a deadlock
         std::mem::drop(instances_locked);
-        trace!("update_instances_with_timeout: released instances; instance_id={}", instance_id);
 
         // We schedule a blocking background task on the tokio runtime. Note that if all
         // blocking workers are busy, the task is put on a queue (which is what we want).

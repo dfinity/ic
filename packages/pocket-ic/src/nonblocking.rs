@@ -35,7 +35,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 
 // wait time between polling requests
-const POLLING_PERIOD_MS: u64 = 500;
+const POLLING_PERIOD_MS: u64 = 10;
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
