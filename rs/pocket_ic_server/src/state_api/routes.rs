@@ -1113,10 +1113,10 @@ pub async fn create_instance(
     };
 
     let (instance_id, topology) = api_state
-        .add_instance(move |instance_id| {
+        .add_instance(move |seed| {
             PocketIc::new(
                 runtime,
-                instance_id,
+                seed,
                 subnet_configs,
                 instance_config.state_dir,
                 instance_config.nonmainnet_features,

@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_types)]
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{async_trait, copy_dir, BlobStore, InstanceId, OpId, Operation};
+use crate::{async_trait, copy_dir, BlobStore, OpId, Operation};
 use askama::Template;
 use axum::{
     extract::State,
@@ -386,7 +386,7 @@ impl PocketIc {
 
     pub(crate) fn new(
         runtime: Arc<Runtime>,
-        instance_id: InstanceId,
+        seed: u64,
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         nonmainnet_features: bool,
@@ -688,7 +688,7 @@ impl PocketIc {
             default_effective_canister_id,
         };
 
-        let state_label = StateLabel::new(instance_id);
+        let state_label = StateLabel::new(seed);
 
         Self {
             state_dir,

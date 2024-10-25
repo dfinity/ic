@@ -52,7 +52,7 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, sync::atomic::AtomicU64, time::Duration};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -81,8 +81,8 @@ pub const STATE_LABEL_HASH_SIZE: usize = 16;
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
 
 impl StateLabel {
-    pub fn new(instance_id: InstanceId) -> Self {
-        let mut seq_no: u128 = instance_id.try_into().unwrap();
+    pub fn new(seed: u64) -> Self {
+        let mut seq_no: u128 = seed.try_into().unwrap();
         seq_no <<= 64;
         Self(seq_no.to_le_bytes())
     }
@@ -142,6 +142,7 @@ pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
     instances: Arc<Mutex<Vec<Mutex<Instance>>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+    seed: AtomicU64,
     sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
@@ -208,6 +209,7 @@ impl PocketIcApiStateBuilder {
         Arc::new(ApiState {
             instances,
             graph,
+            seed: AtomicU64::new(0),
             sync_wait_time,
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
@@ -727,17 +729,18 @@ impl ApiState {
 
     pub async fn add_instance<F>(&self, f: F) -> (InstanceId, Topology)
     where
-        F: FnOnce(InstanceId) -> PocketIc + std::marker::Send + 'static,
+        F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
     {
+        let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let instance = tokio::task::spawn_blocking(move || f(seed))
+            .await
+            .expect("Failed to create PocketIC instance");
+        let topology = instance.topology();
         trace!("add_instance:start");
         let mut instances = self.instances.lock().await;
         trace!("add_instance:locked");
         let instance_id = instances.len();
-        let instance = tokio::task::spawn_blocking(move || f(instance_id))
-            .await
-            .expect("Failed to create PocketIC instance");
         trace!("add_instance:done_blocking");
-        let topology = instance.topology();
         instances.push(Mutex::new(Instance {
             progress_thread: None,
             state: InstanceState::Available(instance),
@@ -1308,7 +1311,6 @@ impl ApiState {
     }
 
     pub async fn list_instance_states(&self) -> Vec<String> {
-        panic!("");
         let instances = self.instances.lock().await;
         let mut res = vec![];
 
@@ -1542,8 +1544,7 @@ impl std::fmt::Debug for InstanceState {
 
 impl std::fmt::Debug for ApiState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        /*
-        let instances = self.instances.blocking_read();
+        let instances = self.instances.blocking_lock();
         let graph = self.graph.blocking_read();
 
         writeln!(f, "Instances:")?;
@@ -1555,7 +1556,6 @@ impl std::fmt::Debug for ApiState {
         for (k, v) in graph.iter() {
             writeln!(f, "  {k:?} => {v:?}")?;
         }
-        */
         Ok(())
     }
 }
