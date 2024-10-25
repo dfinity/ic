@@ -13,7 +13,6 @@ use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::cmp::{min, Ordering};
-use std::ops::RangeInclusive;
 use std::time::Duration;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")

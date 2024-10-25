@@ -3,7 +3,6 @@ mod tests;
 
 use crate::numeric::BlockNumber;
 use ic_ethereum_types::Address;
-use std::cmp::min;
 use std::ops::RangeInclusive;
 
 pub struct LogScrapingState {
@@ -104,7 +103,7 @@ impl BlockRangeInclusive {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-struct BlockRangeChunks {
+pub struct BlockRangeChunks {
     range: BlockRangeInclusive,
     chunk_size: u16,
     exhausted: bool,
