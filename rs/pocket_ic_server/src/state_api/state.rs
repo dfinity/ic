@@ -85,7 +85,7 @@ pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
 
 impl StateLabel {
     pub fn new(seed: u64) -> Self {
-        let mut seq_no: u128 = seed.try_into().unwrap();
+        let mut seq_no: u128 = seed.into();
         seq_no <<= 64;
         Self(seq_no.to_le_bytes())
     }
