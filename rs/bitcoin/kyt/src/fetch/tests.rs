@@ -552,8 +552,8 @@ async fn test_check_fetched() {
     env.expect_get_tx_with_reply(Ok(mock_transaction_with_output_but_no_address(2)));
     assert!(matches!(
         env.check_fetched(txid_0, &fetched).await,
-        CheckTransactionResponse::Unknown(CheckTransactionStatus::Retriable(
-            CheckTransactionRetriable::TransientInternalError(err)
+        CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(
+            CheckTransactionIrrecoverableError::InvalidTransaction(err)
         )) if err.contains("has no address")
     ));
 }

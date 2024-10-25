@@ -2,7 +2,10 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
 };
-use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
+use crate::types::{
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus,
+};
 use crate::{blocklist_contains, providers, state, BtcNetwork};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
@@ -222,10 +225,12 @@ pub trait FetchEnv {
                             state::set_fetched_address(txid, index, address.clone());
                         } else {
                             // This error shouldn't happen unless blockdata is corrupted.
-                            return CheckTransactionRetriable::TransientInternalError(format!(
-                                "Tx {} vout {} has no address, but is vin {} of tx {}",
-                                input.txid, input.vout, index, txid
-                            ))
+                            return CheckTransactionIrrecoverableError::InvalidTransaction(
+                                format!(
+                                    "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                    input.txid, input.vout, index, txid
+                                ),
+                            )
                             .into();
                         }
                     }
@@ -258,7 +263,7 @@ pub trait FetchEnv {
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
                         error = Some(
-                            CheckTransactionRetriable::TransientInternalError(format!(
+                            CheckTransactionIrrecoverableError::InvalidTransaction(format!(
                                 "Tx {} vout {} has no address, but is vin {} of tx {}",
                                 input_txid, vout, index, txid
                             ))
