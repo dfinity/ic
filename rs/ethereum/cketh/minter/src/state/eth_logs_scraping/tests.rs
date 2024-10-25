@@ -40,6 +40,13 @@ fn should_be_one_iteration() {
     }
 }
 
+#[test]
+fn should_have_usable_debug_and_display_output() {
+    let range = BlockRangeInclusive::from(0x698AB3..=0x698DD2_u32);
+    assert_eq!(format!("{:?}", range), "6_916_787..=6_917_586");
+    assert_eq!(format!("{}", range), "6_916_787..=6_917_586");
+}
+
 proptest! {
     #[test]
     fn should_be_empty(chunk_size in any::<u16>()) {

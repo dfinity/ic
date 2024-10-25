@@ -3,6 +3,7 @@ mod tests;
 
 use crate::numeric::BlockNumber;
 use ic_ethereum_types::Address;
+use std::fmt::{Debug, Display};
 use std::ops::RangeInclusive;
 
 #[derive(Clone, PartialEq, Debug)]
@@ -50,12 +51,30 @@ impl LogScrapingState {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct BlockRangeInclusive(RangeInclusive<BlockNumber>);
 
 impl BlockRangeInclusive {
     pub fn new(start: BlockNumber, end: BlockNumber) -> Self {
         Self(RangeInclusive::new(start, end))
+    }
+
+    /// Destructures the `BlockRangeInclusive` into (lower bound, upper (inclusive) bound).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ic_cketh_minter::numeric::BlockNumber;
+    /// use ic_cketh_minter::state::eth_logs_scraping::BlockRangeInclusive;
+    ///
+    /// let start = BlockNumber::from(1_u8);
+    /// let end = BlockNumber::from(5_u8);
+    /// let block_range = BlockRangeInclusive::new(start, end);
+    ///
+    /// assert_eq!(block_range.into_inner(), (start, end));
+    /// ```
+    pub fn into_inner(self) -> (BlockNumber, BlockNumber) {
+        self.0.into_inner()
     }
 
     /// Partition a block range into two non-overlapping ranges at the given block number.
@@ -119,6 +138,72 @@ impl BlockRangeInclusive {
             let right = BlockRangeInclusive::new(mid, end);
             (Some(left), Some(right))
         }
+    }
+
+    /// Partition a block range into two non-overlapping ranges at the midpoint,
+    /// which is included in the first partition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ic_cketh_minter::state::eth_logs_scraping::BlockRangeInclusive;
+    ///
+    /// let block_range = BlockRangeInclusive::from(1..=1_u8);
+    /// let (left, right) = block_range.clone().partition_into_halves();
+    /// assert_eq!(left, Some(block_range));
+    /// assert_eq!(right, None);
+    ///
+    /// let block_range = BlockRangeInclusive::from(1..=2_u8);
+    /// let (left, right) = block_range.partition_into_halves();
+    /// assert_eq!(left, Some(BlockRangeInclusive::from(1..=1_u8)));
+    /// assert_eq!(right, Some(BlockRangeInclusive::from(2..=2_u8)));
+    ///
+    /// let block_range = BlockRangeInclusive::from(1..=3_u8);
+    /// let (left, right) = block_range.partition_into_halves();
+    /// assert_eq!(left, Some(BlockRangeInclusive::from(1..=2_u8)));
+    /// assert_eq!(right, Some(BlockRangeInclusive::from(3..=3_u8)));
+    ///
+    /// let block_range = BlockRangeInclusive::from(1..=4_u8);
+    /// let (left, right) = block_range.partition_into_halves();
+    /// assert_eq!(left, Some(BlockRangeInclusive::from(1..=2_u8)));
+    /// assert_eq!(right, Some(BlockRangeInclusive::from(3..=4_u8)));
+    /// ```
+    ///
+    pub fn partition_into_halves(
+        self,
+    ) -> (Option<BlockRangeInclusive>, Option<BlockRangeInclusive>) {
+        if self.as_ref().start() >= self.as_ref().end() {
+            return (Some(self), None);
+        }
+        // start < end <= BlockNumber::MAX
+        let mid = self
+            .as_ref()
+            .start()
+            .checked_add(
+                self.as_ref()
+                    .end()
+                    .checked_sub(*self.as_ref().start())
+                    .expect("unreachable: end > start")
+                    .div_by_two(),
+            )
+            // mid == end - (delta - delta/2) < end,
+            // where delta = end - start > 0
+            .expect("unreachable: mid < end")
+            .checked_increment()
+            .expect("unreachable: mid <= end");
+        self.partition_at_checked(mid)
+    }
+}
+
+impl Display for BlockRangeInclusive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..={}", self.0.start(), self.0.end())
+    }
+}
+
+impl Debug for BlockRangeInclusive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
