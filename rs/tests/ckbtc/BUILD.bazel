@@ -64,6 +64,7 @@ CKBTC_RUNTIME_DEPS = [
 system_test_nns(
     name = "ckbtc_minter_basics_test",
     env = {
+        "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
         "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/minter:ckbtc_minter_debug)",
         "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",

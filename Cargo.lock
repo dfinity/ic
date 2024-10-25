@@ -12933,6 +12933,7 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-btc-interface",
+ "ic-btc-kyt",
  "ic-canister-client",
  "ic-ckbtc-agent",
  "ic-ckbtc-kyt",

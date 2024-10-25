@@ -3,6 +3,7 @@ use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::{Config, Fees, Flag, Network};
+use ic_btc_kyt::{BtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg};
 use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
@@ -357,6 +358,7 @@ pub async fn install_minter(
     logger: &Logger,
     max_time_in_queue_nanos: u64,
     kyt_canister_id: CanisterId,
+    new_kyt_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
@@ -372,6 +374,7 @@ pub async fn install_minter(
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
         kyt_principal: Some(kyt_canister_id),
+        new_kyt_principal: Some(new_kyt_canister_id),
     };
 
     let minter_arg = MinterArg::Init(args);
@@ -409,6 +412,23 @@ pub async fn install_kyt(
     )
     .await;
     kyt_canister.canister_id()
+}
+
+pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, logger: &Logger) -> CanisterId {
+    info!(&logger, "Installing kyt canister ...");
+    let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
+        btc_network: BtcNetwork::Mainnet,
+    });
+
+    install_rust_canister_from_path(
+        new_kyt_canister,
+        get_dependency_path(
+            env::var("IC_BTC_KYT_WASM_PATH").expect("IC_BTC_KYT_WASM_PATH not set"),
+        ),
+        Some(Encode!(&kyt_init_args).unwrap()),
+    )
+    .await;
+    new_kyt_canister.canister_id()
 }
 
 pub async fn set_kyt_api_key(agent: &ic_agent::Agent, kyt_canister: &Principal, api_key: String) {
