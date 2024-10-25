@@ -113,6 +113,13 @@ pub struct NeuronInfo {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "12")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that following was "refreshed". There are two ways to refresh
+    /// the following of a neuron: set following, or vote directly. When this
+    /// becomes > 6 months, the amount of voting power that this neuron can
+    /// exercise decreases linearly down to 0 over the course of 1 month. After
+    /// that, following is cleared, except for ManageNeuron proposals.
+    #[prost(uint64, optional, tag = "13")]
+    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// A transfer performed from some account to stake a new neuron.
 #[derive(
@@ -276,6 +283,13 @@ pub struct Neuron {
     /// See the Visibility enum.
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    /// The last time that following was "refreshed". There are two ways to refresh
+    /// the following of a neuron: set following, or vote directly. When this
+    /// becomes > 6 months, the amount of voting power that this neuron can
+    /// exercise decreases linearly down to 0 over the course of 1 month. After
+    /// that, following is cleared, except for ManageNeuron proposals.
+    #[prost(uint64, optional, tag = "24")]
+    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     /// At any time, at most one of `when_dissolved` and
     /// `dissolve_delay` are specified.
     ///
@@ -401,6 +415,8 @@ pub struct AbridgedNeuron {
     pub neuron_type: ::core::option::Option<i32>,
     #[prost(enumeration = "Visibility", optional, tag = "23")]
     pub visibility: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "24")]
+    pub following_refreshed_timestamp_seconds: ::core::option::Option<u64>,
     #[prost(oneof = "abridged_neuron::DissolveState", tags = "9, 10")]
     pub dissolve_state: ::core::option::Option<abridged_neuron::DissolveState>,
 }
