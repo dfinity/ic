@@ -23,7 +23,7 @@ fi
 PROPOSAL_FILE=$1
 NEURON_ID=$2
 
-submit_sale_upgrade_proposal_mainnet() {
+submit_swap_upgrade_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
 
     PROPOSAL_FILE=$1
@@ -46,7 +46,7 @@ submit_sale_upgrade_proposal_mainnet() {
     print_green "End Proposal Text"
     echo
     print_green "Summary of action:
-  You are proposing to update canister $CANISTER_ID (A Sale Canister for an SNS) to commit $VERSION.
+  You are proposing to update canister $CANISTER_ID (A Swap Canister for an SNS) to commit $VERSION.
   Please verify additionally you are targeting the correct Canister ID for your intended SNS.
   The WASM hash is $WASM_SHA.
     "
@@ -76,4 +76,4 @@ if ! is_variable_set IC_ADMIN; then
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
 fi
 
-submit_sale_upgrade_proposal_mainnet $PROPOSAL_FILE $NEURON_ID
+submit_swap_upgrade_proposal_mainnet $PROPOSAL_FILE $NEURON_ID
