@@ -28,7 +28,7 @@ pub fn start_main_event_loop(
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
-    adapter_state: AdapterState,
+    mut adapter_state: AdapterState,
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) {

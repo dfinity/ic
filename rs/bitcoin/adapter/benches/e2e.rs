@@ -113,13 +113,13 @@ fn e2e(criterion: &mut Criterion) {
                     &MetricsRegistry::default(),
                 );
 
-                let adapter_state = AdapterState::new(config.idle_seconds);
+                let (_, tx) = AdapterState::new(config.idle_seconds);
 
                 let (transaction_manager_tx, _) = channel(100);
                 start_grpc_server(
                     config.clone(),
                     no_op_logger(),
-                    adapter_state.clone(),
+                    tx,
                     handler,
                     transaction_manager_tx,
                     &MetricsRegistry::default(),

@@ -160,60 +160,53 @@ pub struct AdapterState {
     /// On MacOS this approach caused issues since on MacOS Instant::now() is time since boot and when subtracting
     /// 'idle_seconds' we encountered an underflow and panicked.
     ///
-    /// I't simportant that this value is set to None on startup.
-    last_received_tx: watch::Sender<Option<Instant>>,
+    /// It's simportant that this value is set to [`None`] on startup.
+    last_received_rx: watch::Receiver<Option<Instant>>,
 }
 
 impl AdapterState {
-    /// Creates a new instance of the AdapterState.
-    pub fn new(idle_seconds: u64) -> Self {
+    /// Creates a new instance of the [`AdapterState`].
+    pub fn new(idle_seconds: u64) -> (Self, watch::Sender<Option<Instant>>) {
         // Initialize the watch channel with `None`, indicating no requests have been received yet.
-        let (last_received_tx, _) = watch::channel(None);
-        Self {
-            idle_seconds,
-            last_received_tx,
-        }
-    }
-
-    /// Updates the state to indicate a request was received now.
-    pub fn received_now(&self) {
-        let _ = self.last_received_tx.send(Some(Instant::now()));
-    }
-
-    /// A future that returns when/if the adapter becomes/is awake.
-    pub async fn active(&self) {
-        let mut last_received_rx = self.last_received_tx.subscribe();
-        loop {
-            if let Some(last) = *last_received_rx.borrow() {
-                if last.elapsed().as_secs() < self.idle_seconds {
-                    return;
-                }
-            }
-            // Wait for a change in the last received time.
-            let _ = last_received_rx.changed().await;
-        }
+        let (tx, last_received_rx) = watch::channel(None);
+        (
+            Self {
+                idle_seconds,
+                last_received_rx,
+            },
+            tx,
+        )
     }
 
     /// A future that returns when/if the adapter becomes/is idle.
-    pub async fn idle(&self) {
-        let mut last_received_rx = self.last_received_tx.subscribe();
+    pub async fn idle(&mut self) {
+        let mut last_time = self
+            .last_received_rx
+            .borrow_and_update()
+            .unwrap_or_else(Instant::now);
+
         loop {
-            let last_received = *last_received_rx.borrow();
-            match last_received {
-                Some(last) => {
-                    let elapsed = last.elapsed().as_secs();
-                    if elapsed >= self.idle_seconds {
-                        return;
-                    }
-                    select! {
-                        _ = sleep(Duration::from_secs(self.idle_seconds - elapsed)) => {}
-                        _ = last_received_rx.changed() => {}
-                    }
+            let seconds_left_until_idle = self.idle_seconds - last_time.elapsed().as_secs();
+            select! {
+                _ = sleep(Duration::from_secs(seconds_left_until_idle)) => {return},
+                Ok(_) = self.last_received_rx.changed() => {
+                    last_time = self.last_received_rx.borrow_and_update().unwrap_or_else(Instant::now);
                 }
-                // No requests received yet; the adapter is idle.
-                None => return,
             }
         }
+    }
+
+    /// A future that returns when/if the adapter becomes/is awake.
+    pub async fn active(&mut self) {
+        let _ = self
+            .last_received_rx
+            .wait_for(|v| {
+                if let Some(last) = v {
+                    return last.elapsed().as_secs() < self.idle_seconds;
+                }
+                false
+            })
+            .await;
     }
 }
 
@@ -226,7 +219,7 @@ pub fn start_server(
 ) {
     let _enter = rt_handle.enter();
 
-    let adapter_state = AdapterState::new(config.idle_seconds);
+    let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
 
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
@@ -244,7 +237,7 @@ pub fn start_server(
     start_grpc_server(
         config.clone(),
         log.clone(),
-        adapter_state.clone(),
+        tx,
         get_successors_handler,
         transaction_manager_tx,
         metrics_registry,
