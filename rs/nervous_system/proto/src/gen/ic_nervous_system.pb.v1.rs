@@ -186,6 +186,9 @@ pub struct ResetTimersResponse {}
     ::prost::Message,
 )]
 pub struct Timers {
+    /// Indicates whether this canister (still) requires (timer-based) periodic tasks.
+    ///
+    /// May be ignored by canisters that never cancel their periodic tasks.
     #[prost(bool, optional, tag = "1")]
     pub requires_periodic_tasks: ::core::option::Option<bool>,
     #[prost(uint64, optional, tag = "2")]

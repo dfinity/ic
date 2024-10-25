@@ -280,8 +280,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
         (
             LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
             allowed_viewer,
-            // TODO(EXC-1675): when disabled works as for controllers, change to ok when enabled.
-            not_allowed_error(&allowed_viewer),
+            ok.clone(),
         ),
         (
             LogVisibilityV2::AllowedViewers(allowed_viewers.clone()),
