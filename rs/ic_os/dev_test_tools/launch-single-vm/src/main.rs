@@ -203,8 +203,7 @@ fn main() {
         }
 
         // Build GuestOS config object
-        let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
-        let args = GenerateTestnetConfigArgs {
+        let config = GenerateTestnetConfigArgs {
             ipv6_config_type: Some("RouterAdvertisement".to_string()),
             deterministic_prefix: None,
             deterministic_prefix_length: None,
@@ -233,11 +232,11 @@ fn main() {
             bitcoind_addr: None,
             jaeger_addr: None,
             socks_proxy: None,
-            guestos_config_json_path: guestos_config_json_path.clone(),
         };
 
         // populate guestos_config_json_path with serialized guestos config object
-        let _ = generate_testnet_config(args);
+        let guestos_config_json_path = tempdir.as_ref().join("guestos_config.json");
+        let _ = generate_testnet_config(config, guestos_config_json_path);
 
         // Build config image
         let filename = "config.tar.gz";

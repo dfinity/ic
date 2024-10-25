@@ -43,14 +43,14 @@ pub struct GenerateTestnetConfigArgs {
     pub bitcoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
-
-    // Output path
-    pub guestos_config_json_path: PathBuf,
 }
 
 /// Generates a writes a serialized GuestOSConfig to guestos_config_json_path
 /// Any required config fields that aren't specified will receive dummy values
-pub fn generate_testnet_config(args: GenerateTestnetConfigArgs) -> Result<()> {
+pub fn generate_testnet_config(
+    config: GenerateTestnetConfigArgs,
+    guestos_config_json_path: PathBuf,
+) -> Result<()> {
     let GenerateTestnetConfigArgs {
         ipv6_config_type,
         deterministic_prefix,
@@ -80,8 +80,7 @@ pub fn generate_testnet_config(args: GenerateTestnetConfigArgs) -> Result<()> {
         bitcoind_addr,
         jaeger_addr,
         socks_proxy,
-        guestos_config_json_path,
-    } = args;
+    } = config;
 
     // Construct the NetworkSettings
     let ipv6_config = match ipv6_config_type.as_deref() {

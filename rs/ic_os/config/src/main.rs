@@ -370,10 +370,9 @@ pub fn main() -> Result<()> {
                 bitcoind_addr: clap_args.bitcoind_addr,
                 jaeger_addr: clap_args.jaeger_addr,
                 socks_proxy: clap_args.socks_proxy,
-                guestos_config_json_path: clap_args.guestos_config_json_path,
             };
 
-            generate_testnet_config(args)
+            generate_testnet_config(args, clap_args.guestos_config_json_path)
         }
         None => {
             println!("No command provided. Use --help for usage information.");

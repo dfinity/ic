@@ -413,8 +413,7 @@ fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     // Build GuestOS config object
-    let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
-    let mut args = GenerateTestnetConfigArgs {
+    let mut config = GenerateTestnetConfigArgs {
         ipv6_config_type: Some("RouterAdvertisement".to_string()),
         deterministic_prefix: None,
         deterministic_prefix_length: None,
@@ -443,15 +442,14 @@ fn create_config_disk_image(
         bitcoind_addr: None,
         jaeger_addr: None,
         socks_proxy: None,
-        guestos_config_json_path: guestos_config_json_path.clone(),
     };
 
     // We've seen k8s nodes fail to pick up RA correctly, so we specify their
     // addresses directly. Ideally, all nodes should do this, to match mainnet.
     if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        args.ipv6_config_type = Some("Fixed".to_string());
-        args.fixed_address = Some(format!("{}/64", node.node_config.public_api.ip()));
-        args.fixed_gateway = Some("fe80::ecee:eeff:feee:eeee".to_string());
+        config.ipv6_config_type = Some("Fixed".to_string());
+        config.fixed_address = Some(format!("{}/64", node.node_config.public_api.ip()));
+        config.fixed_gateway = Some("fe80::ecee:eeff:feee:eeee".to_string());
     }
 
     // If we have a root subnet, specify the correct NNS url.
@@ -461,7 +459,7 @@ fn create_config_disk_image(
         .nodes()
         .next()
     {
-        args.nns_urls = Some(vec![format!("http://[{}]:8080", node.get_ip_addr())]);
+        config.nns_urls = Some(vec![format!("http://[{}]:8080", node.get_ip_addr())]);
     }
 
     if let Some(malicious_behavior) = malicious_behavior {
@@ -469,7 +467,7 @@ fn create_config_disk_image(
             test_env.logger(),
             "Node with id={} has malicious behavior={:?}", node.node_id, malicious_behavior
         );
-        args.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
+        config.malicious_behavior = Some(serde_json::to_string(&malicious_behavior)?);
     }
 
     if let Some(query_stats_epoch_length) = query_stats_epoch_length {
@@ -479,7 +477,7 @@ fn create_config_disk_image(
             node.node_id,
             query_stats_epoch_length
         );
-        args.query_stats_epoch_length = Some(query_stats_epoch_length);
+        config.query_stats_epoch_length = Some(query_stats_epoch_length);
     }
 
     if let Some(ipv4_config) = ipv4_config {
@@ -487,9 +485,9 @@ fn create_config_disk_image(
             test_env.logger(),
             "Node with id={} is IPv4-enabled: {:?}", node.node_id, ipv4_config
         );
-        args.ipv4_address = Some(ipv4_config.ip_addr().to_string());
-        args.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
-        args.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
+        config.ipv4_address = Some(ipv4_config.ip_addr().to_string());
+        config.ipv4_gateway = Some(ipv4_config.gateway_ip_addr().to_string());
+        config.ipv4_prefix_length = Some(ipv4_config.prefix_length().try_into().unwrap());
     }
 
     if let Some(domain) = domain {
@@ -497,7 +495,7 @@ fn create_config_disk_image(
             test_env.logger(),
             "Node with id={} has domain_name {}", node.node_id, domain,
         );
-        args.ipv4_domain = Some(domain);
+        config.ipv4_domain = Some(domain);
     }
 
     let elasticsearch_hosts: Vec<String> = get_elasticsearch_hosts()?;
@@ -506,26 +504,27 @@ fn create_config_disk_image(
         "ElasticSearch hosts are {:?}", elasticsearch_hosts
     );
     if !elasticsearch_hosts.is_empty() {
-        args.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
+        config.elasticsearch_hosts = Some(elasticsearch_hosts.join(" "));
     }
 
     // --bitcoind_addr indicates the local bitcoin node that the bitcoin adapter should be connected to in the system test environment.
     if let Ok(bitcoin_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
-        args.bitcoind_addr = Some(bitcoin_addr);
+        config.bitcoind_addr = Some(bitcoin_addr);
     }
 
     // --jaeger_addr indicates the local Jaeger node that the nodes should be connected to in the system test environment.
     if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
-        args.jaeger_addr = Some(jaeger_addr);
+        config.jaeger_addr = Some(jaeger_addr);
     }
 
     // --socks_proxy indicates that a socks proxy is available to the system test environment.
     if let Ok(socks_proxy) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
-        args.socks_proxy = Some(socks_proxy);
+        config.socks_proxy = Some(socks_proxy);
     }
 
     // populate guestos_config_json_path with serialized guestos config object
-    generate_testnet_config(args)?;
+    let guestos_config_json_path = tempdir().unwrap().as_ref().join("guestos_config.json");
+    generate_testnet_config(config, guestos_config_json_path)?;
 
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
     let script_path =
