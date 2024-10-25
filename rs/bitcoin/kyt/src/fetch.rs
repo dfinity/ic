@@ -63,7 +63,7 @@ pub trait FetchEnv {
 
     async fn http_get_tx(
         &self,
-        provider: providers::Provider,
+        provider: &providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError>;
@@ -127,7 +127,7 @@ pub trait FetchEnv {
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<FetchResult, Infallible> {
-        match self.http_get_tx(provider, txid, max_response_bytes).await {
+        match self.http_get_tx(&provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
                 match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {

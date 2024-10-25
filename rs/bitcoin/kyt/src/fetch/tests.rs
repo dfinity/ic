@@ -39,14 +39,14 @@ impl FetchEnv for MockEnv {
 
     async fn http_get_tx(
         &self,
-        provider: Provider,
+        provider: &Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {
         self.calls
             .borrow_mut()
             .push_back((txid, max_response_bytes));
-        *self.called_provider.borrow_mut() = Some(provider);
+        *self.called_provider.borrow_mut() = Some(provider.clone());
         self.replies
             .borrow_mut()
             .pop_front()
@@ -186,7 +186,7 @@ async fn test_mock_env() {
     let txid = mock_txid(0);
     env.expect_get_tx_with_reply(Ok(mock_transaction()));
     let result = env
-        .http_get_tx(provider, txid, INITIAL_MAX_RESPONSE_BYTES)
+        .http_get_tx(&provider, txid, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(result.is_ok());
     env.assert_get_tx_call(txid, INITIAL_MAX_RESPONSE_BYTES);
@@ -258,7 +258,7 @@ async fn test_fetch_tx() {
 
     env.expect_get_tx_with_reply(Ok(tx_0.clone()));
     let result = env
-        .fetch_tx((), provider, txid_0, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_0, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(result, Ok(FetchResult::Fetched(_))));
     assert!(matches!(
@@ -275,7 +275,7 @@ async fn test_fetch_tx() {
     // case RetryWithBiggerBuffer
     env.expect_get_tx_with_reply(Err(HttpGetTxError::ResponseTooLarge));
     let result = env
-        .fetch_tx((), provider, txid_1, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_1, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(result, Ok(FetchResult::RetryWithBiggerBuffer)));
     assert!(matches!(
@@ -287,7 +287,7 @@ async fn test_fetch_tx() {
         "failed to decode tx".to_string(),
     )));
     let result = env
-        .fetch_tx((), provider, txid_2, INITIAL_MAX_RESPONSE_BYTES)
+        .fetch_tx((), provider.clone(), txid_2, INITIAL_MAX_RESPONSE_BYTES)
         .await;
     assert!(matches!(
         result,
@@ -517,7 +517,7 @@ async fn test_check_fetched() {
     state::set_fetch_status(
         txid_2,
         FetchTxStatus::Error(FetchTxStatusError {
-            provider,
+            provider: provider.clone(),
             max_response_bytes: RETRY_MAX_RESPONSE_BYTES,
             error: HttpGetTxError::Rejected {
                 code: RejectionCode::SysTransient,

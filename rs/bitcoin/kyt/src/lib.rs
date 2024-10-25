@@ -60,7 +60,7 @@ impl FetchEnv for KytCanisterEnv {
 
     async fn http_get_tx(
         &self,
-        provider: providers::Provider,
+        provider: &providers::Provider,
         txid: Txid,
         max_response_bytes: u32,
     ) -> Result<Transaction, HttpGetTxError> {

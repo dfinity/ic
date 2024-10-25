@@ -22,7 +22,7 @@ fn should_display_metadata() {
     let oldest_entry_time = 0;
     let latest_entry_time = 1_000_000_000_000;
     let dashboard = DashboardTemplate {
-        btc_network,
+        btc_network: btc_network.clone(),
         outcall_capacity,
         cached_entries,
         tx_table_page_size: 10,
