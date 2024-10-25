@@ -71,8 +71,8 @@ jobs:
               nns_tests_nightly
           )
           if [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "${GITHUB_EVENT_NAME}" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-                      EXCLUDED_TEST_TAGS+=(long_test)
+              if [[ "${{ github.event_name }}" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+                  EXCLUDED_TEST_TAGS+=(long_test)
               fi
           fi
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
