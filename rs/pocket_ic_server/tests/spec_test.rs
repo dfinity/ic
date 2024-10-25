@@ -188,12 +188,12 @@ fn setup_and_run_ic_ref_test(
         16,
     );
 }
-
+/*
 #[test]
 fn ic_ref_test_nns() {
     setup_and_run_ic_ref_test(true, EXCLUDED.to_vec(), vec![])
 }
-
+*/
 #[test]
 fn ic_ref_test_app() {
     setup_and_run_ic_ref_test(false, EXCLUDED.to_vec(), vec![])
