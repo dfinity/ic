@@ -1,3 +1,31 @@
+#[rustfmt::skip]
+
+use anyhow::{Result, bail};
+use bitcoincore_rpc::{Auth, Client, RpcApi};
+use candid::Decode;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env::TestEnv;
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+};
+use ic_system_test_driver::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        universal_vm::{UniversalVm, UniversalVms},
+    },
+    systest,
+    util::{block_on, runtime_from_url, UniversalCanister},
+};
+use ic_tests_ckbtc::install_bitcoin_canister;
+use ic_types::Height;
+use ic_universal_canister::{management, wasm};
+use slog::info;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
+use std::{io::Read, path::Path};
+
 /* tag::catalog[]
 Title:: Bitcoin integration test
 
@@ -15,31 +43,6 @@ Success::
 . The balance of the address matches the expected value.
 
 end::catalog[] */
-
-use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
-
-use crate::ckbtc::lib::install_bitcoin_canister;
-use anyhow::bail;
-use bitcoincore_rpc::{Auth, Client, RpcApi};
-use candid::Decode;
-use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-};
-use ic_system_test_driver::driver::universal_vm::UniversalVms;
-use ic_system_test_driver::util::runtime_from_url;
-use ic_system_test_driver::util::{block_on, UniversalCanister};
-use ic_system_test_driver::{
-    driver::ic::{InternetComputer, Subnet},
-    driver::universal_vm::UniversalVm,
-};
-use ic_types::Height;
-use ic_universal_canister::{management, wasm};
-use slog::info;
-use std::{io::Read, path::Path};
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
@@ -200,4 +203,13 @@ pub fn get_balance(env: TestEnv) {
     get_bitcoind_log(&env);
     // We only exit retry loop successfully if we got the expected satoshi balance
     res.expect("Failed to get btc balance");
+}
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(config)
+        .add_test(systest!(get_balance))
+        .execute_from_args()?;
+
+    Ok(())
 }

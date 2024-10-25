@@ -19,6 +19,24 @@ pub enum TlaValue {
     Variant { tag: String, value: Box<TlaValue> },
 }
 
+impl TlaValue {
+    /// An approximation of the size of the TLA value, in terms of the number of atoms.
+    /// Ignores string lengths or number sizes.
+    pub fn size(&self) -> u64 {
+        match self {
+            TlaValue::Set(set) => set.iter().map(|x| x.size()).sum(),
+            TlaValue::Record(map) => map.iter().map(|(_k, v)| 1 + v.size()).sum(),
+            TlaValue::Function(map) => map.iter().map(|(k, v)| k.size() + v.size()).sum(),
+            TlaValue::Seq(vec) => vec.iter().map(|x| x.size()).sum(),
+            TlaValue::Literal(_s) => 1_u64,
+            TlaValue::Constant(_s) => 1_u64,
+            TlaValue::Bool(_) => 1,
+            TlaValue::Int(_) => 1,
+            TlaValue::Variant { tag: _, value } => 1 + value.size(),
+        }
+    }
+}
+
 impl Display for TlaValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
