@@ -328,7 +328,8 @@ impl DashboardTemplate {
                 .contract_address()
                 .map_or("N/A".to_string(), |address| address.to_string()),
             erc20_helper_contract_address: state
-                .erc20_helper_contract_address
+                .erc20_log_scraping
+                .contract_address()
                 .map_or("N/A".to_string(), |address| address.to_string()),
             cketh_ledger_id: state.cketh_ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
@@ -336,8 +337,9 @@ impl DashboardTemplate {
             first_synced_block: state.first_scraped_block_number,
             last_eth_synced_block: state.eth_log_scraping.last_scraped_block_number(),
             last_erc20_synced_block: state
-                .erc20_helper_contract_address
-                .map(|_| state.last_erc20_scraped_block_number),
+                .erc20_log_scraping
+                .contract_address()
+                .map(|_| state.erc20_log_scraping.last_scraped_block_number()),
             last_observed_block: state.last_observed_block_number,
             minted_events,
             pending_deposits,

@@ -1005,17 +1005,23 @@ fn state_equivalence() {
         .unwrap();
         s
     };
+    let erc20_log_scraping = {
+        let mut s = LogScrapingState::new(BlockNumber::new(1_000_000));
+        s.set_contract_address(
+            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
+                .parse()
+                .unwrap(),
+        )
+        .unwrap();
+        s
+    };
 
     let state = State {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         cketh_ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
         eth_log_scraping: eth_log_scraping.clone(),
-        erc20_helper_contract_address: Some(
-            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
-                .parse()
-                .unwrap(),
-        ),
+        erc20_log_scraping: erc20_log_scraping.clone(),
         ecdsa_public_key: Some(EcdsaPublicKeyResponse {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
@@ -1023,7 +1029,6 @@ fn state_equivalence() {
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
-        last_erc20_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
@@ -1104,6 +1109,19 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
+            erc20_log_scraping: {
+                let mut s = erc20_log_scraping.clone();
+                s.set_last_scraped_block_number(BlockNumber::new(100_000_000_000));
+                s
+            },
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
             ecdsa_key_name: "".to_string(),
             ..state.clone()
         }),
@@ -1114,6 +1132,15 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             eth_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
+            ..state.clone()
+        }),
+        "changing essential fields should break equivalence",
+    );
+
+    assert_ne!(
+        Ok(()),
+        state.is_equivalent_to(&State {
+            erc20_log_scraping: LogScrapingState::new(BlockNumber::new(1_000_000)),
             ..state.clone()
         }),
         "changing essential fields should break equivalence",

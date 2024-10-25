@@ -78,17 +78,16 @@ impl TryFrom<InitArg> for State {
                     InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
                 })?;
         }
+        let erc20_log_scraping = LogScrapingState::new(last_scraped_block_number);
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
-            erc20_helper_contract_address: None,
             pending_withdrawal_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             cketh_ledger_id: ledger_id,
             cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
             first_scraped_block_number,
-            last_erc20_scraped_block_number: last_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
@@ -104,6 +103,7 @@ impl TryFrom<InitArg> for State {
             ckerc20_tokens: Default::default(),
             erc20_balances: Default::default(),
             eth_log_scraping,
+            erc20_log_scraping,
         };
         state.validate_config()?;
         Ok(state)

@@ -56,12 +56,11 @@ pub struct State {
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
     pub eth_log_scraping: LogScrapingState,
-    pub erc20_helper_contract_address: Option<Address>,
+    pub erc20_log_scraping: LogScrapingState,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
-    pub last_erc20_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
@@ -489,13 +488,18 @@ impl State {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
                 InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
             })?;
-            self.erc20_helper_contract_address = Some(erc20_helper_contract_address);
+            self.erc20_log_scraping
+                .set_contract_address(erc20_helper_contract_address)
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
-            self.last_erc20_scraped_block_number =
+            self.erc20_log_scraping.set_last_scraped_block_number(
                 BlockNumber::try_from(block_number).map_err(|e| {
                     InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
-                })?;
+                })?,
+            );
         }
         if let Some(block_height) = ethereum_block_height {
             self.ethereum_block_height = block_height.into();
@@ -528,6 +532,7 @@ impl State {
         ensure_eq!(self.cketh_ledger_id, other.cketh_ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
         ensure_eq!(self.eth_log_scraping, other.eth_log_scraping);
+        ensure_eq!(self.erc20_log_scraping, other.erc20_log_scraping);
         ensure_eq!(
             self.cketh_minimum_withdrawal_amount,
             other.cketh_minimum_withdrawal_amount

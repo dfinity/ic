@@ -377,16 +377,20 @@ async fn scrape_erc20_logs(last_block_number: BlockNumber, max_block_spread: u16
         );
         return;
     }
+    let erc20_log_scraping = read_state(|s| s.erc20_log_scraping.clone());
     scrape_contract_logs(
         &RECEIVED_ERC20_EVENT_TOPIC,
         "ERC-20",
-        read_state(|s| s.erc20_helper_contract_address),
+        erc20_log_scraping.contract_address().cloned(),
         &token_contract_addresses,
         last_block_number,
-        read_state(|s| s.last_erc20_scraped_block_number),
+        erc20_log_scraping.last_scraped_block_number(),
         max_block_spread,
         &|last_block_number| {
-            mutate_state(|s| s.last_erc20_scraped_block_number = last_block_number)
+            mutate_state(|s| {
+                s.erc20_log_scraping
+                    .set_last_scraped_block_number(last_block_number)
+            })
         },
     )
     .await
