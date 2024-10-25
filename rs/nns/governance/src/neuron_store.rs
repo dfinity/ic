@@ -34,6 +34,7 @@ use std::{
 };
 
 pub mod metrics;
+use crate::neuron::{DissolveStateAndAge, StoredDissolveStateAndAge};
 pub(crate) use metrics::NeuronMetrics;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -451,13 +452,7 @@ impl NeuronStore {
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id();
 
-        // Don't write invalid data
-        neuron
-            .dissolve_state_and_age()
-            .validate()
-            .map_err(|reason| NeuronStoreError::InvalidData {
-                reason: format!("Neuron is invalid: {}", reason),
-            })?;
+        self.validate_neuron(&neuron)?;
 
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
@@ -478,6 +473,37 @@ impl NeuronStore {
         self.add_neuron_to_indexes(&neuron);
 
         Ok(neuron_id)
+    }
+
+    fn validate_neuron(&self, neuron: &Neuron) -> Result<(), NeuronStoreError> {
+        let dissolve_state_and_age = neuron.dissolve_state_and_age();
+
+        let stored_dissolve_state_and_age = StoredDissolveStateAndAge::from(dissolve_state_and_age);
+
+        let validated_dissolve_state_and_age =
+            DissolveStateAndAge::try_from(stored_dissolve_state_and_age).map_err(|e| {
+                NeuronStoreError::InvalidData {
+                    reason: format!("Invalid dissolve state and age: {}", e),
+                }
+            })?;
+
+        if validated_dissolve_state_and_age != dissolve_state_and_age {
+            return Err(NeuronStoreError::InvalidData {
+                reason: format!(
+                    "Dissolve state and age is not valid, as it reads and writes in a different shape. In: {:?}, Out: {:?}",
+                    dissolve_state_and_age, validated_dissolve_state_and_age
+                ),
+            });
+        }
+
+        neuron
+            .dissolve_state_and_age()
+            .validate()
+            .map_err(|reason| NeuronStoreError::InvalidData {
+                reason: format!("Neuron is invalid: {}", reason),
+            })?;
+
+        Ok(())
     }
 
     fn add_neuron_to_indexes(&mut self, neuron: &Neuron) {
@@ -626,6 +652,8 @@ impl NeuronStore {
             StorageLocation::Heap
         };
         let is_neuron_changed = *old_neuron != new_neuron;
+
+        self.validate_neuron(&new_neuron)?;
 
         // Perform transition between 2 storage if necessary.
         //
