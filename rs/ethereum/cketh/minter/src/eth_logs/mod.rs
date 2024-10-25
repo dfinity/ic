@@ -12,6 +12,7 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 use std::fmt;
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Decode, Encode)]
@@ -258,6 +259,204 @@ pub enum EventSourceError {
     InvalidPrincipal { invalid_principal: FixedSizeData },
     #[error("invalid ReceivedEthEvent: {0}")]
     InvalidEvent(String),
+}
+
+pub trait LogParser {
+    fn parse_log(log: LogEntry) -> Result<ReceivedEvent, ReceivedEventError>;
+}
+
+pub struct EthWithoutSubaccountLogParser {}
+
+impl LogParser for EthWithoutSubaccountLogParser {
+    fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {
+        let _block_hash = entry
+            .block_hash
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let block_number = entry
+            .block_number
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let transaction_hash = entry
+            .transaction_hash
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let _transaction_index = entry
+            .transaction_index
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let log_index = entry.log_index.ok_or(ReceivedEventError::PendingLogEntry)?;
+        let event_source = EventSource {
+            transaction_hash,
+            log_index,
+        };
+
+        if entry.removed {
+            return Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(
+                    "this event has been removed from the chain".to_string(),
+                ),
+            });
+        }
+
+        let parse_address = |address: &FixedSizeData| -> Result<Address, ReceivedEventError> {
+            Address::try_from(&address.0).map_err(|err| ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Invalid address in log entry: {}",
+                    err
+                )),
+            })
+        };
+
+        let parse_principal = |principal: &FixedSizeData| -> Result<Principal, ReceivedEventError> {
+            parse_principal_from_slice(&principal.0).map_err(|_err| {
+                ReceivedEventError::InvalidEventSource {
+                    source: event_source,
+                    error: EventSourceError::InvalidPrincipal {
+                        invalid_principal: principal.clone(),
+                    },
+                }
+            })
+        };
+
+        if entry.topics.is_empty() {
+            return Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent("Expected at least one topic".to_string()),
+            });
+        }
+
+        match entry.topics[0] {
+            // ReceivedEth (index_topic_1 address from, uint256 value, index_topic_2 bytes32 principal)
+            FixedSizeData(crate::deposit::RECEIVED_ETH_EVENT_TOPIC) => {
+                if entry.topics.len() != 3 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 3 topics for ReceivedEth event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let from_address = parse_address(&entry.topics[1])?;
+                let principal = parse_principal(&entry.topics[2])?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
+                Ok(ReceivedEthEvent {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value: Wei::from_be_bytes(value_bytes),
+                    principal,
+                    subaccount: None,
+                }
+                .into())
+            }
+            _ => Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Expected either ReceivedEth or ReceivedERC20 topics, got {}",
+                    entry.topics[0]
+                )),
+            }),
+        }
+    }
+}
+
+pub struct Erc20WithoutSubaccountLogParser {}
+
+impl LogParser for Erc20WithoutSubaccountLogParser {
+    fn parse_log(entry: LogEntry) -> Result<ReceivedEvent, ReceivedEventError> {
+        let _block_hash = entry
+            .block_hash
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let block_number = entry
+            .block_number
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let transaction_hash = entry
+            .transaction_hash
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let _transaction_index = entry
+            .transaction_index
+            .ok_or(ReceivedEventError::PendingLogEntry)?;
+        let log_index = entry.log_index.ok_or(ReceivedEventError::PendingLogEntry)?;
+        let event_source = EventSource {
+            transaction_hash,
+            log_index,
+        };
+
+        if entry.removed {
+            return Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(
+                    "this event has been removed from the chain".to_string(),
+                ),
+            });
+        }
+
+        let parse_address = |address: &FixedSizeData| -> Result<Address, ReceivedEventError> {
+            Address::try_from(&address.0).map_err(|err| ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Invalid address in log entry: {}",
+                    err
+                )),
+            })
+        };
+
+        let parse_principal = |principal: &FixedSizeData| -> Result<Principal, ReceivedEventError> {
+            parse_principal_from_slice(&principal.0).map_err(|_err| {
+                ReceivedEventError::InvalidEventSource {
+                    source: event_source,
+                    error: EventSourceError::InvalidPrincipal {
+                        invalid_principal: principal.clone(),
+                    },
+                }
+            })
+        };
+
+        if entry.topics.is_empty() {
+            return Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent("Expected at least one topic".to_string()),
+            });
+        }
+
+        match entry.topics[0] {
+            // ReceivedErc20 (index_topic_1 address erc20_contract_address, index_topic_2 address owner, uint256 amount, index_topic_3 bytes32 principal)
+            FixedSizeData(crate::deposit::RECEIVED_ERC20_EVENT_TOPIC) => {
+                if entry.topics.len() != 4 {
+                    return Err(ReceivedEventError::InvalidEventSource {
+                        source: event_source,
+                        error: EventSourceError::InvalidEvent(format!(
+                            "Expected 4 topics for ReceivedERC20 event, got {}",
+                            entry.topics.len()
+                        )),
+                    });
+                };
+                let erc20_contract_address = parse_address(&entry.topics[1])?;
+                let from_address = parse_address(&entry.topics[2])?;
+                let principal = parse_principal(&entry.topics[3])?;
+                let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
+                Ok(ReceivedErc20Event {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value: Erc20Value::from_be_bytes(value_bytes),
+                    principal,
+                    erc20_contract_address,
+                    subaccount: None,
+                }
+                .into())
+            }
+            _ => Err(ReceivedEventError::InvalidEventSource {
+                source: event_source,
+                error: EventSourceError::InvalidEvent(format!(
+                    "Expected either ReceivedEth or ReceivedERC20 topics, got {}",
+                    entry.topics[0]
+                )),
+            }),
+        }
+    }
 }
 
 impl TryFrom<LogEntry> for ReceivedEvent {

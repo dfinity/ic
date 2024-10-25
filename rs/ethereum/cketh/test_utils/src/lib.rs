@@ -594,7 +594,7 @@ impl CkEthSetup {
 
     pub fn max_logs_block_range(&self) -> u64 {
         if self.evm_rpc_id.is_none() {
-            799
+            798
         } else {
             500
         }

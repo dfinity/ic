@@ -1,10 +1,13 @@
-use crate::eth_logs::{report_transaction_error, ReceivedEvent, ReceivedEventError};
-use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError, Topic};
-use crate::eth_rpc_client::EthRpcClient;
+use crate::eth_logs::{
+    report_transaction_error, Erc20WithoutSubaccountLogParser, EthWithoutSubaccountLogParser,
+    LogParser, ReceivedEvent, ReceivedEventError,
+};
+use crate::eth_rpc::{BlockSpec, FixedSizeData, GetLogsParam, HttpOutcallError, LogEntry, Topic};
+use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
-use crate::state::eth_logs_scraping::LogScrapingState;
+use crate::state::eth_logs_scraping::{BlockRangeInclusive, LogScrapingState};
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
@@ -14,6 +17,7 @@ use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
 use std::cmp::{min, Ordering};
+use std::collections::VecDeque;
 use std::time::Duration;
 
 // Keccak256("ReceivedEth(address,uint256,bytes32)")
@@ -52,6 +56,240 @@ impl EthEvent {
             }
         }
     }
+}
+
+pub trait LogScraper {
+    fn current_state(state: &State) -> LogScrapingState;
+    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
+    fn topics(state: &State) -> Vec<Topic>;
+    fn display_id() -> &'static str;
+}
+
+struct EthWithoutSubaccountScraper {}
+
+impl LogScraper for EthWithoutSubaccountScraper {
+    fn current_state(state: &State) -> LogScrapingState {
+        state.eth_log_scraping.clone()
+    }
+
+    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
+        state
+            .eth_log_scraping
+            .set_last_scraped_block_number(block_number);
+    }
+
+    fn topics(_state: &State) -> Vec<Topic> {
+        vec![Topic::from(FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))]
+    }
+
+    fn display_id() -> &'static str {
+        "ETH"
+    }
+}
+
+struct Erc20WithoutSubaccount {}
+
+impl LogScraper for Erc20WithoutSubaccount {
+    fn current_state(state: &State) -> LogScrapingState {
+        state.erc20_log_scraping.clone()
+    }
+
+    fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
+        state
+            .erc20_log_scraping
+            .set_last_scraped_block_number(block_number);
+    }
+
+    fn topics(state: &State) -> Vec<Topic> {
+        let token_contract_addresses = state.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>();
+        let mut topics: Vec<_> = vec![Topic::from(FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))];
+        // We add token contract addresses as additional topics to match.
+        // It has a disjunction semantics, so it will match if event matches any one of these addresses.
+        if !token_contract_addresses.is_empty() {
+            topics.push(
+                token_contract_addresses
+                    .iter()
+                    .map(|address| FixedSizeData(address.into()))
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
+        }
+        topics
+    }
+
+    fn display_id() -> &'static str {
+        "ERC-20"
+    }
+}
+
+async fn scrape_block_range<S: LogScraper, P: LogParser>(
+    rpc_client: &EthRpcClient,
+    contract_address: Address,
+    topics: Vec<Topic>,
+    block_range: BlockRangeInclusive,
+) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+    let mut subranges = VecDeque::new();
+    subranges.push_back(block_range);
+
+    while !subranges.is_empty() {
+        log!(DEBUG, "subranges: {:?}", subranges);
+        let range = subranges.pop_front().unwrap();
+        let (from_block, to_block) = range.clone().into_inner();
+
+        let request = GetLogsParam {
+            from_block: BlockSpec::from(from_block),
+            to_block: BlockSpec::from(to_block),
+            address: vec![contract_address],
+            topics: topics.clone(),
+        };
+
+        let result: Result<
+            (Vec<ReceivedEvent>, Vec<ReceivedEventError>),
+            MultiCallError<Vec<LogEntry>>,
+        > = {
+            let logs = rpc_client.eth_get_logs(request).await;
+
+            logs.map(|res| {
+                let (ok, not_ok): (Vec<_>, Vec<_>) =
+                    res.into_iter().map(P::parse_log).partition(Result::is_ok);
+                let valid_transactions: Vec<ReceivedEvent> =
+                    ok.into_iter().map(Result::unwrap).collect();
+                let errors: Vec<ReceivedEventError> =
+                    not_ok.into_iter().map(Result::unwrap_err).collect();
+                (valid_transactions, errors)
+            })
+        };
+
+        match result {
+            Ok((events, errors)) => {
+                register_deposit_events(S::display_id(), events, errors);
+                mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "Failed to get {} logs in range {range}: {e:?}",
+                    S::display_id()
+                );
+                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
+                    if from_block == to_block {
+                        mutate_state(|s| {
+                            process_event(
+                                s,
+                                EventType::SkippedBlockForContract {
+                                    contract_address,
+                                    block_number: to_block,
+                                },
+                            );
+                        });
+                        mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
+                    } else {
+                        let (left_half, right_half) = range.partition_into_halves();
+                        log!(INFO, "Too many logs received. Will retry splitting the range between {left_half:?} and {right_half:?}");
+                        if let Some(r) = right_half {
+                            subranges.push_front(r);
+                        }
+                        if let Some(l) = left_half {
+                            subranges.push_front(l);
+                        }
+                    }
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn register_deposit_events(
+    scraping_display_name: &str,
+    transaction_events: Vec<ReceivedEvent>,
+    errors: Vec<ReceivedEventError>,
+) {
+    for event in transaction_events {
+        log!(
+            INFO,
+            "Received event {event:?}; will mint {} {scraping_display_name} to {}",
+            event.value(),
+            event.principal()
+        );
+        if crate::blocklist::is_blocked(&event.from_address()) {
+            log!(
+                INFO,
+                "Received event from a blocked address: {} for {} {scraping_display_name}",
+                event.from_address(),
+                event.value(),
+            );
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::InvalidDeposit {
+                        event_source: event.source(),
+                        reason: format!("blocked address {}", event.from_address()),
+                    },
+                )
+            });
+        } else {
+            mutate_state(|s| process_event(s, event.into_deposit()));
+        }
+    }
+    if read_state(State::has_events_to_mint) {
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
+    }
+    for error in errors {
+        if let ReceivedEventError::InvalidEventSource { source, error } = &error {
+            mutate_state(|s| {
+                process_event(
+                    s,
+                    EventType::InvalidDeposit {
+                        event_source: *source,
+                        reason: error.to_string(),
+                    },
+                )
+            });
+        }
+        report_transaction_error(error);
+    }
+}
+
+async fn scrape_until_block<S: LogScraper, P: LogParser>(
+    last_block_number: BlockNumber,
+    max_block_spread: u16,
+) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+    let state = read_state(S::current_state);
+    let helper_contract_address = match state.contract_address() {
+        Some(address) => address.clone(),
+        None => {
+            log!(
+                DEBUG,
+                "[scrape_contract_logs]: skipping scrapping {} logs: no contract address",
+                S::display_id()
+            );
+            return Ok(());
+        }
+    };
+    let topics = read_state(S::topics);
+    let rpc_client = read_state(EthRpcClient::from_state);
+
+    for block_range in BlockRangeInclusive::new(
+        state
+            .last_scraped_block_number()
+            .checked_increment()
+            .unwrap_or(BlockNumber::MAX),
+        last_block_number,
+    )
+    .into_chunks(max_block_spread)
+    {
+        scrape_block_range::<S, P>(
+            &rpc_client,
+            helper_contract_address,
+            topics.clone(),
+            block_range,
+        )
+        .await?
+    }
+    Ok(())
 }
 
 async fn mint() {
@@ -412,8 +650,15 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    scrape_eth_logs(last_block_number, max_block_spread).await;
-    scrape_erc20_logs(last_block_number, max_block_spread).await;
+    let _r = scrape_until_block::<EthWithoutSubaccountScraper, EthWithoutSubaccountLogParser>(
+        last_block_number,
+        max_block_spread,
+    )
+    .await;
+    let _r = scrape_until_block::<Erc20WithoutSubaccount, Erc20WithoutSubaccountLogParser>(
+        last_block_number,
+        max_block_spread,
+    );
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
