@@ -275,6 +275,9 @@ message Swap {
 
   // Amount of contributions from the Neurons' Fund committed to this SNS so far.
   optional uint64 neurons_fund_participation_icp_e8s = 20;
+
+  // Information about the timers that perform periodic tasks of this Swap canister.
+  optional ic_nervous_system.pb.v1.Timers timers = 22;
 }
 
 // The initialisation data of the canister. Always specified on

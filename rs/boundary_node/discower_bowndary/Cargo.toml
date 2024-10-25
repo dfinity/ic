@@ -21,15 +21,3 @@ url = { workspace = true }
 
 [lib]
 name = "discower_bowndary"
-
-[[bin]]
-path = "examples/fetch_api_bns.rs"
-name = "fetch_api_bns"
-
-[[bin]]
-path = "examples/api_bn_dynamic_routing.rs"
-name = "api_bn_dynamic_routing"
-
-[[bin]]
-path = "examples/basic_library_usage.rs"
-name = "basic_library_usage"

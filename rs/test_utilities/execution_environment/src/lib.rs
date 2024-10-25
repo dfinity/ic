@@ -156,6 +156,17 @@ pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
     cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost)
 }
 
+/// Helper function to test that cycles are reserved for both
+/// application and verified application subnets.
+///
+/// Expects a test function that takes a `SubnetType` as an argument
+/// so it can be tested over the desired subnet types.
+pub fn cycles_reserved_for_app_and_verified_app_subnets<T: Fn(SubnetType)>(test: T) {
+    for subnet_type in [SubnetType::Application, SubnetType::VerifiedApplication] {
+        test(subnet_type);
+    }
+}
+
 /// A helper for execution tests.
 ///
 /// Example usage:
@@ -591,6 +602,42 @@ impl ExecutionTest {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgsBuilder::new()
                 .with_wasm_memory_limit(wasm_memory_limit.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_wasm_memory_limit_and_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_memory_limit: NumBytes,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_wasm_memory_limit(wasm_memory_limit.get())
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
+                .build(),
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
+    }
+
+    pub fn canister_update_memory_allocation_and_wasm_memory_threshold(
+        &mut self,
+        canister_id: CanisterId,
+        memory_allocation: NumBytes,
+        wasm_memory_threshold: NumBytes,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation.get())
+                .with_wasm_memory_threshold(wasm_memory_threshold.get())
                 .build(),
             sender_canister_version: None,
         }

@@ -115,3 +115,12 @@ require {
     type user_runtime_root_t;
 }
 allow node_exporter_t user_runtime_root_t:dir { search };
+
+# Allow reading udev state data from /run/udev/data
+udev_read_runtime_files(node_exporter_t)
+
+# Allow reading /proc/pressure
+kernel_read_psi(node_exporter_t)
+
+# Allow reading under mount points with mnt_t
+files_list_mnt(node_exporter_t)

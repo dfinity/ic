@@ -113,7 +113,7 @@ pub fn dashboard(page_index: usize) -> DashboardTemplate {
                         match status {
                             FetchTxStatus::PendingOutcall => Status::PendingOutcall,
                             FetchTxStatus::PendingRetry { .. } => Status::PendingRetry,
-                            FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err)),
+                            FetchTxStatus::Error(err) => Status::Error(format!("{:?}", err.error)),
                             FetchTxStatus::Fetched(fetched) => {
                                 // Return an empty list if no input address is available yet.
                                 let input_addresses =

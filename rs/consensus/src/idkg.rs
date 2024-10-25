@@ -180,6 +180,7 @@
 //! Completed pre-signatures are delivered to the deterministic state machnine,
 //! where they are matched with incoming signature requests.
 
+use crate::bouncer_metrics::BouncerMetrics;
 use crate::idkg::complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl};
 use crate::idkg::metrics::{
     timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS,
@@ -437,11 +438,13 @@ pub struct IDkgBouncer {
     subnet_id: SubnetId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    metrics: BouncerMetrics,
 }
 
 impl IDkgBouncer {
     /// Builds a new IDkgBouncer component
     pub fn new(
+        metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -450,6 +453,7 @@ impl IDkgBouncer {
             subnet_id,
             consensus_block_cache,
             state_reader,
+            metrics: BouncerMetrics::new(metrics_registry, "idkg_pool"),
         }
     }
 }
@@ -473,6 +477,8 @@ impl IDkgBouncerArgs {
 
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
         let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());

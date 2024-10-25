@@ -62,7 +62,9 @@ async fn check_transaction(args: CheckTransactionArgs) -> CheckTransactionRespon
                 check_transaction_inputs(txid).await
             }
         }
-        Err(err) => CheckTransactionIrrecoverableError::InvalidTransaction(err.to_string()).into(),
+        Err(err) => {
+            CheckTransactionIrrecoverableError::InvalidTransactionId(err.to_string()).into()
+        }
     }
 }
 

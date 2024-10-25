@@ -3,6 +3,7 @@
 //! crate.
 
 use crate::{
+    bouncer_metrics::BouncerMetrics,
     consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager},
     idkg::{
         make_bootstrap_summary,
@@ -19,7 +20,10 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets, linear_buckets};
+use ic_metrics::{
+    buckets::{decimal_buckets, linear_buckets},
+    MetricsRegistry,
+};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
@@ -378,7 +382,18 @@ impl<T: DkgPool> PoolMutationsProducer<T> for DkgImpl {
 }
 
 /// `DkgBouncer` is a placeholder for gossip related DKG interfaces.
-pub struct DkgBouncer;
+pub struct DkgBouncer {
+    metrics: BouncerMetrics,
+}
+
+impl DkgBouncer {
+    /// Creates a new bouncer.
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            metrics: BouncerMetrics::new(metrics_registry, "dkg_pool"),
+        }
+    }
+}
 
 // The NiDKG component does not implement custom `get_filter` function
 // because it doesn't require artifact retransmission. Nodes participating
@@ -388,6 +403,8 @@ pub struct DkgBouncer;
 // them before.
 impl<Pool: DkgPool> BouncerFactory<DkgMessageId, Pool> for DkgBouncer {
     fn new_bouncer(&self, dkg_pool: &Pool) -> Bouncer<DkgMessageId> {
+        let _timer = self.metrics.update_duration.start_timer();
+
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |id| {
             use std::cmp::Ordering;
@@ -1010,18 +1027,8 @@ mod tests {
                 for (dkg_id, _) in summary.dkg.configs.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Local);
                 }
-                assert_eq!(
-                    summary
-                        .dkg
-                        .transcripts_for_new_subnets_with_callback_ids
-                        .len(),
-                    2
-                );
-                for (dkg_id, _, result) in summary
-                    .dkg
-                    .transcripts_for_new_subnets_with_callback_ids
-                    .iter()
-                {
+                assert_eq!(summary.dkg.transcripts_for_remote_subnets.len(), 2);
+                for (dkg_id, _, result) in summary.dkg.transcripts_for_remote_subnets.iter() {
                     assert_eq!(dkg_id.target_subnet, NiDkgTargetSubnet::Remote(target_id));
                     assert!(result.is_err());
                 }
@@ -1647,7 +1654,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dkg_payload_has_transcripts_for_new_subnets() {
+    fn test_dkg_payload_has_transcripts_for_remote_subnets() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node_ids = vec![node_test_id(0), node_test_id(1)];
             let dkg_interval_length = 99;
@@ -1697,9 +1704,7 @@ mod tests {
                         .count(),
                     2
                 );
-                assert!(dkg_summary
-                    .transcripts_for_new_subnets_with_callback_ids
-                    .is_empty());
+                assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
             } else {
                 panic!(
                     "block at height {} is not a summary block",
@@ -1730,7 +1735,7 @@ mod tests {
                 );
                 assert_eq!(
                     dkg_summary
-                        .transcripts_for_new_subnets_with_callback_ids
+                        .transcripts_for_remote_subnets
                         .iter()
                         .filter(
                             |(id, _, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id)
