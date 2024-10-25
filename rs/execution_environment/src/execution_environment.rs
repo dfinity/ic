@@ -472,7 +472,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
         idkg_subnet_public_keys: &BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        _replica_version: &ReplicaVersion,
+        replica_version: &ReplicaVersion,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -1381,7 +1381,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::SubnetMetrics) => {
                 let res = SubnetMetricsArgs::decode(payload)
-                    .and_then(|args| self.subnet_stats(registry_settings, args));
+                    .and_then(|args| self.subnet_metrics(replica_version, args));
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
                     refund: msg.take_cycles(),
@@ -2235,9 +2235,9 @@ impl ExecutionEnvironment {
         Ok(Encode!(&result).unwrap())
     }
 
-    fn subnet_stats(
+    fn subnet_metrics(
         &self,
-        registry_settings: &RegistryExecutionSettings,
+        replica_version: &ReplicaVersion,
         args: SubnetMetricsArgs,
     ) -> Result<Vec<u8>, UserError> {
         // TODO: Check taken from node_metric_history; but is this actually needed? Can such a call be routed wrong?
@@ -2251,7 +2251,7 @@ impl ExecutionEnvironment {
             ));
         }
         let res = SubnetMetricsResponse {
-            replica_version: registry_settings.replica_version.clone(),
+            replica_version: replica_version.to_string(),
         };
         Ok(Encode!(&res).unwrap())
     }
