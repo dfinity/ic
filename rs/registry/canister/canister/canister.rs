@@ -1,10 +1,10 @@
 use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
-    api::{arg_data, caller, data_certificate, reply, trap_with},
+    api::{arg_data, data_certificate, reply, trap_with},
     over, over_async, stable,
 };
-use ic_base_types::{NodeId, PrincipalId, PrincipalIdClass};
+use ic_base_types::{NodeId, PrincipalId};
 use ic_certified_map::{AsHashTree, HashTree};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
