@@ -26,7 +26,8 @@ main = do
   ac <- preFlight os
   let TestSubnet my_sub = lookupOption os
   let PeerSubnet other_sub = lookupOption os
-  defaultMainWithIngredients ingredients (icTests my_sub other_sub ac)
+  tests <- icTests my_sub other_sub ac
+  defaultMainWithIngredients ingredients tests
   where
     ingredients =
       [ rerunningTests
