@@ -26,7 +26,8 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
-  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  CI_EVENT_NAME: ${{ github.event_name }}
+  CI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
@@ -112,7 +113,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          # Determine which tests to skip and append 'long_test' for pull requests or merge groups
+          # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
           EXCLUDED_TEST_TAGS=(
               system_test_hourly
               system_test_nightly
@@ -124,10 +125,12 @@ jobs:
               fi_tests_nightly
               nns_tests_nightly
           )
-          if [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "${{ github.event_name }}" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+          if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
+              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
                   EXCLUDED_TEST_TAGS+=(long_test)
               fi
+          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$CI_BRANCH_NAME" =~ ^dev-gh-.* ]]; then
+              EXCLUDED_TEST_TAGS+=(long_test)
           fi
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
           echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
@@ -137,7 +140,7 @@ jobs:
           BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
-          elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
+          elif [[ $CI_BRANCH_NAME =~ ^hotfix-.* ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
           else
               BAZEL_EXTRA_ARGS+=" --keep_going"
