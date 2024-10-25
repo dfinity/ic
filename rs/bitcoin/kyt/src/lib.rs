@@ -74,11 +74,31 @@ impl FetchEnv for KytCanisterEnv {
                     // All non-200 status are treated as transient errors
                     return Err(HttpGetTxError::Rejected {
                         code: RejectionCode::SysTransient,
-                        message: format!("HTTP GET {} received code {}", url, response.status),
+                        message: format!("HTTP call {} received code {}", url, response.status),
                     });
                 }
-                let tx = Transaction::consensus_decode(&mut response.body.as_slice())
-                    .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?;
+                let tx = match provider.btc_network() {
+                    BtcNetwork::Regtest { .. } => {
+                        use serde_json::{from_slice, from_value, Value};
+                        let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
+                        })?;
+                        let hex: String =
+                            from_value(json["result"]["hex"].clone()).map_err(|_| {
+                                HttpGetTxError::TxEncoding(
+                                    "Missing result.hex field in JSON response".to_string(),
+                                )
+                            })?;
+                        let raw = hex::decode(&hex).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("decode hex error: {}", err))
+                        })?;
+                        Transaction::consensus_decode(&mut raw.as_slice()).map_err(|err| {
+                            HttpGetTxError::TxEncoding(format!("decode tx error: {}", err))
+                        })?
+                    }
+                    _ => Transaction::consensus_decode(&mut response.body.as_slice())
+                        .map_err(|err| HttpGetTxError::TxEncoding(err.to_string()))?,
+                };
                 // Verify the correctness of the transaction by recomputing the transaction ID.
                 let decoded_txid = tx.compute_txid();
                 if decoded_txid.as_ref() as &[u8; 32] != txid.as_ref() {

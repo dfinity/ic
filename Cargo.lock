@@ -5874,6 +5874,7 @@ dependencies = [
  "candid_parser",
  "ciborium",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-btc-interface",
  "ic-canisters-http-types",
@@ -5885,6 +5886,7 @@ dependencies = [
  "pocket-ic",
  "scraper",
  "serde",
+ "serde_json",
  "time",
  "tokio",
 ]
