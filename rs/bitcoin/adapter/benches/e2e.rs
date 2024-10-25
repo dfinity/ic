@@ -2,6 +2,7 @@ use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_btc_adapter::config::IncomingSource;
 use ic_btc_adapter::start_grpc_server;
+use ic_btc_adapter::start_server;
 use ic_btc_adapter::AdapterState;
 use ic_btc_adapter::{
     config::Config, BlockchainManagerRequest, BlockchainState, GetSuccessorsHandler,
@@ -113,17 +114,7 @@ fn e2e(criterion: &mut Criterion) {
                     &MetricsRegistry::default(),
                 );
 
-                let (_, tx) = AdapterState::new(config.idle_seconds);
-
-                let (transaction_manager_tx, _) = channel(100);
-                start_grpc_server(
-                    config.clone(),
-                    no_op_logger(),
-                    tx,
-                    handler,
-                    transaction_manager_tx,
-                    &MetricsRegistry::default(),
-                );
+                start_server(&no_op_logger(), &MetricsRegistry::default(), &rt.handle(), config.clone());
 
                 start_client(uds_path).await
             }))
