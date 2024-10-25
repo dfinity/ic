@@ -153,14 +153,21 @@ fn make_post_request(
     txid: Txid,
     max_response_bytes: u32,
 ) -> CanisterHttpRequestArgument {
-    let body = format!("{{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"{}\", true]}}", txid);
+    let request_headers = vec![HttpHeader {
+        name: "Authorization".to_string(),
+        value: "Basic aWMtYnRjLWludGVncmF0aW9uOlFQUWlOYXBoMTlGcVVzQ3JCUk4wRklJN2x5TTI2QjUxZkFNZUJRekNiLUU9".to_string(),
+    }];
+    let body = format!(
+        "{{\"method\": \"gettransaction\", \"params\": [\"{}\"]}}",
+        txid
+    );
     CanisterHttpRequestArgument {
         url: json_rpc_url.to_string(),
         method: HttpMethod::POST,
         body: Some(body.as_bytes().to_vec()),
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
-        headers: vec![],
+        headers: request_headers,
     }
 }
 
