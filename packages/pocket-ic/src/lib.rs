@@ -6,9 +6,9 @@
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust,no_run
-//! use candid::encode_one;
-//! use pocket_ic::PocketIc;
+//! ```rust
+//! use candid::{Principal, encode_one};
+//! use pocket_ic::{WasmResult, PocketIc};
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
@@ -17,7 +17,7 @@
 //!     let canister_id = pic.create_canister();
 //!     pic.add_cycles(canister_id, 2_000_000_000_000);
 //!  
-//!     let wasm_bytes = load_counter_wasm(...);
+//!     let wasm_bytes = todo!();
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
 //!     call_counter_canister(&pic, canister_id, "inc");
@@ -26,7 +26,7 @@
 //!     assert_eq!(reply, WasmResult::Reply(vec![0, 0, 0, 1]));
 //!  }
 //!
-//! fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) -> WasmResult {
+//! fn call_counter_canister(pic: &PocketIc, canister_id: Principal, method: &str) -> WasmResult {
 //!     pic.update_call(canister_id, Principal::anonymous(), method, encode_one(()).unwrap())
 //!         .expect("Failed to call counter canister")
 //! }
@@ -195,13 +195,11 @@ impl PocketIcBuilder {
     /// `nns_subnet_id` should be the subnet ID of the NNS subnet in the state under
     /// `path_to_state`, e.g.:
     /// ```rust
-    /// PrincipalId(
-    ///     candid::Principal::from_text(
-    ///         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-    ///     )
-    ///     .unwrap(),
-    /// )
-    /// .into();
+    /// use pocket_ic::common::rest::SubnetId;
+    ///
+    /// let nns_subnet_id: SubnetId = candid::Principal::from_text(
+    ///     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    /// ).unwrap().into();
     /// ```
     ///
     /// The value can be obtained, e.g., via the following command:
