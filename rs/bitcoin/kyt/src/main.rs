@@ -19,7 +19,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let btc_network = config.btc_network;
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid bitcoin address: {}", err)))
-        .require_network(btc_network.into())
+        .require_network(btc_network.clone().into())
         .unwrap_or_else(|err| {
             ic_cdk::trap(&format!("Not a bitcoin {} address: {}", btc_network, err))
         });

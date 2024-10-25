@@ -43,7 +43,7 @@ impl fmt::Display for ProviderId {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Provider {
     btc_network: BtcNetwork,
     provider_id: ProviderId,
@@ -56,16 +56,17 @@ impl Provider {
 
     // Return the next provider by cycling through all available providers.
     pub fn next(&self) -> Self {
-        let btc_network = self.btc_network;
-        let provider_id = match (self.btc_network, self.provider_id) {
+        let btc_network = &self.btc_network;
+        let provider_id = match (btc_network, self.provider_id) {
             (BtcNetwork::Mainnet, ProviderId::Btcscan) => ProviderId::Blockstream,
             (BtcNetwork::Mainnet, ProviderId::Blockstream) => ProviderId::MempoolSpace,
             (BtcNetwork::Mainnet, ProviderId::MempoolSpace) => ProviderId::Btcscan,
             (BtcNetwork::Testnet, ProviderId::Blockstream) => ProviderId::MempoolSpace,
             (BtcNetwork::Testnet, _) => ProviderId::Blockstream,
+            (BtcNetwork::Regtest { .. }, _) => return self.clone(),
         };
         Self {
-            btc_network,
+            btc_network: btc_network.clone(),
             provider_id,
         }
     }
@@ -75,15 +76,18 @@ impl Provider {
         txid: Txid,
         max_response_bytes: u32,
     ) -> CanisterHttpRequestArgument {
-        match (self.provider_id, self.btc_network) {
-            (ProviderId::Blockstream, _) => make_request(
+        match (self.provider_id, &self.btc_network) {
+            (_, BtcNetwork::Regtest { json_rpc_url }) => {
+                make_post_request(json_rpc_url, txid, max_response_bytes)
+            }
+            (ProviderId::Blockstream, _) => make_get_request(
                 "blockstream.info",
-                self.btc_network,
+                &self.btc_network,
                 txid,
                 max_response_bytes,
             ),
             (ProviderId::MempoolSpace, _) => {
-                make_request("mempool.space", self.btc_network, txid, max_response_bytes)
+                make_get_request("mempool.space", &self.btc_network, txid, max_response_bytes)
             }
             (ProviderId::Btcscan, BtcNetwork::Mainnet) => btcscan_request(txid, max_response_bytes),
             (provider, btc_network) => {
@@ -119,15 +123,16 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> CanisterHttpRequestAr
     }
 }
 
-fn make_request(
+fn make_get_request(
     host: &str,
-    network: BtcNetwork,
+    network: &BtcNetwork,
     txid: Txid,
     max_response_bytes: u32,
 ) -> CanisterHttpRequestArgument {
     let url = match network {
         BtcNetwork::Mainnet => format!("https://{}/api/tx/{}/raw", host, txid),
         BtcNetwork::Testnet => format!("https://{}/testnet/api/tx/{}/raw", host, txid),
+        BtcNetwork::Regtest { .. } => panic!("Request to regtest network requires POST"),
     };
     let request_headers = vec![HttpHeader {
         name: "Host".to_string(),
@@ -140,6 +145,22 @@ fn make_request(
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
+    }
+}
+
+fn make_post_request(
+    json_rpc_url: &str,
+    txid: Txid,
+    max_response_bytes: u32,
+) -> CanisterHttpRequestArgument {
+    let body = format!("{{\"jsonrpc\": \"1.0\", \"id\": \"curltest\", \"method\": \"getrawtransaction\", \"params\": [\"{}\", true]}}", txid);
+    CanisterHttpRequestArgument {
+        url: json_rpc_url.to_string(),
+        method: HttpMethod::POST,
+        body: Some(body.as_bytes().to_vec()),
+        max_response_bytes: Some(max_response_bytes as u64),
+        transform: param_transform(),
+        headers: vec![],
     }
 }
 
