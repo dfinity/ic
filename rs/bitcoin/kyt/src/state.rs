@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, VecDeque};
-use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
@@ -63,7 +62,7 @@ pub struct FetchedTx {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TransactionKytData {
     pub inputs: Vec<PreviousOutput>,
-    pub outputs: Vec<Address>,
+    pub outputs: Vec<Option<Address>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -72,10 +71,11 @@ pub struct PreviousOutput {
     pub vout: u32,
 }
 
-impl TryFrom<Transaction> for TransactionKytData {
-    type Error = bitcoin::address::FromScriptError;
-
-    fn try_from(tx: Transaction) -> Result<Self, Self::Error> {
+impl TransactionKytData {
+    pub fn from_transaction(
+        btc_network: &BtcNetwork,
+        tx: Transaction,
+    ) -> Result<Self, bitcoin::address::FromScriptError> {
         let inputs = tx
             .input
             .iter()
@@ -86,10 +86,13 @@ impl TryFrom<Transaction> for TransactionKytData {
             .collect();
         let mut outputs = Vec::new();
         for output in tx.output.iter() {
-            outputs.push(Address::from_script(
-                &output.script_pubkey,
-                bitcoin::Network::Bitcoin,
-            )?)
+            outputs.push(
+                Address::from_script(
+                    &output.script_pubkey,
+                    bitcoin::Network::from(btc_network.clone()),
+                )
+                .ok(),
+            )
         }
         Ok(Self { inputs, outputs })
     }

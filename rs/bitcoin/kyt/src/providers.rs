@@ -50,6 +50,10 @@ pub struct Provider {
 }
 
 impl Provider {
+    pub fn network(&self) -> &BtcNetwork {
+        &self.btc_network
+    }
+
     // Return the next provider by cycling through all available providers.
     pub fn next(&self) -> Self {
         let btc_network = self.btc_network;
