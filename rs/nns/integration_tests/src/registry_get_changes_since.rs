@@ -33,7 +33,7 @@ fn test_allow_opaque_caller() {
         version,
         deltas,
     } = response;
-    
+
     assert_eq!(error, None);
     // The important thing is that deltas is not empty. The exact number of
     // elements is not so important.
