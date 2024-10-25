@@ -130,13 +130,6 @@ struct Instance {
     state: InstanceState,
 }
 
-impl std::fmt::Debug for Instance {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{:?}", self.state)?;
-        Ok(())
-    }
-}
-
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on `instances` and then on `graph`.
@@ -737,7 +730,7 @@ impl ApiState {
             .expect("Failed to create PocketIC instance");
         let topology = instance.topology();
         trace!("add_instance:start");
-        let mut instances = self.instances.lock().await;
+        let mut instances = self.instances.write().await;
         trace!("add_instance:locked");
         let instance_id = instances.len();
         trace!("add_instance:done_blocking");
@@ -1526,36 +1519,5 @@ impl ApiState {
             op_id,
         );
         Ok(busy_outcome)
-    }
-}
-
-impl std::fmt::Debug for InstanceState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Busy { state_label, op_id } => {
-                write!(f, "Busy {{ {state_label:?}, {op_id:?} }}")?
-            }
-            Self::Available(pic) => write!(f, "Available({:?})", pic.get_state_label())?,
-            Self::Deleted => write!(f, "Deleted")?,
-        }
-        Ok(())
-    }
-}
-
-impl std::fmt::Debug for ApiState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let instances = self.instances.blocking_lock();
-        let graph = self.graph.blocking_read();
-
-        writeln!(f, "Instances:")?;
-        for (idx, instance) in instances.iter().enumerate() {
-            writeln!(f, "  [{idx}] {instance:?}")?;
-        }
-
-        writeln!(f, "Graph:")?;
-        for (k, v) in graph.iter() {
-            writeln!(f, "  {k:?} => {v:?}")?;
-        }
-        Ok(())
     }
 }
