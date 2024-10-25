@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -183,9 +183,33 @@ system_test(
     ],
 )
 
+exports_files([
+    "btc_integration/bitcoin.conf",
+    "btc_integration/btc_activate.sh",
+])
+
+uvm_config_image(
+    name = "btc_uvm_config_image",
+    srcs = [
+        ":bitcoind.tar",
+        ":btc_integration/bitcoin.conf",
+        ":btc_integration/btc_activate.sh",
+    ],
+    remap_paths = {
+        "btc_activate.sh": "activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
+
+oci_tar(
+    name = "bitcoind.tar",
+    image = "@bitcoind",
+    repo_tags = ["bitcoind:pinned"],
+)
+
 BTC_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/tests:btc_uvm_config_image",
+    ":btc_uvm_config_image",
     "@btc_canister//file",
 ]
 
