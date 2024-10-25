@@ -7,7 +7,7 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
-    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-sale-canister-upgrade-proposal-text.sh (or formatted in that way)
+    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-swap-canister-upgrade-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
 
   This script will create a proposal on mainnet from a given proposal text.

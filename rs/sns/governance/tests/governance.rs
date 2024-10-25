@@ -1714,7 +1714,7 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
 
 #[test]
 fn test_claim_swap_neurons_rejects_unauthorized_access() {
-    // Set up the test environment with the default sale canister id
+    // Set up the test environment with the default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
