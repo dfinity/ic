@@ -107,9 +107,12 @@ pub fn registry_get_changes_since(
     version: u64,
 ) -> RegistryGetChangesSinceResponse {
     let mut request = vec![];
-    RegistryGetChangesSinceRequest { version, limit: None }
-        .encode(&mut request)
-        .unwrap();
+    RegistryGetChangesSinceRequest {
+        version,
+        limit: None,
+    }
+    .encode(&mut request)
+    .unwrap();
 
     let result = state_machine
         .execute_ingress_as(sender, REGISTRY_CANISTER_ID, "get_changes_since", request)
