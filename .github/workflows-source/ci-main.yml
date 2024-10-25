@@ -27,7 +27,7 @@ env:
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
-  CI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+  BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
@@ -129,7 +129,7 @@ jobs:
               if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
                   EXCLUDED_TEST_TAGS+=(long_test)
               fi
-          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$CI_BRANCH_NAME" =~ ^dev-gh-.* ]]; then
+          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
               EXCLUDED_TEST_TAGS+=(long_test)
           fi
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
@@ -140,7 +140,7 @@ jobs:
           BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
-          elif [[ $CI_BRANCH_NAME =~ ^hotfix-.* ]]; then
+          elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
               BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
           else
               BAZEL_EXTRA_ARGS+=" --keep_going"
