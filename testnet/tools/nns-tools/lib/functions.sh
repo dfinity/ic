@@ -276,7 +276,7 @@ top_up_canister() {
         --amount "$AMOUNT" "$CANISTER"
 }
 
-# Note, this will be deprecated soon when get_state is deprecated from sale canister.
+# Note, this will be deprecated soon when get_state is deprecated from swap canister.
 call_swap() {
     local NNS_URL=$1
     local SWAP_CANISTER_ID=$2
