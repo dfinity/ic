@@ -20,6 +20,21 @@ pub enum DissolveStateAndAge {
 }
 
 impl DissolveStateAndAge {
+    pub fn validate(self) -> Result<Self, String> {
+        match self {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: _,
+            } => {
+                if dissolve_delay_seconds == 0 {
+                    return Err("Dissolve delay must be greater than 0".to_string());
+                }
+            }
+            DissolveStateAndAge::DissolvingOrDissolved { .. } => {}
+        };
+
+        Ok(self)
+    }
     /// Returns the current state given the current time. Mainly for differentiating between
     /// dissolving and dissolved neurons.
     pub fn current_state(self, now_seconds: u64) -> NeuronState {

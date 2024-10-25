@@ -451,6 +451,14 @@ impl NeuronStore {
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
         let neuron_id = neuron.id();
 
+        // Don't write invalid data
+        neuron
+            .dissolve_state_and_age()
+            .validate()
+            .map_err(|reason| NeuronStoreError::InvalidData {
+                reason: format!("Neuron is invalid: {}", reason),
+            })?;
+
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
         }
