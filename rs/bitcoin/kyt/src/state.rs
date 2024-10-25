@@ -86,6 +86,8 @@ impl TransactionKytData {
             .collect();
         let mut outputs = Vec::new();
         for output in tx.output.iter() {
+            // Some outputs do not have addresses. These outputs will never be
+            // inputs of other transactions, so it is okay to treat them as `None`.
             outputs.push(
                 Address::from_script(
                     &output.script_pubkey,

@@ -127,7 +127,7 @@ pub trait FetchEnv {
         match self.http_get_tx(provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionKytData::from_transaction(provider.network(), tx.clone()) {
+                match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,
@@ -220,6 +220,13 @@ pub trait FetchEnv {
                     Fetched(fetched) => {
                         if let Some(address) = &fetched.tx.outputs[input.vout as usize] {
                             state::set_fetched_address(txid, index, address.clone());
+                        } else {
+                            // This error shouldn't happen unless blockdata is corrupted.
+                            return CheckTransactionRetriable::TransientInternalError(format!(
+                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                input.txid, input.vout, index, txid
+                            ))
+                            .into();
                         }
                     }
                     Pending => continue,
@@ -248,6 +255,15 @@ pub trait FetchEnv {
                 FetchResult::Fetched(fetched) => {
                     if let Some(address) = &fetched.tx.outputs[vout as usize] {
                         state::set_fetched_address(txid, index, address.clone());
+                    } else {
+                        // This error shouldn't happen unless blockdata is corrupted.
+                        error = Some(
+                            CheckTransactionRetriable::TransientInternalError(format!(
+                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                input_txid, vout, index, txid
+                            ))
+                            .into(),
+                        );
                     }
                 }
                 FetchResult::Error(err) => error = Some((input_txid, err).into()),

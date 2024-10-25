@@ -50,7 +50,7 @@ pub struct Provider {
 }
 
 impl Provider {
-    pub fn network(&self) -> &BtcNetwork {
+    pub fn btc_network(&self) -> &BtcNetwork {
         &self.btc_network
     }
 
