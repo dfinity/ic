@@ -42,7 +42,7 @@ use rand::SeedableRng;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Parameters related to workload creation.

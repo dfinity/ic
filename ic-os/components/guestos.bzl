@@ -85,6 +85,8 @@ component_files = {
     Label("monitoring/journald.conf"): "/etc/systemd/journald.conf",
     Label("monitoring/nft-exporter/nft-exporter.service"): "/etc/systemd/system/nft-exporter.service",
     Label("monitoring/nft-exporter/nft-exporter.timer"): "/etc/systemd/system/nft-exporter.timer",
+    Label("monitoring/custom-metrics/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
+    Label("monitoring/custom-metrics/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/vector/guestos/generate-vector-config.sh"): "/opt/ic/bin/generate-vector-config.sh",
     Label("monitoring/vector/guestos/vector.yaml.template"): "/etc/vector/vector.yaml.template",
     Label("monitoring/vector/setup-vector-permissions.sh"): "/opt/ic/bin/setup-vector-permissions.sh",

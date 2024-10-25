@@ -1,18 +1,19 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
     ptr::addr_of_mut,
 };
 
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
-    checker::{check_tla_code_link, PredicateDescription},
     tla_log_locals, tla_log_request, tla_log_response,
     tla_value::{TlaValue, ToTla},
     Destination, InstrumentationState,
 };
-use tla_instrumentation_proc_macros::tla_update_method;
+use tla_instrumentation_proc_macros::{tla_update_method, with_tla_trace_check};
+
+mod common;
+use common::check_tla_trace;
 
 // Example of how to separate as much of the instrumentation code as possible from the main code
 #[macro_use]
@@ -34,9 +35,10 @@ mod tla_stuff {
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
+        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
     }
 
-    pub static TLA_TRACES: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+    pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
 
     pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
         let mut state = GlobalState::new();
@@ -109,7 +111,9 @@ mod tla_stuff {
     }
 }
 
-use tla_stuff::{my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+use tla_stuff::{
+    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+};
 
 struct StructCanister {
     pub counter: u64,
@@ -148,58 +152,13 @@ impl StructCanister {
     }
 }
 
-// Add JAVABASE/bin to PATH to make the Bazel-provided JRE available to scripts
-fn set_java_path() {
-    let current_path = std::env::var("PATH").unwrap();
-    let bazel_java = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
-}
-
-/// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).
-/// TLA modules are read from $TLA_MODULES (space-separated list)
-/// NOTE: this assumes unique basenames amongst the modules
-fn get_tla_module_path(module: &str) -> PathBuf {
-    let modules = std::env::var("TLA_MODULES").expect(
-        "environment variable 'TLA_MODULES' should be a space-separated list of TLA modules",
-    );
-
-    modules
-        .split(" ")
-        .map(|f| f.into()) /* str -> PathBuf */
-        .find(|f: &PathBuf| f.file_name().is_some_and(|file_name| file_name == module))
-        .unwrap_or_else(|| {
-            panic!("Could not find TLA module {module}, check 'TLA_MODULES' is set correctly")
-        })
-}
-
-#[test]
-fn size_test() {
-    let myval = TlaValue::Record(BTreeMap::from([
-        (
-            "field1".to_string(),
-            TlaValue::Function(BTreeMap::from([(
-                1_u64.to_tla_value(),
-                true.to_tla_value(),
-            )])),
-        ),
-        (
-            "field2".to_string(),
-            TlaValue::Variant {
-                tag: "tag".to_string(),
-                value: Box::new("abc".to_tla_value()),
-            },
-        ),
-    ]));
-    assert_eq!(myval.size(), 6);
-}
-
 #[test]
 fn struct_test() {
     unsafe {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
     }
-    let trace = &TLA_TRACES.read().unwrap()[0];
+    let trace = &TLA_TRACES_MUTEX.read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
         Some(&2_u64.to_string())
@@ -305,33 +264,20 @@ fn struct_test() {
         Some(&Vec::<TlaValue>::new().to_tla_value())
     );
 
-    set_java_path();
+    check_tla_trace(trace);
+}
 
-    let apalache = std::env::var("TLA_APALACHE_BIN")
-        .expect("environment variable 'TLA_APALACHE_BIN' should point to the apalache binary");
-    let apalache = PathBuf::from(apalache);
-
-    if !apalache.as_path().is_file() {
-        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+fn tla_check_traces() {
+    let traces = TLA_TRACES_LKEY.get();
+    let traces = traces.borrow();
+    for t in &*traces {
+        check_tla_trace(t)
     }
+}
 
-    let update = trace.update.clone();
-    for pair in &trace.state_pairs {
-        let constants = trace.constants.clone();
-        println!("Constants: {:?}", constants);
-        // NOTE: the 'process_id" is actually the tla module name
-        let tla_module = format!("{}_Apalache.tla", update.process_id);
-        let tla_module = get_tla_module_path(&tla_module);
-        check_tla_code_link(
-            &apalache,
-            PredicateDescription {
-                tla_module,
-                transition_predicate: "Next".to_string(),
-                predicate_parameters: Vec::new(),
-            },
-            pair.clone(),
-            constants,
-        )
-        .expect("TLA link check failed");
-    }
+#[test]
+#[with_tla_trace_check]
+fn annotated_test() {
+    let canister = &mut StructCanister { counter: 0 };
+    tokio_test::block_on(canister.my_method());
 }
