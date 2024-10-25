@@ -114,12 +114,12 @@ icTests my_sub other_sub conf =
                                                                        in let test_subnet_msg_canister_http' sub subnet_id cid = do
                                                                                 ic_http_get_request' (ic00viaWithCyclesSubnet' subnet_id cid) sub httpbin_proto ("equal_bytes/8") Nothing Nothing cid >>= isReject [3]
                                                                            in let install_with_cycles_at_id n cycles prog = do
-                                                                                    let ecid = rawEntityId $ wordToId n
-                                                                                    let specified_id = entityIdToPrincipal $ EntityId ecid
-                                                                                    cid <- ic_provisional_create ic00 ecid (Just specified_id) (Just cycles) Nothing
-                                                                                    assertBool "canister was not created at its specified ID" $ ecid == cid
-                                                                                    universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                                                    ic_install ic00 (enum #install) cid universal_wasm (run prog)
+                                                                                    let specified_raw_id = rawEntityId $ wordToId n
+                                                                                    let specified_id = entityIdToPrincipal $ EntityId specified_raw_id
+                                                                                    let nns_store_canister_id = if checkCanisterIdInRanges my_ranges (EntityId specified_raw_id) then store_canister_id else other_store_canister_id
+                                                                                    cid <- ic_provisional_create ic00 specified_raw_id (Just specified_id) (Just cycles) Nothing
+                                                                                    assertBool "canister was not created at its specified ID" $ cid == specified_raw_id
+                                                                                    ic_install_single_chunk ic00 (enum #install) cid nns_store_canister_id ucan_chunk_hash (run prog)
                                                                                     return cid
                                                                                in [ testCase "NNS canisters" $ do
                                                                                       registry <- install_with_cycles_at_id 0 initial_cycles noop
