@@ -128,11 +128,7 @@ oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 # file server used in tests
 oci.pull(
     name = "static-file-server",
-    # $ docker pull halverneus/static-file-server
-    # $ docker tag halverneus/static-file-server dfinitydev/halverneus-static-file-server:latest
-    # $ docker push dfinitydev/halverneus-static-file-server:latest
-    #latest: digest: sha256:...
-    image = "docker.io/dfinitydev/halverneus-static-file-server@sha256:80eb204716e0928e27e378ed817056c1167b2b1a878b1ac4ce496964dd9a3ccd",
+    image = "docker.io/halverneus/static-file-server@sha256:9e46688910b1cf9328c3b55784f08a63c53e70a276ccaf76bfdaaf2fbd0019fa",
     platforms = [
         "linux/amd64",
     ],
@@ -150,16 +146,9 @@ oci.pull(
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
 # Tracing image used in tests
-# we can't use the official image: https://github.com/bazel-contrib/rules_oci/issues/695
-#
-# Instead we copy the official image to our repository:
-# $ docker pull jaegertracing/all-in-one
-# $ docker tag jaegertracing/all-in-one dfinitydev/jaegertracing-all-in-one:latest
-# $ docker push jaegertracing-all-in-one:latest
-# > latest: digest: sha256:...
 oci.pull(
     name = "jaeger",
-    image = "docker.io/dfinitydev/jaegertracing-all-in-one@sha256:b85a6bbb949a62377010b8418d7a860c9d0ea7058d83e7cb5ade4fba046c4a76",
+    image = "docker.io/jaegertracing/all-in-one@sha256:836e9b69c88afbedf7683ea7162e179de63b1f981662e83f5ebb68badadc710f",
     platforms = [
         "linux/amd64",
     ],

@@ -4089,6 +4089,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "financial_integrations-system-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "assert_matches",
+ "candid",
+ "canister-test",
+ "dfn_candid",
+ "ic-crypto-tree-hash",
+ "ic-icrc1-ledger",
+ "ic-ledger-core",
+ "ic-nns-test-utils",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "icrc-ledger-agent",
+ "icrc-ledger-types",
+ "on_wire",
+ "serde_cbor",
+]
+
+[[package]]
 name = "findshlibs"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6013,6 +6034,7 @@ dependencies = [
  "memory_tracker",
  "mockall 0.13.0",
  "nix 0.24.3",
+ "num-traits",
  "once_cell",
  "prometheus",
  "rayon",
@@ -9565,6 +9587,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5c7628eac357aecda461130f8074468be5aa4d258a002032d82d817f79f1f8"
 
 [[package]]
+name = "ic-metrics-tool"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.5.20",
+]
+
+[[package]]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
 dependencies = [
@@ -9934,6 +9964,29 @@ name = "ic-nervous-system-temporary"
 version = "0.0.1"
 dependencies = [
  "rand 0.8.5",
+]
+
+[[package]]
+name = "ic-networking-subnet-update-workload"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-agent",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-canister-api",
+ "ic-registry-keys",
+ "ic-registry-nns-data-provider",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "registry-canister",
+ "slog",
+ "slog-async",
+ "slog-term",
+ "tokio",
+ "tokio-util",
+ "url",
 ]
 
 [[package]]
@@ -11428,6 +11481,7 @@ dependencies = [
  "prost 0.13.3",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "registry-canister",
  "reqwest 0.12.8",
  "rolling-file",
  "rosetta-core",
@@ -13459,6 +13513,7 @@ dependencies = [
  "ic-boundary-nodes-system-test-utils",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
+ "ic-networking-subnet-update-workload",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -15512,11 +15567,16 @@ dependencies = [
  "canister_http",
  "cloner-canister-types",
  "dfn_candid",
+ "ic-agent",
  "ic-base-types",
  "ic-cdk 0.16.0",
  "ic-limits",
  "ic-management-canister-types",
+ "ic-networking-subnet-update-workload",
+ "ic-nns-governance-api",
  "ic-prep",
+ "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -15525,10 +15585,13 @@ dependencies = [
  "ic-types",
  "ic-utils 0.37.0",
  "proxy_canister",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "registry-canister",
  "reqwest 0.12.8",
  "slog",
- "tests",
  "tokio",
+ "url",
 ]
 
 [[package]]
@@ -18041,6 +18104,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "research-systests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "spec-compliance",
+]
+
+[[package]]
 name = "resolv-conf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20020,7 +20093,6 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "slog",
- "spec-compliance",
 ]
 
 [[package]]
@@ -20386,7 +20458,6 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "local_key",
- "serde",
  "sha2 0.10.8",
  "tla_instrumentation_proc_macros",
  "tokio-test",
