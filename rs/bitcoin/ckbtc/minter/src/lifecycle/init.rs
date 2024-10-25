@@ -84,6 +84,11 @@ pub struct InitArgs {
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_principal: Option<CanisterId>,
+
+    /// The principal of the new KYT canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_kyt_principal: Option<CanisterId>,
 }
 
 pub fn init(args: InitArgs) {
