@@ -700,8 +700,8 @@ pub struct Governance {
     /// The number of proposals after the last time "garbage collection" was run.
     pub latest_gc_num_proposals: usize,
 
-    /// Global lock for all periodic tasks that relate to upgrades - this guarantees
-    /// that they don't interleave with one another.
+    /// Global lock for all periodic tasks that relate to upgrades - this is used to
+    /// guarantee that they don't interleave with one another outside of rare circumstances (e.g. timeouts).
     /// `None` means that the lock is not currently held by any task.
     /// `Some(x)` means that a task is has been holding the lock since timestamp `x`.
     pub upgrade_periodic_task_lock: Option<u64>,
@@ -4634,12 +4634,19 @@ impl Governance {
 
         self.process_proposals();
 
+        // None of the upgrade-related tasks should interleave with one another or themselves, so we acquire a global
+        // lock for the duration of their execution. This will return `false` if the lock has already been acquired less
+        // than 10 minutes ago by a previous invocation of `run_periodic_tasks`, in which case we skip the
+        // upgrade-related tasks.
         if self.acquire_upgrade_periodic_task_lock() {
+            // We only want to check the upgrade status if we are currently executing an upgrade.
             if self.should_check_upgrade_status() {
                 self.check_upgrade_status().await;
             }
 
             if self.should_refresh_cached_upgrade_steps() {
+                // We only want to refresh the cached_upgrade_steps every UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                // seconds, so we first lock the refresh operation (which will automatically unlock after that interval)
                 self.temporarily_lock_refresh_cached_upgrade_steps();
                 self.refresh_cached_upgrade_steps().await;
             }
@@ -4679,12 +4686,13 @@ impl Governance {
     }
 
     // Acquires the "upgrade periodic task lock" (a lock shared between all periodic tasks that relate to upgrades)
-    // if it is currently released or was last acquired over 10 minutes ago.
+    // if it is currently released or was last acquired over UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS ago.
     fn acquire_upgrade_periodic_task_lock(&mut self) -> bool {
         let now = self.env.now();
         match self.upgrade_periodic_task_lock {
             Some(time_acquired)
-                if now > time_acquired + UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS =>
+                if now
+                    > time_acquired.saturating_add(UPGRADE_PERIODIC_TASK_LOCK_TIMEOUT_SECONDS) =>
             {
                 self.upgrade_periodic_task_lock = Some(now);
                 true
@@ -8288,10 +8296,21 @@ mod tests {
             Box::new(FakeCmc::new()),
         );
 
-        assert!(gov.acquire_upgrade_periodic_task_lock());
-        assert!(!gov.acquire_upgrade_periodic_task_lock());
-        assert!(gov.upgrade_periodic_task_lock.is_some());
+        // The lock is initially None
+        assert!(gov.upgrade_periodic_task_lock.is_none());
 
+        // Test acquiring it
+        assert!(gov.acquire_upgrade_periodic_task_lock());
+        assert!(gov.upgrade_periodic_task_lock.is_some()); // the lock is now engaged
+        assert!(!gov.acquire_upgrade_periodic_task_lock()); // acquiring it twice fails
+        assert!(!gov.acquire_upgrade_periodic_task_lock()); // acquiring it a third time fails
+        assert!(gov.upgrade_periodic_task_lock.is_some()); // the lock is still engaged
+
+        // Test releasing it
+        gov.release_upgrade_periodic_task_lock();
+        assert!(gov.upgrade_periodic_task_lock.is_none());
+
+        // Releasing twice is fine
         gov.release_upgrade_periodic_task_lock();
         assert!(gov.upgrade_periodic_task_lock.is_none());
     }
