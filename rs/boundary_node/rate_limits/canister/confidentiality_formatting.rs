@@ -61,8 +61,10 @@ impl<A: ResolveAccessLevel> ConfidentialityFormatting
     fn format(&self, rule: &OutputRuleMetadata) -> OutputRuleMetadata {
         let mut rule = rule.clone();
         // return full rule if authorized
-        if self.access_resolver.get_access_level() == AccessLevel::FullAccess || self.access_resolver.get_access_level() == AccessLevel::FullRead {
-            rule
+        if self.access_resolver.get_access_level() == AccessLevel::FullAccess
+            || self.access_resolver.get_access_level() == AccessLevel::FullRead
+        {
+            return rule;
         }
         // return the redacted rule otherwise
         if rule.disclosed_at.is_none() {
