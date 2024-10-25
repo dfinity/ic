@@ -311,7 +311,8 @@ pub fn test_fee_collector_blocks<T>(
                 )
                 .expect("Unable to perform the transfer_from");
 
-                let blocks = retrieve_blocks_from_ledger(&env, ledger_id, block_id, 4, &block_retrieval);
+                let blocks =
+                    retrieve_blocks_from_ledger(&env, ledger_id, block_id, 4, &block_retrieval);
 
                 assert_eq!(
                     fee_collector_from_block(blocks.first().unwrap()),
