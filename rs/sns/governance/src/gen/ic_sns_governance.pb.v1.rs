@@ -1649,7 +1649,7 @@ pub struct Governance {
     pub cached_upgrade_steps: ::core::option::Option<governance::CachedUpgradeSteps>,
     /// Information about the timers that perform periodic tasks of this Governance canister.
     #[prost(message, optional, tag = "31")]
-    pub timers: ::core::option::Option<Timers>,
+    pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1995,64 +1995,6 @@ pub mod governance {
             }
         }
     }
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct Timers {
-    #[prost(uint64, optional, tag = "1")]
-    pub last_reset_timestamp_seconds: ::core::option::Option<u64>,
-    #[prost(uint64, optional, tag = "2")]
-    pub last_spawned_timestamp_seconds: ::core::option::Option<u64>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ResetTimersResponse {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersRequest {}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct GetTimersResponse {
-    #[prost(message, optional, tag = "1")]
-    pub timers: ::core::option::Option<Timers>,
 }
 /// Request message for 'get_metadata'.
 #[derive(
