@@ -107,7 +107,7 @@ pub fn registry_get_changes_since(
     version: u64,
 ) -> RegistryGetChangesSinceResponse {
     let mut request = vec![];
-    RegistryGetChangesSinceRequest { version }
+    RegistryGetChangesSinceRequest { version, limit: None }
         .encode(&mut request)
         .unwrap();
 

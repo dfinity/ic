@@ -196,9 +196,9 @@ pub fn deserialize_get_latest_version_response(response: Vec<u8>) -> Result<u64,
 
 /// Deserializes the response obtained from the registry canister for a
 /// get_changes_since() call, from protobuf.
-pub fn deserialize_get_changes_since_request(request: Vec<u8>) -> Result<u64, Error> {
+pub fn deserialize_get_changes_since_request(request: Vec<u8>) -> Result<(u64, Option<u32>), Error> {
     match pb::v1::RegistryGetChangesSinceRequest::decode(&request[..]) {
-        Ok(request) => Ok(request.version),
+        Ok(request) => Ok((request.version, request.limit)),
         Err(error) => Err(Error::MalformedMessage(error.to_string())),
     }
 }
@@ -226,7 +226,7 @@ pub fn serialize_get_changes_since_response(
 // be used in the registry canister only and thus there is no problem with
 // leaking the PB structs to the rest of the code base.
 pub fn serialize_get_changes_since_request(version: u64) -> Result<Vec<u8>, Error> {
-    let request = pb::v1::RegistryGetChangesSinceRequest { version };
+    let request = pb::v1::RegistryGetChangesSinceRequest { version, limit: None };
     let mut buf = Vec::new();
     match request.encode(&mut buf) {
         Ok(_) => Ok(buf),
