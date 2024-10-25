@@ -52,7 +52,10 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::Arc, sync::atomic::AtomicU64, time::Duration};
+use std::{
+    collections::HashMap, fmt, path::PathBuf, str::FromStr, sync::atomic::AtomicU64, sync::Arc,
+    time::Duration,
+};
 use tokio::{
     sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
@@ -725,6 +728,7 @@ impl ApiState {
         F: FnOnce(u64) -> PocketIc + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        // create the instance using `spawn_blocking` before acquiring a lock
         let instance = tokio::task::spawn_blocking(move || f(seed))
             .await
             .expect("Failed to create PocketIC instance");
