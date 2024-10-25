@@ -64,7 +64,7 @@ icTests my_sub other_sub conf =
   let (my_subnet_id_as_entity, my_type, my_nodes, my_ranges, _) = my_sub
    in let ((ecid_as_word64, last_canister_id_as_word64) : _) = my_ranges
        in let (_, last_canister_id_as_word64) = last my_ranges
-           in let (other_subnet_id_as_entity, _, other_nodes, ((other_ecid_as_word64, _) : _), _) = other_sub
+           in let (other_subnet_id_as_entity, _, other_nodes, ((other_ecid_as_word64, other_last_canister_id_as_word64) : _), _) = other_sub
                in let my_subnet_id = rawEntityId my_subnet_id_as_entity
                    in let other_subnet_id = rawEntityId other_subnet_id_as_entity
                        in let my_is_root = isRootTestSubnet my_sub
@@ -72,16 +72,22 @@ icTests my_sub other_sub conf =
                                in let other_ecid = rawEntityId $ wordToId other_ecid_as_word64
                                    in let specified_canister_id = rawEntityId $ wordToId last_canister_id_as_word64
                                        in let store_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 1)
+                                         in let other_store_canister_id = rawEntityId $ wordToId other_last_canister_id_as_word64
                                            in let unused_canister_id = rawEntityId $ wordToId (last_canister_id_as_word64 - 2)
+                                             in let initialize_store_canister store_canister_id = do
+                                                      universal_wasm <- getTestWasm "universal_canister.wasm.gz"
+                                                      _ <- ic_provisional_create ic00 store_canister_id (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
+                                                      ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
+                                                      ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
+                                                      return ucan_chunk_hash
                                                in let initial_cycles = case my_type of
                                                         System -> 0
                                                         _ -> (2 ^ (60 :: Int))
                                                    in do
                                                         ucan_chunk_hash <- withAgentConfig conf $ do
-                                                          universal_wasm <- getTestWasm "universal_canister.wasm.gz"
-                                                          _ <- ic_provisional_create ic00 ecid (Just $ entityIdToPrincipal $ EntityId store_canister_id) Nothing Nothing
-                                                          ucan_chunk_hash <- ic_upload_chunk ic00 store_canister_id universal_wasm
-                                                          ic_install_single_chunk ic00 (enum #install) store_canister_id store_canister_id ucan_chunk_hash ""
+                                                          ucan_chunk_hash <- initialize_store_canister store_canister_id
+                                                          ucan_chunk_hash' <- initialize_store_canister other_store_canister_id
+                                                          assertBool "universal canister chunk hashes should match for the test and other subnets" $ ucan_chunk_hash == ucan_chunk_hash'
                                                           return ucan_chunk_hash
                                                         let extended_conf = conf {tc_ucan_chunk_hash = Just ucan_chunk_hash, tc_store_canister_id = Just store_canister_id}
                                                         return $
