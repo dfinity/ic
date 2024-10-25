@@ -84,6 +84,8 @@ const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
 const METRIC_TIMED_OUT_MESSAGES_TOTAL: &str = "mr_timed_out_messages_total";
 const METRIC_TIMED_OUT_CALLBACKS_TOTAL: &str = "mr_timed_out_callbacks_total";
+const METRIC_SHED_MESSAGES_TOTAL: &str = "mr_shed_messages_total";
+const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
@@ -276,6 +278,10 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) timed_out_messages_total: IntCounter,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
+    /// Number of shed best-effort messages.
+    pub(crate) shed_messages_total: IntCounter,
+    /// Byte size of shed best-effort messages.
+    pub(crate) shed_message_bytes_total: IntCounter,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -373,6 +379,14 @@ impl MessageRoutingMetrics {
             timed_out_callbacks_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_CALLBACKS_TOTAL,
                 "Count of expired best-effort callbacks.",
+            ),
+            shed_messages_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGES_TOTAL,
+                "Count of shed messages.",
+            ),
+            shed_message_bytes_total: metrics_registry.int_counter(
+                METRIC_SHED_MESSAGE_BYTES_TOTAL,
+                "Total byte size of shed messages.",
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,

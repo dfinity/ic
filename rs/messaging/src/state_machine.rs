@@ -194,8 +194,12 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed some messages if above the best-effort message memory limit.
-        state_after_stream_builder
+        let (shed_messages, shed_message_bytes) = state_after_stream_builder
             .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
+        self.metrics.shed_messages_total.inc_by(shed_messages);
+        self.metrics
+            .shed_message_bytes_total
+            .inc_by(shed_message_bytes.get());
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
         state_after_stream_builder

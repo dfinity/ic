@@ -961,8 +961,10 @@ impl ReplicatedState {
     /// best-effort messages of the canisters with the largest best-effort memory
     /// usage until the memory usage drops below the limit.
     ///
+    /// Returns the number of messages and message bytes that were shed.
+    ///
     /// Time complexity: `O(n * log(n))`.
-    pub fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) {
+    pub fn enforce_best_effort_message_limit(&mut self, limit: NumBytes) -> (u64, NumBytes) {
         const ZERO: NumBytes = NumBytes::new(0);
 
         // Check if we need to do anything at all before constructing a priority queue.
@@ -974,7 +976,7 @@ impl ReplicatedState {
             });
         if memory_usage <= limit {
             // No need to do anything.
-            return;
+            return (0, 0.into());
         }
 
         // Construct a priority queue of canisters by best-effort message memory usage.
@@ -990,6 +992,9 @@ impl ReplicatedState {
                 }
             })
             .collect();
+
+        let mut shed_messages = 0;
+        let mut shed_message_bytes = 0.into();
 
         // Shed messages from the canisters with the largest memory usage until we are
         // below the limit.
@@ -1019,7 +1024,11 @@ impl ReplicatedState {
             let memory_usage_delta = memory_usage_before - memory_usage_after;
             debug_assert!(memory_usage_delta > ZERO);
             memory_usage -= memory_usage_delta;
+
+            shed_messages += message_shed as u64;
+            shed_message_bytes += memory_usage_delta;
         }
+        (shed_messages, shed_message_bytes)
     }
 
     /// Splits the replicated state as part of subnet splitting phase 1, retaining
