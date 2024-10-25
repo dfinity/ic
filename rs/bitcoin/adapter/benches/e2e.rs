@@ -1,11 +1,9 @@
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_btc_adapter::config::IncomingSource;
-use ic_btc_adapter::start_grpc_server;
 use ic_btc_adapter::start_server;
-use ic_btc_adapter::AdapterState;
 use ic_btc_adapter::{
-    config::Config, BlockchainManagerRequest, BlockchainState, GetSuccessorsHandler,
+    config::Config, BlockchainManagerRequest, BlockchainState,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -97,7 +95,6 @@ fn e2e(criterion: &mut Criterion) {
         1975,
     );
 
-    let blockchain_state = Arc::new(Mutex::new(blockchain_state));
 
     let rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -106,16 +103,7 @@ fn e2e(criterion: &mut Criterion) {
             Ok(rt.block_on(async {
                 config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
 
-                let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
-                let handler = GetSuccessorsHandler::new(
-                    &config,
-                    blockchain_state.clone(),
-                    blockchain_manager_tx,
-                    &MetricsRegistry::default(),
-                );
-
                 start_server(&no_op_logger(), &MetricsRegistry::default(), &rt.handle(), config.clone());
-
                 start_client(uds_path).await
             }))
         })
