@@ -139,17 +139,17 @@ pub fn test_fee_collector_blocks<T>(
 ) where
     T: CandidType,
 {
-    fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
+    fn value_as_u64(value: &icrc_ledger_types::icrc::generic_value::Value) -> u64 {
         use icrc_ledger_types::icrc::generic_value::Value;
         match value {
-            Value::Nat64(n) => n,
+            Value::Nat64(n) => *n,
             Value::Nat(n) => n.0.to_u64().expect("block index should fit into u64"),
             Value::Int(int) => int.0.to_u64().expect("block index should fit into u64"),
             value => panic!("Expected a numeric value but found {:?}", value),
         }
     }
 
-    fn value_as_account(value: icrc_ledger_types::icrc::generic_value::Value) -> Account {
+    fn value_as_account(value: &icrc_ledger_types::icrc::generic_value::Value) -> Account {
         use icrc_ledger_types::icrc::generic_value::Value;
 
         match value {
@@ -174,16 +174,16 @@ pub fn test_fee_collector_blocks<T>(
     }
 
     fn fee_collector_from_block(
-        block: icrc_ledger_types::icrc::generic_value::Value,
+        block: &icrc_ledger_types::icrc::generic_value::Value,
     ) -> (Option<Account>, Option<u64>) {
         match block {
             icrc_ledger_types::icrc::generic_value::Value::Map(block_map) => {
                 let fee_collector = block_map
                     .get("fee_col")
-                    .map(|fee_collector| value_as_account(fee_collector.clone()));
+                    .map(|fee_collector| value_as_account(fee_collector));
                 let fee_collector_block_index = block_map
                     .get("fee_col_block")
-                    .map(|value| value_as_u64(value.clone()));
+                    .map(|value| value_as_u64(value));
                 (fee_collector, fee_collector_block_index)
             }
             _ => panic!("A block should be a map!"),
@@ -239,16 +239,16 @@ pub fn test_fee_collector_blocks<T>(
 
                 // The first block must have the fee collector explicitly defined.
                 assert_eq!(
-                    fee_collector_from_block(blocks.first().unwrap().clone()),
+                    fee_collector_from_block(blocks.first().unwrap()),
                     (Some(fee_collector_account), None)
                 );
                 // The other two blocks must have a pointer to the first block.
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(1).unwrap().clone()),
+                    fee_collector_from_block(blocks.get(1).unwrap()),
                     (None, Some(0))
                 );
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(2).unwrap().clone()),
+                    fee_collector_from_block(blocks.get(2).unwrap()),
                     (None, Some(0))
                 );
 
@@ -312,21 +312,21 @@ pub fn test_fee_collector_blocks<T>(
                         .collect(),
                 };
                 assert_eq!(
-                    fee_collector_from_block(blocks.first().unwrap().clone()),
+                    fee_collector_from_block(blocks.first().unwrap()),
                     (Some(account_from), None)
                 );
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(1).unwrap().clone()),
+                    fee_collector_from_block(blocks.get(1).unwrap()),
                     (None, Some(block_id))
                 );
                 // Expect the fee collector to be set in an approve block.
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(2).unwrap().clone()),
+                    fee_collector_from_block(blocks.get(2).unwrap()),
                     (None, Some(block_id))
                 );
                 // Expect the fee collector to be set in a transfer_from block.
                 assert_eq!(
-                    fee_collector_from_block(blocks.get(3).unwrap().clone()),
+                    fee_collector_from_block(blocks.get(3).unwrap()),
                     (None, Some(block_id))
                 );
 
