@@ -3,8 +3,8 @@ use anyhow::Result;
 use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_kyt::KytMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_kyt::KytMode;
 use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
@@ -21,7 +21,8 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, set_kyt_api_key, setup, subnet_sys, upgrade_kyt,
+    install_ledger, install_minter, install_new_kyt, set_kyt_api_key, setup, subnet_sys,
+    upgrade_new_kyt,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction,
         assert_no_new_utxo, assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address,
@@ -66,6 +67,7 @@ pub fn test_kyt(env: TestEnv) {
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let mut kyt_canister = create_canister(&runtime).await;
+        let mut new_kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
@@ -78,8 +80,17 @@ pub fn test_kyt(env: TestEnv) {
         )
         .await;
         set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
+        let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
+        let minter_id = install_minter(
+            &mut minter_canister,
+            ledger_id,
+            &logger,
+            0,
+            kyt_id,
+            new_kyt_id,
+        )
+        .await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());
@@ -126,7 +137,7 @@ pub fn test_kyt(env: TestEnv) {
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
         // Put the kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, KytMode::RejectAll).await;
+        upgrade_new_kyt(&mut kyt_canister, KytMode::RejectAll).await;
 
         wait_for_bitcoin_balance(
             &universal_canister,
@@ -183,7 +194,7 @@ pub fn test_kyt(env: TestEnv) {
         start_canister(&kyt_canister).await;
 
         // Put the kyt canister into accept all utxos mode.
-        upgrade_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
+        upgrade_new_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
         // Now that the kyt canister is available and accept all utxos
         // we should be able to mint new utxos.
         let update_balance_new_utxos = minter_agent
@@ -302,7 +313,7 @@ pub fn test_kyt(env: TestEnv) {
         let retrieve_amount: u64 = 35_000_000;
 
         // Put the kyt canister into reject all utxos mode.
-        upgrade_kyt(&mut kyt_canister, KytMode::RejectAll).await;
+        upgrade_new_kyt(&mut kyt_canister, KytMode::RejectAll).await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -327,7 +338,7 @@ pub fn test_kyt(env: TestEnv) {
         }
         assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, KYT_FEE).await;
 
-        upgrade_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
+        upgrade_new_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
         let _ = minter_agent.distribute_kyt_fee().await;
 
         assert_mint_transaction(

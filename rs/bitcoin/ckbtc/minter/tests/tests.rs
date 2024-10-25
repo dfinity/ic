@@ -5,7 +5,10 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_interface::{Network, Txid};
-use ic_btc_kyt::{BtcNetwork as NewKytBtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg};
+use ic_btc_kyt::{
+    BtcNetwork as NewKytBtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg,
+    KytMode as NewKytMode,
+};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
@@ -731,6 +734,7 @@ impl CkBtcSetup {
             new_kyt_wasm(),
             Encode!(&NewKytArg::InitArg(NewKytInitArg {
                 btc_network: NewKytBtcNetwork::Mainnet,
+                kyt_mode: NewKytMode::AcceptAll,
             }))
             .unwrap(),
         )

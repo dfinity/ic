@@ -3,6 +3,10 @@ use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::{Config, Fees, Flag, Network};
+use ic_btc_kyt::{
+    BtcNetwork, InitArg as NewKytInitArg, KytArg as NewKytArg, KytMode as NewKytMode,
+    UpgradeArg as NewKytUpgradeArg,
+};
 use ic_canister_client::Sender;
 use ic_ckbtc_kyt::{
     InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
@@ -81,6 +85,14 @@ pub const KYT_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
+const BITCOIND_RPC_USER: &str = "btc-dev-preview";
+
+const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=";
+
+const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
+
+const BITCOIND_RPC_PORT: u32 = 8332;
+
 pub fn btc_config(env: TestEnv) {
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -98,7 +110,10 @@ docker run  --name=bitcoind-node -d \
 
     let bitcoin_conf_path = config_dir.join("bitcoin.conf");
     let mut bitcoin_conf = File::create(bitcoin_conf_path).unwrap();
-    bitcoin_conf.write_all(r#"
+    bitcoin_conf
+        .write_all(
+            format!(
+                r#"
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1
     debug=1
@@ -106,11 +121,14 @@ docker run  --name=bitcoind-node -d \
     fallbackfee=0.0002
 
     # Dummy credentials that are required by `bitcoin-cli`.
-    rpcuser=btc-dev-preview
-    rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
-    rpcauth=btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb
+    rpcuser={BITCOIND_RPC_USER}
+    rpcpassword={BITCOIND_RPC_PASSWORD}
+    rpcauth={BITCOIND_RPC_AUTH}
     "#
-    .as_bytes()).unwrap();
+            )
+            .as_bytes(),
+        )
+        .unwrap();
     bitcoin_conf.sync_all().unwrap();
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
@@ -357,6 +375,7 @@ pub async fn install_minter(
     logger: &Logger,
     max_time_in_queue_nanos: u64,
     kyt_canister_id: CanisterId,
+    new_kyt_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
@@ -372,6 +391,7 @@ pub async fn install_minter(
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
         kyt_principal: Some(kyt_canister_id),
+        new_kyt_principal: Some(new_kyt_canister_id),
     };
 
     let minter_arg = MinterArg::Init(args);
@@ -411,6 +431,32 @@ pub async fn install_kyt(
     kyt_canister.canister_id()
 }
 
+pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
+    let logger = env.logger();
+    info!(logger, "Installing kyt canister ...");
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let universal_vm = deployed_universal_vm.get_vm().unwrap();
+    let btc_node_ipv6 = universal_vm.ipv6;
+    let json_rpc_url = format!(
+        "http://{}:{}@[{}]:{}",
+        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, BITCOIND_RPC_PORT
+    );
+    let kyt_init_args = NewKytArg::InitArg(NewKytInitArg {
+        btc_network: BtcNetwork::Regtest { json_rpc_url },
+        kyt_mode: NewKytMode::AcceptAll,
+    });
+
+    install_rust_canister_from_path(
+        new_kyt_canister,
+        get_dependency_path(
+            env::var("IC_BTC_KYT_WASM_PATH").expect("IC_BTC_KYT_WASM_PATH not set"),
+        ),
+        Some(Encode!(&kyt_init_args).unwrap()),
+    )
+    .await;
+    new_kyt_canister.canister_id()
+}
+
 pub async fn set_kyt_api_key(agent: &ic_agent::Agent, kyt_canister: &Principal, api_key: String) {
     agent
         .update(kyt_canister, "set_api_key")
@@ -432,6 +478,18 @@ pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> Cani
         .await
         .expect("failed to upgrade the canister");
     kyt_canister.canister_id()
+}
+
+pub async fn upgrade_new_kyt(new_kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {
+    let kyt_upgrade_arg = NewKytUpgradeArg {
+        kyt_mode: Some(mode),
+    };
+
+    new_kyt_canister
+        .upgrade_to_self_binary(Encode!(&kyt_upgrade_arg).unwrap())
+        .await
+        .expect("failed to upgrade the canister");
+    new_kyt_canister.canister_id()
 }
 
 pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
