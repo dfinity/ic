@@ -8,6 +8,7 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
+use std::collections::HashSet;
 
 pub fn test_fee_collector<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
@@ -27,7 +28,7 @@ where
                 1..10_000_000u64,
             )
                 .prop_filter("The three accounts must be different", |(a1, a2, a3, _)| {
-                    a1 != a2 && a2 != a3 && a1 != a3
+                    HashSet::from([a1, a2, a3]).len() == 3
                 }),
             |(account_from, account_to, fee_collector, amount)| {
                 // Test 1: with no fee collector the fee should be burned.
@@ -203,10 +204,8 @@ pub fn test_fee_collector_blocks<T>(
                 1..10_000_000u64,
             )
                 .prop_filter(
-                    "The three accounts must be different",
-                    |(a1, a2, a3, a4, _)| {
-                        a1 != a2 && a2 != a3 && a1 != a3 && a1 != a4 && a2 != a4 && a3 != a4
-                    },
+                    "The four accounts must be different",
+                    |(a1, a2, a3, a4, _)| HashSet::from([a1, a2, a3, a4]).len() == 4,
                 )
                 .no_shrink(),
             |(account_from, account_to, account_spender, fee_collector_account, amount)| {
