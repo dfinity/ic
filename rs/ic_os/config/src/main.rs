@@ -103,11 +103,11 @@ pub struct GenerateTestnetConfigClapArgs {
 
     // GuestOSSettings arguments
     #[arg(long)]
-    pub ic_crypto_path: Option<PathBuf>,
+    pub inject_ic_crypto: Option<bool>,
     #[arg(long)]
-    pub ic_state_path: Option<PathBuf>,
+    pub inject_ic_state: Option<bool>,
     #[arg(long)]
-    pub ic_registry_local_store_path: Option<PathBuf>,
+    pub inject_ic_registry_local_store: Option<bool>,
 
     // GuestOSDevSettings arguments
     #[arg(long)]
@@ -362,9 +362,9 @@ pub fn main() -> Result<()> {
                 nns_urls: clap_args.nns_urls,
                 node_operator_private_key_path: clap_args.node_operator_private_key_path,
                 ssh_authorized_keys_path: clap_args.ssh_authorized_keys_path,
-                ic_crypto_path: clap_args.ic_crypto_path,
-                ic_state_path: clap_args.ic_state_path,
-                ic_registry_local_store_path: clap_args.ic_registry_local_store_path,
+                inject_ic_crypto: clap_args.inject_ic_crypto,
+                inject_ic_state: clap_args.inject_ic_state,
+                inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
                 backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
                 backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
                 malicious_behavior: clap_args.malicious_behavior,

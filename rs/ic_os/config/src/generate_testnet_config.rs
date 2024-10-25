@@ -31,9 +31,9 @@ pub struct GenerateTestnetConfigArgs {
     pub ssh_authorized_keys_path: Option<PathBuf>,
 
     // GuestOSSettings arguments
-    pub ic_crypto_path: Option<PathBuf>,
-    pub ic_state_path: Option<PathBuf>,
-    pub ic_registry_local_store_path: Option<PathBuf>,
+    pub inject_ic_crypto: Option<bool>,
+    pub inject_ic_state: Option<bool>,
+    pub inject_ic_registry_local_store: Option<bool>,
 
     // GuestOSDevSettings arguments
     pub backup_retention_time_seconds: Option<u64>,
@@ -71,9 +71,9 @@ pub fn generate_testnet_config(
         nns_urls,
         node_operator_private_key_path,
         ssh_authorized_keys_path,
-        ic_crypto_path,
-        ic_state_path,
-        ic_registry_local_store_path,
+        inject_ic_crypto,
+        inject_ic_state,
+        inject_ic_registry_local_store,
         backup_retention_time_seconds,
         backup_purging_interval_seconds,
         malicious_behavior,
@@ -221,9 +221,9 @@ pub fn generate_testnet_config(
 
     // Construct GuestOSSettings
     let guestos_settings = GuestOSSettings {
-        ic_crypto_path,
-        ic_state_path,
-        ic_registry_local_store_path,
+        inject_ic_crypto: inject_ic_crypto.unwrap_or(false),
+        inject_ic_state: inject_ic_state.unwrap_or(false),
+        inject_ic_registry_local_store: inject_ic_registry_local_store.unwrap_or(false),
         guestos_dev_settings,
     };
 

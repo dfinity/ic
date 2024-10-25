@@ -52,13 +52,13 @@ pub struct GuestOSSettings {
     /// Must be a directory with contents matching the internal representation of the ic_crypto directory.
     /// When given, this provides the private keys of the node.
     /// If not given, the node will generate its own private/public key pair.
-    pub ic_crypto_path: Option<PathBuf>,
-    pub ic_state_path: Option<PathBuf>,
+    pub inject_ic_crypto: bool,
+    pub inject_ic_state: bool,
     /// Initial registry state.
     /// Must be a directory with contents matching the internal representation of the ic_registry_local_store.
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
-    pub ic_registry_local_store_path: Option<PathBuf>,
+    pub inject_ic_registry_local_store: bool,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 

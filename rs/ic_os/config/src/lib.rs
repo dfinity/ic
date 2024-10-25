@@ -91,9 +91,9 @@ mod tests {
             verbose: false,
         };
         let guestos_settings = GuestOSSettings {
-            ic_crypto_path: None,
-            ic_state_path: None,
-            ic_registry_local_store_path: None,
+            inject_ic_crypto: false,
+            inject_ic_state: false,
+            inject_ic_registry_local_store: false,
             guestos_dev_settings: GuestOSDevSettings::default(),
         };
 
