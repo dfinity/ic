@@ -1907,6 +1907,8 @@ impl SystemState {
     }
 
     /// Returns the memory currently used by best-effort canister messages.
+    ///
+    /// This returns zero iff there are zero best-effort messages enqueued.
     pub fn best_effort_message_memory_usage(&self) -> NumBytes {
         (self.queues.best_effort_message_memory_usage() as u64).into()
     }

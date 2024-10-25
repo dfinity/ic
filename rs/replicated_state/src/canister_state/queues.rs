@@ -1267,7 +1267,8 @@ impl CanisterQueues {
         self.queue_stats.output_queues_reserved_slots
     }
 
-    /// Returns the memory usage of all best-effort messages.
+    /// Returns the memory usage of all best-effort messages (zero iff there are
+    /// zero pooled best-effort messages).
     ///
     /// Does not account for callback references for expired callbacks or dropped
     /// responses, as these are constant size per callback and thus can be included

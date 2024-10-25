@@ -993,7 +993,10 @@ impl ReplicatedState {
 
         // Shed messages from the canisters with the largest memory usage until we are
         // below the limit.
-        while memory_usage > limit {
+        //
+        // The non-empty priority queue check is only here in case a canister somehow
+        // reports non-zero best-effort memory usage but then fails to shed a message.
+        while memory_usage > limit && !priority_queue.is_empty() {
             // Safe to unwrap, the priority queue cannot be empty.
             let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
 
@@ -1006,8 +1009,9 @@ impl ReplicatedState {
             let memory_usage_after = canister.system_state.best_effort_message_memory_usage();
             self.canister_states.insert(canister_id, canister);
 
-            // Update the priority queue.
-            if memory_usage_after > ZERO {
+            // Replace the canister in the priority queue iff its memory usage is still
+            // non-zero AND a message was actually shed.
+            if memory_usage_after > ZERO && message_shed {
                 priority_queue.insert((memory_usage_after, canister_id));
             }
 
