@@ -5,9 +5,7 @@ use ic_nns_test_utils::{
         registry_get_changes_since, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_registry_transport::pb::v1::{
-    registry_error, RegistryError, RegistryGetChangesSinceResponse,
-};
+use ic_registry_transport::pb::v1::RegistryGetChangesSinceResponse;
 use std::str::FromStr;
 
 #[test]
@@ -35,7 +33,11 @@ fn test_allow_opaque_caller() {
         version,
         deltas,
     } = response;
-
+    
+    assert_eq!(error, None);
+    // The important thing is that deltas is not empty. The exact number of
+    // elements is not so important.
+    assert_eq!(deltas.len(), 13);
     assert_eq!(version, 1);
 }
 
