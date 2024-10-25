@@ -349,6 +349,12 @@ enum OnLowWasmMemoryHookStatus {
   ON_LOW_WASM_MEMORY_HOOK_STATUS_EXECUTED = 3;
 }
 
+message TaskQueue{
+  optional ExecutionTask paused_or_aborted_task = 1;
+  OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 2;
+  repeated ExecutionTask queue = 3;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -439,4 +445,98 @@ message CanisterStateBits {
   LongExecutionMode long_execution_mode = 49;
   optional uint64 wasm_memory_threshold = 50;
   optional OnLowWasmMemoryHookStatus on_low_wasm_memory_hook_status = 53;
+}
+
+
+message CanisterStateBitsV2 {
+  reserved 1;
+  reserved "controller";
+  uint64 last_full_execution_round = 2;
+  CallContextManager call_context_manager = 3;
+  uint64 compute_allocation = 4;
+  int64 accumulated_priority = 5;
+  reserved 6;
+  reserved "query_allocation";
+  ExecutionStateBits execution_state_bits = 7;
+  uint64 memory_allocation = 8;
+  reserved 9;
+  reserved "cycles_account";
+  reserved 10;
+  reserved "icp_balance";
+  oneof canister_status {
+    CanisterStatusRunning running = 11;
+    CanisterStatusStopping stopping = 12;
+    CanisterStatusStopped stopped = 13;
+  }
+  reserved 14;
+  reserved "scheduled_to_run";
+  uint64 scheduled_as_first = 15;
+  reserved 16;
+  reserved "skipped_round_due_to_low_cycles";
+  uint64 skipped_round_due_to_no_messages = 17;
+  // In how many rounds a canister is executed.
+  uint64 executed = 18;
+  reserved 19;
+  reserved "executed_and_exhausted_its_messages";
+  bytes certified_data = 20;
+  uint64 interrupted_during_execution = 21;
+  types.v1.NominalCycles consumed_cycles = 22;
+  uint64 freeze_threshold = 23;
+  reserved 24;
+  reserved "stable_memory_size";
+  repeated types.v1.PrincipalId controllers = 25;
+  state.queues.v1.Cycles cycles_balance = 26;
+  // The size of the canister's stable memory in bytes.
+  uint64 stable_memory_size64 = 27;
+  // The memory delta debit of this canister. This is tracked for the purposes
+  // of rate limiting the amount of memory delta generated per round.
+  uint64 heap_delta_debit = 28;
+  // The instruction debit for install_code messages of this canister. This is
+  // tracked for the purposes of rate limiting the install_code messages.
+  uint64 install_code_debit = 29;
+  reserved 30;
+  // Time of last charge for resource allocations.
+  google.protobuf.UInt64Value time_of_last_allocation_charge_nanos = 31;
+  // Postponed charges that are not applied to `cycles_balance` yet.
+  state.queues.v1.Cycles cycles_debit = 32;
+  // Canister global timer, in nanoseconds since Unix epoch.
+  optional uint64 global_timer_nanos = 33;
+  // Canister version.
+  uint64 canister_version = 34;
+  reserved 35;
+  repeated ConsumedCyclesByUseCase consumed_cycles_by_use_cases = 36;
+  CanisterHistory canister_history = 37;
+  // Resource reservation cycles.
+  state.queues.v1.Cycles reserved_balance = 38;
+  // The user-specified upper limit on `reserved_balance`.
+  state.queues.v1.Cycles reserved_balance_limit = 39;
+  // Maps tracking chunks in the Wasm chunk store.
+  WasmChunkStoreMetadata wasm_chunk_store_metadata = 40;
+  // Statistics on query execution for entire lifetime of canister.
+  TotalQueryStats total_query_stats = 41;
+  reserved 42;
+  reserved "log_visibility";
+  // Log visibility for the canister.
+  LogVisibilityV2 log_visibility_v2 = 51;
+  // Log records of the canister.
+  repeated CanisterLogRecord canister_log_records = 43;
+  // The index of the next log record to be created.
+  uint64 next_canister_log_record_idx = 44;
+  // The Wasm memory limit. This is a field in developer-visible canister
+  // settings that allows the developer to limit the usage of the Wasm memory
+  // by the canister to leave some room in 4GiB for upgrade calls.
+  // See the interface specification for more information.
+  optional uint64 wasm_memory_limit = 45;
+  // The next local snapshot ID.
+  uint64 next_snapshot_id = 46;
+  // Captures the memory usage of all snapshots associated with a canister.
+  uint64 snapshots_memory_usage = 52;
+  reserved 47;
+  int64 priority_credit = 48;
+  LongExecutionMode long_execution_mode = 49;
+  optional uint64 wasm_memory_threshold = 50;
+  reserved 53;
+  // Contains tasks that need to be executed before processing any input of the
+  // canister.
+  TaskQueue task_queue = 54;
 }

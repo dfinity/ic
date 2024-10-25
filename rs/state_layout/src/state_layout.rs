@@ -16,7 +16,7 @@ use ic_replicated_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{
             wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase,
-            OnLowWasmMemoryHookStatus,
+            OnLowWasmMemoryHookStatus, TaskQueue,
         },
     },
     page_map::{Shard, StorageLayout, StorageResult},
@@ -166,7 +166,6 @@ pub struct CanisterStateBits {
     pub stable_memory_size: NumWasmPages,
     pub heap_delta_debit: NumBytes,
     pub install_code_debit: NumInstructions,
-    pub task_queue: Vec<ExecutionTask>,
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
@@ -179,7 +178,7 @@ pub struct CanisterStateBits {
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
     pub snapshots_memory_usage: NumBytes,
-    pub on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    pub task_queue: TaskQueue,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -2279,7 +2278,7 @@ impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
     }
 }
 
-impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
+impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBitsV2 {
     fn from(item: CanisterStateBits) -> Self {
         Self {
             controllers: item
@@ -2315,7 +2314,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             heap_delta_debit: item.heap_delta_debit.get(),
             install_code_debit: item.install_code_debit.get(),
             time_of_last_allocation_charge_nanos: Some(item.time_of_last_allocation_charge_nanos),
-            task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
             consumed_cycles_by_use_cases: item
@@ -2343,12 +2341,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
             snapshots_memory_usage: item.snapshots_memory_usage.get(),
-            on_low_wasm_memory_hook_status: Some(
-                pb_canister_state_bits::OnLowWasmMemoryHookStatus::from(
-                    &item.on_low_wasm_memory_hook_status,
-                )
-                .into(),
-            ),
+            task_queue: item.task_queue.into_pb(),
         }
     }
 }
@@ -2467,7 +2460,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 value.time_of_last_allocation_charge_nanos,
                 "CanisterStateBits::time_of_last_allocation_charge_nanos",
             )?,
-            task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
             consumed_cycles_by_use_cases,
@@ -2503,11 +2495,15 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
             snapshots_memory_usage: NumBytes::from(value.snapshots_memory_usage),
-            on_low_wasm_memory_hook_status: try_from_option_field(
-                on_low_wasm_memory_hook_status,
-                "CanisterStateBits::on_low_wasm_memory_hook_status",
-            )
-            .unwrap_or_default(),
+            task_queue: TaskQueue::from_checkpoint(
+                task_queue,
+                try_from_option_field(
+                    on_low_wasm_memory_hook_status,
+                    "CanisterStateBits::on_low_wasm_memory_hook_status",
+                )
+                .unwrap_or_default(),
+                canister_id,
+            ),
         })
     }
 }
