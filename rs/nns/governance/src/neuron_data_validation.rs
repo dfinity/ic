@@ -471,10 +471,10 @@ impl CardinalityAndRangeValidator for PrincipalIndexValidator {
     const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 200;
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap: u64 = neuron_store
-            .active_neurons_iter()
-            .map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
-            .sum();
+        let cardinality_primary_heap: u64 = neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.principal_ids_with_special_permissions().len() as u64)
+                .sum()
+        });
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store|
                     // `stable_neuron_store.len()` is for the controllers.
                     stable_neuron_store.lens().hot_keys + stable_neuron_store.len() as u64);
@@ -529,10 +529,10 @@ impl CardinalityAndRangeValidator for FollowingIndexValidator {
     const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 40;
 
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap: u64 = neuron_store
-            .active_neurons_iter()
-            .map(|neuron| neuron.topic_followee_pairs().len() as u64)
-            .sum();
+        let cardinality_primary_heap: u64 = neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.topic_followee_pairs().len() as u64)
+                .sum()
+        });
         let cardinality_primary_stable =
             with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.lens().followees);
         let cardinality_primary = cardinality_primary_heap + cardinality_primary_stable;
@@ -584,10 +584,10 @@ impl CardinalityAndRangeValidator for KnownNeuronIndexValidator {
     // entry lookup takes ~130K instructions.
     const HEAP_NEURON_RANGE_CHUNK_SIZE: usize = 300000;
     fn validate_cardinalities(neuron_store: &NeuronStore) -> Option<ValidationIssue> {
-        let cardinality_primary_heap = neuron_store
-            .active_neurons_iter()
-            .filter(|neuron| neuron.known_neuron_data.is_some())
-            .count() as u64;
+        let cardinality_primary_heap = neuron_store.with_active_neurons_iter(|iter| {
+            iter.filter(|neuron| neuron.known_neuron_data.is_some())
+                .count() as u64
+        });
         let cardinality_primary_stable = with_stable_neuron_store(|stable_neuron_store| {
             stable_neuron_store.lens().known_neuron_data
         });
