@@ -26,10 +26,12 @@ env:
   CI_JOB_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
   CI_PIPELINE_SOURCE: ${{ github.event_name }}
   CI_PROJECT_DIR: ${{ github.workspace }}
+  CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   BUILDEVENT_DATASET: "github-ci-dfinity"
+  RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
 
 anchors:
   image: &image
@@ -112,17 +114,29 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-
-          # Determine which tests to skip and append 'long_test' for pull requests or merge groups
-          EXCLUDED_TEST_TAGS=(system_test_hourly system_test_nightly system_test_nightly_nns system_test_staging system_test_hotfix system_test_benchmark fuzz_test fi_tests_nightly nns_tests_nightly)
-          [[ "${{ github.event_name }}" =~ ^(pull_request|merge_group)$ ]] && EXCLUDED_TEST_TAGS+=(long_test)
-
+          # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
+          EXCLUDED_TEST_TAGS=(
+              system_test_hourly
+              system_test_nightly
+              system_test_nightly_nns
+              system_test_staging
+              system_test_hotfix
+              system_test_benchmark
+              fuzz_test
+              fi_tests_nightly
+              nns_tests_nightly
+          )
+          if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
+              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
+                  EXCLUDED_TEST_TAGS+=(long_test)
+              fi
+          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
+              EXCLUDED_TEST_TAGS+=(long_test)
+          fi
           # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
           echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
-
           # Prepend tags with '-' and join them with commas for Bazel
           TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
-
           # Determine BAZEL_EXTRA_ARGS based on event type or branch name
           BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
           if [[ "${{ github.event_name }}" == 'merge_group' ]]; then
@@ -132,7 +146,6 @@ jobs:
           else
               BAZEL_EXTRA_ARGS+=" --keep_going"
           fi
-
           # Export BAZEL_EXTRA_ARGS to environment
           echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
       - name: Run Bazel Test All
@@ -141,7 +154,6 @@ jobs:
         env:
           AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
           # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
         with:
           BAZEL_COMMAND: "test"
@@ -278,7 +290,6 @@ jobs:
           rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
         env:
           BAZEL_COMMAND: "build"
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
           MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
           BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
