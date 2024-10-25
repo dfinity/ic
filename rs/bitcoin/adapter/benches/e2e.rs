@@ -2,9 +2,7 @@ use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_btc_adapter::config::IncomingSource;
 use ic_btc_adapter::start_server;
-use ic_btc_adapter::{
-    config::Config, BlockchainManagerRequest, BlockchainState,
-};
+use ic_btc_adapter::{config::Config, BlockchainState};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
@@ -17,9 +15,7 @@ use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use tempfile::Builder;
-use tokio::sync::mpsc::channel;
 
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
@@ -95,7 +91,6 @@ fn e2e(criterion: &mut Criterion) {
         1975,
     );
 
-
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     let (client, _temp) = Builder::new()
@@ -103,7 +98,12 @@ fn e2e(criterion: &mut Criterion) {
             Ok(rt.block_on(async {
                 config.incoming_source = IncomingSource::Path(uds_path.to_path_buf());
 
-                start_server(&no_op_logger(), &MetricsRegistry::default(), &rt.handle(), config.clone());
+                start_server(
+                    &no_op_logger(),
+                    &MetricsRegistry::default(),
+                    rt.handle(),
+                    config.clone(),
+                );
                 start_client(uds_path).await
             }))
         })
