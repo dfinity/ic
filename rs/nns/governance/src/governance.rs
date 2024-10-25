@@ -128,6 +128,9 @@ pub mod test_data;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "canbench-rs")]
+mod benches;
+
 #[macro_use]
 pub mod tla_macros;
 #[cfg(feature = "tla")]

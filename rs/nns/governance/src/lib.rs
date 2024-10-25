@@ -160,7 +160,7 @@ pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
 mod migrations;
-mod neuron;
+pub(crate) mod neuron;
 pub mod neuron_data_validation;
 mod neuron_store;
 pub mod neurons_fund;
@@ -202,6 +202,8 @@ thread_local! {
     static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
 
     static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+
+    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
 }
 
 pub fn is_private_neuron_enforcement_enabled() -> bool {
@@ -244,6 +246,20 @@ pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
 /// Only integration tests should use this.
 pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
     Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+}
+
+pub fn use_stable_memory_following_index() -> bool {
+    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
+}
+
+/// Only integration tests should use this.
+pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
+    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
