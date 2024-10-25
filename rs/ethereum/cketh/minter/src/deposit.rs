@@ -1,9 +1,10 @@
 use crate::eth_logs::{report_transaction_error, ReceivedEvent, ReceivedEventError};
-use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError};
+use crate::eth_rpc::{BlockSpec, FixedSizeData, HttpOutcallError, Topic};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
+use crate::state::eth_logs_scraping::LogScrapingState;
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
@@ -347,15 +348,21 @@ async fn scrape_contract_logs<F>(
 }
 
 async fn scrape_eth_logs(last_block_number: BlockNumber, max_block_spread: u16) {
+    let scraping_state = read_state(|s| s.eth_log_scraping.clone());
     scrape_contract_logs(
         &RECEIVED_ETH_EVENT_TOPIC,
         "ETH",
-        read_state(|s| s.eth_helper_contract_address),
+        scraping_state.contract_address().cloned(),
         &[],
         last_block_number,
-        read_state(|s| s.last_scraped_block_number),
+        scraping_state.last_scraped_block_number(),
         max_block_spread,
-        &|last_block_number| mutate_state(|s| s.last_scraped_block_number = last_block_number),
+        &|last_block_number| {
+            mutate_state(|s| {
+                s.eth_log_scraping
+                    .set_last_scraped_block_number(last_block_number)
+            })
+        },
     )
     .await
 }

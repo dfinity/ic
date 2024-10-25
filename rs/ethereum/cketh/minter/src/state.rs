@@ -10,6 +10,7 @@ use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
+use crate::state::eth_logs_scraping::LogScrapingState;
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData, WithdrawalRequest};
 use crate::tx::GasFeeEstimate;
 use candid::Principal;
@@ -54,13 +55,12 @@ pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub cketh_ledger_id: Principal,
-    pub eth_helper_contract_address: Option<Address>,
+    pub eth_log_scraping: LogScrapingState,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
-    pub last_scraped_block_number: BlockNumber,
     pub last_erc20_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
@@ -153,15 +153,6 @@ impl State {
         if self.cketh_ledger_id == Principal::anonymous() {
             return Err(InvalidStateError::InvalidLedgerId(
                 "ledger_id cannot be the anonymous principal".to_string(),
-            ));
-        }
-        if self
-            .eth_helper_contract_address
-            .iter()
-            .any(|address| address == &Address::ZERO)
-        {
-            return Err(InvalidStateError::InvalidEthereumContractAddress(
-                "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
         if self.cketh_minimum_withdrawal_amount == Wei::ZERO {
@@ -394,13 +385,6 @@ impl State {
         }
     }
 
-    pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
-        let address = self
-            .eth_helper_contract_address
-            .expect("BUG: Missing eth_helper_contract_address");
-        self.record_skipped_block_for_contract(address, block_number)
-    }
-
     pub fn record_skipped_block_for_contract(
         &mut self,
         contract_address: Address,
@@ -495,7 +479,11 @@ impl State {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
-            self.eth_helper_contract_address = Some(eth_helper_contract_address);
+            self.eth_log_scraping
+                .set_contract_address(eth_helper_contract_address)
+                .map_err(|e| {
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                })?;
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
@@ -539,10 +527,7 @@ impl State {
         ensure_eq!(self.ethereum_network, other.ethereum_network);
         ensure_eq!(self.cketh_ledger_id, other.cketh_ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
-        ensure_eq!(
-            self.eth_helper_contract_address,
-            other.eth_helper_contract_address
-        );
+        ensure_eq!(self.eth_log_scraping, other.eth_log_scraping);
         ensure_eq!(
             self.cketh_minimum_withdrawal_amount,
             other.cketh_minimum_withdrawal_amount
@@ -550,10 +535,6 @@ impl State {
         ensure_eq!(
             self.first_scraped_block_number,
             other.first_scraped_block_number
-        );
-        ensure_eq!(
-            self.last_scraped_block_number,
-            other.last_scraped_block_number
         );
         ensure_eq!(self.ethereum_block_height, other.ethereum_block_height);
         ensure_eq!(self.events_to_mint, other.events_to_mint);
