@@ -12,6 +12,8 @@
             <a href="https://live.blockcypher.com/btc/tx/{{txid}}"><code>{{txid}}</code></a>
         {%- when crate::BtcNetwork::Testnet -%}
             <a href="https://live.blockcypher.com/btc-testnet/tx/{{txid}}"><code>{{txid}}</code></a>
+        {%- when _ -%}
+            <code>{{txid}}</code>
     {% endmatch %}
 {%- endmacro %}
 
