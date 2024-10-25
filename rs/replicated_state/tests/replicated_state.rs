@@ -26,6 +26,7 @@ use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CallbackId, RejectContext};
+use ic_types::time::CoarseTime;
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
@@ -44,13 +45,13 @@ const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
-fn request_from(canister_id: CanisterId) -> RequestOrResponse {
+fn request_from(canister_id: CanisterId) -> Request {
     RequestBuilder::default()
         .sender(canister_id)
         .receiver(CANISTER_ID)
         .build()
-        .into()
 }
 
 fn request_to(canister_id: CanisterId) -> Request {
@@ -247,7 +248,7 @@ fn memory_taken_by_canister_queues() {
     fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
         .unwrap();
@@ -381,7 +382,7 @@ fn memory_taken_by_wasm_custom_sections() {
     fixture
         .state
         .push_input(
-            request_from(OTHER_CANISTER_ID),
+            request_from(OTHER_CANISTER_ID).into(),
             &mut subnet_available_memory,
         )
         .unwrap();
@@ -521,18 +522,20 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    fixture.push_input(request_from(OTHER_CANISTER_ID)).unwrap();
+    fixture
+        .push_input(request_from(OTHER_CANISTER_ID).into())
+        .unwrap();
     assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    fixture.push_input(request_from(CANISTER_ID)).unwrap();
+    fixture
+        .push_input(request_from(CANISTER_ID).into())
+        .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
-        .push_input(request_from(CanisterId::unchecked_from_principal(
-            SUBNET_ID.get(),
-        )))
+        .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
         .unwrap();
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
@@ -680,7 +683,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
 fn time_out_messages_updates_subnet_input_schedules_correctly() {
     let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
-    // Push 3 requests into the canister with id `local_canister_id1`:
+    // Enqueue 3 outgoing requests for `CANISTER_ID`:
     // - one to self.
     // - one to a another local canister.
     // - one to a remote canister.
@@ -708,6 +711,55 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
     );
+}
+
+#[test]
+fn enforce_best_effort_message_limit() {
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
+
+    // Enqueue 3 best-effort incoming requests of increasing sizes for `CANISTER_ID`
+    // and `OTHER_CANISTER_ID`.
+    for (i, receiver) in [CANISTER_ID, OTHER_CANISTER_ID, CANISTER_ID]
+        .iter()
+        .enumerate()
+    {
+        let mut request = request_to(*receiver);
+        request.deadline = SOME_DEADLINE;
+        request.method_name = String::from_utf8(vec![b'x'; i * 10 + 1]).unwrap();
+        fixture.push_input(request.into()).unwrap();
+    }
+
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(u64::MAX.into()),
+    );
+
+    let best_effort_memory_usage = fixture.state.best_effort_message_memory_taken();
+    assert_eq!(
+        (0, 0.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(best_effort_memory_usage),
+    );
+
+    // Enforce a limit equal to the mean message size. This should shed the second
+    // and third message (with byte sizes of `mean` and respectively `mean + 100`).
+    let mean_message_size = best_effort_memory_usage / 3;
+    assert_eq!(
+        (2, mean_message_size * 2 + 10.into()),
+        fixture
+            .state
+            .enforce_best_effort_message_limit(mean_message_size),
+    );
+
+    // Pop the remaining message.
+    assert!(fixture.pop_input().is_some());
+
+    // There should now be no more inbound or outbound messages left.
+    assert!(fixture.pop_input().is_none());
+    assert!(fixture.state.output_into_iter().next().is_none());
 }
 
 #[test]

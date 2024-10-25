@@ -668,6 +668,18 @@ impl ReplicatedState {
         canisters_memory_usage + subnet_memory_usage
     }
 
+    /// Computes the memory taken by best-effort response messages.
+    pub fn best_effort_message_memory_taken(&self) -> NumBytes {
+        let canisters_memory_usage: NumBytes = self
+            .canisters_iter()
+            .map(|canister| canister.system_state.best_effort_message_memory_usage())
+            .sum();
+        let subnet_memory_usage =
+            (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
+
+        canisters_memory_usage + subnet_memory_usage
+    }
+
     /// Returns the total memory taken by the ingress history in bytes.
     pub fn total_ingress_memory_taken(&self) -> NumBytes {
         self.metadata.ingress_history.memory_usage()
@@ -998,12 +1010,12 @@ impl ReplicatedState {
 
         // Shed messages from the canisters with the largest memory usage until we are
         // below the limit.
-        //
-        // The non-empty priority queue check is only here in case a canister somehow
-        // reports non-zero best-effort memory usage but then fails to shed a message.
         while memory_usage > limit && !priority_queue.is_empty() {
-            // Safe to unwrap, the priority queue cannot be empty.
-            let (memory_usage_before, canister_id) = priority_queue.pop_last().unwrap();
+            let Some((memory_usage_before, canister_id)) = priority_queue.pop_last() else {
+                // Safety net, in case a canister somehow reports non-zero best-effort memory
+                // usage but then fails to shed a message.
+                break;
+            };
 
             // Remove the canister, shed its largest message, replace it.
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
