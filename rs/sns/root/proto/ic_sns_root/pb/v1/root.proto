@@ -48,7 +48,7 @@ message SnsRootCanister {
   reserved "latest_ledger_archive_poll_timestamp_seconds";
   reserved 6;
 
-  // Information about the timers that perform periodic tasks of this Swap canister.
+  // Information about the timers that perform periodic tasks of this Root canister.
   optional ic_nervous_system.pb.v1.Timers timers = 10;
 }
 
