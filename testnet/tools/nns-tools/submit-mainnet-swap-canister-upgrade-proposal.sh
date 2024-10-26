@@ -30,6 +30,15 @@ submit_swap_upgrade_proposal_mainnet() {
     NEURON_ID=$2
 
     CANISTER_ID=$(proposal_header_field_value "$PROPOSAL_FILE" "Target canister:")
+    ROOT_CANISTER_ID=$(dfx \
+        --identity default \
+        canister --network ic \
+        call $CANISTER_ID get_init '(record {})' \
+            | idl2json \
+            | jq -r ".init[0].sns_root_canister_id"
+    )
+    SNS_PROJECT_NAME=$(curl -s "https://sns-api.internetcomputer.org/api/v1/snses/$ROOT_CANISTER_ID" | jq -r ".name")
+
     VERSION=$(proposal_header_field_value "$PROPOSAL_FILE" "Git Hash:")
     PROPOSAL_SHA=$(proposal_header_field_value "$PROPOSAL_FILE" "New Wasm Hash:")
 
@@ -46,9 +55,8 @@ submit_swap_upgrade_proposal_mainnet() {
     print_green "End Proposal Text"
     echo
     print_green "Summary of action:
-  You are proposing to update canister $CANISTER_ID (A Swap Canister for an SNS) to commit $VERSION.
-  Please verify additionally you are targeting the correct Canister ID for your intended SNS.
-  The WASM hash is $WASM_SHA.
+  You are proposing to update canister $CANISTER_ID (A Swap Canister for $SNS_PROJECT_NAME)
+  to commit $VERSION. The WASM hash is $WASM_SHA.
     "
 
     check_or_set_dfx_hsm_pin

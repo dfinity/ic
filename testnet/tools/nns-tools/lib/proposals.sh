@@ -8,8 +8,11 @@ generate_swap_canister_upgrade_proposal_text() {
     local CANISTER_ID=$3
     local OUTPUT_FILE=${4:-}
 
+    PROPOSER=$(git config user.email | sed 's/@/ at /')
+
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
+    SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
     CAPITALIZED_CANISTER_NAME="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
 
@@ -19,33 +22,67 @@ generate_swap_canister_upgrade_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION=$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")
 
+    ROOT_CANISTER_ID=$(dfx \
+        --identity default \
+        canister --network ic \
+        call ${CANISTER_ID} get_init '(record {})' \
+            | idl2json \
+            | jq -r ".init[0].sns_root_canister_id"
+    )
+    SNS_PROJECT_NAME=$(curl -s "https://sns-api.internetcomputer.org/api/v1/snses/$ROOT_CANISTER_ID" | jq -r ".name")
+
     OUTPUT=$(
-        cat <<EOF
-## Proposal to Upgrade the Swap Canister for TODO
-### Proposer: DFINITY Foundation
-### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
-### Target canister: $CANISTER_ID
----
-## Features
-TODO ADD FEATURE NOTES
-## Release Notes
+        cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+# Upgrade the $SNS_PROJECT_NAME $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
+
+__Proposer__: ${PROPOSER}
+
+__Source Code__: [$NEXT_COMMIT][new-commit]
+
+[new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
+
+## New Commits
+
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
-$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- "$CANISTER_CODE_LOCATION")
+$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
-## Wasm Verification
-Verify that the hash of the gzipped WASM matches the proposed hash.
-\`\`\`
-git fetch
-git checkout $NEXT_COMMIT
-./ci/container/build-ic.sh -c
-sha256sum ./artifacts/canisters/$(_canister_download_name_for_sns_canister_type swap).wasm.gz
-\`\`\`
+
 ## Current Version
+
 - Current Git Hash: $LAST_COMMIT
 - Current Wasm Hash: $LAST_WASM_HASH
-EOF
+
+## Verification
+
+See the general instructions on [how to verify] proposals like this. A "quick
+start" guide is provided here.
+
+[how to verify]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/rs/nervous_system/docs/proposal_verification.md
+
+### WASM Verification
+
+See ["Building the code"][prereqs] for prerequisites.
+
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
+
+\`\`\`
+# 1. Get a copy of the code.
+git clone git@github.com:dfinity/ic.git
+cd ic
+# Or, if you already have a copy of the ic repo,
+git fetch
+git checkout $NEXT_COMMIT
+
+# 2. Build canisters.
+./ci/container/build-ic.sh -c
+
+# 3. Fingerprint the result.
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
+\`\`\`
+
+This should match \`wasm_module_hash\` field of this proposal.
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
     )
 
     if [ -z "$OUTPUT_FILE" ]; then
@@ -90,7 +127,8 @@ generate_nns_upgrade_proposal_text() {
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Upgrade the $CAPITALIZED_CANISTER_NAME Canister to Commit $SHORT_NEXT_COMMIT
 
-__Proposer__: ${PROPOSER}\\
+__Proposer__: ${PROPOSER}
+
 __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
@@ -131,7 +169,7 @@ start" guide is provided here.
 
 See ["Building the code"][prereqs] for prerequisites.
 
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
 
 \`\`\`
 # 1. Get a copy of the code.
@@ -202,7 +240,8 @@ generate_sns_bless_wasm_proposal_text() {
         cat <<++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 # Publish SNS $CAPITALIZED_CANISTER_TYPE WASM Built at Commit $SHORT_NEXT_COMMIT
 
-__Proposer__: $PROPOSER\\
+__Proposer__: $PROPOSER
+
 __Source Code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
@@ -225,7 +264,7 @@ start" guide is provided here.
 
 See ["Building the code"][prereqs] for prerequisites.
 
-[prereqs]: https://github.com/dfinity/ic?tab=readme-ov-file#building-the-code
+[prereqs]: https://github.com/dfinity/ic/tree/${NEXT_COMMIT}/README.adoc#building-the-code
 
 \`\`\`
 # 1. Get a copy of the code.
