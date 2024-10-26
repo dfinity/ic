@@ -530,11 +530,11 @@ old_proposal_header_field_value() {
 # ```
 extract_first_markdown_link_display_name() {
     local STRING_POTENTIALLY_WITH_MARKDOWN_LINKS=$1
-    FIRST_MARKDOWN_LINK_DISPLAY_NAME=$(echo $STRING_POTENTIALLY_WITH_MARKDOWN_LINKS | sed -nre 's/\[([^]]+)\].*/\1/p')
+    FIRST_MARKDOWN_LINK_DISPLAY_NAME=$(printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS" | sed -nre 's/\[([^]]+)\].*/\1/p')
     if [ -z "$FIRST_MARKDOWN_LINK_DISPLAY_NAME" ]; then
-        echo "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS"
+        printf "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS"
     else
-        echo "$FIRST_MARKDOWN_LINK_DISPLAY_NAME"
+        printf "$FIRST_MARKDOWN_LINK_DISPLAY_NAME"
     fi
 }
 
