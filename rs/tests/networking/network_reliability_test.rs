@@ -46,7 +46,7 @@ use std::io::{self};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Seed for random generator
 const RND_SEED: u64 = 42;

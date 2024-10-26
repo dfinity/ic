@@ -53,7 +53,9 @@ pub fn config(env: TestEnv) {
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
+        .with_config_img(get_dependency_path(
+            "rs/tests/execution/btc_uvm_config_image.zst",
+        ))
         .start(&env)
         .expect("failed to setup universal VM");
 
