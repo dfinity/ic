@@ -38,7 +38,11 @@ generate_swap_canister_upgrade_proposal_text() {
 
 __Proposer__: ${PROPOSER}
 
-__Source Code__: [$NEXT_COMMIT][new-commit]
+__Source code__: [$NEXT_COMMIT][new-commit]
+
+__New wasm hash__: $WASM_SHA
+
+__Target canister__: [$CANISTER_ID](https://dashboard.internetcomputer.org/canister/$CANISTER_ID)
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
@@ -51,8 +55,9 @@ $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_
 
 ## Current Version
 
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
 
 ## Verification
 
@@ -130,7 +135,7 @@ generate_nns_upgrade_proposal_text() {
 
 __Proposer__: ${PROPOSER}
 
-__Source Code__: [$NEXT_COMMIT][new-commit]
+__Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
@@ -154,8 +159,9 @@ $CANDID_ARGS
 
 ## Current Version
 
-- Current Git Hash: $LAST_COMMIT
-- Current Wasm Hash: $LAST_WASM_HASH
+__Current git hash__: $LAST_COMMIT
+
+__Current wasm hash__: $LAST_WASM_HASH
 
 
 ## Verification
@@ -243,7 +249,7 @@ generate_sns_bless_wasm_proposal_text() {
 
 __Proposer__: $PROPOSER
 
-__Source Code__: [$NEXT_COMMIT][new-commit]
+__Source code__: [$NEXT_COMMIT][new-commit]
 
 [new-commit]: https://github.com/dfinity/ic/tree/$NEXT_COMMIT
 
@@ -499,12 +505,52 @@ extract_candid_upgrade_args() {
 # Extracts a proposal header field value if the field title is given.
 # Example:
 #   For file with line like: "### Some Field: foo"
-#   the value of foo can be extracted with "proposal_header_field_value <FILE> 'Some Field:'"
-# Usage: proposal_header_field_value <FILE> <FIELD_NAME>
-proposal_header_field_value() {
+#   the value of foo can be extracted with "old_proposal_header_field_value <FILE> 'Some Field:'"
+# Usage: old_proposal_header_field_value <FILE> <FIELD_NAME>
+#
+# Deprecated; please use `proposal_canister_id_value` instead.
+old_proposal_header_field_value() {
     local FILE=$1
     local FIELD=$2
     cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
+}
+
+# If the input starts with `[...`, tries to extract the markdown link's display name.
+# Otherwise, returns the full input string as-is.
+#
+# Example 1:
+# ```
+# extract_first_markdown_link_display_name "[abc](https://dashboard.internetcomputer.org/canister/abc)"
+# abc
+# ```
+#
+# Example 2:
+# extract_first_markdown_link_display_name "user at dfinity.org"
+# user at dfinity.org
+# ```
+extract_first_markdown_link_display_name() {
+    local STRING_POTENTIALLY_WITH_MARKDOWN_LINKS=$1
+    FIRST_MARKDOWN_LINK_DISPLAY_NAME=$(echo $STRING_POTENTIALLY_WITH_MARKDOWN_LINKS | sed -nre 's/\[([^]]+)\].*/\1/p')
+    if [ -z "$FIRST_MARKDOWN_LINK_DISPLAY_NAME" ]; then
+        echo "$STRING_POTENTIALLY_WITH_MARKDOWN_LINKS"
+    else
+        echo "$FIRST_MARKDOWN_LINK_DISPLAY_NAME"
+    fi
+}
+
+# Extracts a proposal header field value if the field title is given.
+# Example:
+#   For file with line like: "__Some Field__: foo"
+#   the value of foo can be extracted with "proposal_field_value <FILE> 'Some Field:'"
+# Usage: proposal_field_value <FILE> <FIELD_NAME>
+proposal_field_value() {
+    local FILE=$1
+    local FIELD=$2
+    VALUE=$(cat $FILE | grep "__${FIELD}__" | sed "s/.*__${FIELD}__:[[:space:]]*//")
+    if [ -z "$VALUE" ]; then
+        >&2 echo "WARNING: Cannot find field '$FIELD' in '$FILE'."
+    fi
+    extract_first_markdown_link_display_name "$VALUE"
 }
 
 nns_upgrade_proposal_canister_raw_name() {
