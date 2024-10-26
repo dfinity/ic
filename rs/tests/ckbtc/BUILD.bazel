@@ -56,9 +56,9 @@ rust_library(
 
 CKBTC_RUNTIME_DEPS = [
     # Keep sorted.
-    "//rs/bitcoin/kyt:btc_kyt_canister",
     "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "//rs/bitcoin/kyt:btc_kyt_canister",
     "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     "@btc_canister//file",
 ]
