@@ -13,6 +13,7 @@ generate_swap_canister_upgrade_proposal_text() {
     WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     SHORT_NEXT_COMMIT="${NEXT_COMMIT:0:7}"
+    CANISTER_NAME="swap"
     CAPITALIZED_CANISTER_NAME="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
 
