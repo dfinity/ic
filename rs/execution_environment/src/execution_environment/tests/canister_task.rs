@@ -822,7 +822,7 @@ fn global_timer_produces_transient_error_on_out_of_cycles() {
     assert_eq!(RejectCode::SysTransient, err.code().into());
 }
 
-fn get_wat_with_updade_and_hook_mem_grow(
+fn get_wat_with_update_and_hook_mem_grow(
     update_grow_mem_size: i32,
     hook_grow_mem_size: i32,
 ) -> String {
@@ -858,7 +858,7 @@ fn on_low_wasm_memory_is_executed() {
     let update_grow_mem_size = 7;
     let hook_grow_mem_size = 5;
 
-    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+    let wat = get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
 
     let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
@@ -907,7 +907,7 @@ fn on_low_wasm_memory_is_executed_before_message() {
     let update_grow_mem_size = 7;
     let hook_grow_mem_size = 5;
 
-    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+    let wat = get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
 
     let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
@@ -964,7 +964,7 @@ fn on_low_wasm_memory_is_executed_once() {
     let update_grow_mem_size = 7;
     let hook_grow_mem_size = 2;
 
-    let wat = get_wat_with_updade_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
+    let wat = get_wat_with_update_and_hook_mem_grow(update_grow_mem_size, hook_grow_mem_size);
 
     let canister_id = test.canister_from_wat(wat.as_str()).unwrap();
 
