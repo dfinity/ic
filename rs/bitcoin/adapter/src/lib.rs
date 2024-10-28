@@ -7,17 +7,12 @@
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use std::time::Duration;
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
     time::Instant,
 };
-use tokio::{
-    select,
-    sync::{mpsc::channel, watch},
-    time::sleep,
-};
+use tokio::sync::{mpsc::channel, watch};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -176,24 +171,6 @@ impl AdapterState {
             },
             tx,
         )
-    }
-
-    /// A future that returns when/if the adapter becomes/is idle.
-    pub async fn idle(&mut self) {
-        let mut last_time = self
-            .last_received_rx
-            .borrow_and_update()
-            .unwrap_or_else(Instant::now);
-
-        loop {
-            let seconds_left_until_idle = self.idle_seconds - last_time.elapsed().as_secs();
-            select! {
-                _ = sleep(Duration::from_secs(seconds_left_until_idle)) => {return},
-                Ok(_) = self.last_received_rx.changed() => {
-                    last_time = self.last_received_rx.borrow_and_update().unwrap_or_else(Instant::now);
-                }
-            }
-        }
     }
 
     /// A future that returns when/if the adapter becomes/is awake.
