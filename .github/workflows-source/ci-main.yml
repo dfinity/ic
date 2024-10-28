@@ -176,6 +176,7 @@ jobs:
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
         with:
+          RUN_ON_DIFF_ONLY: false
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
           BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
