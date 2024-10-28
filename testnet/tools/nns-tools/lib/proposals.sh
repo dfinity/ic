@@ -2,7 +2,7 @@
 
 #### Proposal generators
 
-generate_sale_canister_upgrade_proposal_text() {
+generate_swap_canister_upgrade_proposal_text() {
     local LAST_COMMIT=$1
     local NEXT_COMMIT=$2
     local CANISTER_ID=$3
@@ -21,7 +21,7 @@ generate_sale_canister_upgrade_proposal_text() {
 
     OUTPUT=$(
         cat <<EOF
-## Proposal to Upgrade the Sale Canister for TODO
+## Proposal to Upgrade the Swap Canister for TODO
 ### Proposer: DFINITY Foundation
 ### Git Hash: $NEXT_COMMIT
 ### New Wasm Hash: $WASM_SHA
