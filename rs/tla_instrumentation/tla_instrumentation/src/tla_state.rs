@@ -48,11 +48,17 @@ impl VarAssignment {
 Possible causes:
 1. A local variable is set both after the last await and in default_locals.
    This is the most likely cause if the stack trace includes tla_log_method_return.
-2. A local variable of the same name is set in multiple functions in the call stack."#,
+2. A local variable of the same name is set in multiple functions in the call stack.
+States are:
+{:?}
+and
+{:?}"#,
             self.0
                 .keys()
                 .collect::<BTreeSet<_>>()
-                .intersection(&other.0.keys().collect::<BTreeSet<_>>())
+                .intersection(&other.0.keys().collect::<BTreeSet<_>>()),
+            self,
+            other
         );
         let mut new_locals = self.0.clone();
         new_locals.extend(other.0);

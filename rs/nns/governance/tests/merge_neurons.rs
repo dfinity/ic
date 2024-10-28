@@ -20,6 +20,11 @@ use ic_nns_governance::{
 };
 use proptest::prelude::{proptest, TestCaseError};
 
+#[cfg(feature = "tla")]
+use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::with_tla_trace_check;
+
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379
 pub mod fixtures;
@@ -166,6 +171,7 @@ fn do_test_merge_neurons(
 proptest! {
 
 #[test]
+#[cfg_attr(feature = "tla", with_tla_trace_check)]
 fn test_merge_neurons_small(
     n1_stake in 0u64..50_000,
     n1_maturity in 0u64..500_000_000,

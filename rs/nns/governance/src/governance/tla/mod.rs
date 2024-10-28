@@ -23,10 +23,13 @@ pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
 use common::{function_domain_union, governance_account_id};
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
-mod split_neuron;
-pub use split_neuron::split_neuron_desc;
 mod claim_neuron;
+mod merge_neurons;
+mod split_neuron;
+
 pub use claim_neuron::claim_neuron_desc;
+pub use merge_neurons::merge_neurons_desc;
+pub use split_neuron::split_neuron_desc;
 
 fn neuron_global(gov: &Governance) -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
@@ -103,7 +106,7 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
     state
 }
 
-fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
+fn  extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
     vec![
         (
             format!("{}_Process_Ids", pid),
