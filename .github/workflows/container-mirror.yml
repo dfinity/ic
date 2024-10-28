@@ -1,0 +1,57 @@
+name: Container Image Mirroring
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/container-mirror.yml'
+      - '.github/container-mirror/images.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+  packages: write
+  contents: write
+
+jobs:
+  mirror:
+    name: Mirror Images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.get-images.outputs.matrix) }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read Container Images
+        id: get-images
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+            const fileContents = fs.readFileSync('.github/container-mirror/images.yml', 'utf8');
+            const imagesData = yaml.load(fileContents);
+
+            // Create a matrix array combining images, repos, and sha256 values
+            const matrix = imagesData.images.map(imageInfo => ({
+              image: imageInfo.image,
+              repo: imageInfo.repo,
+              sha256: imageInfo.sha256
+            }));
+
+            return JSON.stringify(matrix);
+        result-encoding: string
+
+      - name: Sync Containers
+        run: |
+          echo "Processing image ${{ matrix.image }} from repository ${{ matrix.repo }} with SHA256 ${{ matrix.sha256 }}"
+
