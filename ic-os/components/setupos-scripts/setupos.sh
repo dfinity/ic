@@ -40,8 +40,8 @@ main() {
     start_setupos
     /opt/ic/bin/check-setupos-age.sh
     /opt/ic/bin/check-config.sh
-    #/opt/ic/bin/check-hardware.sh
-    #/opt/ic/bin/check-network.sh
+    /opt/ic/bin/check-hardware.sh
+    /opt/ic/bin/check-network.sh
     /opt/ic/bin/setup-disk.sh
     /opt/ic/bin/install-hostos.sh
     /opt/ic/bin/install-guestos.sh
