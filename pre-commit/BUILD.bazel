@@ -216,3 +216,25 @@ sh_binary(
     ],
     visibility = ["//visibility:public"],
 )
+
+sh_test(
+    name = "buf-breaking",
+    size = "small",
+    srcs = ["check-incompatibilities.sh"],
+    data = [
+        "//:WORKSPACE.bazel",
+        "//:buf.yaml",
+        "@buf",
+    ],
+    env = {
+        # Hack to escape the sandbox and grep on the actual repository
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_config": "$(rootpath //:buf.yaml)",
+    },
+    tags = [
+        "external",  # force test to be unconditionally executed.
+        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
+        "smoke",  # it should be run before committing code changes into the version control system.
+    ],
+)
