@@ -192,10 +192,6 @@ name = "ic-systest-rosetta-neuron-hotkey-test"
 path = "financial_integrations/rosetta/rosetta_neuron_hotkey_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-neuron-info-test"
-path = "financial_integrations/rosetta/rosetta_neuron_info_test.rs"
-
-[[bin]]
 name = "ic-systest-rosetta-neuron-maturity-test"
 path = "financial_integrations/rosetta/rosetta_neuron_maturity_test.rs"
 

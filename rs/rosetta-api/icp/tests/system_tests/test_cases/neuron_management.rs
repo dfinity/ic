@@ -14,11 +14,9 @@ use ic_icp_rosetta_client::{
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::KnownNeuronData;
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
-use ic_rosetta_api::ledger_client::OperationOutput::NeuronResponse;
-use ic_rosetta_api::{
-    models::AccountBalanceRequest,
-    request::transaction_operation_results::TransactionOperationResults,
-};
+use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
+use ic_rosetta_api::models::AccountBalanceRequest;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use lazy_static::lazy_static;
@@ -761,11 +759,7 @@ fn test_get_neuron_info() {
 
         // See if the neuron was created successfully
         let agent = get_test_agent(env.pocket_ic.url().unwrap().port().unwrap()).await;
-        let mut neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
-        use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
-        use ic_rosetta_api::ledger_client::OperationOutput;
-        use ic_rosetta_api::models::NeuronInfoResponse;
-        use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
+        let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
 
         let neuron_info = NeuronResponse::try_from(
             TransactionOperationResults::try_from(

@@ -380,7 +380,7 @@ impl RosettaClient {
             coin_change: None,
             metadata: Some(
                 NeuronInfoMetadata {
-                    neuron_index: neuron_index,
+                    neuron_index,
                     controller: match (public_key, principal_id) {
                         (Some(public_key), None) => {
                             Some(PublicKeyOrPrincipal::PublicKey(public_key))
