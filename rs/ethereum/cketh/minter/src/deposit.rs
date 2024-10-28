@@ -35,28 +35,6 @@ pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
 pub(crate) const RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC: [u8; 32] =
     hex!("aef895090c2f5d6e81a70bef80dce496a0558487845aada57822159d5efae5cf");
 
-pub enum EthEvent {
-    ReceivedEthWithoutSubaccount,
-    ReceivedErc20WithoutSubaccount,
-    ReceivedEthWithSubaccount,
-    ReceivedErc20WithSubaccount,
-}
-
-impl EthEvent {
-    pub fn event_signature(&self) -> FixedSizeData {
-        match self {
-            EthEvent::ReceivedEthWithoutSubaccount => FixedSizeData(RECEIVED_ETH_EVENT_TOPIC),
-            EthEvent::ReceivedErc20WithoutSubaccount => FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC),
-            EthEvent::ReceivedEthWithSubaccount => {
-                FixedSizeData(RECEIVED_ETH_EVENT_WITH_SUBACCOUNT_TOPIC)
-            }
-            EthEvent::ReceivedErc20WithSubaccount => {
-                FixedSizeData(RECEIVED_ERC20_EVENT_WITH_SUBACCOUNT_TOPIC)
-            }
-        }
-    }
-}
-
 pub trait LogScraper {
     fn check_active(state: &State) -> Option<ActiveLogScrapingState>;
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
