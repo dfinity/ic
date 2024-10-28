@@ -377,7 +377,7 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        // `messages_end` may not exceed a certain `max_slice_end` in order to cap the number of
+        // `messages_end` may not exceed a certain `max_messages_end` in order to cap the number of
         // signals in the reverse stream. Calculate the maximum number of messages we can include
         // in the slice such that this is respected.
         let max_message_limit = {
@@ -389,6 +389,7 @@ impl Payload {
         let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
             message_limit.min(max_message_limit)
         });
+        //let message_limit = message_limit.unwrap_or(usize::MAX);
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
