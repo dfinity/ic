@@ -608,7 +608,7 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
         },
     ));
 
-    let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
+    let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Os { code: 111, kind: ConnectionRefused, message: \"Connection refused\" }))";
     let err_response = response.clone().unwrap_err();
     assert_matches!(err_response.0, RejectionCode::SysTransient);
 
