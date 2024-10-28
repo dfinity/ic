@@ -298,6 +298,8 @@ fn apply_filter(
                 initial_config.update_message_execution_fee;
             filtered_config.ten_update_instructions_execution_fee =
                 initial_config.ten_update_instructions_execution_fee;
+            filtered_config.ten_update_instructions_execution_fee_wasm64 =
+                initial_config.ten_update_instructions_execution_fee_wasm64;
             filtered_config
         }
         KeepFeesFilter::IngressInduction => {
@@ -734,7 +736,7 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             // verified subnet is using.
             update_message_execution_fee: Cycles::new(590_000),
             ten_update_instructions_execution_fee: Cycles::new(4),
-            ten_update_instructions_execution_fee_wasm64: Cycles::new(8),
+            ten_update_instructions_execution_fee_wasm64: Cycles::new(4),
             xnet_call_fee: Cycles::new(260_000),
             xnet_byte_transmission_fee: Cycles::new(1_000),
             ingress_message_reception_fee: Cycles::new(1_200_000),
