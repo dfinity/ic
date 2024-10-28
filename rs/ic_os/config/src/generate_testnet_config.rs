@@ -28,7 +28,7 @@ pub struct GenerateTestnetConfigArgs {
     pub nns_public_key_exists: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
     pub node_operator_private_key_exists: Option<bool>,
-    pub ssh_authorized_keys_path: Option<PathBuf>,
+    pub use_ssh_authorized_keys: Option<bool>,
 
     // GuestOSSettings arguments
     pub inject_ic_crypto: Option<bool>,
@@ -70,7 +70,7 @@ pub fn generate_testnet_config(
         nns_public_key_exists,
         nns_urls,
         node_operator_private_key_exists,
-        ssh_authorized_keys_path,
+        use_ssh_authorized_keys,
         inject_ic_crypto,
         inject_ic_state,
         inject_ic_registry_local_store,
@@ -182,6 +182,8 @@ pub fn generate_testnet_config(
 
     let node_operator_private_key_exists = node_operator_private_key_exists.unwrap_or(false);
 
+    let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
+
     let icos_settings = ICOSSettings {
         mgmt_mac,
         deployment_environment,
@@ -189,7 +191,7 @@ pub fn generate_testnet_config(
         nns_public_key_exists,
         nns_urls,
         node_operator_private_key_exists,
-        ssh_authorized_keys_path,
+        use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
     };
 

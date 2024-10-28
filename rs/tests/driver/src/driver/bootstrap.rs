@@ -431,7 +431,7 @@ fn create_config_disk_image(
         nns_public_key_exists: Some(true),
         nns_urls: None,
         node_operator_private_key_exists: Some(true),
-        ssh_authorized_keys_path: Some("/boot/config/accounts_ssh_authorized_keys".into()),
+        use_ssh_authorized_keys: Some(true),
         inject_ic_crypto: Some(false),
         inject_ic_state: Some(false),
         inject_ic_registry_local_store: Some(false),

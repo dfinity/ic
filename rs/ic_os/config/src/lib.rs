@@ -77,7 +77,7 @@ mod tests {
             nns_public_key_exists: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
             node_operator_private_key_exists: true,
-            ssh_authorized_keys_path: None,
+            use_ssh_authorized_keys: false,
             icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;

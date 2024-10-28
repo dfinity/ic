@@ -22,16 +22,16 @@ function mount_config_partition() {
 
 function copy_config_files() {
     echo "* Copying SSH authorized keys..."
-    ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
-    if [ -n "${ssh_authorized_keys}" ] && [ "${ssh_authorized_keys}" != "null" ]; then
+    use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
+    if [[ "${ssh_authorized_keys,,}" == "true" ]]; then
         if [ -d "${ssh_authorized_keys}" ]; then
             cp -a "${ssh_authorized_keys}" /media/
             log_and_halt_installation_on_error "${?}" "Unable to copy SSH authorized keys to hostOS config partition."
         else
-            log_and_halt_installation_on_error "1" "Directory '${ssh_authorized_keys}' does not exist."
+            echo >&2 "Warning: SSH authorized keys are not configured."
         fi
     else
-        echo >&2 "Warning: SSH authorized keys path is not configured."
+        echo >&2 "SSH keys not in use."
     fi
 
     echo "* Copying node operator private key..."

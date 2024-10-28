@@ -61,7 +61,7 @@ function read_config_variables() {
     node_operator_private_key_exists=$(get_config_value '.icos_settings.node_operator_private_key_exists')
     vm_memory=$(get_config_value '.hostos_settings.vm_memory')
     vm_cpu=$(get_config_value '.hostos_settings.vm_cpu')
-    ssh_authorized_keys=$(get_config_value '.icos_settings.ssh_authorized_keys_path')
+    use_ssh_authorized_keys=$(get_config_value '.icos_settings.use_ssh_authorized_keys')
 }
 
 function assemble_config_media() {
@@ -76,7 +76,9 @@ function assemble_config_media() {
     if [ -f "$node_operator_private_key_exists" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi
-    cmd+=(--accounts_ssh_authorized_keys "$ssh_authorized_keys")
+    if [[ "${ssh_authorized_keys,,}" == "true" ]]; then
+        cmd+=(--accounts_ssh_authorized_keys "/boot/config/ssh_authorized_keys")
+    fi
 
     # Run the above command
     "${cmd[@]}"

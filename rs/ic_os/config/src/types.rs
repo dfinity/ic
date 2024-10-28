@@ -2,7 +2,6 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use mac_address::mac_address::FormattedMacAddress;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::PathBuf;
 use url::Url;
 
 /// SetupOS configuration. User-facing configuration files
@@ -96,13 +95,14 @@ pub struct ICOSSettings {
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
     pub node_operator_private_key_exists: bool,
-    /// This directory contains individual files named `admin`, `backup`, `readonly`.
+    /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
     /// is transferred to `~admin/.ssh/authorized_keys` on the target system.
     /// backup and readonly can only be modified via an NNS proposal
     /// and are in place for subnet recovery or issue debugging purposes.
-    pub ssh_authorized_keys_path: Option<PathBuf>,
+    /// use_ssh_authorized_keys triggers the use of the ssh keys directory
+    pub use_ssh_authorized_keys: bool,
     pub icos_dev_settings: ICOSDevSettings,
 }
 

@@ -24,8 +24,8 @@ pub enum Commands {
         #[arg(long, default_value_t = true)]
         nns_public_key_exists: bool,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH, value_name = "ssh_authorized_keys")]
-        ssh_authorized_keys_path: PathBuf,
+        #[arg(long, default_value_t = false)]
+        use_ssh_authorized_keys: bool,
 
         #[arg(long, default_value_t = true)]
         node_operator_private_key_exists: bool,
@@ -99,7 +99,7 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub node_operator_private_key_exists: Option<bool>,
     #[arg(long)]
-    pub ssh_authorized_keys_path: Option<PathBuf>,
+    pub use_ssh_authorized_keys: Option<bool>,
 
     // GuestOSSettings arguments
     #[arg(long)]
@@ -140,7 +140,7 @@ pub fn main() -> Result<()> {
             config_ini_path,
             deployment_json_path,
             nns_public_key_exists,
-            ssh_authorized_keys_path,
+            use_ssh_authorized_keys,
             node_operator_private_key_exists,
             setupos_config_json_path,
         }) => {
@@ -211,9 +211,7 @@ pub fn main() -> Result<()> {
                 nns_public_key_exists,
                 nns_urls: deployment_json_settings.nns.url.clone(),
                 node_operator_private_key_exists,
-                ssh_authorized_keys_path: ssh_authorized_keys_path
-                    .exists()
-                    .then_some(ssh_authorized_keys_path),
+                use_ssh_authorized_keys,
                 icos_dev_settings: ICOSDevSettings::default(),
             };
 
@@ -259,16 +257,9 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 serde_json::from_reader(File::open(setupos_config_json_path)?)?;
 
-            // update select file paths for HostOS
-            let mut hostos_icos_settings = setupos_config.icos_settings;
-            let hostos_config_path = Path::new("/boot/config");
-            if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
-                *path = hostos_config_path.join("ssh_authorized_keys");
-            }
-
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
-                icos_settings: hostos_icos_settings,
+                icos_settings: setupos_config.icos_settings,
                 hostos_settings: setupos_config.hostos_settings,
                 guestos_settings: setupos_config.guestos_settings,
             };
@@ -293,13 +284,6 @@ pub fn main() -> Result<()> {
             let hostos_config: HostOSConfig =
                 serde_json::from_reader(File::open(hostos_config_json_path)?)?;
 
-            // update select file paths for GuestOS
-            let mut guestos_icos_settings = hostos_config.icos_settings;
-            let guestos_config_path = Path::new("/boot/config");
-            if let Some(ref mut path) = guestos_icos_settings.ssh_authorized_keys_path {
-                *path = guestos_config_path.join("accounts_ssh_authorized_keys");
-            }
-
             // TODO: We won't have to modify networking between the hostos and
             // guestos config after completing the networking revamp (NODE-1327)
             let mut guestos_network_settings = hostos_config.network_settings;
@@ -320,7 +304,7 @@ pub fn main() -> Result<()> {
 
             let guestos_config = GuestOSConfig {
                 network_settings: guestos_network_settings,
-                icos_settings: guestos_icos_settings,
+                icos_settings: hostos_config.icos_settings,
                 guestos_settings: hostos_config.guestos_settings,
             };
 
@@ -354,7 +338,7 @@ pub fn main() -> Result<()> {
                 nns_public_key_exists: clap_args.nns_public_key_exists,
                 nns_urls: clap_args.nns_urls,
                 node_operator_private_key_exists: clap_args.node_operator_private_key_exists,
-                ssh_authorized_keys_path: clap_args.ssh_authorized_keys_path,
+                use_ssh_authorized_keys: clap_args.use_ssh_authorized_keys,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,
                 inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
