@@ -307,7 +307,7 @@ impl<'a> PoolReader<'a> {
         self.cache.catch_up_package()
     }
 
-    /// Get the DKG summary block with greatest height.
+    /// Get the finalized DKG summary block with greatest height.
     pub fn get_highest_summary_block(&self) -> Block {
         self.cache.summary_block()
     }

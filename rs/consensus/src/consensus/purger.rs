@@ -324,8 +324,10 @@ impl Purger {
             .certified_height
             .min(self.state_manager.latest_state_height());
 
+        let pending_cup_heights = get_pending_cup_heights(pool);
+
         self.state_manager
-            .remove_inmemory_states_below(height, &BTreeSet::new());
+            .remove_inmemory_states_below(height, &pending_cup_heights);
         trace!(
             self.log,
             "Purge replicated states below [memory] {:?}",
@@ -453,6 +455,22 @@ fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
                 None
             }
         })
+}
+
+fn get_pending_cup_heights(pool: &PoolReader<'_>) -> BTreeSet<Height> {
+    let mut pending_cup_heights = BTreeSet::new();
+    let current_cup_height = pool.get_catch_up_height();
+    let mut summary_height = pool.get_highest_summary_block().height();
+    while summary_height > current_cup_height {
+        pending_cup_heights.insert(summary_height);
+
+        let Some(parent) = pool.get_finalized_block(summary_height.decrement()) else {
+            break;
+        };
+
+        summary_height = parent.payload.as_ref().dkg_interval_start_height();
+    }
+    pending_cup_heights
 }
 
 #[cfg(test)]
