@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{get_signal_limit, ExpectedIndices};
+use crate::{max_messages_end, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -377,7 +377,18 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        let message_limit = message_limit.unwrap_or(usize::MAX);
+        // `messages_end` may not exceed a certain `max_slice_end` in order to cap the number of
+        // signals in the reverse stream. Calculate the maximum number of messages we can include
+        // in the slice such that this is respected.
+        let max_message_limit = {
+            let messages_begin =
+                self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
+            let max_messages_end = max_messages_end(self.header.begin()).get() as usize;
+            max_messages_end.saturating_sub(messages_begin)
+        };
+        let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
+            message_limit.min(max_message_limit)
+        });
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
@@ -1158,17 +1169,6 @@ impl CertifiedSlicePool {
             Some(entry) => entry,
             None => return Ok(None),
         };
-
-        let signal_limit = get_signal_limit(
-            slice.payload.header.begin(),
-            slice
-                .payload
-                .messages
-                .as_ref()
-                .map(|messages| messages.begin()),
-        );
-        let msg_limit =
-            Some(msg_limit.map_or(signal_limit, |msg_limit| msg_limit.min(signal_limit)));
 
         // GC first if explicit begin indices were provided.
         let original_message_count = slice.payload.len();
