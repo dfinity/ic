@@ -53,13 +53,8 @@ fn subnet_config(
     )
 }
 
-fn setup_and_run_ic_ref_test(
-    test_nns: bool,
-    excluded_tests: Vec<&str>,
-    _included_tests: Vec<&str>,
-) {
-    // generate root TLS certificate (only used if `https` is set to `true`,
-    // but defining it here unconditionally simplifies the test)
+fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
+    // generate root TLS certificate
     let root_key_pair = KeyPair::generate().unwrap();
     let root_cert = CertificateParams::new(vec!["localhost".to_string()])
         .unwrap()
@@ -184,16 +179,16 @@ fn setup_and_run_ic_ref_test(
         test_subnet_config,
         peer_subnet_config,
         excluded_tests,
-        vec!["$0 ~ /canister http/"],
+        included_tests,
         64,
     );
 }
-/*
+
 #[test]
 fn ic_ref_test_nns() {
     setup_and_run_ic_ref_test(true, EXCLUDED.to_vec(), vec![])
 }
-*/
+
 #[test]
 fn ic_ref_test_app() {
     setup_and_run_ic_ref_test(false, EXCLUDED.to_vec(), vec![])
