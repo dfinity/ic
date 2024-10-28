@@ -49,6 +49,10 @@ pub fn start_main_event_loop(
 
     tokio::task::spawn(async move {
         let mut tick_interval = interval(Duration::from_millis(100));
+        if adapter_state.is_idle() {
+            connection_manager.make_idle();
+            blockchain_manager.make_idle();
+        }
         loop {
             adapter_state.active().await;
 
