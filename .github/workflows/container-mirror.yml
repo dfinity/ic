@@ -17,16 +17,9 @@ permissions:
   contents: write
 
 jobs:
-  mirror:
-    name: Mirror Images
+  get-images:
+    name: Get Image List
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.get-images.outputs.matrix) }}
-    permissions:
-      contents: read
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -50,6 +43,18 @@ jobs:
 
             // Return the matrix as a JSON string
             core.setOutput('matrix', JSON.stringify(matrix));
+
+  mirror:
+    name: Mirror Images
+    runs-on: ubuntu-latest
+    needs: get-images
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.get-images.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Sync Containers
         run: |
