@@ -59,7 +59,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -113,7 +113,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -150,7 +150,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
     );
 
     let caller = None;
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -201,7 +201,7 @@ fn correct_charging_source_canister_for_a_request() {
         .receiver(canister_test_id(1))
         .build();
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
@@ -348,7 +348,7 @@ fn is_controller_test() {
     system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
 
     let caller = None;
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
@@ -429,7 +429,7 @@ fn test_inter_canister_call(
         NumSeconds::from(100_000),
     );
 
-    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
         &system_state,
         cycles_account_manager,
         topo,

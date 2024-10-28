@@ -649,6 +649,30 @@ impl SandboxSafeSystemState {
         }
     }
 
+    pub fn new_for_testing(
+        system_state: &SystemState,
+        cycles_account_manager: CyclesAccountManager,
+        network_topology: &NetworkTopology,
+        dirty_page_overhead: NumInstructions,
+        compute_allocation: ComputeAllocation,
+        request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        call_context_id: Option<CallContextId>,
+    ) -> Self {
+        Self::new(
+            system_state,
+            cycles_account_manager,
+            network_topology,
+            dirty_page_overhead,
+            compute_allocation,
+            request_metadata,
+            caller,
+            call_context_id,
+            // We can assume a Wasm32 environment in tests for now.
+            false,
+        )
+    }
+
     pub fn new(
         system_state: &SystemState,
         cycles_account_manager: CyclesAccountManager,
@@ -1444,6 +1468,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         );
         sandbox_state.msg_deadline()
     }
@@ -1491,6 +1517,8 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            // Wasm32 execution environment. Sufficient in testing.
+            false,
         )
     }
 
