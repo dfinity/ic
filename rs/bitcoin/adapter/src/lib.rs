@@ -208,6 +208,15 @@ impl AdapterState {
             })
             .await;
     }
+
+    /// Returns whether the adapter is idle.
+    pub fn is_idle(&self) -> bool {
+        match *self.last_received_rx.borrow() {
+            Some(last) => last.elapsed().as_secs() >= self.idle_seconds,
+            // Nothing received yet still in idle from startup.
+            None => true,
+        }
+    }
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.

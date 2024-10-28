@@ -740,7 +740,7 @@ impl GovernanceCanisterFixture {
         }
     }
 
-    pub fn get_sale_canister_id(&self) -> PrincipalId {
+    pub fn get_swap_canister_id(&self) -> PrincipalId {
         self.governance
             .proto
             .swap_canister_id

@@ -62,6 +62,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 "opt-level=3",
             ],
         )],
+        "rustix": [crate.annotation(
+            # Patch for determinism issues
+            # https://github.com/bytecodealliance/rustix/issues/1199
+            patch_args = ["-p1"],
+            patches = ["@rustix-patch//file:downloaded"],
+        )],
         "secp256k1-sys": [crate.annotation(
             # This specific version is used by ic-btc-kyt canister, which
             # requires an extra cfg flag to avoid linking issues.
@@ -1382,7 +1388,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.217.0",
             ),
             "wasmtime": crate.spec(
-                version = "^25.0.0",
+                version = "=25.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
