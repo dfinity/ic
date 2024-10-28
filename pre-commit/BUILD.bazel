@@ -231,6 +231,8 @@ sh_test(
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "buf_config": "$(rootpath //:buf.yaml)",
         "buf_path": "$(rootpath @buf//:buf)",
+        "MERGE_BASE_SHA": "$(MERGE_BASE_SHA)",
+        "CI_OVERRIDE_BUF_BREAKING": "$(CI_OVERRIDE_BUF_BREAKING)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
