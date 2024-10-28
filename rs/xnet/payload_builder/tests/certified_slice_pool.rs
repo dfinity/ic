@@ -239,18 +239,7 @@ proptest! {
             }
         });
     }
-/*
-    #[test]
-    fn slice_take_prefix_respects_signals_limit(
-        (stream, from, msg_count) in arb_stream(
-            MAX_STREAM_MESSAGES,
-            2 * MAX_STREAM_MESSAGES,
-            0,
-            100
-        )
-    ) {
-    }
-*/
+
     #[test]
     fn invalid_slice((stream, from, msg_count) in arb_stream_slice(1, 10, 0, 10)) {
         // Returns the provided slice, adjusted by the provided function.
@@ -1129,6 +1118,45 @@ proptest! {
                 0,
                 fixture.fetch_pool_size_bytes()
             );
+        });
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(10))]
+    #[test]
+    fn pool_take_slice_respects_signal_limit(
+        (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES, 2 * MAX_STREAM_MESSAGES, 0, 0),
+    ) {
+        with_test_replica_logger(|log| {
+            // Stream position matching slice begin.
+            let begin = ExpectedIndices{
+                message_index: from,
+                signal_index: stream.signals_end(),
+            };
+
+            let fixture = StateManagerFixture::new(log.clone()).with_stream(SRC_SUBNET, stream);
+            let slice = fixture.get_slice(SRC_SUBNET, from, msg_count);
+
+            let mut certified_stream_store = MockCertifiedStreamStore::new();
+            // Actual return value does not matter as long as it's `Ok(_)`.
+            certified_stream_store
+                .expect_decode_certified_stream_slice()
+                .returning(|_, _, _| Ok(StreamSliceBuilder::new().build()));
+            let certified_stream_store = Arc::new(certified_stream_store) as Arc<_>;
+            let mut pool = CertifiedSlicePool::new(Arc::clone(&certified_stream_store), &fixture.metrics);
+
+            pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone()).unwrap();
+            let (certified_slice, _) = pool.take_slice(SRC_SUBNET, Some(&begin), None, None).unwrap().unwrap();
+
+            let decoded_slice = certified_stream_store
+                .decode_certified_stream_slice(SRC_SUBNET, REGISTRY_VERSION, &certified_slice)
+                .unwrap();
+
+            if let Some(messages_end) = decoded_slice.messages().map(|messages| messages.end()) {
+                let max_messages_end = decoded_slice.header().begin() + (MAX_STREAM_MESSAGES as u64).into();
+                assert!(messages_end <= max_messages_end);
+            }
         });
     }
 }
