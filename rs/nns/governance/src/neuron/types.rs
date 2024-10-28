@@ -23,7 +23,7 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
-/// Value: one second after midnight, 2024-11-05.
+/// Value: one second after midnight, 2024-11-05 (UTC).
 ///
 /// How this value was chosen: This is the earliest that "refreshing" the follow
 /// configuration of a neuron can be released.
