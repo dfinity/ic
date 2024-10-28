@@ -285,7 +285,7 @@ pub async fn update_balance(
 
 async fn kyt_check_utxo(utxo: &Utxo) -> Result<UtxoCheckStatus, UpdateBalanceError> {
     let new_kyt_principal = read_state(|s| {
-        s.kyt_principal
+        s.new_kyt_principal
             .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
             .get()
             .into()
