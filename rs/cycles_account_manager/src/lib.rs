@@ -192,12 +192,6 @@ impl CyclesAccountManager {
         }
     }
 
-    /// Charges instructions according to the Wasm64 fees.
-    pub fn switch_to_wasm64_mode(&mut self) {
-        self.config.ten_update_instructions_execution_fee =
-            self.config.ten_update_instructions_execution_fee_wasm64;
-    }
-
     /// Returns the subnet type of this [`CyclesAccountManager`].
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type

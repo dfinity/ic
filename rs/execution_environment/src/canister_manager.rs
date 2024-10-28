@@ -932,7 +932,7 @@ impl CanisterManager {
                 // At this point, we don't really know if what we are about to install is a
                 // wasm32 or wasm64 module. We will assume it is wasm64 and adjust the
                 // cycles later if it turns out to be wasm32.
-                let is_wasm64_execution = false;
+                let is_wasm64_execution = true;
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
