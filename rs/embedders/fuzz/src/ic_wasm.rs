@@ -284,6 +284,7 @@ fn export_name(
         "canister_post_upgrade".to_string(),
         "canister_heartbeat".to_string(),
         "canister_global_timer".to_string(),
+        "canister_on_low_wasm_memory".to_string(),
     ];
 
     let export_func_prefix: Vec<String> = vec![

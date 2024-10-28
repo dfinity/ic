@@ -2998,17 +2998,14 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
 
-        match &args.replace_snapshot {
-            Some(replace_snapshot) => {
-                // Verify that snapshot ID has the correct format.
-                if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
-                    return Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Payload deserialization error: {err:?}"),
-                    ));
-                }
+        if let Some(replace_snapshot) = &args.replace_snapshot {
+            // Verify that snapshot ID has the correct format.
+            if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
+                return Err(UserError::new(
+                    ErrorCode::InvalidManagementPayload,
+                    format!("Payload deserialization error: {err:?}"),
+                ));
             }
-            None => {}
         }
         Ok(args)
     }

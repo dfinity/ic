@@ -4,7 +4,7 @@ mod get_master_public_key_from_transcript {
     use crate::sign::tests::REG_V1;
     use assert_matches::assert_matches;
     use ic_base_types::SubnetId;
-    use ic_crypto_internal_threshold_sig_ecdsa::IDkgTranscriptInternal;
+    use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
     use ic_crypto_test_utils::set_of;
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
@@ -100,7 +100,7 @@ mod get_master_public_key_from_transcript {
     }
 
     /// Retrieved from a successful execution of
-    /// `ic_crypto_internal_threshold_sig_ecdsa::transcript::new`.
+    /// `ic_crypto_internal_threshold_sig_canister_threshold_sig::transcript::new`.
     const VALID_SECP256K1_INTERNAL_TRANSCRIPT_RAW: &str =
         "a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f\
         6ea168506564657273656ea166706f696e7473825822010252a937b4c129d822412\

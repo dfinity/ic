@@ -11,6 +11,7 @@ on:
       - release-*
     workflows:
       - Schedule Daily
+      - Schedule Hourly
       - Schedule RC
       - Schedule Rust Benchmarks
       - Schedule Weekly

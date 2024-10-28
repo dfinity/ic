@@ -3,9 +3,7 @@ use crate::eth_rpc::{
     GetLogsParam, Hash, HttpOutcallError, HttpResponsePayload, LogEntry, Quantity,
     ResponseSizeEstimate, SendRawTransactionResult, Topic, HEADER_SIZE_LIMIT,
 };
-use crate::eth_rpc_client::providers::{
-    EthereumProvider, RpcNodeProvider, SepoliaProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS,
-};
+use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
@@ -38,6 +36,7 @@ mod tests;
 
 // We expect most of the calls to contain zero events.
 const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
+const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
 
 #[derive(Debug)]
 pub struct EthRpcClient {
@@ -54,21 +53,27 @@ impl EthRpcClient {
     }
 
     pub fn from_state(state: &State) -> Self {
+        use evm_rpc_client::RpcServices as EvmRpcServices;
+
         let mut client = Self::new(state.ethereum_network());
         if let Some(evm_rpc_id) = state.evm_rpc_id {
             const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
             let providers = match client.chain {
-                EthereumNetwork::Mainnet => EthereumProvider::evm_rpc_node_providers(),
-                EthereumNetwork::Sepolia => SepoliaProvider::evm_rpc_node_providers(),
+                EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
+                EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(None),
             };
             let min_threshold = match client.chain {
                 EthereumNetwork::Mainnet => 3_u8,
                 EthereumNetwork::Sepolia => 2_u8,
             };
+            assert!(
+                min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+                "BUG: min_threshold too high"
+            );
             let threshold_strategy = EvmRpcConfig {
                 response_consensus: Some(ConsensusStrategy::Threshold {
-                    total: None,
+                    total: Some(TOTAL_NUMBER_OF_PROVIDERS),
                     min: min_threshold,
                 }),
                 ..EvmRpcConfig::default()
