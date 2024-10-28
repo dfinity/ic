@@ -225,6 +225,7 @@ pub trait FetchEnv {
                             state::set_fetched_address(txid, index, address.clone());
                         } else {
                             // This error shouldn't happen unless blockdata is corrupted.
+                            // TODO(XC-205): log this error
                             return CheckTransactionIrrecoverableError::InvalidTransaction(
                                 format!(
                                     "Tx {} vout {} has no address, but is vin {} of tx {}",
@@ -262,6 +263,7 @@ pub trait FetchEnv {
                         state::set_fetched_address(txid, index, address.clone());
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
+                        // TODO(XC-205): log this error
                         error = Some(
                             CheckTransactionIrrecoverableError::InvalidTransaction(format!(
                                 "Tx {} vout {} has no address, but is vin {} of tx {}",
