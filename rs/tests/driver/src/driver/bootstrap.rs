@@ -172,6 +172,12 @@ pub fn init_ic(
         ic_topology.insert_unassigned_node(node_index as NodeIndex, node_to_config(node));
     }
 
+    for node in &ic.api_boundary_nodes {
+        let node_index = next_node_index;
+        next_node_index += 1;
+        ic_topology.insert_api_boundary_node(node_index as NodeIndex, node_to_config(node));
+    }
+
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url) = {
         if ic.has_malicious_behaviours() {
@@ -232,6 +238,9 @@ pub fn setup_and_start_vms(
         }
     }
     for node in initialized_ic.unassigned_nodes.values() {
+        nodes.push(node.clone());
+    }
+    for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
 
@@ -565,6 +574,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
+        domain: node.domain.clone(),
     }
 }
 
