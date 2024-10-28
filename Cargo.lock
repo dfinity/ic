@@ -8466,6 +8466,7 @@ dependencies = [
  "once_cell",
  "prometheus",
  "rand 0.8.5",
+ "reqwest 0.12.8",
  "rstest",
  "rustls 0.23.15",
  "rustls-pemfile 2.2.0",

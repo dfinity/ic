@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:hyper-socks2",
     "@crate_index//:hyper-util",
     "@crate_index//:prometheus",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
