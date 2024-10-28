@@ -229,8 +229,8 @@ sh_test(
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
         "buf_config": "$(rootpath //:buf.yaml)",
+        "buf_path": "$(rootpath @buf//:buf)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
