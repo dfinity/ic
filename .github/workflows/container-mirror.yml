@@ -57,6 +57,7 @@ jobs:
           curl -L -o crane "https://github.com/michaelsauter/crane/releases/download/v3.6.0/crane_linux_amd64"
           chmod +x crane
           sudo mv crane /usr/local/bin/crane
+          echo "${{ github.token }}" | crane auth login ghcr.io --username "dummy" --password-stdin
 
       - name: Mirror Container
         run: |
