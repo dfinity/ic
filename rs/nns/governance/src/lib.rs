@@ -140,7 +140,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
 
 mod account_id_index;
