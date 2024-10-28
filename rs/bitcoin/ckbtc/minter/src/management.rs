@@ -8,7 +8,7 @@ use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_btc_kyt::{CheckAddressArgs, CheckAddressResponse};
+use ic_btc_kyt::{CheckTransactionArgs, CheckTransactionResponse, CheckAddressArgs, CheckAddressResponse};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
@@ -362,6 +362,28 @@ pub async fn check_withdrawal_destination_address(
     .await
     .map_err(|(code, message)| CallError {
         method: "check_address".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
+    Ok(res)
+}
+
+/// Check if the given utxo passes KYT.
+pub async fn check_transaction(
+    kyt_principal: Principal,
+    utxo: &Utxo,
+) -> Result<CheckTransactionResponse, CallError> {
+    let payment = 40_000_000_000;
+    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment(
+        kyt_principal,
+        "check_transaction",
+        (CheckTransactionArgs {
+            txid: utxo.outpoint.txid.as_ref().to_vec(),
+        },),
+        payment,
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "fetch_utxo_alerts".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)

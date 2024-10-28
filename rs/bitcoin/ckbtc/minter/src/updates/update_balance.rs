@@ -4,8 +4,8 @@ use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_interface::{GetUtxosError, GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_kyt::CheckTransactionResponse;
 use ic_canister_log::log;
-use ic_ckbtc_kyt::Error as KytError;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -17,7 +17,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
     guard::{balance_update_guard, GuardError},
-    management::{fetch_utxo_alerts, get_utxos, CallError, CallSource},
+    management::{check_transaction, get_utxos, CallError, CallSource},
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
@@ -230,9 +230,9 @@ pub async fn update_balance(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let (uuid, status, kyt_provider) = kyt_check_utxo(caller_account.owner, &utxo).await?;
+        let status = kyt_check_utxo(&utxo).await?;
         mutate_state(|s| {
-            crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status, kyt_provider);
+            crate::state::audit::mark_utxo_checked(s, &utxo, None, status, None);
         });
         if status == UtxoCheckStatus::Tainted {
             utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
@@ -283,23 +283,19 @@ pub async fn update_balance(
     Ok(utxo_statuses)
 }
 
-async fn kyt_check_utxo(
-    caller: Principal,
-    utxo: &Utxo,
-) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
-    let kyt_principal = read_state(|s| {
+async fn kyt_check_utxo(utxo: &Utxo) -> Result<UtxoCheckStatus, UpdateBalanceError> {
+    let new_kyt_principal = read_state(|s| {
         s.kyt_principal
-            .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
+            .expect("BUG: upgrade procedure must ensure that the new KYT principal is set")
             .get()
             .into()
     });
 
-    if let Some((uuid, status, api_key_owner)) = read_state(|s| s.checked_utxos.get(utxo).cloned())
-    {
-        return Ok((uuid, status, api_key_owner));
+    if let Some((_, status, _)) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
+        return Ok(status);
     }
 
-    match fetch_utxo_alerts(kyt_principal, caller, utxo)
+    match check_transaction(new_kyt_principal, utxo)
         .await
         .map_err(|call_err| {
             UpdateBalanceError::TemporarilyUnavailable(format!(
@@ -307,36 +303,25 @@ async fn kyt_check_utxo(
                 call_err
             ))
         })? {
-        Ok(response) => {
-            if !response.alerts.is_empty() {
-                log!(
-                    P0,
-                    "Discovered a tainted UTXO {} (external id {})",
-                    DisplayOutpoint(&utxo.outpoint),
-                    response.external_id
-                );
-                Ok((
-                    response.external_id,
-                    UtxoCheckStatus::Tainted,
-                    response.provider,
-                ))
-            } else {
-                Ok((
-                    response.external_id,
-                    UtxoCheckStatus::Clean,
-                    response.provider,
-                ))
-            }
+        CheckTransactionResponse::Failed(addresses) => {
+            log!(
+                P0,
+                "Discovered a tainted UTXO {} (due to input addresses {})",
+                DisplayOutpoint(&utxo.outpoint),
+                addresses.join(",")
+            );
+            Ok(UtxoCheckStatus::Tainted)
         }
-        Err(KytError::TemporarilyUnavailable(reason)) => {
+        CheckTransactionResponse::Passed => Ok(UtxoCheckStatus::Clean),
+        CheckTransactionResponse::Unknown(status) => {
             log!(
                 P1,
-                "The KYT provider is temporarily unavailable: {}",
-                reason
+                "The KYT provider is temporarily unavailable: {:?}",
+                status
             );
             Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                "The KYT provider is temporarily unavailable: {}",
-                reason
+                "The KYT provider is temporarily unavailable: {:?}",
+                status
             )))
         }
     }

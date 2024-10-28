@@ -377,7 +377,7 @@ pub struct CkBtcMinterState {
     pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
     /// A cache of UTXO KYT check statuses.
-    pub checked_utxos: BTreeMap<Utxo, (String, UtxoCheckStatus, Principal)>,
+    pub checked_utxos: BTreeMap<Utxo, (Option<String>, UtxoCheckStatus, Option<Principal>)>,
 
     /// UTXOs whose values are too small to pay the KYT check fee.
     pub ignored_utxos: BTreeSet<Utxo>,
@@ -1039,9 +1039,9 @@ impl CkBtcMinterState {
     fn mark_utxo_checked(
         &mut self,
         utxo: Utxo,
-        uuid: String,
+        uuid: Option<String>,
         status: UtxoCheckStatus,
-        kyt_provider: Principal,
+        kyt_provider: Option<Principal>,
     ) {
         match status {
             UtxoCheckStatus::Clean => {
@@ -1052,7 +1052,9 @@ impl CkBtcMinterState {
                 {
                     // Updated the owed amount only if it's the first time we mark this UTXO as
                     // clean.
-                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
+                    if let Some(provider) = kyt_provider {
+                        *self.owed_kyt_amount.entry(provider).or_insert(0) += self.kyt_fee;
+                    }
                 }
             }
             UtxoCheckStatus::Tainted => {
