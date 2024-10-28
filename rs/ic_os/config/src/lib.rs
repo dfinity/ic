@@ -1,5 +1,6 @@
 pub mod config_ini;
 pub mod deployment_json;
+pub mod generate_testnet_config;
 pub mod types;
 
 use anyhow::{Context, Result};
@@ -11,15 +12,13 @@ use std::path::Path;
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";
 pub static DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH: &str = "/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
-pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
 pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/config/ssh_authorized_keys";
-pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
-    "/config/node_operator_private_key.pem";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
-pub static DEFAULT_HOSTOS_CONFIG_INI_FILE_PATH: &str = "/boot/config/config.ini";
-pub static DEFAULT_HOSTOS_DEPLOYMENT_JSON_PATH: &str = "/boot/config/deployment.json";
+pub static DEFAULT_HOSTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
+pub static DEFAULT_HOSTOS_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config-guestos.json";
+pub static DEFAULT_GUESTOS_CONFIG_OBJECT_PATH: &str = "/boot/config/config.json";
 
 pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Result<()> {
     let serialized_config =
@@ -34,11 +33,12 @@ pub fn serialize_and_write_config<T: Serialize>(path: &Path, config: &T) -> Resu
     Ok(())
 }
 
-pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Result<T> {
-    let file = File::open(file_path).context(format!("Failed to open file: {}", file_path))?;
+pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_path: P) -> Result<T> {
+    let file =
+        File::open(&file_path).context(format!("Failed to open file: {:?}", file_path.as_ref()))?;
     serde_json::from_reader(file).context(format!(
-        "Failed to deserialize JSON from file: {}",
-        file_path
+        "Failed to deserialize JSON from file: {:?}",
+        file_path.as_ref()
     ))
 }
 
@@ -46,7 +46,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>>(file_path: &str) -> Resu
 mod tests {
     use super::*;
     use mac_address::mac_address::FormattedMacAddress;
-    use std::path::PathBuf;
     use types::*;
 
     #[test]
@@ -75,10 +74,10 @@ mod tests {
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
-            nns_public_key_path: PathBuf::from("/path/to/key"),
+            nns_public_key_exists: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
-            node_operator_private_key_path: None,
-            ssh_authorized_keys_path: None,
+            node_operator_private_key_exists: true,
+            use_ssh_authorized_keys: false,
             icos_dev_settings,
         };
         let setupos_settings = SetupOSSettings;
@@ -88,9 +87,9 @@ mod tests {
             verbose: false,
         };
         let guestos_settings = GuestOSSettings {
-            ic_crypto_path: None,
-            ic_state_path: None,
-            ic_registry_local_store_path: None,
+            inject_ic_crypto: false,
+            inject_ic_state: false,
+            inject_ic_registry_local_store: false,
             guestos_dev_settings: GuestOSDevSettings::default(),
         };
 
