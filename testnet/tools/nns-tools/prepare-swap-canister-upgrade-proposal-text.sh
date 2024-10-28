@@ -46,4 +46,4 @@ current_branch_has_commit $NEXT || (
     exit 1
 )
 
-generate_sale_canister_upgrade_proposal_text "$LAST" "$NEXT" "$SWAP_CANISTER_ID" "$OUTPUT_FILE"
+generate_swap_canister_upgrade_proposal_text "$LAST" "$NEXT" "$SWAP_CANISTER_ID" "$OUTPUT_FILE"
