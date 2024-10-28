@@ -7,7 +7,7 @@ use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, LedgerMintIndex};
-use crate::state::eth_logs_scraping::{BlockRangeInclusive, LogScrapingState};
+use crate::state::eth_logs_scraping::{ActiveLogScrapingState, BlockRangeInclusive};
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
@@ -58,22 +58,17 @@ impl EthEvent {
 }
 
 pub trait LogScraper {
-    fn is_active(state: &State) -> bool;
-    fn current_state(state: &State) -> LogScrapingState;
+    fn check_active(state: &State) -> Option<ActiveLogScrapingState>;
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
-    fn topics(state: &State) -> Vec<Topic>;
+    fn event_topics(state: &State) -> Vec<Topic>;
     fn display_id() -> &'static str;
 }
 
 struct EthWithoutSubaccountScraper {}
 
 impl LogScraper for EthWithoutSubaccountScraper {
-    fn is_active(state: &State) -> bool {
-        Self::current_state(state).contract_address().is_some()
-    }
-
-    fn current_state(state: &State) -> LogScrapingState {
-        state.eth_log_scraping.clone()
+    fn check_active(state: &State) -> Option<ActiveLogScrapingState> {
+        state.eth_log_scraping.clone().into_active()
     }
 
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
@@ -82,7 +77,7 @@ impl LogScraper for EthWithoutSubaccountScraper {
             .set_last_scraped_block_number(block_number);
     }
 
-    fn topics(_state: &State) -> Vec<Topic> {
+    fn event_topics(_state: &State) -> Vec<Topic> {
         vec![Topic::from(FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))]
     }
 
@@ -94,12 +89,11 @@ impl LogScraper for EthWithoutSubaccountScraper {
 struct Erc20WithoutSubaccount {}
 
 impl LogScraper for Erc20WithoutSubaccount {
-    fn is_active(state: &State) -> bool {
-        Self::current_state(state).contract_address().is_some() && !state.ckerc20_tokens.is_empty()
-    }
-
-    fn current_state(state: &State) -> LogScrapingState {
-        state.erc20_log_scraping.clone()
+    fn check_active(state: &State) -> Option<ActiveLogScrapingState> {
+        if state.ckerc20_tokens.is_empty() {
+            return None;
+        }
+        state.erc20_log_scraping.clone().into_active()
     }
 
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber) {
@@ -108,7 +102,7 @@ impl LogScraper for Erc20WithoutSubaccount {
             .set_last_scraped_block_number(block_number);
     }
 
-    fn topics(state: &State) -> Vec<Topic> {
+    fn event_topics(state: &State) -> Vec<Topic> {
         let token_contract_addresses = state.ckerc20_tokens.alt_keys().cloned().collect::<Vec<_>>();
         let mut topics: Vec<_> = vec![Topic::from(FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))];
         // We add token contract addresses as additional topics to match.
@@ -278,28 +272,19 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
     last_block_number: BlockNumber,
     max_block_spread: u16,
 ) -> Result<(), MultiCallError<Vec<LogEntry>>> {
-    if !read_state(S::is_active) {
-        log!(
-            DEBUG,
-            "[scrape_contract_logs]: skipping scrapping of {} logs: not active",
-            S::display_id()
-        );
-        return Ok(());
-    }
-    let state = read_state(S::current_state);
-    let helper_contract_address = match state.contract_address() {
-        Some(address) => *address,
+    let scraping_state = match read_state(S::check_active) {
+        Some(s) => s,
         None => {
             log!(
                 DEBUG,
-                "[scrape_contract_logs]: skipping scrapping {} logs: no contract address",
+                "[scrape_contract_logs]: skipping scrapping {} logs: not active",
                 S::display_id()
             );
             return Ok(());
         }
     };
     let block_range = BlockRangeInclusive::new(
-        state
+        scraping_state
             .last_scraped_block_number()
             .checked_increment()
             .unwrap_or(BlockNumber::MAX),
@@ -310,12 +295,12 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
         "Scraping {} logs in in block range {block_range}",
         S::display_id()
     );
-    let topics = read_state(S::topics);
+    let topics = read_state(S::event_topics);
     let rpc_client = read_state(EthRpcClient::from_state);
     for block_range in block_range.into_chunks(max_block_spread) {
         scrape_block_range::<S, P>(
             &rpc_client,
-            helper_contract_address,
+            scraping_state.contract_address(),
             topics.clone(),
             block_range,
         )

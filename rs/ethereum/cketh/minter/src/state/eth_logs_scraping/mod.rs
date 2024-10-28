@@ -49,6 +49,30 @@ impl LogScrapingState {
     pub fn contract_address(&self) -> Option<&Address> {
         self.contract_address.as_ref()
     }
+
+    pub fn into_active(self) -> Option<ActiveLogScrapingState> {
+        self.contract_address
+            .map(|contract_address| ActiveLogScrapingState {
+                contract_address,
+                last_scraped_block_number: self.last_scraped_block_number,
+            })
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct ActiveLogScrapingState {
+    contract_address: Address,
+    last_scraped_block_number: BlockNumber,
+}
+
+impl ActiveLogScrapingState {
+    pub fn contract_address(&self) -> Address {
+        self.contract_address
+    }
+
+    pub fn last_scraped_block_number(&self) -> BlockNumber {
+        self.last_scraped_block_number
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
