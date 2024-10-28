@@ -15,7 +15,7 @@ function install_hostos() {
     TMPDIR=$(mktemp -d)
     # Extract the disk image to RAM.  Cannot run concurrently with install-guestos.sh.
     echo "* Temporarily extracting the HostOS image to memory; please stand by for a few seconds"
-    tar xafS /data/host-os.img.tar.zst -C "${TMPDIR}" disk.img
+    tar xaf /data/host-os.img.tar.zst -C "${TMPDIR}" disk.img
     log_and_halt_installation_on_error "${?}" "Unable to extract HostOS disk-image."
     # Write the extracted image to the disk.
     # Progress is handled by status=progress.
