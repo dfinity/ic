@@ -23,16 +23,15 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
-/// Value: Midnight Jan 1, 2025.
+/// Value: one second after midnight, 2024-11-05.
 ///
-/// How this value was chosen: this should give everyone plenty of time to get
-/// used to the new "periodic confirmation" behavior, which will probably be
-/// released not too long before that time.
+/// How this value was chosen: This is the earliest that "refreshing" the follow
+/// configuration of a neuron can be released.
 ///
 /// How this value is used: when a neuron does not have a value in the
 /// following_refreshed_timestamp_seconds field (because it was created before
 /// this feature), we pretend as though this value is in that field.
-const GRANDFATHERED_FOLLOWING_REFRESHED_TIMESTAMP_SECONDS: u64 = 1735689600;
+const GRANDFATHERED_FOLLOWING_REFRESHED_TIMESTAMP_SECONDS: u64 = 1731628801;
 
 /// A neuron type internal to the governance crate. Currently, this type is identical to the
 /// prost-generated Neuron type (except for derivations for prost). Gradually, this type will evolve
