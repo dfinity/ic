@@ -105,7 +105,7 @@ function _kernel_cmdline_bool() {
 # Check if a kernel command line boolean is set to 1 (true).
 # If set to 1, return true (0).
 # If set to 0, return false (1).
-# if absent or any other value, return true (1).
+# if absent or any other value, return true (0).
 function kernel_cmdline_bool_default_true() {
     _kernel_cmdline_bool "true" "$1"
 }
