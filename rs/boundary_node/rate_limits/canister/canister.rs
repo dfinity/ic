@@ -6,6 +6,7 @@ use crate::confidentiality_formatting::ConfidentialityFormatterFactory;
 use crate::disclose::{DisclosesRules, RulesDiscloser};
 use crate::fetcher::{ConfigFetcher, EntityFetcher, RuleFetcher};
 use crate::metrics::{encode_metrics, serve_metrics};
+use crate::state::Repository;
 use crate::state::{init_version_and_config, with_state};
 use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
 use candid::{candid_method, Principal};
@@ -24,6 +25,11 @@ const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";
 #[init]
 #[candid_method(init)]
 fn init(init_arg: InitArg) {
+    // Set authorized principal, which performs write operations, such as adding new configurations
+    with_state(|state| {
+        state.set_authorized_principal(init_arg.authorized_principal);
+    });
+
     // Initialize an empty config with version=1
     init_version_and_config(1);
 
@@ -37,7 +43,7 @@ fn init(init_arg: InitArg) {
 fn get_config(version: Option<Version>) -> GetConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_state(|state| {
-        let access_resolver = AccessLevelResolver::new(caller_id);
+        let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter =
             ConfidentialityFormatterFactory::new(access_resolver).create_config_formatter();
         let fetcher = ConfigFetcher::new(state, formatter);
@@ -51,7 +57,7 @@ fn get_config(version: Option<Version>) -> GetConfigResponse {
 fn get_rule_by_id(rule_id: RuleId) -> GetRuleByIdResponse {
     let caller_id = ic_cdk::api::caller();
     let response = with_state(|state| {
-        let access_resolver = AccessLevelResolver::new(caller_id);
+        let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let formatter =
             ConfidentialityFormatterFactory::new(access_resolver).create_rule_formatter();
         let fetcher = RuleFetcher::new(state, formatter);
@@ -66,7 +72,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
     let caller_id = ic_cdk::api::caller();
     let current_time = ic_cdk::api::time();
     with_state(|state| {
-        let access_resolver: AccessLevelResolver = AccessLevelResolver::new(caller_id);
+        let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let writer = ConfigAdder::new(state, access_resolver);
         writer.add_config(config.into(), current_time)
     })?;
@@ -78,7 +84,7 @@ fn add_config(config: InputConfig) -> AddConfigResponse {
 fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     let caller_id = ic_cdk::api::caller();
     with_state(|state| {
-        let access_resolver: AccessLevelResolver = AccessLevelResolver::new(caller_id);
+        let access_resolver = AccessLevelResolver::new(caller_id, state.clone());
         let discloser = RulesDiscloser::new(state, access_resolver);
         discloser.disclose_rules(args.into())
     })?;

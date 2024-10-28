@@ -71,6 +71,7 @@ pub struct OutputRuleMetadata {
 #[derive(CandidType, Deserialize, Debug)]
 pub struct InitArg {
     pub registry_polling_period_secs: u64,
+    pub authorized_principal: Principal,
 }
 
 #[derive(CandidType, Deserialize, Clone, Copy, PartialEq, Eq)]

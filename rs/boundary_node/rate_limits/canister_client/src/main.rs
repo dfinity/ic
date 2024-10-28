@@ -9,7 +9,7 @@ use rate_limits_api::{
 };
 use regex::Regex;
 
-const RATE_LIMIT_CANISTER_ID: &str = "5oxzc-3qaaa-aaaab-qaczq-cai";
+const RATE_LIMIT_CANISTER_ID: &str = "x5pps-pqaaa-aaaab-qadbq-cai";
 const IC_DOMAIN: &str = "https://ic0.app";
 
 use k256::elliptic_curve::SecretKey;
@@ -19,6 +19,7 @@ MHQCAQEEIIBzyyJ32Kdjixx+ZJvNeUWsqAzSQZfLsOyXKgxc7aH9oAcGBSuBBAAK
 oUQDQgAECWc6ZRn9bBP96RM1G6h8ZAtbryO65dKg6cw0Oij2XbnAlb6zSPhU+4hh
 gc2Q0JiGrqKks1AVi+8wzmZ+2PQXXA==
 -----END EC PRIVATE KEY-----";
+// Corresponding principal: imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae
 
 #[tokio::main]
 async fn main() {

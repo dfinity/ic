@@ -19,8 +19,12 @@ pub type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 const MEMORY_ID_CONFIGS: MemoryId = MemoryId::new(0);
 const MEMORY_ID_RULES: MemoryId = MemoryId::new(1);
 const MEMORY_ID_INCIDENTS: MemoryId = MemoryId::new(2);
+const MEMORY_ID_AUTHORIZED_PRINCIPAL: MemoryId = MemoryId::new(3);
 
 // Storables
+#[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
+pub struct StorablePrincipal(pub Principal);
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialOrd, Ord, PartialEq, Eq)]
 pub struct StorableVersion(pub Version);
 
@@ -51,6 +55,21 @@ pub struct StorableConfig {
 pub struct StorableIncidentMetadata {
     pub is_disclosed: bool,
     pub rule_ids: Vec<RuleId>,
+}
+
+impl Storable for StorablePrincipal {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(bincode::serialize(&self.0).expect("StorablePrincipal serialization failed"))
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self(bincode::deserialize(&bytes).expect("StorablePrincipal deserialization failed"))
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 256,
+        is_fixed_size: false,
+    };
 }
 
 impl Storable for StorableVersion {
@@ -161,6 +180,12 @@ thread_local! {
     pub static RULES: RefCell<StableMap<StorableRuleId, StorableRuleMetadata>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_RULES)),
+        )
+    );
+
+    pub static AUTHORIZED_PRINCIPAL: RefCell<StableMap<(), StorablePrincipal>> = RefCell::new(
+        StableMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MEMORY_ID_AUTHORIZED_PRINCIPAL)),
         )
     );
 

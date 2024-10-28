@@ -1,3 +1,4 @@
+use candid::Principal;
 use ic_cdk::api::time;
 use mockall::automock;
 use rate_limits_api::IncidentId;
@@ -6,13 +7,16 @@ use crate::{
     add_config::INIT_VERSION,
     storage::{
         LocalRef, StableMap, StorableConfig, StorableIncidentId, StorableIncidentMetadata,
-        StorableRuleId, StorableRuleMetadata, StorableVersion, CONFIGS, INCIDENTS, RULES,
+        StorablePrincipal, StorableRuleId, StorableRuleMetadata, StorableVersion,
+        AUTHORIZED_PRINCIPAL, CONFIGS, INCIDENTS, RULES,
     },
     types::{RuleId, Version},
 };
 
 #[automock]
 pub trait Repository {
+    fn get_authorized_principal(&self) -> Option<StorablePrincipal>;
+    fn set_authorized_principal(&self, principal: Principal);
     fn get_version(&self) -> Option<StorableVersion>;
     fn get_config(&self, version: Version) -> Option<StorableConfig>;
     fn get_rule(&self, rule_id: &RuleId) -> Option<StorableRuleMetadata>;
@@ -24,10 +28,12 @@ pub trait Repository {
     fn update_incident(&self, incident_id: IncidentId, rule_ids: StorableIncidentMetadata) -> bool;
 }
 
+#[derive(Clone)]
 pub struct State {
     configs: LocalRef<StableMap<StorableVersion, StorableConfig>>,
     rules: LocalRef<StableMap<StorableRuleId, StorableRuleMetadata>>,
     incidents: LocalRef<StableMap<StorableIncidentId, StorableIncidentMetadata>>,
+    authorized_principal: LocalRef<StableMap<(), StorablePrincipal>>,
 }
 
 impl State {
@@ -36,11 +42,22 @@ impl State {
             configs: &CONFIGS,
             rules: &RULES,
             incidents: &INCIDENTS,
+            authorized_principal: &AUTHORIZED_PRINCIPAL,
         }
     }
 }
 
 impl Repository for State {
+    fn get_authorized_principal(&self) -> Option<StorablePrincipal> {
+        self.authorized_principal
+            .with(|cell| cell.borrow().get(&()))
+    }
+
+    fn set_authorized_principal(&self, principal: Principal) {
+        self.authorized_principal
+            .with(|cell| cell.borrow_mut().insert((), StorablePrincipal(principal)));
+    }
+
     fn get_version(&self) -> Option<StorableVersion> {
         self.configs.with(|cell| {
             let configs = cell.borrow();

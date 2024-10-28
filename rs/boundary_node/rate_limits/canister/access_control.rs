@@ -1,9 +1,7 @@
 use candid::Principal;
 use mockall::automock;
 
-use crate::storage::API_BOUNDARY_NODE_PRINCIPALS;
-
-const FULL_ACCESS_ID: &str = "imx2d-dctwe-ircfz-emzus-bihdn-aoyzy-lkkdi-vi5vw-npnik-noxiy-mae";
+use crate::{state::Repository, storage::API_BOUNDARY_NODE_PRINCIPALS};
 
 #[automock]
 pub trait ResolveAccessLevel {
@@ -18,22 +16,26 @@ pub enum AccessLevel {
 }
 
 #[derive(Clone)]
-pub struct AccessLevelResolver {
+pub struct AccessLevelResolver<R: Repository> {
     pub caller_id: Principal,
+    pub repository: R,
 }
 
-impl AccessLevelResolver {
-    pub fn new(caller_id: Principal) -> Self {
-        Self { caller_id }
+impl<R: Repository> AccessLevelResolver<R> {
+    pub fn new(caller_id: Principal, repository: R) -> Self {
+        Self {
+            caller_id,
+            repository,
+        }
     }
 }
 
-impl ResolveAccessLevel for AccessLevelResolver {
+impl<R: Repository> ResolveAccessLevel for AccessLevelResolver<R> {
     fn get_access_level(&self) -> AccessLevel {
-        let full_access_principal = Principal::from_text(FULL_ACCESS_ID).unwrap();
-
-        if self.caller_id == full_access_principal {
-            return AccessLevel::FullAccess;
+        if let Some(authorized_principal) = self.repository.get_authorized_principal() {
+            if self.caller_id == authorized_principal.0 {
+                return AccessLevel::FullAccess;
+            }
         }
 
         let has_full_read_access = API_BOUNDARY_NODE_PRINCIPALS.with(|cell| {
