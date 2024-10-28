@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,

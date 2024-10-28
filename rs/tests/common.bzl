@@ -87,7 +87,6 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
-    "//rs/tests/ckbtc",
     "//rs/tests/consensus/utils",
     "//rs/tests/consensus/tecdsa/utils",
     "//rs/tests/driver:ic-system-test-driver",
@@ -321,15 +320,10 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
+COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
-CUSTOM_DOMAINS_RUNTIME_DEPS = [
-    "//rs/tests:custom_domains_uvm_config_image",
-    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]

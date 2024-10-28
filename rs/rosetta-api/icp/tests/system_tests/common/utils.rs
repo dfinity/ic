@@ -10,6 +10,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::ListNeurons;
 use ic_nns_governance::pb::v1::ListNeuronsResponse;
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -46,6 +47,26 @@ pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> A
     // For verification the agent needs the root key of the IC running on the local replica
     agent.fetch_root_key().await.unwrap();
     agent
+}
+
+pub async fn wait_for_rosetta_to_catch_up_with_icp_ledger(
+    rosetta_client: &RosettaClient,
+    network_identifier: NetworkIdentifier,
+    agent: &Agent,
+) {
+    let chain_length = query_encoded_blocks(agent, u64::MAX, 1).await.chain_length;
+    let last_block = wait_for_rosetta_to_sync_up_to_block(
+        rosetta_client,
+        network_identifier,
+        chain_length.saturating_sub(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        chain_length.saturating_sub(1),
+        last_block,
+        "Failed to sync with the ledger"
+    );
 }
 
 pub async fn wait_for_rosetta_to_sync_up_to_block(
@@ -169,4 +190,18 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
         ListNeuronsResponse
     )
     .unwrap()
+}
+
+pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1::Neuron) {
+    let result = Decode!(
+        &agent
+            .update(&GOVERNANCE_CANISTER_ID.into(), "update_neuron")
+            .with_arg(Encode!(&neuron).unwrap())
+            .call_and_wait()
+            .await
+            .unwrap(),
+        Option<GovernanceError>
+    )
+    .unwrap();
+    assert!(result.is_none(), "Failed to update neuron: {:?}", result);
 }

@@ -48,7 +48,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:bitcoin",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:clap_3_2_25",
+    "@crate_index//:clap",
     "@crate_index//:ctrlc",
     "@crate_index//:flate2",
     "@crate_index//:form_urlencoded",
@@ -112,7 +112,7 @@ TEST_DEPENDENCIES = [
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
-    "//rs/tests/testing_verification/spec_compliance",
+    "//rs/tests/research/spec_compliance",
     "//rs/registry/subnet_type",
 ]
 
@@ -193,13 +193,13 @@ rust_test(
     ],
     data = [
         ":pocket-ic-server",
-        "//rs/tests:ic-hs",
         "//rs/tests/httpbin-rs:httpbin",
+        "//rs/tests/research:ic-hs",
     ],
     env = {
         "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
+        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
     },
     tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
