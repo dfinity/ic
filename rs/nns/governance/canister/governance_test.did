@@ -579,6 +579,7 @@ type Neuron = record {
   transfer : opt NeuronStakeTransfer;
   known_neuron_data : opt KnownNeuronData;
   spawn_at_timestamp_seconds : opt nat64;
+  following_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronBasketConstructionParameters = record {
@@ -630,6 +631,7 @@ type NeuronInfo = record {
   known_neuron_data : opt KnownNeuronData;
   voting_power : nat64;
   age_seconds : nat64;
+  following_refreshed_timestamp_seconds : opt nat64;
 };
 
 type NeuronStakeTransfer = record {

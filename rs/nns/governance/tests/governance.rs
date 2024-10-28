@@ -148,6 +148,8 @@ pub mod fixtures;
 // https://github.com/rust-lang/rust/issues/46379
 pub mod common;
 
+const START_TIMESTAMP_SECONDS: u64 = 1730132754;
+
 lazy_static! {
     static ref RANDOM_PRINCIPAL_ID: PrincipalId = PrincipalId::new_user_test_id(0xDEAD_BEEF);
 }
@@ -4271,7 +4273,7 @@ fn governance_with_staked_neuron(
     });
 
     let driver = fake::FakeDriver::default()
-        .at(56)
+        .at(START_TIMESTAMP_SECONDS)
         .with_ledger_accounts(vec![fake::FakeAccount {
             id: AccountIdentifier::new(
                 ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
@@ -4360,6 +4362,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             kyc_verified: true,
             visibility,
+            following_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
             ..Default::default()
         }
     );
@@ -10051,6 +10054,8 @@ fn test_include_public_neurons_in_full_neurons() {
             controller: Some(controller),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             aging_since_timestamp_seconds: 1_721_727_936,
+            following_refreshed_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+
             ..Default::default()
         }
     };
@@ -10080,7 +10085,7 @@ fn test_include_public_neurons_in_full_neurons() {
 
     let total_icp_suppply = Tokens::new(200, 0).unwrap();
     let driver = fake::FakeDriver::default()
-        .at(60 * 60 * 24 * 30)
+        .at(START_TIMESTAMP_SECONDS)
         .with_supply(total_icp_suppply);
     let governance = Governance::new(
         governance_proto,

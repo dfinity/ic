@@ -509,9 +509,9 @@ fn test_abridged_neuron_size() {
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is created so that we are aware of the available
-    // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 184);
+    // This size can be updated. This assertion is here to make sure we are very aware of growth.
+    // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
+    assert_eq!(abridged_neuron.encoded_len(), 196);
 }
 
 #[test]
