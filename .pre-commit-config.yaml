@@ -61,7 +61,7 @@ repos:
 
   - id: buf-breaking
     name: Check no breaking changes were introduced
-    entry: ./pre-commit/check-incompatibilities.sh
+    entry: bazel test --config=precommit //:buf-breaking
     language: script
     stages: [manual]
     pass_filenames: false
