@@ -923,8 +923,8 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
     }
 }
 
-/// Calculates an upper bound for up to which stream index messages can be included into a block
-/// based on how many signals the reverse stream will contain after inducting the stream slice.
+/// The stream index up to which messages can be inducted while limiting the
+/// number of signals in the reverse stream to `MAX_STREAM_MESSAGES`.
 ///
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
