@@ -231,9 +231,11 @@ sh_test(
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "buf_config": "$(rootpath //:buf.yaml)",
         "buf_path": "$(rootpath @buf//:buf)",
-        "MERGE_BASE_SHA": "$(MERGE_BASE_SHA)",
-        "CI_OVERRIDE_BUF_BREAKING": "$(CI_OVERRIDE_BUF_BREAKING)",
     },
+    env_inherit = [
+        "MERGE_BASE_SHA",
+        "CI_OVERRIDE_BUF_BREAKING",
+    ],
     tags = [
         "external",  # force test to be unconditionally executed.
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
