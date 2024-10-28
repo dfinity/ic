@@ -216,85 +216,6 @@ pub trait LogParser {
     fn parse_log(log: LogEntry) -> Result<ReceivedEvent, ReceivedEventError>;
 }
 
-fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), ReceivedEventError> {
-    let _block_hash = entry
-        .block_hash
-        .ok_or(ReceivedEventError::PendingLogEntry)?;
-    let block_number = entry
-        .block_number
-        .ok_or(ReceivedEventError::PendingLogEntry)?;
-    let transaction_hash = entry
-        .transaction_hash
-        .ok_or(ReceivedEventError::PendingLogEntry)?;
-    let _transaction_index = entry
-        .transaction_index
-        .ok_or(ReceivedEventError::PendingLogEntry)?;
-    let log_index = entry.log_index.ok_or(ReceivedEventError::PendingLogEntry)?;
-    Ok((
-        block_number,
-        EventSource {
-            transaction_hash,
-            log_index,
-        },
-    ))
-}
-
-fn ensure_not_removed(
-    entry: &LogEntry,
-    event_source: EventSource,
-) -> Result<(), ReceivedEventError> {
-    if entry.removed {
-        return Err(ReceivedEventError::InvalidEventSource {
-            source: event_source,
-            error: EventSourceError::InvalidEvent(
-                "this event has been removed from the chain".to_string(),
-            ),
-        });
-    }
-    Ok(())
-}
-
-fn ensure_topics<P>(
-    entry: &LogEntry,
-    predicate: P,
-    event_source: EventSource,
-) -> Result<(), ReceivedEventError>
-where
-    P: FnOnce(&[FixedSizeData]) -> bool,
-{
-    if !predicate(&entry.topics) {
-        return Err(ReceivedEventError::InvalidEventSource {
-            source: event_source,
-            error: EventSourceError::InvalidEvent("Invalid topics".to_string()),
-        });
-    }
-    Ok(())
-}
-
-fn parse_address(
-    address: &FixedSizeData,
-    event_source: EventSource,
-) -> Result<Address, ReceivedEventError> {
-    Address::try_from(&address.0).map_err(|err| ReceivedEventError::InvalidEventSource {
-        source: event_source,
-        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {}", err)),
-    })
-}
-
-fn parse_principal(
-    principal: &FixedSizeData,
-    event_source: EventSource,
-) -> Result<Principal, ReceivedEventError> {
-    parse_principal_from_slice(&principal.0).map_err(|_err| {
-        ReceivedEventError::InvalidEventSource {
-            source: event_source,
-            error: EventSourceError::InvalidPrincipal {
-                invalid_principal: principal.clone(),
-            },
-        }
-    })
-}
-
 pub struct EthWithoutSubaccountLogParser {}
 
 impl LogParser for EthWithoutSubaccountLogParser {
@@ -415,6 +336,85 @@ impl LogParser for Erc20WithSubaccountLogParser {
         }
         .into())
     }
+}
+
+fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), ReceivedEventError> {
+    let _block_hash = entry
+        .block_hash
+        .ok_or(ReceivedEventError::PendingLogEntry)?;
+    let block_number = entry
+        .block_number
+        .ok_or(ReceivedEventError::PendingLogEntry)?;
+    let transaction_hash = entry
+        .transaction_hash
+        .ok_or(ReceivedEventError::PendingLogEntry)?;
+    let _transaction_index = entry
+        .transaction_index
+        .ok_or(ReceivedEventError::PendingLogEntry)?;
+    let log_index = entry.log_index.ok_or(ReceivedEventError::PendingLogEntry)?;
+    Ok((
+        block_number,
+        EventSource {
+            transaction_hash,
+            log_index,
+        },
+    ))
+}
+
+fn ensure_not_removed(
+    entry: &LogEntry,
+    event_source: EventSource,
+) -> Result<(), ReceivedEventError> {
+    if entry.removed {
+        return Err(ReceivedEventError::InvalidEventSource {
+            source: event_source,
+            error: EventSourceError::InvalidEvent(
+                "this event has been removed from the chain".to_string(),
+            ),
+        });
+    }
+    Ok(())
+}
+
+fn ensure_topics<P>(
+    entry: &LogEntry,
+    predicate: P,
+    event_source: EventSource,
+) -> Result<(), ReceivedEventError>
+where
+    P: FnOnce(&[FixedSizeData]) -> bool,
+{
+    if !predicate(&entry.topics) {
+        return Err(ReceivedEventError::InvalidEventSource {
+            source: event_source,
+            error: EventSourceError::InvalidEvent("Invalid topics".to_string()),
+        });
+    }
+    Ok(())
+}
+
+fn parse_address(
+    address: &FixedSizeData,
+    event_source: EventSource,
+) -> Result<Address, ReceivedEventError> {
+    Address::try_from(&address.0).map_err(|err| ReceivedEventError::InvalidEventSource {
+        source: event_source,
+        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {}", err)),
+    })
+}
+
+fn parse_principal(
+    principal: &FixedSizeData,
+    event_source: EventSource,
+) -> Result<Principal, ReceivedEventError> {
+    parse_principal_from_slice(&principal.0).map_err(|_err| {
+        ReceivedEventError::InvalidEventSource {
+            source: event_source,
+            error: EventSourceError::InvalidPrincipal {
+                invalid_principal: principal.clone(),
+            },
+        }
+    })
 }
 
 fn parse_data_into_32_byte_words<const N: usize>(
