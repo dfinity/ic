@@ -217,7 +217,7 @@ sh_binary(
     visibility = ["//visibility:public"],
 )
 
-sh_test(
+sh_binary(
     name = "buf-breaking",
     size = "small",
     srcs = ["check-incompatibilities.sh"],
