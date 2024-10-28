@@ -174,6 +174,7 @@ mod tests {
                 id: canister_test_id(i),
                 last_used: now,
                 rss: 50.into(),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
             total_rss += 50.into();
         }
@@ -193,6 +194,7 @@ mod tests {
                 id: canister_test_id(i),
                 last_used: now,
                 rss: 50.into(),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
             total_rss += 50.into();
         }
@@ -212,6 +214,7 @@ mod tests {
                 id: canister_test_id(i),
                 last_used: now,
                 rss: 50.into(),
+                scheduler_priority: AccumulatedPriority::new(0),
             });
             total_rss += 50.into();
         }
