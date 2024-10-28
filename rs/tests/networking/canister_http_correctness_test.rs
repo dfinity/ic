@@ -616,7 +616,7 @@ pub fn test_http_calls_to_ic_fails(env: TestEnv) {
         err_response.1.contains(expected_error_message),
         "Expected error message to contain, {}, got: {}",
         expected_error_message,
-        actual_error_message
+        err_response.1
     );
 }
 
