@@ -237,9 +237,10 @@ sh_test(
         "CI_OVERRIDE_BUF_BREAKING",
     ],
     tags = [
-        "external",  # force test to be unconditionally executed.
-        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
-        "smoke",  # it should be run before committing code changes into the version control system.
+        # tags copied from other pre-commit tests, but unclear if they are required
+        "external",
+        "local",
+        "smoke",
     ],
     visibility = ["//visibility:public"],
 )
