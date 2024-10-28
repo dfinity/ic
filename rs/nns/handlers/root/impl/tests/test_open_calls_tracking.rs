@@ -1,5 +1,4 @@
 use candid::{Decode, Encode};
-use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_nervous_system_clients::{
@@ -28,11 +27,10 @@ fn test_canister_status_call_tracking() {
     let universal = set_up_universal_canister(&machine, None);
 
     // Canister status call should fail as NNS Root is not a controller.
-    assert!(update_with_sender(
+    assert!(update_with_sender::<_, CanisterStatusResult>(
         &machine,
         ROOT_CANISTER_ID,
         "canister_status",
-        candid_one::<CanisterStatusResult, CanisterIdRecord>,
         CanisterIdRecord::from(universal),
         PrincipalId::new_anonymous(),
     )

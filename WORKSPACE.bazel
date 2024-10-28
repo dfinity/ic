@@ -23,8 +23,10 @@ canisters(
         "genesis-token": "genesis-token-canister.wasm.gz",
         "cycles-minting": "cycles-minting-canister.wasm.gz",
         "sns-wasm": "sns-wasm-canister.wasm.gz",
+        "ck_btc_archive": "ic-icrc1-archive.wasm.gz",
         "ck_btc_ledger": "ic-icrc1-ledger.wasm.gz",
         "ck_btc_index": "ic-icrc1-index-ng.wasm.gz",
+        "ck_eth_archive": "ic-icrc1-archive-u256.wasm.gz",
         "ck_eth_ledger": "ic-icrc1-ledger-u256.wasm.gz",
         "ck_eth_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "sns_root": "sns-root-canister.wasm.gz",
@@ -46,8 +48,10 @@ canisters(
         "genesis-token": "mainnet_nns_genesis-token-canister",
         "cycles-minting": "mainnet_nns_cycles-minting-canister",
         "sns-wasm": "mainnet_nns_sns-wasm-canister",
+        "ck_btc_archive": "mainnet_ckbtc_ic-icrc1-archive",
         "ck_btc_ledger": "mainnet_ckbtc_ic-icrc1-ledger",
         "ck_btc_index": "mainnet_ckbtc-index-ng",
+        "ck_eth_archive": "mainnet_cketh_ic-icrc1-archive-u256",
         "ck_eth_ledger": "mainnet_cketh_ic-icrc1-ledger-u256",
         "ck_eth_index": "mainnet_cketh-index-ng",
         "sns_root": "mainnet_sns-root-canister",
@@ -81,7 +85,8 @@ sol_register_toolchains(
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-JLN47ZcAbx9wEr5Jiib4HduZATGLiDgK7oUi/fvotzU=",
+    patch_args = ["-p1"],
+    sha256 = "24b378ed97006f1f7012be498a26f81ddb9901318b88380aee8522fdfbe8b735",
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.42.1/rules_rust-v0.42.1.tar.gz"],
 )
 

@@ -34,3 +34,4 @@
 . https://dashboard.internetcomputer.org/proposal/133058[133058]: upgrade the ckETH minter canister to adjust cycle fees for tECDSA signatures
 . https://dashboard.internetcomputer.org/proposal/133084[133084]: upgrade the ckERC20 ledger suite orchestrator to let the ckETH ledger suite be managed by the orchestrator and upgrade all managed ledger suites
 . https://dashboard.internetcomputer.org/proposal/133796[133796]: upgrade the ckETH minter canister to use the EVM RPC canister to reach Ethereum
+. https://dashboard.internetcomputer.org/proposal/133797[133797]: upgrade the ckERC20 ledger suite orchestrator to upgrade all managed ledger suites

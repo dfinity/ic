@@ -1633,6 +1633,11 @@ fn test_proposal_garbage_collection() {
             .await
             .expect("Expected set_time_warp to succeed");
 
+        sns_canisters
+            .run_periodic_tasks_now()
+            .await
+            .expect("Expected run_periodic_tasks_now to succeed");
+
         // Proposals should have been garbage_collected. Get all the proposals kept in the current
         // SNS
         let proposals_after_gc = list_all_proposals_through_pagination(
