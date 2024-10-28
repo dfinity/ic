@@ -293,7 +293,7 @@ class TrivyExecutor:
         command = (
             f"bazel run vuln-scan -- --output-path {json_file_path} --format json --hash-output-path {hash_file_path}"
         )
-        for i in range(1, TRIVY_SCAN_RETRIES+1):
+        for i in range(1, TRIVY_SCAN_RETRIES + 1):
             logging.debug(f"{i}. trivy scan attempt")
             trivy_output = ProcessExecutor.execute_command(command, path.resolve(), {})
             with open(json_file_path, "r") as file:

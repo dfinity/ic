@@ -39,8 +39,12 @@ FAILOVER_FINDING_PREFIXES = {
 }
 
 IGNORE_LIST_BY_PROJECT = {
-    "OSP: ic/ic-os/boundary-guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/boundary-guestos/context)": resource_reader.read_ignore_list(IgnoreList.BOUNDARY_GUEST_OS),
-    "OSP: ic/ic-os/guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/guestos/context)": resource_reader.read_ignore_list(IgnoreList.GUEST_OS),
+    "OSP: ic/ic-os/boundary-guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/boundary-guestos/context)": resource_reader.read_ignore_list(
+        IgnoreList.BOUNDARY_GUEST_OS
+    ),
+    "OSP: ic/ic-os/guestos/envs/prod (https://github.com/dfinity/ic/tree/master/ic-os/guestos/context)": resource_reader.read_ignore_list(
+        IgnoreList.GUEST_OS
+    ),
 }
 
 
