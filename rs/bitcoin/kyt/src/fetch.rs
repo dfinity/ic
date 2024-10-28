@@ -2,12 +2,15 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionKytData,
 };
-use crate::types::{CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus};
+use crate::types::{
+    CheckTransactionIrrecoverableError, CheckTransactionResponse, CheckTransactionRetriable,
+    CheckTransactionStatus,
+};
 use crate::{blocklist_contains, providers, state, BtcNetwork};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_interface::Txid;
-use std::convert::{Infallible, TryFrom};
+use std::convert::Infallible;
 
 #[cfg(test)]
 mod tests;
@@ -127,7 +130,7 @@ pub trait FetchEnv {
         match self.http_get_tx(provider, txid, max_response_bytes).await {
             Ok(tx) => {
                 let input_addresses = tx.input.iter().map(|_| None).collect();
-                match TransactionKytData::try_from(tx) {
+                match TransactionKytData::from_transaction(provider.btc_network(), tx.clone()) {
                     Ok(tx) => {
                         let fetched = FetchedTx {
                             tx,
@@ -218,8 +221,19 @@ pub trait FetchEnv {
                         futures.push(do_fetch)
                     }
                     Fetched(fetched) => {
-                        let address = &fetched.tx.outputs[input.vout as usize];
-                        state::set_fetched_address(txid, index, address.clone());
+                        if let Some(address) = &fetched.tx.outputs[input.vout as usize] {
+                            state::set_fetched_address(txid, index, address.clone());
+                        } else {
+                            // This error shouldn't happen unless blockdata is corrupted.
+                            // TODO(XC-205): log this error
+                            return CheckTransactionIrrecoverableError::InvalidTransaction(
+                                format!(
+                                    "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                    input.txid, input.vout, index, txid
+                                ),
+                            )
+                            .into();
+                        }
                     }
                     Pending => continue,
                     HighLoad | NotEnoughCycles => break,
@@ -245,8 +259,19 @@ pub trait FetchEnv {
             let (index, input_txid, vout) = jobs[i];
             match result {
                 FetchResult::Fetched(fetched) => {
-                    let address = &fetched.tx.outputs[vout as usize];
-                    state::set_fetched_address(txid, index, address.clone());
+                    if let Some(address) = &fetched.tx.outputs[vout as usize] {
+                        state::set_fetched_address(txid, index, address.clone());
+                    } else {
+                        // This error shouldn't happen unless blockdata is corrupted.
+                        // TODO(XC-205): log this error
+                        error = Some(
+                            CheckTransactionIrrecoverableError::InvalidTransaction(format!(
+                                "Tx {} vout {} has no address, but is vin {} of tx {}",
+                                input_txid, vout, index, txid
+                            ))
+                            .into(),
+                        );
+                    }
                 }
                 FetchResult::Error(err) => error = Some((input_txid, err).into()),
                 FetchResult::RetryWithBiggerBuffer => (),
