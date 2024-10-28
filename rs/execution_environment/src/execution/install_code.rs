@@ -273,16 +273,19 @@ impl InstallCodeHelper {
             .as_ref()
             .map_or(false, |es| es.is_wasm64);
 
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            instructions_left,
-            message_instruction_limit,
-            original.prepaid_execution_cycles,
-            round.counters.execution_refund_error,
-            original.subnet_size,
-            is_wasm64_execution,
-            round.log,
-        );
+        round
+            .cycles_account_manager
+            .refund_unused_execution_cycles_after_install_code(
+                &mut self.canister.system_state,
+                instructions_used,
+                instructions_left,
+                message_instruction_limit,
+                original.prepaid_execution_cycles,
+                round.counters.execution_refund_error,
+                original.subnet_size,
+                is_wasm64_execution,
+                round.log,
+            );
 
         self.canister
             .system_state

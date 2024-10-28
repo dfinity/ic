@@ -566,6 +566,43 @@ impl CyclesAccountManager {
         system_state.add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
     }
 
+    /// Refunds cycles after `install_code`. This is a special case because of Wasm64.
+    /// The refund is based on the number of instructions executed and the type of the canister installed.
+    /// The initial prepayment is always as if for Wasm64. However, the actual execution may be Wasm32.
+    pub fn refund_unused_execution_cycles_after_install_code(
+        &self,
+        system_state: &mut SystemState,
+        num_instructions_used: NumInstructions,
+        num_instructions_left: NumInstructions,
+        num_instructions_initially_charged: NumInstructions,
+        prepaid_execution_cycles: Cycles,
+        error_counter: &IntCounter,
+        subnet_size: usize,
+        is_wasm64_execution: bool,
+        log: &ReplicaLogger,
+    ) {
+        self.refund_unused_execution_cycles(
+            system_state,
+            num_instructions_left,
+            num_instructions_initially_charged,
+            prepaid_execution_cycles,
+            error_counter,
+            subnet_size,
+            true, // Refund as if for Wasm64.
+            log,
+        );
+
+        // If the execution was Wasm32, we need to refund the difference between the
+        // Wasm64 and Wasm32 execution costs for the instructions that were used.
+        if !is_wasm64_execution {
+            let wasm64_cost = self.execution_cost(num_instructions_used, subnet_size, true);
+            let wasm32_cost = self.execution_cost(num_instructions_used, subnet_size, false);
+
+            let refund = wasm64_cost - wasm32_cost;
+            system_state.add_cycles(refund, CyclesUseCase::Instructions);
+        }
+    }
+
     /// Returns the cost of compute allocation for the given duration.
     #[doc(hidden)] // pub for usage in tests
     pub fn compute_allocation_cost(
