@@ -33,7 +33,7 @@ jobs:
 
       - name: Read Container Images
         id: get-images
-        uses: actions/github-script@v6
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
             const fs = require('fs');
@@ -48,8 +48,8 @@ jobs:
               sha256: imageInfo.sha256
             }));
 
-            return JSON.stringify(matrix);
-        result-encoding: string
+            // Return the matrix as a JSON string
+            core.setOutput('matrix', JSON.stringify(matrix));
 
       - name: Sync Containers
         run: |
