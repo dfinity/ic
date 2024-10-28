@@ -17,10 +17,10 @@ function install_hostos() {
     echo "* Temporarily extracting the HostOS image to memory; please stand by for a few seconds"
     tar xafS /data/host-os.img.tar.zst -C "${TMPDIR}" disk.img
     log_and_halt_installation_on_error "${?}" "Unable to extract HostOS disk-image."
-    # Duplicate the image to the disk.
+    # Write the extracted image to the disk.
     # Progress is handled by status=progress.
-    # Makes a huge difference when running the setup under QEMU with no KVM.
     # dd will detect nulls in chunks of 4M and sparsify the writes.
+    # Makes a huge difference when running the setup under QEMU with no KVM.
     # In *non-KVM-accelerated* VM, this goes 500 MB/s, three times as fast as before.
     echo "* Writing the HostOS image to /dev/${target_drive}"
     dd if="${TMPDIR}/disk.img" of="/dev/${target_drive}" bs=4M conv=sparse status=progress
