@@ -247,25 +247,10 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/node/                                         @dfinity/node @dfinity/idx
 /rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/sdk/                                          @dfinity/sdk @dfinity/idx
-/rs/tests/src/basic_health_test.rs                      @dfinity/idx
-/rs/tests/src/btc_integration/                          @dfinity/execution @dfinity/idx
-/rs/tests/src/canister_http/                            @dfinity/networking @dfinity/idx
-/rs/tests/src/canister_sig_verification_cache_test/     @dfinity/crypto-team @dfinity/idx
-/rs/tests/src/certificate_orchestrator.rs               @dfinity/boundary-node @dfinity/idx
-/rs/tests/src/consensus/                                @dfinity/consensus @dfinity/idx
-/rs/tests/src/cross_chain/                              @dfinity/cross-chain-team @dfinity/idx
-/rs/tests/src/crypto/                                   @dfinity/crypto-team @dfinity/idx
-/rs/tests/src/custom_domains_integration/               @dfinity/boundary-node @dfinity/idx
-/rs/tests/src/execution/                                @dfinity/execution @dfinity/idx
-/rs/tests/src/ipv4_tests/                               @dfinity/node  @dfinity/idx
 /rs/tests/src/ledger_tests/                             @dfinity/finint  @dfinity/idx
-/rs/tests/src/message_routing/                          @dfinity/ic-message-routing-owners  @dfinity/idx
-/rs/tests/src/networking/                               @dfinity/networking @dfinity/idx
 /rs/tests/src/nns_tests/                                @dfinity/nns-team @dfinity/idx
-/rs/tests/src/orchestrator/                             @dfinity/consensus @dfinity/idx
-/rs/tests/src/query_stats/                              @dfinity/execution @dfinity/consensus @dfinity/idx
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint @dfinity/idx
-/rs/tests/src/tecdsa/                                   @dfinity/consensus @dfinity/idx
+/rs/tests/src/rosetta_tests/                            @dfinity/finint @dfinity/idx
 /rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners

@@ -10122,6 +10122,9 @@ fn test_include_public_neurons_in_full_neurons() {
 
     if is_private_neuron_enforcement_enabled() {
         for neuron in &mut expected_full_neurons {
+            if neuron.known_neuron_data.is_some() {
+                neuron.visibility = Some(Visibility::Public as i32);
+            }
             let visibility = &mut neuron.visibility;
             if visibility.is_none() {
                 *visibility = Some(Visibility::Private as i32);
@@ -10129,7 +10132,7 @@ fn test_include_public_neurons_in_full_neurons() {
         }
     }
 
-    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons,);
+    assert_eq!(list_neurons_response.full_neurons, expected_full_neurons);
 }
 
 /// Struct to help with the wait for quiet tests.
@@ -14138,15 +14141,20 @@ fn test_neuron_info_private_enforcement() {
         ];
         main(neuron_id_to_expect_redact);
 
-        // Insepct visibility. This time, it should always be None.
-        for neuron_id in [
-            no_explicit_visibility_neuron.id.unwrap(),
-            private_neuron.id.unwrap(),
-            public_neuron.id.unwrap(),
-            known_neuron.id.unwrap(),
+        // Insepct visibility. This time, the no explicit visibility neuron is shown as such.
+        for (neuron_id, expected_visibility) in [
+            (no_explicit_visibility_neuron.id.unwrap(), None),
+            (private_neuron.id.unwrap(), Some(Visibility::Private)),
+            (public_neuron.id.unwrap(), Some(Visibility::Public)),
+            (known_neuron.id.unwrap(), Some(Visibility::Public)),
         ] {
             let neuron_info = governance.get_neuron_info(&neuron_id, controller).unwrap();
-            assert_eq!(neuron_info.visibility, None, "{:?}", neuron_info,);
+            assert_eq!(
+                neuron_info.visibility,
+                expected_visibility.map(|visibility| visibility as i32),
+                "{:?}",
+                neuron_info,
+            );
         }
     }
 }

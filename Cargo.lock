@@ -11925,6 +11925,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
+ "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
  "ic-sns-root-protobuf-generator",

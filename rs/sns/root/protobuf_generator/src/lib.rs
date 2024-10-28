@@ -3,6 +3,7 @@ use std::path::Path;
 pub struct ProtoPaths<'a> {
     pub sns: &'a Path,
     pub base_types: &'a Path,
+    pub nervous_system: &'a Path,
 }
 
 pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
@@ -19,11 +20,18 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     // Imported stuff.
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
+    config.extern_path(
+        ".ic_nervous_system.pb.v1",
+        "::ic-nervous-system-proto::pb::v1",
+    );
 
     let root_proto = proto.sns.join("ic_sns_root/pb/v1/root.proto");
 
     config
-        .compile_protos(&[root_proto], &[proto.sns, proto.base_types])
+        .compile_protos(
+            &[root_proto],
+            &[proto.sns, proto.base_types, proto.nervous_system],
+        )
         .unwrap();
 
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
