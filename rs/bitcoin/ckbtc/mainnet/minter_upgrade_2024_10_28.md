@@ -14,7 +14,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 ## Motivation
 
-Reduce the minimum ckbtc retrieval amounnt to 0.0005 BTC, as proposed by a recently passed motion proposal https://dashboard.internetcomputer.org/proposal/133462.
+Reduce the minimum ckbtc retrieval amount to 0.0005 BTC, as proposed by a recently passed motion proposal https://dashboard.internetcomputer.org/proposal/133462.
 
 ## Upgrade args
 
@@ -27,7 +27,7 @@ didc encode -d ckbtc_minter.did -t '(MinterArg)' '(variant {Upgrade = opt record
 
 ## Release Notes
 
-There is no change to the deployed wasm binary.
+There is no change to the deployed Wasm binary.
 
 The same version was deployed previously in https://dashboard.internetcomputer.org/proposal/133057.
 
