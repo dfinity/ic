@@ -5,14 +5,13 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test", "symlink_dirs")
+load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
 load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 exports_files([
-    "src/memory_safety.wasm",
     "src/message.wasm",
     "src/counter.wat",
 ])
@@ -28,7 +27,6 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "//ic-os/components:ic/ic.json5.template",
-        "src/memory_safety.wasm",
         "src/counter.wat",
         "src/ledger_tests/transaction_ledger_correctness.wasm",
     ],
@@ -186,6 +184,9 @@ dpkg_status(
     controls = [
         "%s:control" % package
         for package in PACKAGES_NOBLE
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
     ],
 )
 
@@ -385,20 +386,6 @@ run_binary(
     tool = "//rs/tests/testing_verification/wabt-tests:generator",
 )
 
-symlink_dirs(
-    name = "ic-hs",
-    target_compatible_with = ["@platforms//os:linux"],
-    targets = {
-        "//hs/spec_compliance:ic-ref-test": "bin",
-        "//rs/universal_canister/impl:universal_canister.wasm.gz": "test-data",
-        "//rs/tests:wabt-tests": "test-data",
-    },
-    visibility = [
-        "//rs:system-tests-pkg",
-        "//rs/pocket_ic_server:__pkg__",
-    ],
-)
-
 oci_tar(
     name = "jaeger.tar",
     image = "@jaeger",
@@ -409,46 +396,4 @@ oci_tar(
     name = "bitcoind.tar",
     image = "@bitcoind",
     repo_tags = ["bitcoind:pinned"],
-)
-
-oci_tar(
-    name = "coredns.tar",
-    image = "@coredns",
-    repo_tags = ["coredns:latest"],
-)
-
-oci_tar(
-    name = "pebble.tar",
-    image = "@pebble",
-    repo_tags = ["pebble:latest"],
-)
-
-oci_tar(
-    name = "python3.tar",
-    image = "@python3",
-    repo_tags = ["python3:latest"],
-)
-
-oci_tar(
-    name = "openssl.tar",
-    image = "@alpine_openssl",
-    repo_tags = ["openssl:latest"],
-)
-
-uvm_config_image(
-    name = "custom_domains_uvm_config_image",
-    srcs = [
-        # Docker images
-        ":coredns_tar",
-        ":openssl_tar",
-        ":pebble_tar",
-        ":python3_tar",
-
-        # Assets
-        ":src/custom_domains_integration/activate.sh",
-        ":src/custom_domains_integration/pebble_cache.py",
-        ":src/custom_domains_integration/cloudflare_api.py",
-    ],
-    remap_paths = {"activate.sh": "activate"},
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )

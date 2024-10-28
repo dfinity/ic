@@ -17,7 +17,8 @@ use prost::Message;
 use std::{
     borrow::Cow,
     collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
-    ops::RangeBounds,
+    iter::Peekable,
+    ops::{Bound as RangeBound, RangeBounds},
 };
 
 // Because many arguments are needed to construct a StableNeuronStore, there is
@@ -343,10 +344,85 @@ where
     /// Returns the next neuron_id equal to or higher than the provided neuron_id
     pub fn range_neurons<R>(&self, range: R) -> impl Iterator<Item = Neuron> + '_
     where
-        R: RangeBounds<NeuronId>,
+        R: RangeBounds<NeuronId> + Clone,
     {
-        self.main.range(range).map(|(neuron_id, neuron)| {
-            self.reconstitute_neuron(neuron_id, neuron, NeuronSections::all())
+        let (start, end) = get_range_boundaries(range.clone());
+
+        // We want our ranges for sub iterators to include start and end
+        let hotkeys_range = (start, u64::MIN)..=(end, u64::MAX);
+        let ballots_range = (start, u64::MIN)..=(end, u64::MAX);
+
+        let followees_range = FolloweesKey {
+            follower_id: start,
+            ..FolloweesKey::MIN
+        }..=FolloweesKey {
+            follower_id: end,
+            ..FolloweesKey::MAX
+        };
+
+        // Instead of randomly accessing each map (which is expensive for StableBTreeMaps), we
+        // use a range query on each map, and iterate all of the ranges at the same time.  This
+        // uses 40% less instructions compared to just iterating on the top level range, and
+        // accessing the other maps for each neuron_id.
+        // This is only possible because EVERY range begins with NeuronId, so that their ordering
+        // is the same in respect to the main range's neurons.
+
+        let main_range = self.main.range(range.clone());
+        let mut hot_keys_iter = self.hot_keys_map.range(hotkeys_range).peekable();
+        let mut recent_ballots_iter = self.recent_ballots_map.range(ballots_range).peekable();
+        let mut followees_iter = self.followees_map.range(followees_range).peekable();
+        let mut known_neuron_data_iter = self.known_neuron_data_map.range(range.clone()).peekable();
+        let mut transfer_iter = self.transfer_map.range(range).peekable();
+
+        main_range.map(move |(main_neuron_id, abridged_neuron)| {
+            // We'll collect data from all relevant maps for this neuron_id
+
+            let hot_keys = collect_values_for_neuron_from_peekable_range(
+                &mut hot_keys_iter,
+                main_neuron_id,
+                |((neuron_id, _), _)| *neuron_id,
+                |((_, _), principal)| PrincipalId::from(principal),
+            );
+
+            let ballots = collect_values_for_neuron_from_peekable_range(
+                &mut recent_ballots_iter,
+                main_neuron_id,
+                |((neuron_id, _), _)| *neuron_id,
+                |((_, _), ballot_info)| ballot_info,
+            );
+
+            let followees = collect_values_for_neuron_from_peekable_range(
+                &mut followees_iter,
+                main_neuron_id,
+                |(followees_key, _)| followees_key.follower_id,
+                |x| x,
+            );
+
+            let current_known_neuron_data = collect_values_for_neuron_from_peekable_range(
+                &mut known_neuron_data_iter,
+                main_neuron_id,
+                |(neuron_id, _)| *neuron_id,
+                |(_, known_neuron_data)| known_neuron_data,
+            )
+            .pop();
+
+            let current_transfer = collect_values_for_neuron_from_peekable_range(
+                &mut transfer_iter,
+                main_neuron_id,
+                |(neuron_id, _)| *neuron_id,
+                |(_, transfer)| transfer,
+            )
+            .pop();
+
+            Neuron::from(DecomposedNeuron {
+                id: main_neuron_id,
+                main: abridged_neuron,
+                hot_keys,
+                recent_ballots: ballots,
+                followees: self.reconstitute_followees_from_range(followees.into_iter()),
+                known_neuron_data: current_known_neuron_data,
+                transfer: current_transfer,
+            })
         })
     }
 
@@ -438,6 +514,13 @@ where
         };
         let range = self.followees_map.range(first..=last);
 
+        self.reconstitute_followees_from_range(range)
+    }
+
+    fn reconstitute_followees_from_range(
+        &self,
+        range: impl Iterator<Item = (FolloweesKey, NeuronId)>,
+    ) -> HashMap</* topic ID */ i32, Followees> {
         range
             // create groups for topics
             .group_by(|(followees_key, _followee_id)| followees_key.topic)
@@ -611,6 +694,56 @@ impl Storable for NeuronStakeTransfer {
 
 // Private Helpers
 // ===============
+
+fn get_range_boundaries<R>(range_bound: R) -> (NeuronId, NeuronId)
+where
+    R: RangeBounds<NeuronId>,
+{
+    let start = match range_bound.start_bound() {
+        RangeBound::Included(start) => *start,
+        RangeBound::Excluded(start) => *start,
+        RangeBound::Unbounded => NeuronId::MIN,
+    };
+    let end = match range_bound.end_bound() {
+        RangeBound::Included(end) => *end,
+        RangeBound::Excluded(end) => *end,
+        RangeBound::Unbounded => NeuronId::MAX,
+    };
+
+    (start, end)
+}
+
+/// Skips until extract_neuron_id(item) == target_neuron_id, then maps corresponding items through
+/// extract_value and returns the result as a vector.
+fn collect_values_for_neuron_from_peekable_range<Iter, T, R, FNeuronId, FValue>(
+    iter: &mut Peekable<Iter>,
+    target_neuron_id: NeuronId,
+    extract_neuron_id: FNeuronId,
+    extract_value: FValue,
+) -> Vec<R>
+where
+    Iter: Iterator<Item = T>,
+    FNeuronId: Fn(&T) -> NeuronId,
+    FValue: Fn(T) -> R,
+{
+    let mut result = vec![];
+
+    while let Some(item) = iter.peek() {
+        let neuron_id = extract_neuron_id(item);
+        if neuron_id > target_neuron_id {
+            break;
+        }
+        let item = iter
+            .next()
+            .expect("Peek had a value, but next did not!  This should be impossible.");
+
+        if neuron_id == target_neuron_id {
+            result.push(extract_value(item));
+        }
+    }
+
+    result
+}
 
 // This is copied from candid/src. Seems like their definition should be public,
 // but it's not. Seems to be an oversight.

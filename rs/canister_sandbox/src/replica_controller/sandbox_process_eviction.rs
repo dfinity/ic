@@ -1,11 +1,13 @@
+use num_traits::ops::saturating::SaturatingAdd;
 use std::{cmp::Ordering, time::Instant};
 
-use ic_types::{AccumulatedPriority, CanisterId};
+use ic_types::{AccumulatedPriority, CanisterId, NumBytes};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(crate) struct EvictionCandidate {
     pub id: CanisterId,
     pub last_used: Instant,
+    pub rss: NumBytes,
     pub scheduler_priority: AccumulatedPriority,
 }
 
@@ -41,38 +43,34 @@ impl PartialOrd for EvictionCandidate {
 ///      evicts the most candidates with `last_used < last_used_threshold`.
 /// 4. Return the evicted candidates.
 pub(crate) fn evict(
-    candidates: Vec<EvictionCandidate>,
-    min_number_of_candidates: usize,
-    max_number_of_candidates: usize,
+    mut candidates: Vec<EvictionCandidate>,
+    total_rss: NumBytes,
+    max_count_threshold: usize,
     last_used_threshold: Instant,
+    max_sandboxes_rss: NumBytes,
 ) -> Vec<EvictionCandidate> {
-    let evict_at_most = candidates.len().saturating_sub(min_number_of_candidates);
+    candidates.sort_by_key(|x| x.last_used);
 
-    let (mut idle, mut non_idle): (_, Vec<_>) = candidates
-        .into_iter()
-        .partition(|candidate| candidate.last_used < last_used_threshold);
+    let evict_at_least = candidates.len().saturating_sub(max_count_threshold);
 
-    if idle.len() >= evict_at_most {
-        idle.sort_by(|a, b| a.last_used.cmp(&b.last_used));
+    let mut evicted = vec![];
+    let mut evicted_rss = NumBytes::new(0);
 
-        idle.truncate(evict_at_most);
-
-        return idle;
+    for candidate in candidates.into_iter() {
+        if candidate.last_used >= last_used_threshold
+            && evicted.len() >= evict_at_least
+            && total_rss <= max_sandboxes_rss.saturating_add(&evicted_rss)
+        {
+            // We have already evicted the minimum required number of candidates
+            // and all the remaining candidates were not idle the recent
+            // `last_used_threshold` time window. No need to evict more.
+            break;
+        }
+        evicted_rss = evicted_rss.saturating_add(&candidate.rss);
+        evicted.push(candidate);
     }
 
-    let remain_to_evict = non_idle.len().saturating_sub(max_number_of_candidates);
-    println!("min: {}, max:{}", remain_to_evict, evict_at_most);
-
-    non_idle.sort_by(|a, b| {
-        if a.scheduler_priority == b.scheduler_priority {
-            return a.last_used.cmp(&b.last_used);
-        }
-        a.scheduler_priority.cmp(&b.scheduler_priority)
-    });
-
-    idle.into_iter()
-        .chain(non_idle.into_iter().take(remain_to_evict))
-        .collect()
+    evicted
 }
 
 #[cfg(test)]
@@ -81,12 +79,13 @@ mod tests {
 
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::AccumulatedPriority;
+    use ic_types::NumBytes;
 
     use super::{evict, EvictionCandidate};
 
     #[test]
     fn evict_empty() {
-        assert_eq!(evict(vec![], 0, 0, Instant::now()), vec![],);
+        assert_eq!(evict(vec![], 0.into(), 0, Instant::now(), 0.into()), vec![],);
     }
 
     #[test]
@@ -98,9 +97,10 @@ mod tests {
                 id: canister_test_id(i),
                 last_used: now,
                 scheduler_priority: AccumulatedPriority::new(0),
+                rss: 0.into(),
             });
         }
-        assert_eq!(evict(candidates, 0, 10, now,), vec![],);
+        assert_eq!(evict(candidates, 0.into(), 10, now, 0.into()), vec![],);
     }
 
     #[test]
@@ -111,11 +111,12 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now + Duration::from_secs(100 - i),
+                rss: 0.into(),
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
-            evict(candidates.clone(), 0, 90, now,),
+            evict(candidates.clone(), 0.into(), 90, now, 0.into()),
             candidates.into_iter().rev().take(10).collect::<Vec<_>>()
         );
     }
@@ -129,11 +130,18 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i),
+                rss: 0.into(),
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
-            evict(candidates.clone(), 0, 100, now - Duration::from_secs(50)),
+            evict(
+                candidates.clone(),
+                0.into(),
+                100,
+                now - Duration::from_secs(50),
+                0.into()
+            ),
             candidates.into_iter().rev().take(49).collect::<Vec<_>>()
         );
     }
@@ -145,13 +153,129 @@ mod tests {
         for i in 0..100 {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
-                last_used: now - Duration::from_secs(i + 1),
+                last_used: now - Duration::from_secs(i + 1) + Duration::from_secs(10),
+                rss: 0.into(),
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
         assert_eq!(
-            evict(candidates.clone(), 10, 100, now),
+            evict(candidates.clone(), 0.into(), 100, now, 0.into()),
             candidates.into_iter().rev().take(90).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn evict_none_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+                scheduler_priority: AccumulatedPriority::new(0),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, total_rss),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn evict_some_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, total_rss / 2),
+            candidates.into_iter().take(50).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn evict_all_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, 0.into()),
+            candidates
+        );
+    }
+
+    #[test]
+    fn evict_none_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, total_rss),
+            vec![]
+        );
+    }
+
+    #[test]
+    fn evict_some_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, total_rss / 2),
+            candidates.into_iter().take(50).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn evict_all_due_to_rss() {
+        let mut candidates = vec![];
+        let now = Instant::now();
+        let mut total_rss = NumBytes::new(0);
+        for i in 0..100 {
+            candidates.push(EvictionCandidate {
+                id: canister_test_id(i),
+                last_used: now,
+                rss: 50.into(),
+            });
+            total_rss += 50.into();
+        }
+        assert_eq!(
+            evict(candidates.clone(), total_rss, 100, now, 0.into()),
+            candidates
         );
     }
 
@@ -163,9 +287,13 @@ mod tests {
             candidates.push(EvictionCandidate {
                 id: canister_test_id(i),
                 last_used: now - Duration::from_secs(i + 1),
+                rss: 0.into(),
                 scheduler_priority: AccumulatedPriority::new(0),
             });
         }
-        assert_eq!(evict(candidates.clone(), 10, 100, now).len(), 90);
+        assert_eq!(
+            evict(candidates.clone(), 0.into(), 100, now, 0.into()).len(),
+            100
+        );
     }
 }

@@ -18,9 +18,9 @@ use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tempfile::Builder;
-use tokio::sync::{mpsc::channel, Mutex};
+use tokio::sync::mpsc::channel;
 
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,

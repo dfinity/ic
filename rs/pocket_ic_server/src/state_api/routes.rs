@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 /// This module contains the route handlers for the PocketIc server.
 ///
 /// A handler may receive a representation of a PocketIc Operation in the request
@@ -768,14 +769,6 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
 /// the return type.
 async fn op_out_to_response(op_out: OpOut) -> Response {
     match op_out {
-        OpOut::Pruned => (
-            StatusCode::GONE,
-            Json(ApiResponse::<()>::Error {
-                message: "Pruned".to_owned(),
-            })
-            .into_response(),
-        )
-            .into_response(),
         opout @ OpOut::MessageId(_) => (
             StatusCode::OK,
             Json(ApiResponse::Success(
@@ -872,9 +865,7 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) =
-            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
-        {
+        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
             op_out_to_response(op_out).await
         } else {
             (
