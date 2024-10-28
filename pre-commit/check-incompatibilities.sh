@@ -2,7 +2,7 @@
 
 set -eExuo pipefail
 
-MERGE_BASE=${{MERGE_BASE_SHA:-HEAD}}
+MERGE_BASE=${MERGE_BASE_SHA:-HEAD}
 
 CONF="$(readlink "$buf_config")"
 REPO_PATH="$(dirname "$(readlink "$WORKSPACE")")"
