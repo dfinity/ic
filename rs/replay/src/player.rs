@@ -701,7 +701,6 @@ impl Player {
                 pool,
                 &*self.registry,
                 self.subnet_id,
-                self.replica_version.clone(),
                 &self.log,
                 replay_target_height,
                 None,
