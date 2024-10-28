@@ -16,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::{ExpectedIndices, max_messages_end, MAX_STREAM_MESSAGES};
+use ic_xnet_payload_builder::{max_messages_end, ExpectedIndices, MAX_STREAM_MESSAGES};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -1122,13 +1122,13 @@ proptest! {
 
     // Testing the 'signals limit' (the limit on messages in a slice such that the number of
     // signals after inducting it is capped) requires streams with thousands of messages in it.
-    // 
+    //
     // It is therefore using a reduced number of cases to keep the load within reasonable bounds.
     #[test]
     fn pool_take_slice_respects_signal_limit(
         (stream, from, msg_count) in arb_stream_slice(MAX_STREAM_MESSAGES, 2 * MAX_STREAM_MESSAGES, 0, 0),
     ) {
-        with_test_replica_logger(|log| { 
+        with_test_replica_logger(|log| {
             // Stream position matching slice begin.
             let begin = ExpectedIndices{
                 message_index: from,
@@ -1149,7 +1149,7 @@ proptest! {
 
             pool.put(SRC_SUBNET, slice, REGISTRY_VERSION, log.clone()).unwrap();
             let _ = pool.take_slice(SRC_SUBNET, Some(&begin), None, None).unwrap().unwrap();
-            
+
             let (new_begin, _, _, _) = pool.slice_stats(SRC_SUBNET);
             let messages_end = new_begin.unwrap().message_index;
 
