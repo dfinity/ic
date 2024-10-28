@@ -389,7 +389,6 @@ impl Payload {
         let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
             message_limit.min(max_message_limit)
         });
-        //let message_limit = message_limit.unwrap_or(usize::MAX);
         let byte_limit = byte_limit.unwrap_or(usize::MAX);
 
         debug_assert!(EMPTY_PAYLOAD_BYTES <= NON_EMPTY_PAYLOAD_FIXED_BYTES);
