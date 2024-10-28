@@ -2,7 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test", "rust_ic_test_suite_with_extra_srcs")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [

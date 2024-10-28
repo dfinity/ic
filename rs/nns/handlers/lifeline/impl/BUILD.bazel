@@ -2,7 +2,7 @@ load("@rules_motoko//motoko:defs.bzl", "external_actor")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "motoko_canister")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs:system-dapps-pkg"])
 
 # The motoko compiler fails to map float types in the Governance init arg to
 # appropriate Motoko types.
@@ -49,6 +49,10 @@ rust_library(
     rustc_env = {
         "LIFELINE_CANISTER_WASM_PATH": "$(location :lifeline_canister.wasm)",
     },
+    visibility = [
+        "//rs:system-dapps-pkg",
+        "//rs:system-tests-pkg",
+    ],
 )
 
 rust_binary(
