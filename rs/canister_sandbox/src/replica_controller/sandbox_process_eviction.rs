@@ -174,64 +174,6 @@ mod tests {
                 id: canister_test_id(i),
                 last_used: now,
                 rss: 50.into(),
-                scheduler_priority: AccumulatedPriority::new(0),
-            });
-            total_rss += 50.into();
-        }
-        assert_eq!(
-            evict(candidates.clone(), total_rss, 100, now, total_rss),
-            vec![]
-        );
-    }
-
-    #[test]
-    fn evict_some_due_to_rss() {
-        let mut candidates = vec![];
-        let now = Instant::now();
-        let mut total_rss = NumBytes::new(0);
-        for i in 0..100 {
-            candidates.push(EvictionCandidate {
-                id: canister_test_id(i),
-                last_used: now,
-                rss: 50.into(),
-            });
-            total_rss += 50.into();
-        }
-        assert_eq!(
-            evict(candidates.clone(), total_rss, 100, now, total_rss / 2),
-            candidates.into_iter().take(50).collect::<Vec<_>>()
-        );
-    }
-
-    #[test]
-    fn evict_all_due_to_rss() {
-        let mut candidates = vec![];
-        let now = Instant::now();
-        let mut total_rss = NumBytes::new(0);
-        for i in 0..100 {
-            candidates.push(EvictionCandidate {
-                id: canister_test_id(i),
-                last_used: now,
-                rss: 50.into(),
-            });
-            total_rss += 50.into();
-        }
-        assert_eq!(
-            evict(candidates.clone(), total_rss, 100, now, 0.into()),
-            candidates
-        );
-    }
-
-    #[test]
-    fn evict_none_due_to_rss() {
-        let mut candidates = vec![];
-        let now = Instant::now();
-        let mut total_rss = NumBytes::new(0);
-        for i in 0..100 {
-            candidates.push(EvictionCandidate {
-                id: canister_test_id(i),
-                last_used: now,
-                rss: 50.into(),
             });
             total_rss += 50.into();
         }
