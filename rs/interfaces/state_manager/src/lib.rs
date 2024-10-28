@@ -6,7 +6,10 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height,
 };
 use phantom_newtype::BitMask;
-use std::{collections::{HashMap, BTreeSet}, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 use thiserror::Error;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
