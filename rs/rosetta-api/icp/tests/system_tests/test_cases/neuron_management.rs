@@ -1,4 +1,3 @@
-use crate::common::utils::get_custom_agent;
 use crate::common::utils::update_neuron;
 use crate::common::utils::wait_for_rosetta_to_catch_up_with_icp_ledger;
 use crate::common::{

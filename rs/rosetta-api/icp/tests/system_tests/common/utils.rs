@@ -15,7 +15,6 @@ use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
-use rosetta_core::models::Ed25519KeyPair;
 use std::sync::Arc;
 use url::Url;
 
