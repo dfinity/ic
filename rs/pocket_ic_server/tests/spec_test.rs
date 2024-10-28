@@ -185,7 +185,7 @@ fn setup_and_run_ic_ref_test(
         peer_subnet_config,
         excluded_tests,
         vec!["$0 ~ /canister http/"],
-        16,
+        64,
     );
 }
 /*

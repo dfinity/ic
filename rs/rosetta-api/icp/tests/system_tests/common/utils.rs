@@ -10,6 +10,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::ListNeurons;
 use ic_nns_governance::pb::v1::ListNeuronsResponse;
+use ic_nns_governance_api::pb::v1::GovernanceError;
 use ic_rosetta_api::convert::to_hash;
 use icp_ledger::GetBlocksArgs;
 use icp_ledger::QueryEncodedBlocksResponse;
@@ -189,4 +190,18 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
         ListNeuronsResponse
     )
     .unwrap()
+}
+
+pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1::Neuron) {
+    let result = Decode!(
+        &agent
+            .update(&GOVERNANCE_CANISTER_ID.into(), "update_neuron")
+            .with_arg(Encode!(&neuron).unwrap())
+            .call_and_wait()
+            .await
+            .unwrap(),
+        Option<GovernanceError>
+    )
+    .unwrap();
+    assert!(result.is_none(), "Failed to update neuron: {:?}", result);
 }

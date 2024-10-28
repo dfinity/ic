@@ -320,7 +320,7 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
+COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests/networking/canister_http:http_uvm_config_image",

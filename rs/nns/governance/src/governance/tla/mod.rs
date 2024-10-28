@@ -21,7 +21,7 @@ mod store;
 
 pub use common::{account_to_tla, opt_subaccount_to_tla, subaccount_to_tla};
 use common::{function_domain_union, governance_account_id};
-pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES};
+pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
 mod split_neuron;
 pub use split_neuron::split_neuron_desc;
@@ -213,10 +213,25 @@ pub fn check_traces() {
     // improving that later, for now we introduce a hard limit on the state size, and
     // skip checking states larger than the limit
     const STATE_SIZE_LIMIT: u64 = 500;
+    fn is_under_limit(p: &ResolvedStatePair) -> bool {
+        p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT
+    }
+
+    fn print_stats(traces: &Vec<UpdateTrace>) {
+        println!("Checking {} traces with TLA/Apalache", traces.len());
+        for t in traces {
+            let total_len = t.state_pairs.len();
+            let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
+            println!(
+                "TLA/Apalache checks: keeping {}/{} states for update {}",
+                under_limit_len, total_len, t.update.process_id
+            );
+        }
+    }
+
     let traces = {
-        // Introduce a scope to drop the write lock immediately, in order
-        // not to poison the lock if we panic later
-        let mut t = TLA_TRACES.write().unwrap();
+        let t = TLA_TRACES_LKEY.get();
+        let mut t = t.borrow_mut();
         std::mem::take(&mut (*t))
     };
 
@@ -230,11 +245,13 @@ pub fn check_traces() {
         panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
     }
 
+    print_stats(&traces);
+
     let chunk_size = 20;
     let all_pairs = traces.into_iter().flat_map(|t| {
         t.state_pairs
             .into_iter()
-            .filter(|p| p.start.size() < STATE_SIZE_LIMIT && p.end.size() < STATE_SIZE_LIMIT)
+            .filter(is_under_limit)
             .map(move |p| (t.update.clone(), t.constants.clone(), p))
     });
     let chunks = all_pairs.chunks(chunk_size);
@@ -267,7 +284,7 @@ pub fn check_traces() {
                 println!("Possible divergence from the TLA model detected when interacting with the ledger!");
                 println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
                 println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
-                println!("You can edit nervous_system/tla/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
+                println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 println!("-------------------");
                 println!("Error occured while checking the state pair:\n{:#?}\nwith constants:\n{:#?}", e.pair, e.constants);
                 println!("Apalache returned:\n{:#?}", e.apalache_error);
