@@ -193,6 +193,24 @@ impl BlockRangeInclusive {
             .expect("unreachable: mid <= end");
         self.partition_at_checked(mid)
     }
+
+    /// Join two block ranges into a single range that spans both ranges.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use ic_cketh_minter::state::eth_logs_scraping::BlockRangeInclusive;
+    ///
+    /// let lower_range = BlockRangeInclusive::from(1..=3_u8);
+    /// let upper_range = BlockRangeInclusive::from(4..=5_u8);
+    /// assert_eq!(lower_range.clone().join_with(upper_range.clone()), BlockRangeInclusive::from(1..=5_u8));
+    /// assert_eq!(upper_range.join_with(lower_range), BlockRangeInclusive::from(1..=5_u8));
+    /// ```
+    pub fn join_with(self, other: BlockRangeInclusive) -> BlockRangeInclusive {
+        let (start, end) = self.0.into_inner();
+        let (other_start, other_end) = other.0.into_inner();
+        BlockRangeInclusive::new(start.min(other_start), end.max(other_end))
+    }
 }
 
 impl Display for BlockRangeInclusive {

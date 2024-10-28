@@ -59,6 +59,7 @@ impl EthEvent {
 }
 
 pub trait LogScraper {
+    fn is_active(state: &State) -> bool;
     fn current_state(state: &State) -> LogScrapingState;
     fn update_last_scraped_block_number(state: &mut State, block_number: BlockNumber);
     fn topics(state: &State) -> Vec<Topic>;
@@ -68,6 +69,10 @@ pub trait LogScraper {
 struct EthWithoutSubaccountScraper {}
 
 impl LogScraper for EthWithoutSubaccountScraper {
+    fn is_active(state: &State) -> bool {
+        Self::current_state(state).contract_address().is_some()
+    }
+
     fn current_state(state: &State) -> LogScrapingState {
         state.eth_log_scraping.clone()
     }
@@ -90,6 +95,10 @@ impl LogScraper for EthWithoutSubaccountScraper {
 struct Erc20WithoutSubaccount {}
 
 impl LogScraper for Erc20WithoutSubaccount {
+    fn is_active(state: &State) -> bool {
+        Self::current_state(state).contract_address().is_some() && !state.ckerc20_tokens.is_empty()
+    }
+
     fn current_state(state: &State) -> LogScrapingState {
         state.erc20_log_scraping.clone()
     }
@@ -132,7 +141,6 @@ async fn scrape_block_range<S: LogScraper, P: LogParser>(
     subranges.push_back(block_range);
 
     while !subranges.is_empty() {
-        log!(DEBUG, "subranges: {:?}", subranges);
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
@@ -185,15 +193,27 @@ async fn scrape_block_range<S: LogScraper, P: LogParser>(
                         mutate_state(|s| S::update_last_scraped_block_number(s, to_block));
                     } else {
                         let (left_half, right_half) = range.partition_into_halves();
-                        log!(INFO, "Too many logs received. Will retry splitting the range between {left_half:?} and {right_half:?}");
                         if let Some(r) = right_half {
-                            subranges.push_front(r);
+                            let upper_range = subranges
+                                .pop_front()
+                                .map(|current_next| r.clone().join_with(current_next))
+                                .unwrap_or(r);
+                            subranges.push_front(upper_range);
                         }
-                        if let Some(l) = left_half {
-                            subranges.push_front(l);
+                        if let Some(lower_range) = left_half {
+                            subranges.push_front(lower_range);
                         }
+                        log!(
+                            INFO,
+                            "Too many logs received. Will with ranges {subranges:?}"
+                        );
                     }
                 } else {
+                    log!(
+                        INFO,
+                        "Failed to get {} logs in range {range}: {e:?}",
+                        S::display_id()
+                    );
                     return Err(e);
                 }
             }
@@ -257,6 +277,14 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
     last_block_number: BlockNumber,
     max_block_spread: u16,
 ) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+    if !read_state(S::is_active) {
+        log!(
+            DEBUG,
+            "[scrape_contract_logs]: skipping scrapping of {} logs: not active",
+            S::display_id()
+        );
+        return Ok(());
+    }
     let state = read_state(S::current_state);
     let helper_contract_address = match state.contract_address() {
         Some(address) => address.clone(),
@@ -269,18 +297,21 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
             return Ok(());
         }
     };
-    let topics = read_state(S::topics);
-    let rpc_client = read_state(EthRpcClient::from_state);
-
-    for block_range in BlockRangeInclusive::new(
+    let block_range = BlockRangeInclusive::new(
         state
             .last_scraped_block_number()
             .checked_increment()
             .unwrap_or(BlockNumber::MAX),
         last_block_number,
-    )
-    .into_chunks(max_block_spread)
-    {
+    );
+    log!(
+        DEBUG,
+        "Scraping {} logs in in block range {block_range}",
+        S::display_id()
+    );
+    let topics = read_state(S::topics);
+    let rpc_client = read_state(EthRpcClient::from_state);
+    for block_range in block_range.into_chunks(max_block_spread) {
         scrape_block_range::<S, P>(
             &rpc_client,
             helper_contract_address,
@@ -658,7 +689,8 @@ pub async fn scrape_logs() {
     let _r = scrape_until_block::<Erc20WithoutSubaccount, Erc20WithoutSubaccountLogParser>(
         last_block_number,
         max_block_spread,
-    );
+    )
+    .await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
