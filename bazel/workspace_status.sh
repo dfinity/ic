@@ -12,6 +12,9 @@ echo "REPO_URL $repo_url"
 commit_sha=$(git rev-parse HEAD)
 echo "COMMIT_SHA $commit_sha"
 
+commit_timestamp=$(git show -s --format=%ct)
+echo "COMMIT_TIMESTAMP $commit_timestamp"
+
 git_branch=$(git rev-parse --abbrev-ref HEAD)
 echo "GIT_BRANCH $git_branch"
 

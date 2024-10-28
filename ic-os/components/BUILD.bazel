@@ -30,16 +30,15 @@ exports_files(
 
 genrule(
     name = "commit_timestamp_txt",
-    outs = ["commit_timestamp.txt"],
-    cmd = select({
-        "//bazel:is_release_build": "git show -s --format=%ct > $@",
-        # Use a constant in non-release builds to improve caching.
-        "//conditions:default": "echo 4000000000 > $@",
-    }),
-    tags = [
-        "local",
-        "no-cache",
-    ],
+    outs = ["commit-timestamp.txt"],
+    cmd = """
+        if [[ -f bazel-out/volatile-status.txt ]]; then
+            timestamp=$$(grep "^COMMIT_TIMESTAMP " "bazel-out/volatile-status.txt" | cut -d' ' -f2-)
+        fi
+        echo $${timestamp:-4000000000} > $@
+    """,
+    # Let the bazel --stamp flag control whether volatile-status.txt is available
+    stamp = -1,
 )
 
 used_components = guestos_component_files | hostos_component_files | setupos_component_files | boundaryos_component_files
