@@ -176,6 +176,8 @@ jobs:
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
         with:
+          # Diff logic is problematic for this CI job
+          # https://github.com/dfinity/ic/actions/runs/11528673458/job/32096105251
           RUN_ON_DIFF_ONLY: false
           BAZEL_COMMAND: "build"
           BAZEL_TARGETS: "//rs/..."
