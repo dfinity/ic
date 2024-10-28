@@ -32,6 +32,9 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use tower::Service;
 
+/// Se a very large limit for the header to accept.
+const MAX_HEADER_LIST_SIZE: u32 = 1024 * 1024; // 1MiB
+
 const DETERMINISTIC_HEADERS: [(&str, &str); 4] = [
     ("Access-Control-Allow-Origin", "*"),
     ("Access-Control-Allow-Credentials", "true"),
@@ -310,6 +313,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 }
                             };
                             if let Err(err) = Builder::new(TokioExecutor::new())
+                                .http2()
+                                .max_header_list_size(MAX_HEADER_LIST_SIZE)
                                 .serve_connection(TokioIo::new(tls_stream), hyper_service)
                                 .await
                             {
