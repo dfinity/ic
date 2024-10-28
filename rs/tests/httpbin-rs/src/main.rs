@@ -38,6 +38,9 @@ const DETERMINISTIC_HEADERS: [(&str, &str); 3] = [
     ("date", "Jan 1 1970 00:00:00 GMT"),
 ];
 
+/// Set a very large limit for the headers to accept.
+const MAX_HEADER_LIST_SIZE: u32 = 1024 * 1024; // 1MiB
+
 /// Returns a normal HTML response
 async fn root_handler() -> Html<&'static str> {
     Html(
@@ -309,6 +312,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 }
                             };
                             if let Err(err) = Builder::new(TokioExecutor::new())
+                                .http2()
+                                .max_header_list_size(MAX_HEADER_LIST_SIZE)
                                 .serve_connection(TokioIo::new(tls_stream), hyper_service)
                                 .await
                             {
