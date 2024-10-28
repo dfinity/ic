@@ -711,14 +711,14 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the signal limit is respected.
-            let max_messages_end = max_messages_end(slice.header().begin());
-            if messages.end() > max_messages_end {
+            let max_messages_index = max_messages_index(slice.header().begin());
+            if messages.end() > max_messages_index {
                 warn!(
                     self.log,
-                    "Stream from {}: slice end ({}) exceeds max end ({})",
+                    "Stream from {}: slice end ({}) exceeds max index ({})",
                     subnet_id,
                     messages.end(),
-                    max_messages_end
+                    max_messages_index
                 );
                 return SliceValidationResult::Invalid(format!(
                     "Stream from {}: inducting slice would produce too many signals",
@@ -929,7 +929,7 @@ pub fn get_msg_limit(subnet_id: SubnetId, state: &ReplicatedState) -> Option<usi
 /// `stream_begin` is the `begin` in the `StreamHeader` contained in the (same) stream slice.
 ///  It reflects the status on the remote subnet as far as we know at present. Up to this index
 ///  signals can be gc'ed in the reverse stream.
-pub fn max_messages_end(stream_begin: StreamIndex) -> StreamIndex {
+pub fn max_messages_index(stream_begin: StreamIndex) -> StreamIndex {
     stream_begin + (MAX_STREAM_MESSAGES as u64).into()
 }
 

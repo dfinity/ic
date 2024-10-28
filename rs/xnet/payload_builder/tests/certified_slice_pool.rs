@@ -16,7 +16,7 @@ use ic_xnet_payload_builder::certified_slice_pool::{
     certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
     InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
 };
-use ic_xnet_payload_builder::{max_messages_end, ExpectedIndices, MAX_STREAM_MESSAGES};
+use ic_xnet_payload_builder::{max_messages_index, ExpectedIndices, MAX_STREAM_MESSAGES};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -1154,10 +1154,10 @@ proptest! {
             let messages_end = new_begin.unwrap().message_index;
 
             assert!(
-                messages_end <= max_messages_end(stream_begin),
-                "messages_end: {} > max_messages_end: {}",
+                messages_end <= max_messages_index(stream_begin),
+                "messages_end: {} > max_messages_index: {}",
                 messages_end,
-                max_messages_end(stream_begin),
+                max_messages_index(stream_begin),
             );
         });
     }

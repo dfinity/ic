@@ -1,7 +1,7 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{max_messages_end, ExpectedIndices};
+use crate::{max_messages_index, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
@@ -377,14 +377,14 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        // `messages_end` may not exceed a certain `max_messages_end` in order to cap the number of
-        // signals in the reverse stream. Calculate the maximum number of messages we can include
+        // `messages_end` may not exceed a certain `max_messages_index` in order to cap the number
+        // of signals in the reverse stream. Calculate the maximum number of messages we can include
         // in the slice such that this is respected.
         let max_message_limit = {
             let messages_begin =
                 self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
-            let max_messages_end = max_messages_end(self.header.begin()).get() as usize;
-            max_messages_end.saturating_sub(messages_begin)
+            let max_messages_index = max_messages_index(self.header.begin()).get() as usize;
+            max_messages_index.saturating_sub(messages_begin)
         };
         let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
             message_limit.min(max_message_limit)
