@@ -146,7 +146,6 @@ mod tests {
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
             new_kyt_principal: Some(CanisterId::from(0)),
-            kyt_principal: Some(CanisterId::from(0)),
             kyt_fee: None,
         }
     }

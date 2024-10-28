@@ -23,8 +23,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-    install_ledger, install_minter, install_new_kyt, set_kyt_api_key, setup, subnet_sys,
+    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
+    install_minter, install_new_kyt, setup, subnet_sys,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
         assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
@@ -70,31 +70,14 @@ pub fn test_update_balance(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
-        let mut kyt_canister = create_canister(&runtime).await;
         let mut new_kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
-        let agent_principal = agent.get_principal().unwrap();
-        let kyt_id = install_kyt(
-            &mut kyt_canister,
-            &logger,
-            Principal::from(minting_user),
-            vec![agent_principal],
-        )
-        .await;
-        set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
         let new_kyt_id = install_new_kyt(&mut new_kyt_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(
-            &mut minter_canister,
-            ledger_id,
-            &logger,
-            0,
-            kyt_id,
-            new_kyt_id,
-        )
-        .await;
+        let minter_id =
+            install_minter(&mut minter_canister, ledger_id, &logger, 0, new_kyt_id).await;
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());

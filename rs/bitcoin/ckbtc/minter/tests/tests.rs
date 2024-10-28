@@ -10,7 +10,6 @@ use ic_btc_kyt::{
     KytMode as NewKytMode, UpgradeArg as NewUpgradeArg,
 };
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
@@ -78,17 +77,6 @@ fn bitcoin_mock_wasm() -> Vec<u8> {
     )
 }
 
-fn kyt_wasm() -> Vec<u8> {
-    load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .join("kyt"),
-        "ic-ckbtc-kyt",
-        &[],
-    )
-}
-
 fn new_kyt_wasm() -> Vec<u8> {
     load_wasm(
         PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -124,7 +112,6 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         min_confirmations: Some(1),
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: Some(CanisterId::from(0)),
         new_kyt_principal: Some(CanisterId::from(0)),
     };
     let minter_arg = MinterArg::Init(args);
@@ -196,7 +183,6 @@ fn test_wrong_upgrade_parameter() {
         min_confirmations: Some(6_u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(1001),
-        kyt_principal: None,
         new_kyt_principal: None,
     });
     let args = Encode!(&args).unwrap();
@@ -212,7 +198,6 @@ fn test_wrong_upgrade_parameter() {
         min_confirmations: Some(6_u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(1001),
-        kyt_principal: None,
         new_kyt_principal: None,
     });
     let args = Encode!(&args).unwrap();
@@ -232,7 +217,6 @@ fn test_wrong_upgrade_parameter() {
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
         new_kyt_principal: None,
-        kyt_principal: None,
         kyt_fee: None,
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
@@ -261,7 +245,6 @@ fn test_upgrade_read_only() {
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
         new_kyt_principal: Some(CanisterId::from(0)),
-        kyt_principal: Some(CanisterId::from(0)),
         kyt_fee: None,
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
@@ -333,7 +316,6 @@ fn test_upgrade_restricted() {
         mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
         kyt_fee: None,
         new_kyt_principal: Some(CanisterId::from(0)),
-        kyt_principal: Some(CanisterId::from(0)),
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -388,7 +370,6 @@ fn test_upgrade_restricted() {
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::DepositsRestrictedTo(vec![authorized_principal])),
         new_kyt_principal: Some(CanisterId::from(0)),
-        kyt_principal: Some(CanisterId::from(0)),
         kyt_fee: None,
     };
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
@@ -474,7 +455,6 @@ fn update_balance_should_return_correct_confirmations() {
         max_time_in_queue_nanos: None,
         mode: None,
         new_kyt_principal: None,
-        kyt_principal: None,
         kyt_fee: None,
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
@@ -593,7 +573,6 @@ fn test_minter() {
         min_confirmations: Some(6_u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(1001),
-        kyt_principal: Some(CanisterId::from(0)),
         new_kyt_principal: Some(CanisterId::from(0)),
     });
     let args = Encode!(&args).unwrap();
@@ -644,7 +623,6 @@ fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
 struct CkBtcSetup {
     pub env: StateMachine,
     pub caller: PrincipalId,
-    pub kyt_provider: PrincipalId,
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
@@ -669,7 +647,6 @@ impl CkBtcSetup {
         let ledger_id = env.create_canister(None);
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
-        let kyt_id = env.create_canister(None);
         let new_kyt_id = env.create_canister(None);
 
         env.install_existing_canister(
@@ -699,7 +676,6 @@ impl CkBtcSetup {
                 min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 kyt_fee: Some(KYT_FEE),
-                kyt_principal: kyt_id.into(),
                 new_kyt_principal: new_kyt_id.into(),
             }))
             .unwrap(),
@@ -707,19 +683,6 @@ impl CkBtcSetup {
         .expect("failed to install the minter");
 
         let caller = PrincipalId::new_user_test_id(1);
-        let kyt_provider = PrincipalId::new_user_test_id(2);
-
-        env.install_existing_canister(
-            kyt_id,
-            kyt_wasm(),
-            Encode!(&LifecycleArg::InitArg(KytInitArg {
-                minter_id: minter_id.into(),
-                maintainers: vec![kyt_provider.into()],
-                mode: KytMode::AcceptAll,
-            }))
-            .unwrap(),
-        )
-        .expect("failed to install the KYT canister");
 
         env.install_existing_canister(
             new_kyt_id,
@@ -739,20 +702,8 @@ impl CkBtcSetup {
         )
         .expect("failed to set fee percentiles");
 
-        env.execute_ingress_as(
-            kyt_provider,
-            kyt_id,
-            "set_api_key",
-            Encode!(&SetApiKeyArg {
-                api_key: "api key".to_string(),
-            })
-            .unwrap(),
-        )
-        .expect("failed to set api key");
-
         Self {
             env,
-            kyt_provider,
             caller,
             bitcoin_id,
             ledger_id,
@@ -1814,26 +1765,6 @@ fn test_ledger_memo() {
         },
         "memo not found in burn"
     );
-
-    ckbtc
-        .env
-        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
-        .expect("failed to transfer funds");
-
-    let get_transaction_request = GetTransactionsRequest {
-        start: 3_u8.into(),
-        length: 1_u8.into(),
-    };
-    let res = ckbtc.get_transactions(get_transaction_request);
-    let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
-    assert_eq!(
-        ckbtc.kyt_provider,
-        res.transactions[0].mint.clone().unwrap().to.owner.into(),
-    );
-    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
-    assert_eq!(decoded_data, MintMemo::Kyt);
-    // Make sure only deposit fee is transferred to kyt_provider
-    assert_eq!(res.transactions[0].mint.clone().unwrap().amount, KYT_FEE);
 }
 
 #[test]

@@ -32,9 +32,6 @@ pub struct UpgradeArgs {
     pub kyt_fee: Option<u64>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub kyt_principal: Option<CanisterId>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub new_kyt_principal: Option<CanisterId>,
 }
 

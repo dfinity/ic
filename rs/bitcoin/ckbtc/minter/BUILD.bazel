@@ -8,7 +8,6 @@ LIB_DEPS = [
     # Keep sorted.
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/kyt:btc_kyt_lib",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/secp256k1",
@@ -154,7 +153,6 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ckbtc_minter_debug.wasm",
-        "//rs/bitcoin/ckbtc/kyt:kyt_canister",
         "//rs/bitcoin/kyt:btc_kyt_canister",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
@@ -164,14 +162,12 @@ rust_ic_test(
         "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "IC_BTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/kyt:btc_kyt_canister)",
-        "IC_CKBTC_KYT_WASM_PATH": "$(rootpath //rs/bitcoin/ckbtc/kyt:kyt_canister)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
     },
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/bitcoin/ckbtc/kyt",
         "//rs/bitcoin/kyt:btc_kyt_lib",
         "//rs/bitcoin/mock",
         "//rs/config",

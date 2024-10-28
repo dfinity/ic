@@ -828,7 +828,6 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None,
             new_kyt_principal: None
         });
         for (utxo, acc_idx) in utxos_acc_idx {
@@ -853,7 +852,6 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None,
             new_kyt_principal: None
         });
 
@@ -897,7 +895,6 @@ proptest! {
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
             kyt_fee: None,
-            kyt_principal: None,
             new_kyt_principal: None
         });
 
@@ -1124,7 +1121,6 @@ fn can_form_a_batch_conditions() {
         min_confirmations: None,
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: None,
         new_kyt_principal: None,
     });
     // no request, can't form a batch, fail.
@@ -1182,7 +1178,6 @@ fn test_build_account_to_utxos_table_pagination() {
         min_confirmations: None,
         mode: Mode::GeneralAvailability,
         kyt_fee: None,
-        kyt_principal: None,
         new_kyt_principal: None,
     });
     let account1 = Account::from(

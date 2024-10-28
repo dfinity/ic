@@ -8,9 +8,6 @@ use ic_btc_kyt::{
     UpgradeArg as NewKytUpgradeArg,
 };
 use ic_canister_client::Sender;
-use ic_ckbtc_kyt::{
-    InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
-};
 use ic_ckbtc_minter::{
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
     CKBTC_LEDGER_MEMO_SIZE,
@@ -374,7 +371,6 @@ pub async fn install_minter(
     ledger_id: CanisterId,
     logger: &Logger,
     max_time_in_queue_nanos: u64,
-    kyt_canister_id: CanisterId,
     new_kyt_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
@@ -390,7 +386,6 @@ pub async fn install_minter(
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
-        kyt_principal: Some(kyt_canister_id),
         new_kyt_principal: Some(new_kyt_canister_id),
     };
 
@@ -405,30 +400,6 @@ pub async fn install_minter(
     )
     .await;
     canister.canister_id()
-}
-
-pub async fn install_kyt(
-    kyt_canister: &mut Canister<'_>,
-    logger: &Logger,
-    minter_id: Principal,
-    maintainers: Vec<Principal>,
-) -> CanisterId {
-    info!(&logger, "Installing kyt canister ...");
-    let kyt_init_args = LifecycleArg::InitArg(KytInitArg {
-        minter_id,
-        maintainers,
-        mode: KytMode::AcceptAll,
-    });
-
-    install_rust_canister_from_path(
-        kyt_canister,
-        get_dependency_path(
-            env::var("IC_CKBTC_KYT_WASM_PATH").expect("IC_CKBTC_KYT_WASM_PATH not set"),
-        ),
-        Some(Encode!(&kyt_init_args).unwrap()),
-    )
-    .await;
-    kyt_canister.canister_id()
 }
 
 pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv) -> CanisterId {
@@ -455,29 +426,6 @@ pub async fn install_new_kyt(new_kyt_canister: &mut Canister<'_>, env: &TestEnv)
     )
     .await;
     new_kyt_canister.canister_id()
-}
-
-pub async fn set_kyt_api_key(agent: &ic_agent::Agent, kyt_canister: &Principal, api_key: String) {
-    agent
-        .update(kyt_canister, "set_api_key")
-        .with_arg(candid::Encode!(&SetApiKeyArg { api_key }).unwrap())
-        .call_and_wait()
-        .await
-        .expect("failed to set api key");
-}
-
-pub async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> CanisterId {
-    let kyt_upgrade_arg = LifecycleArg::UpgradeArg(KytUpgradeArg {
-        mode: Some(mode),
-        maintainers: None,
-        minter_id: None,
-    });
-
-    kyt_canister
-        .upgrade_to_self_binary(Encode!(&kyt_upgrade_arg).unwrap())
-        .await
-        .expect("failed to upgrade the canister");
-    kyt_canister.canister_id()
 }
 
 pub async fn upgrade_new_kyt(new_kyt_canister: &mut Canister<'_>, mode: NewKytMode) -> CanisterId {

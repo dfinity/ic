@@ -80,11 +80,6 @@ pub struct InitArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kyt_fee: Option<u64>,
 
-    /// The principal of the KYT canister.
-    /// NOTE: this field is optional for backward compatibility.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub kyt_principal: Option<CanisterId>,
-
     /// The principal of the new KYT canister.
     /// NOTE: this field is optional for backward compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]

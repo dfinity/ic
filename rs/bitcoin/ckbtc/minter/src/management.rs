@@ -8,10 +8,11 @@ use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
-use ic_btc_kyt::{CheckAddressArgs, CheckAddressResponse};
+use ic_btc_kyt::{
+    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
+};
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
 use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
 };
@@ -298,57 +299,6 @@ pub async fn sign_with_ecdsa(
     }
 }
 
-/// Requests alerts for the given UTXO.
-pub async fn fetch_utxo_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    utxo: &Utxo,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_utxo_alerts",
-        (DepositRequest {
-            caller,
-            txid: utxo.outpoint.txid.into(),
-            vout: utxo.outpoint.vout,
-        },),
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "fetch_utxo_alerts".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
-}
-
-/// Requests alerts for the given Bitcoin address.
-pub async fn fetch_withdrawal_alerts(
-    kyt_principal: Principal,
-    caller: Principal,
-    address: String,
-    amount: u64,
-) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let now = ic_cdk::api::time();
-    let id = format!("{caller}:{address}:{amount}:{now}");
-    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
-        kyt_principal,
-        "fetch_withdrawal_alerts",
-        (WithdrawalAttempt {
-            caller,
-            id,
-            amount,
-            address,
-            timestamp_nanos: now,
-        },),
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "fetch_withdrawal_alerts".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
-}
-
 /// Check if the given Bitcoin address is blocked.
 pub async fn check_withdrawal_destination_address(
     kyt_principal: Principal,
@@ -362,6 +312,28 @@ pub async fn check_withdrawal_destination_address(
     .await
     .map_err(|(code, message)| CallError {
         method: "check_address".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
+    Ok(res)
+}
+
+/// Check if the given utxo passes KYT.
+pub async fn check_transaction(
+    kyt_principal: Principal,
+    utxo: &Utxo,
+) -> Result<CheckTransactionResponse, CallError> {
+    let payment = 40_000_000_000;
+    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment(
+        kyt_principal,
+        "check_transaction",
+        (CheckTransactionArgs {
+            txid: utxo.outpoint.txid.as_ref().to_vec(),
+        },),
+        payment,
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "check_transaction".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)
