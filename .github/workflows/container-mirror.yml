@@ -52,11 +52,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup GO
-        uses: actions/setup-go@v5
-
       - name: Setup Crane
-        uses: imjasonh/setup-crane@v0.4
+        run: |
+          curl -L -o crane "https://github.com/michaelsauter/crane/releases/download/v3.6.0/crane_linux_amd64"
+          chmod +x crane
+          sudo mv crane /usr/local/bin/crane
 
       - name: Mirror Container
         run: |
