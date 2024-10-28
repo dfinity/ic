@@ -13,6 +13,6 @@ def read_ignore_list(ignore_list: IgnoreList) -> Set[str]:
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ignore_list)) as file:
         for line in file:
             stripped_line = line.strip()
-            if not (stripped_line.startswith("//") and len(stripped_line) == 0):
+            if not (stripped_line.startswith("//") or len(stripped_line) == 0):
                 res.add(stripped_line)
     return res
