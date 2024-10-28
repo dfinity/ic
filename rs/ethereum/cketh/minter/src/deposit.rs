@@ -271,7 +271,7 @@ pub fn register_deposit_events(
 async fn scrape_until_block<S: LogScraper, P: LogParser>(
     last_block_number: BlockNumber,
     max_block_spread: u16,
-) -> Result<(), MultiCallError<Vec<LogEntry>>> {
+) {
     let scraping_state = match read_state(S::check_active) {
         Some(s) => s,
         None => {
@@ -280,7 +280,7 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
                 "[scrape_contract_logs]: skipping scrapping {} logs: not active",
                 S::display_id()
             );
-            return Ok(());
+            return;
         }
     };
     let block_range = BlockRangeInclusive::new(
@@ -292,21 +292,31 @@ async fn scrape_until_block<S: LogScraper, P: LogParser>(
     );
     log!(
         DEBUG,
-        "Scraping {} logs in in block range {block_range}",
+        "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
         S::display_id()
     );
     let topics = read_state(S::event_topics);
     let rpc_client = read_state(EthRpcClient::from_state);
     for block_range in block_range.into_chunks(max_block_spread) {
-        scrape_block_range::<S, P>(
+        match scrape_block_range::<S, P>(
             &rpc_client,
             scraping_state.contract_address(),
             topics.clone(),
-            block_range,
+            block_range.clone(),
         )
-        .await?
+        .await
+        {
+            Ok(()) => {}
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[scrape_contract_logs]: Failed to scrape {} logs in range {block_range}: {e:?}",
+                    S::display_id()
+                );
+                return;
+            }
+        }
     }
-    Ok(())
 }
 
 async fn mint() {
@@ -437,12 +447,12 @@ pub async fn scrape_logs() {
         }
     };
     let max_block_spread = read_state(|s| s.max_block_spread_for_logs_scraping());
-    let _r = scrape_until_block::<EthWithoutSubaccountScraper, EthWithoutSubaccountLogParser>(
+    scrape_until_block::<EthWithoutSubaccountScraper, EthWithoutSubaccountLogParser>(
         last_block_number,
         max_block_spread,
     )
     .await;
-    let _r = scrape_until_block::<Erc20WithoutSubaccount, Erc20WithoutSubaccountLogParser>(
+    scrape_until_block::<Erc20WithoutSubaccount, Erc20WithoutSubaccountLogParser>(
         last_block_number,
         max_block_spread,
     )
