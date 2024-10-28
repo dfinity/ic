@@ -1,13 +1,11 @@
 {
   "images": [
     {
-      "name": "minica",
       "image": "ryantk/minica",
       "repo": "docker.io",
       "sha256": "c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0"
     },
     {
-      "name": "ubuntu",
       "image": "library/ubuntu",
       "repo": "docker.io",
       "sha256": "965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea"

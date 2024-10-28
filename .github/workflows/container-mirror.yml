@@ -1,3 +1,7 @@
+# Mirror container images we use from DockerHub to GHCR.
+#
+# Add image to container-mirror-images.json to mirror it to GHCR.
+# Use it within MODULE.bazel after it's mirrored to GHCR.
 name: Container Image Mirroring
 
 on:
@@ -29,7 +33,7 @@ jobs:
       - name: Read Container Images
         id: parse-images
         run: |
-          echo "Reading images.json..."
+          echo "Reading container-mirror-images.json"
           MATRIX=$(jq -c '.images' .github/workflows/container-mirror-images.json)
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
@@ -62,4 +66,4 @@ jobs:
         run: |
           crane copy \
             ${{ matrix.repo }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }} \
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}@sha256:${{ matrix.sha256 }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }}
