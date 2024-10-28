@@ -20,29 +20,18 @@ jobs:
   get-images:
     name: Get Image List
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.parse-images.outputs.matrix }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Read Container Images
-        id: get-images
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            const fs = require('fs');
-            const yaml = require('js-yaml');
-            const fileContents = fs.readFileSync('.github/container-mirror/images.yml', 'utf8');
-            const imagesData = yaml.load(fileContents);
-
-            // Create a matrix array combining images, repos, and sha256 values
-            const matrix = imagesData.images.map(imageInfo => ({
-              image: imageInfo.image,
-              repo: imageInfo.repo,
-              sha256: imageInfo.sha256
-            }));
-
-            // Return the matrix as a JSON string
-            core.setOutput('matrix', JSON.stringify(matrix));
+        id: parse-images
+        run: |
+          echo "Reading images.json..."
+          MATRIX=$(jq -c '.images' .github/workflows/container-mirror-images.json)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   mirror:
     name: Mirror Images
