@@ -21,7 +21,7 @@ use ic_test_utilities_types::{
 use ic_types::consensus::idkg::PreSigId;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
-use ic_types::{Height, PrincipalId, SubnetId, Time};
+use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
@@ -36,6 +36,7 @@ mock! {
             randomness: ic_types::Randomness,
             idkg_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
             idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+            replica_version: &ReplicaVersion,
             current_round: ExecutionRound,
             round_summary: Option<ExecutionRoundSummary>,
             current_round_type: ExecutionRoundType,
@@ -92,12 +93,13 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             eq(provided_batch.randomness),
             eq(provided_batch.idkg_subnet_public_keys.clone()),
             eq(provided_batch.idkg_pre_signature_ids.clone()),
+            eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),
             eq(round_type),
             eq(test_registry_settings()),
         )
-        .returning(|state, _, _, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder
