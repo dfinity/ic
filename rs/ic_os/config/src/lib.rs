@@ -12,10 +12,7 @@ use std::path::Path;
 pub static DEFAULT_SETUPOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config.json";
 pub static DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH: &str = "/config/config.ini";
 pub static DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH: &str = "/data/deployment.json";
-pub static DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH: &str = "/data/nns_public_key.pem";
 pub static DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH: &str = "/config/ssh_authorized_keys";
-pub static DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH: &str =
-    "/config/node_operator_private_key.pem";
 
 pub static DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH: &str = "/var/ic/config/config-hostos.json";
 
@@ -49,7 +46,6 @@ pub fn deserialize_config<T: for<'de> Deserialize<'de>, P: AsRef<Path>>(file_pat
 mod tests {
     use super::*;
     use mac_address::mac_address::FormattedMacAddress;
-    use std::path::PathBuf;
     use types::*;
 
     #[test]
@@ -78,9 +74,9 @@ mod tests {
             mgmt_mac: FormattedMacAddress::try_from("ec:2a:72:31:a2:0c")?,
             deployment_environment: "Mainnet".to_string(),
             logging,
-            nns_public_key_path: PathBuf::from("/path/to/key"),
+            nns_public_key_exists: true,
             nns_urls: vec!["http://localhost".parse().unwrap()],
-            node_operator_private_key_path: None,
+            node_operator_private_key_exists: true,
             ssh_authorized_keys_path: None,
             icos_dev_settings,
         };

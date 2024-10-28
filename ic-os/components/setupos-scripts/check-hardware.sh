@@ -249,9 +249,7 @@ function verify_disks() {
 function verify_deployment_path() {
     echo "* Verifying deployment path..."
 
-    local node_operator_key_path=$(get_config_value '.icos_settings.node_operator_private_key_path')
-
-    if [[ ${GENERATION} == 2 ]] && [[ ! -f "${node_operator_key_path}" ]]; then
+    if [[ ${GENERATION} == 2 ]] && [[ ! -f "/boot/config/node_operator_private_key.pem" ]]; then
         echo -e "\n\n\n\n\n\n"
         echo -e "\033[1;31mWARNING: Gen2 hardware detected but no Node Operator Private Key found.\033[0m"
         echo -e "\033[1;31mGen2 hardware should be deployed using the Gen2 Node Deployment method.\033[0m"

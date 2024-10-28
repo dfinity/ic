@@ -21,14 +21,14 @@ pub enum Commands {
         #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_NNS_PUBLIC_KEY_PATH, value_name = "nns_public_key.pem")]
-        nns_public_key_path: PathBuf,
+        #[arg(long, default_value_t = true)]
+        nns_public_key_exists: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_SSH_AUTHORIZED_KEYS_PATH, value_name = "ssh_authorized_keys")]
         ssh_authorized_keys_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_NODE_OPERATOR_PRIVATE_KEY_PATH, value_name = "node_operator_private_key.pem")]
-        node_operator_private_key_path: PathBuf,
+        #[arg(long, default_value_t = true)]
+        node_operator_private_key_exists: bool,
 
         #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
@@ -93,11 +93,11 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub elasticsearch_tags: Option<String>,
     #[arg(long)]
-    pub nns_public_key_path: Option<PathBuf>,
+    pub nns_public_key_exists: Option<bool>,
     #[arg(long)]
     pub nns_urls: Option<Vec<String>>,
     #[arg(long)]
-    pub node_operator_private_key_path: Option<PathBuf>,
+    pub node_operator_private_key_exists: Option<bool>,
     #[arg(long)]
     pub ssh_authorized_keys_path: Option<PathBuf>,
 
@@ -139,9 +139,9 @@ pub fn main() -> Result<()> {
         Some(Commands::CreateSetuposConfig {
             config_ini_path,
             deployment_json_path,
-            nns_public_key_path,
+            nns_public_key_exists,
             ssh_authorized_keys_path,
-            node_operator_private_key_path,
+            node_operator_private_key_exists,
             setupos_config_json_path,
         }) => {
             // get config.ini settings
@@ -208,11 +208,9 @@ pub fn main() -> Result<()> {
                 mgmt_mac,
                 deployment_environment: deployment_json_settings.deployment.name,
                 logging,
-                nns_public_key_path: nns_public_key_path.to_path_buf(),
+                nns_public_key_exists,
                 nns_urls: deployment_json_settings.nns.url.clone(),
-                node_operator_private_key_path: node_operator_private_key_path
-                    .exists()
-                    .then_some(node_operator_private_key_path),
+                node_operator_private_key_exists,
                 ssh_authorized_keys_path: ssh_authorized_keys_path
                     .exists()
                     .then_some(ssh_authorized_keys_path),
@@ -267,11 +265,6 @@ pub fn main() -> Result<()> {
             if let Some(ref mut path) = hostos_icos_settings.ssh_authorized_keys_path {
                 *path = hostos_config_path.join("ssh_authorized_keys");
             }
-            if let Some(ref mut path) = hostos_icos_settings.node_operator_private_key_path {
-                *path = hostos_config_path.join("node_operator_private_key.pem");
-            }
-            hostos_icos_settings.nns_public_key_path =
-                hostos_config_path.join("nns_public_key.pem");
 
             let hostos_config = HostOSConfig {
                 network_settings: setupos_config.network_settings,
@@ -358,9 +351,9 @@ pub fn main() -> Result<()> {
                 deployment_environment: clap_args.deployment_environment,
                 elasticsearch_hosts: clap_args.elasticsearch_hosts,
                 elasticsearch_tags: clap_args.elasticsearch_tags,
-                nns_public_key_path: clap_args.nns_public_key_path,
+                nns_public_key_exists: clap_args.nns_public_key_exists,
                 nns_urls: clap_args.nns_urls,
-                node_operator_private_key_path: clap_args.node_operator_private_key_path,
+                node_operator_private_key_exists: clap_args.node_operator_private_key_exists,
                 ssh_authorized_keys_path: clap_args.ssh_authorized_keys_path,
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,

@@ -35,20 +35,31 @@ function copy_config_files() {
     fi
 
     echo "* Copying node operator private key..."
-    node_operator_private_key_path=$(get_config_value '.icos_settings.node_operator_private_key_path')
-    if [ "${node_operator_private_key_path}" != "null" ] && [ -f "${node_operator_private_key_path}" ]; then
-        cp "${node_operator_private_key_path}" /media/
-        log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
-    elif [ "${node_operator_private_key_path}" = "null" ]; then
-        echo >&2 "Warning: Node operator private key path is not configured."
+    node_operator_private_key_exists=$(get_config_value '.icos_settings.node_operator_private_key_exists')
+    if [[ "${node_operator_private_key_exists,,}" == "true" ]]; then
+        if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+            cp "${CONFIG_DIR}/node_operator_private_key.pem" /media/
+            log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
+        else
+            log_and_halt_installation_on_error "1" "node_operator_private_key_exists set to true but not found"
+        fi
     else
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
+        insert_hsm
     fi
 
     echo "* Copying NNS public key to hostOS config partition..."
-    nns_public_key_path=$(get_config_value '.icos_settings.nns_public_key_path')
-    cp "${nns_public_key_path}" /media/
-    log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key to hostOS config partition."
+    nns_public_key_exists=$(get_config_value '.icos_settings.nns_public_key_exists')
+    if [[ "${nns_public_key_exists,,}" == "true" ]]; then
+        if [ -f "/data/nns_public_key.pem" ]; then
+            cp /data/nns_public_key.pem /media/
+            log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key to hostOS config partition."
+        else
+            log_and_halt_installation_on_error "1" "nns_public_key_exists set to true but not found."
+        fi
+    else
+        log_and_halt_installation_on_error "1" "nns_public_key_exists must be set to true."
+    fi
 
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config generate-hostos-config
@@ -63,20 +74,18 @@ function copy_config_files() {
     fi
 }
 
-function insert_hsm_if_necessary() {
-    if [ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
-        retry=0
-        while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
-            let retry=retry+1
-            if [ ${retry} -ge 3600 ]; then
-                log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
-                break
-            else
-                echo "* Please insert Nitrokey HSM USB device..."
-                sleep 3
-            fi
-        done
-    fi
+function insert_hsm() {
+    retry=0
+    while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
+        let retry=retry+1
+        if [ ${retry} -ge 3600 ]; then
+            log_and_halt_installation_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
+            break
+        else
+            echo "* Please insert Nitrokey HSM USB device..."
+            sleep 3
+        fi
+    done
 }
 
 function unmount_config_partition() {
@@ -97,7 +106,6 @@ main() {
     log_start "$(basename $0)"
     mount_config_partition
     copy_config_files
-    insert_hsm_if_necessary
     unmount_config_partition
     log_end "$(basename $0)"
 }

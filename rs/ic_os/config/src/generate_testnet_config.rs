@@ -25,9 +25,9 @@ pub struct GenerateTestnetConfigArgs {
     pub deployment_environment: Option<String>,
     pub elasticsearch_hosts: Option<String>,
     pub elasticsearch_tags: Option<String>,
-    pub nns_public_key_path: Option<PathBuf>,
+    pub nns_public_key_exists: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
-    pub node_operator_private_key_path: Option<PathBuf>,
+    pub node_operator_private_key_exists: Option<bool>,
     pub ssh_authorized_keys_path: Option<PathBuf>,
 
     // GuestOSSettings arguments
@@ -67,9 +67,9 @@ pub fn generate_testnet_config(
         deployment_environment,
         elasticsearch_hosts,
         elasticsearch_tags,
-        nns_public_key_path,
+        nns_public_key_exists,
         nns_urls,
-        node_operator_private_key_path,
+        node_operator_private_key_exists,
         ssh_authorized_keys_path,
         inject_ic_crypto,
         inject_ic_state,
@@ -170,8 +170,7 @@ pub fn generate_testnet_config(
         elasticsearch_tags,
     };
 
-    let nns_public_key_path =
-        nns_public_key_path.unwrap_or_else(|| PathBuf::from("/boot/config/nns_public_key.pem"));
+    let nns_public_key_exists = nns_public_key_exists.unwrap_or(true);
 
     let nns_urls = match nns_urls {
         Some(urls) => urls
@@ -181,13 +180,15 @@ pub fn generate_testnet_config(
         None => vec![Url::parse("https://wiki.internetcomputer.org")?],
     };
 
+    let node_operator_private_key_exists = node_operator_private_key_exists.unwrap_or(false);
+
     let icos_settings = ICOSSettings {
         mgmt_mac,
         deployment_environment,
         logging,
-        nns_public_key_path,
+        nns_public_key_exists,
         nns_urls,
-        node_operator_private_key_path,
+        node_operator_private_key_exists,
         ssh_authorized_keys_path,
         icos_dev_settings: ICOSDevSettings::default(),
     };

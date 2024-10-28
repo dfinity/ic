@@ -92,13 +92,10 @@ pub struct ICOSSettings {
     /// "mainnet" or "testnet"
     pub deployment_environment: String,
     pub logging: Logging,
-    /// This file must be a text file containing the public key of the NNS to be used.
-    pub nns_public_key_path: PathBuf,
+    pub nns_public_key_exists: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    /// This file contains the Node Operator private key,
-    /// which is registered with the NNS and used to sign the IC join request.
-    pub node_operator_private_key_path: Option<PathBuf>,
+    pub node_operator_private_key_exists: bool,
     /// This directory contains individual files named `admin`, `backup`, `readonly`.
     /// The contents of these files serve as `authorized_keys` for their respective role account.
     /// This means that, for example, `accounts_ssh_authorized_keys/admin`
