@@ -61,5 +61,5 @@ jobs:
       - name: Mirror Container
         run: |
           crane copy \
-            ${{ matrix.repo }}/${{ matrix.image }}@${{ matrix.sha256 }} \
-            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@${{ matrix.sha256 }}
+            ${{ matrix.repo }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }} \
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@sha256:${{ matrix.sha256 }}
