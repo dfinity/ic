@@ -2564,23 +2564,6 @@ impl Governance {
             ),
         });
 
-        // SNS Swap is controlled by NNS Governance, so this SNS instance cannot upgrade it.
-        // Simply set `deployed_version` to `next_version` version so that other SNS upgrades can
-        // be executed, and let the Swap upgrade occur externally (e.g. by someone submitting an
-        // NNS proposal).
-        if canister_type_to_upgrade == SnsCanisterType::Swap {
-            self.proto.deployed_version = Some(next_version);
-            self.push_to_upgrade_journal(upgrade_journal_entry::UpgradeOutcome {
-                status: Some(upgrade_journal_entry::upgrade_outcome::Status::Success(
-                    Empty {},
-                )),
-                human_readable: Some(
-                    "Swap upgrades are no-ops, upgrade automatically succeeded".to_string(),
-                ),
-            });
-            return Ok(true);
-        }
-
         let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
             .await
             .map_err(|e| {

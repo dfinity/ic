@@ -280,3 +280,73 @@ async fn test_sns_upgrade(sns_canisters_to_upgrade: Vec<SnsCanisterType>) {
         .await;
     }
 }
+
+#[tokio::test]
+async fn test_proper_sns_swap_upgrade() {
+    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions().await;
+
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
+        .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
+        .with_one_developer_neuron(
+            PrincipalId::new_user_test_id(830947),
+            ONE_MONTH_SECONDS * 6,
+            756575,
+            0,
+        )
+        .build();
+    let swap_parameters = create_service_nervous_system
+        .swap_parameters
+        .clone()
+        .unwrap();
+
+    // Make sure we have the new SNS-W code that deploys Swap controlled by its SNS Swap.
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID).await;
+
+    // Deploy an SNS instance via proposal.
+    let sns_instance_label = "1";
+    let (sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+        &pocket_ic,
+        create_service_nervous_system,
+        sns_instance_label,
+    )
+    .await;
+
+    // Add one Swap WASM.
+    {
+        let swap_wasm = build_swap_sns_wasm();
+        let swap_wasm = ensure_sns_wasm_gzipped(swap_wasm);
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, swap_wasm)
+            .await
+            .unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+
+    // Add another Swap WASM.
+    {
+        let swap_wasm = create_modified_sns_wasm(&build_swap_sns_wasm(), Some(42));
+        let swap_wasm = ensure_sns_wasm_gzipped(swap_wasm);
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, swap_wasm)
+            .await
+            .unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .unwrap();
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    )
+    .await;
+
+    // Every canister we are testing has two upgrades.  We are just making sure the counts match
+    sns::upgrade_sns_to_next_version(&pocket_ic, sns.root.canister_id, SnsCanisterType::Swap)
+        .await
+        .unwrap();
+
+    sns::upgrade_sns_to_next_version(&pocket_ic, sns.root.canister_id, SnsCanisterType::Swap)
+        .await
+        .unwrap()
+}
