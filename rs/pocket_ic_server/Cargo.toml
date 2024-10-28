@@ -91,5 +91,5 @@ rcgen = { workspace = true }
 registry-canister = { path = "../registry/canister" }
 reqwest = { workspace = true }
 serde_json = { workspace = true }
-spec-compliance = { path = "../tests/testing_verification/spec_compliance" }
+spec-compliance = { path = "../tests/research/spec_compliance" }
 slog = { workspace = true }

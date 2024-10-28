@@ -38,6 +38,7 @@ num-bigint = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
