@@ -35,7 +35,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
-ic-icrc1-ledger-sm-tests = { path = "../../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
 ic-ledger-test-utils = { path = "../test_utils" }
 ic-rosetta-test-utils = { path = "../../../rosetta-api/icp/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }

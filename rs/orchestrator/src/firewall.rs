@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider,
     error::{OrchestratorError, OrchestratorResult},
@@ -846,7 +847,7 @@ mod tests {
             .replace("{{ ipv6_address }}", "::")
             .replace("{{ backup_retention_time_secs }}", "0")
             .replace("{{ backup_purging_interval_secs }}", "0")
-            .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+            .replace("{{ nns_urls }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
             .replace("{{ query_stats_epoch_length }}", "600");
         let config_source = ConfigSource::Literal(cfg);

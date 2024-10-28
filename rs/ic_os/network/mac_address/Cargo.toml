@@ -1,0 +1,12 @@
+[package]
+name = "mac_address"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+regex = { workspace = true }
+sha2 = { workspace = true }
+utils = { path = "../../utils" }
+hex = { version = "^0.4.3" }
+serde = { workspace = true }

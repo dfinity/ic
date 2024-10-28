@@ -360,7 +360,7 @@ impl Default for Config {
             dirty_page_logging: FlagStatus::Disabled,
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
-            allowed_viewers_feature: FlagStatus::Disabled,
+            allowed_viewers_feature: FlagStatus::Enabled,
         }
     }
 }

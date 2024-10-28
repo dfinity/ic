@@ -55,7 +55,12 @@ fi
 if [ "${BAZEL_COMMAND:-}" == "build" ]; then
     TARGETS=$(bazel query "rdeps(//..., set(${files[*]}))")
 elif [ "${BAZEL_COMMAND:-}" == "test" ]; then
-    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', 'manual|system_test_hourly|system_test_nightly|system_test_staging|system_test_hotfix|system_test_nightly_nns', //...)")
+    EXCLUDED_TAGS=(manual $EXCLUDED_TEST_TAGS)
+    EXCLUDED_TAGS=$(
+        IFS='|'
+        echo "${EXCLUDED_TAGS[*]}"
+    )
+    TARGETS=$(bazel query "kind(test, rdeps(//..., set(${files[*]}))) except attr('tags', '$EXCLUDED_TAGS', //...)")
 else
     echo "Unknown BAZEL_COMMAND: ${BAZEL_COMMAND:-}" >&2
     exit 1

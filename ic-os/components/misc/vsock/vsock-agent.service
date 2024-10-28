@@ -1,6 +1,5 @@
 [Unit]
 Description=VSOCK agent daemon
-After=syslog.target
 
 [Service]
 User=root

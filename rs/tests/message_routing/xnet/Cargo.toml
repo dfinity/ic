@@ -1,0 +1,43 @@
+[package]
+name = "message-routing-system-tests-xnet"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+xnet-slo-test-lib = { path = "../xnet/slo_test_lib" }
+anyhow = { workspace = true }
+ic_consensus_system_test_utils = { path = "../../consensus/utils" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+slog = { workspace = true }
+ic-types = { path = "../../../types/types" }
+tokio = { workspace = true }
+systest-message-routing-common = { path = "../common" }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+
+[[bin]]
+name = "xnet_compatibility"
+path = "xnet_compatibility.rs"
+
+[[bin]]
+name = "xnet_malicious_slices"
+path = "xnet_malicious_slices.rs"
+
+[[bin]]
+name = "xnet_slo_3_subnets_hotfix_test"
+path = "xnet_slo_3_subnets_hotfix_test.rs"
+
+[[bin]]
+name = "xnet_slo_3_subnets_test"
+path = "xnet_slo_3_subnets_test.rs"
+
+[[bin]]
+name = "xnet_slo_29_subnets_test"
+path = "xnet_slo_29_subnets_test.rs"
+
+[[bin]]
+name = "xnet_slo_120_subnets_staging_test"
+path = "xnet_slo_120_subnets_staging_test.rs"

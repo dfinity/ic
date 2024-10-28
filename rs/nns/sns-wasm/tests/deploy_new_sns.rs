@@ -3,7 +3,6 @@ use crate::common::{
     EXPECTED_SNS_CREATION_FEE,
 };
 use canister_test::Wasm;
-use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
@@ -63,7 +62,6 @@ fn test_canisters_are_created_and_installed() {
         &state_machine,
         CanisterId::unchecked_from_principal(root_canister_id),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },
@@ -386,7 +384,6 @@ fn test_deploy_sns_and_transfer_dapps() {
         &machine,
         CanisterId::unchecked_from_principal(root_canister_principal),
         "get_sns_canisters_summary",
-        candid_one,
         GetSnsCanistersSummaryRequest {
             update_canister_list: None,
         },
