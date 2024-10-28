@@ -596,7 +596,7 @@ impl CkEthSetup {
         if self.evm_rpc_id.is_none() {
             798
         } else {
-            500
+            499
         }
     }
 

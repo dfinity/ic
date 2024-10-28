@@ -48,7 +48,11 @@ fn deserialize_json_reply() {
 }
 
 mod eth_get_logs {
-    use crate::eth_logs::{LedgerSubaccount, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
+    use crate::eth_logs::{
+        Erc20WithSubaccountLogParser, Erc20WithoutSubaccountLogParser,
+        EthWithoutSubaccountLogParser, LedgerSubaccount, LogParser, ReceivedErc20Event,
+        ReceivedEthEvent,
+    };
     use crate::eth_rpc::LogEntry;
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
@@ -123,8 +127,10 @@ mod eth_get_logs {
             "logIndex": "0x27",
             "removed": false
         }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let parsed_event = EthWithoutSubaccountLogParser::parse_log(
+            serde_json::from_str::<LogEntry>(event).unwrap(),
+        )
+        .unwrap();
         let expected_event = ReceivedEthEvent {
             transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
                 .parse()
@@ -137,46 +143,6 @@ mod eth_get_logs {
             value: Wei::from(10_000_000_000_000_000_u128),
             principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
             subaccount: None,
-        }
-        .into();
-
-        assert_eq!(parsed_event, expected_event);
-    }
-
-    #[test]
-    fn should_parse_received_eth_event_with_subaccount() {
-        let event = r#"{
-            "address": "0x11d7c426eedc044b21066d2be9480d4b99e7cc1a",
-            "topics": [
-                "0x5cf3eb7dcd092fdae9eb9a8bee8249f871222400db54ff78e64b809d723a02bf",
-                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
-                "0x1d9facb184cbe453de4841b6b9d9cc95bfc065344e485789b550544529020000"
-            ],
-            "data": "0x00000000000000000000000000000000000000000000000000038d7ea4c68000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-            "blockNumber": "0x698ab3",
-            "transactionHash": "0x037305b461a7c69bf65d4e143262fc038b39d5e46da79de1539e3a90e91b9b37",
-            "transactionIndex": "0x12",
-            "blockHash": "0x92d629a73b6e94c799e940868e4961e2674b0ffd28796102add19a89402e03dd",
-            "logIndex": "0x14",
-            "removed": false
-        }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
-        let expected_event = ReceivedEthEvent {
-            transaction_hash: "0x037305b461a7c69bf65d4e143262fc038b39d5e46da79de1539e3a90e91b9b37"
-                .parse()
-                .unwrap(),
-            block_number: BlockNumber::new(6916787),
-            log_index: LogIndex::from(20_u8),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
-                .parse()
-                .unwrap(),
-            value: Wei::from(1_000_000_000_000_000_u128),
-            principal: Principal::from_str(
-                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
-            )
-            .unwrap(),
-            subaccount: LedgerSubaccount::from_bytes([0xff; 32]),
         }
         .into();
 
@@ -201,8 +167,10 @@ mod eth_get_logs {
             "logIndex": "0x27",
             "removed": false
         }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let parsed_event = Erc20WithoutSubaccountLogParser::parse_log(
+            serde_json::from_str::<LogEntry>(event).unwrap(),
+        )
+        .unwrap();
         let expected_event = ReceivedErc20Event {
             transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
                 .parse()
@@ -245,8 +213,10 @@ mod eth_get_logs {
             "logIndex": "0x45",
             "removed": false
         }"#;
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let parsed_event = Erc20WithSubaccountLogParser::parse_log(
+            serde_json::from_str::<LogEntry>(event).unwrap(),
+        )
+        .unwrap();
         let expected_event = ReceivedErc20Event {
             transaction_hash: "0xf353e17cbcfea236a8b03d2d800205074e1f5014a3ce0f6dedcf128addb6bea4"
                 .parse()
@@ -290,8 +260,9 @@ mod eth_get_logs {
             "removed": true
         }"#;
 
-        let parsed_event =
-            ReceivedEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap());
+        let parsed_event = EthWithoutSubaccountLogParser::parse_log(
+            serde_json::from_str::<LogEntry>(event).unwrap(),
+        );
         let expected_error = Err(ReceivedEventError::InvalidEventSource {
             source: EventSource {
                 transaction_hash:
