@@ -3480,6 +3480,26 @@ mod tests {
     }
 
     #[test]
+    fn vetkd_curve_round_trip() {
+        for curve in VetKdCurve::iter() {
+            assert_eq!(format!("{}", curve).parse::<VetKdCurve>().unwrap(), curve);
+        }
+    }
+
+    #[test]
+    fn vetkd_key_id_round_trip() {
+        for curve in VetKdCurve::iter() {
+            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
+                let key = VetKdKeyId {
+                    curve,
+                    name: name.to_string(),
+                };
+                assert_eq!(format!("{}", key).parse::<VetKdKeyId>().unwrap(), key);
+            }
+        }
+    }
+
+    #[test]
     fn master_public_key_id_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             for name in ["Ed25519", "", "other_key", "other key", "other:key"] {
@@ -3497,6 +3517,19 @@ mod tests {
         for curve in EcdsaCurve::iter() {
             for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
                 let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                    curve,
+                    name: name.to_string(),
+                });
+                assert_eq!(
+                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
+                    key
+                );
+            }
+        }
+
+        for curve in VetKdCurve::iter() {
+            for name in ["bls12_381_g2", "", "other_key", "other key", "other:key"] {
+                let key = MasterPublicKeyId::VetKd(VetKdKeyId {
                     curve,
                     name: name.to_string(),
                 });
