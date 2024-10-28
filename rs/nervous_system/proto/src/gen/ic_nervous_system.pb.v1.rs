@@ -174,6 +174,10 @@ pub struct ResetTimersRequest {}
     ::prost::Message,
 )]
 pub struct ResetTimersResponse {}
+/// TODO\[NNS1-3420\] This type can be refined into different internal API types, depending on
+/// TODO\[NNS1-3420\] the needs of a particular canister. The fields of this type represent
+/// TODO\[NNS1-3420\] over-approximation of the fields that might be relevant for observing and
+/// TODO\[NNS1-3420\] managing timers in nervous system-related canisters.
 #[derive(
     Eq,
     candid::CandidType,
