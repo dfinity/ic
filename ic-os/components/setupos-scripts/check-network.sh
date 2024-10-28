@@ -44,7 +44,19 @@ function eval_command_with_retries() {
     done
 
     if [ -z "${result}" ]; then
-        log_and_halt_installation_on_error "1" "${error_message}"
+        local ip6_output=$(ip -6 addr show)
+        local ip6_route_output=$(ip -6 route show)
+        local dns_servers=$(cat /etc/resolv.conf | grep 'nameserver')
+
+        log_and_halt_installation_on_error "1" "${error_message}
+Output of 'ip -6 addr show':
+${ip6_output}
+
+Output of 'ip -6 route show':
+${ip6_route_output}
+
+Configured DNS servers:
+${dns_servers}"
     fi
 
     echo "${result}"
@@ -55,21 +67,13 @@ function get_network_settings() {
         "ip -6 addr show | awk '/^[0-9]+: / {print \$2}' | sed 's/://g' | grep -v '^lo$'" \
         "Failed to get system's network interfaces.")
 
-    if [ -z "${ipv6_capable_interfaces}" ]; then
-        log_and_halt_installation_on_error "1" "No network interfaces with IPv6 addresses found."
-    else
-        echo "IPv6-capable interfaces found:"
-        echo "${ipv6_capable_interfaces}"
-    fi
+    echo "IPv6-capable interfaces found:"
+    echo "${ipv6_capable_interfaces}"
 
     # Full IPv6 address
     ipv6_address_system_full=$(eval_command_with_retries \
         "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
         "Failed to get system's network configuration.")
-
-    if [ -z "${ipv6_address_system_full}" ]; then
-        log_and_halt_installation_on_error "1" "No IPv6 addresses found."
-    fi
 
     ipv6_prefix_system=$(eval_command_with_retries \
         "echo ${ipv6_address_system_full} | cut -d: -f1-4" \
