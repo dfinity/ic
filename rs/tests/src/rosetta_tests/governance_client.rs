@@ -1,4 +1,3 @@
-use crate::ckbtc::lib::subnet_sys;
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -30,7 +29,7 @@ pub struct GovernanceClient {
 ///  Create an agent to interact with the ledger.
 fn create_agent(env: &TestEnv) -> Agent {
     block_on(async {
-        let subnet_sys = subnet_sys(env);
+        let subnet_sys = super::setup::subnet_sys(env);
         let node = subnet_sys.nodes().next().expect("No node in sys subnet.");
         assert_create_agent(node.get_public_url().as_str()).await
     })
