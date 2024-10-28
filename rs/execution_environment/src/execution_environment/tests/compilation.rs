@@ -260,9 +260,11 @@ mod execution_tests {
         assert_eq!(
             test.canister_state(canister_id2).system_state.balance(),
             initial_balance
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(wat_compilation_cost(WAT_EMPTY), test.subnet_size())
+                - test.cycles_account_manager().execution_cost(
+                    wat_compilation_cost(WAT_EMPTY),
+                    test.subnet_size(),
+                    false // Does not matter if it is Wasm64 or Wasm32 for this test.
+                )
         );
     }
 

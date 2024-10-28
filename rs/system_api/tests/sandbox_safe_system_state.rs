@@ -35,6 +35,7 @@ use common::*;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
+const IS_WASM64_EXECUTION: bool = false;
 
 #[test]
 fn push_output_request_fails_not_enough_cycles_for_request() {
@@ -94,8 +95,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, IS_WASM64_EXECUTION);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -160,8 +161,8 @@ fn push_output_request_succeeds_with_enough_cycles() {
         None,
     );
 
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, IS_WASM64_EXECUTION);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 
@@ -214,8 +215,8 @@ fn correct_charging_source_canister_for_a_request() {
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
         .xnet_call_bytes_transmitted_fee(request.payload_size_bytes(), SMALL_APP_SUBNET_MAX_SIZE);
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, IS_WASM64_EXECUTION);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
     let total_cost = xnet_cost
@@ -446,8 +447,8 @@ fn test_inter_canister_call(
         .method_payload(arg)
         .build();
 
-    let prepayment_for_response_execution =
-        cycles_account_manager.prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE);
+    let prepayment_for_response_execution = cycles_account_manager
+        .prepayment_for_response_execution(SMALL_APP_SUBNET_MAX_SIZE, IS_WASM64_EXECUTION);
     let prepayment_for_response_transmission =
         cycles_account_manager.prepayment_for_response_transmission(SMALL_APP_SUBNET_MAX_SIZE);
 

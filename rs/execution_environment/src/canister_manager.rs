@@ -929,6 +929,10 @@ impl CanisterManager {
                 let memory_usage = canister.memory_usage();
                 let message_memory_usage = canister.message_memory_usage();
                 let reveal_top_up = canister.controllers().contains(message.sender());
+                // At this point, we don't really know if what we are about to install is a
+                // wasm32 or wasm64 module. We will assume it is wasm64 and adjust the
+                // cycles later if it turns out to be wasm32.
+                let is_wasm64_execution = false;
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
@@ -937,6 +941,7 @@ impl CanisterManager {
                     execution_parameters.instruction_limits.message(),
                     subnet_size,
                     reveal_top_up,
+                    is_wasm64_execution,
                 ) {
                     Ok(cycles) => cycles,
                     Err(err) => {
@@ -1555,6 +1560,12 @@ impl CanisterManager {
         let message_memory = canister.message_memory_usage();
         let compute_allocation = canister.compute_allocation();
         let reveal_top_up = canister.controllers().contains(&sender);
+
+        // For the upload chunk operation, it does not matter if this is a Wasm64 or Wasm32 module
+        // since the number of instructions charged is a constant set fee and Wasm64 does not bring
+        // any additional overhead for this operation. The only overhead is during execution time.
+        let is_wasm64_execution = false;
+
         // Charge for the upload.
         let prepaid_cycles = self
             .cycles_account_manager
@@ -1566,6 +1577,7 @@ impl CanisterManager {
                 instructions,
                 subnet_size,
                 reveal_top_up,
+                is_wasm64_execution,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
                 message: format!("Error charging for 'upload_chunk': {}", err),
@@ -1582,6 +1594,7 @@ impl CanisterManager {
             // here.
             &IntCounter::new("no_op", "no_op").unwrap(),
             subnet_size,
+            is_wasm64_execution,
             &self.log,
         );
 
@@ -1916,11 +1929,18 @@ impl CanisterManager {
             .config
             .canister_snapshot_baseline_instructions
             .saturating_add(&new_snapshot_size.get().into());
+
+        // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
+        // since the number of instructions charged depends on constant set fee and snapshot size
+        // and Wasm64 does not bring any additional overhead for this operation.
+        // The only overhead is during execution time.
+        let is_wasm64_execution = false;
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             canister,
             instructions,
             subnet_size,
+            is_wasm64_execution,
         ) {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
@@ -2072,11 +2092,17 @@ impl CanisterManager {
 
         // All basic checks have passed, charge baseline instructions.
         let mut canister_clone = canister.clone();
+        // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
+        // since the number of instructions charged depends on constant set fee
+        // and Wasm64 does not bring any additional overhead for this operation.
+        // The only overhead is during execution time.
+        let is_wasm64_execution = false;
         if let Err(err) = self.cycles_account_manager.consume_cycles_for_instructions(
             &sender,
             &mut canister_clone,
             self.config.canister_snapshot_baseline_instructions,
             subnet_size,
+            is_wasm64_execution,
         ) {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),
@@ -2126,6 +2152,10 @@ impl CanisterManager {
             .certified_data
             .clone_from(snapshot.certified_data());
 
+        let is_wasm64_execution = new_execution_state
+            .as_ref()
+            .map_or(false, |es| es.is_wasm64);
+
         let mut new_canister =
             CanisterState::new(system_state, new_execution_state, scheduler_state);
         let new_memory_usage = new_canister.memory_usage();
@@ -2146,6 +2176,9 @@ impl CanisterManager {
             &mut new_canister,
             instructions_used.saturating_add(&snapshot.size().get().into()),
             subnet_size,
+            // In this case, when the canister is actually created from the snapshot, we need to check
+            // if the canister is in wasm64 mode to account for its instruction usage.
+            is_wasm64_execution,
         ) {
             return (
                 Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err)),

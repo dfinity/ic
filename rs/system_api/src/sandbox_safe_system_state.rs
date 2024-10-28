@@ -578,6 +578,7 @@ pub struct SandboxSafeSystemState {
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
     caller: Option<PrincipalId>,
+    pub is_wasm64_execution: bool,
 }
 
 impl SandboxSafeSystemState {
@@ -610,6 +611,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        is_wasm64_execution: bool,
     ) -> Self {
         Self {
             canister_id,
@@ -643,6 +645,7 @@ impl SandboxSafeSystemState {
             controllers,
             request_metadata,
             caller,
+            is_wasm64_execution,
         }
     }
 
@@ -655,6 +658,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
+        is_wasm64_execution: bool,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -727,6 +731,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            is_wasm64_execution,
         )
     }
 
@@ -921,7 +926,7 @@ impl SandboxSafeSystemState {
 
     pub fn prepayment_for_response_execution(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size)
+            .prepayment_for_response_execution(self.subnet_size, self.is_wasm64_execution)
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {

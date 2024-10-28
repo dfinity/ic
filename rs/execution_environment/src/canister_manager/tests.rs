@@ -5241,7 +5241,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(5 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5258,7 +5259,8 @@ fn cycles_correct_if_upgrade_succeeds() {
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(11 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5295,8 +5297,11 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            wasm_compilation_cost(&wasm),
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
+        )
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -5310,8 +5315,11 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
     );
     assert_eq!(
         execution_cost,
-        test.cycles_account_manager()
-            .execution_cost(NumInstructions::from(0), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(0),
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
+        )
     );
 }
 
@@ -5367,7 +5375,8 @@ fn cycles_correct_if_upgrade_fails_at_start() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5405,8 +5414,11 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(wasm_compilation_cost(&wasm), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            wasm_compilation_cost(&wasm),
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
+        )
     );
 
     let cycles_before = test.canister_state(id).system_state.balance();
@@ -5421,7 +5433,8 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         execution_cost,
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5475,7 +5488,8 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm2),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5514,7 +5528,8 @@ fn cycles_correct_if_install_succeeds() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(6 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(4)
     );
@@ -5553,8 +5568,11 @@ fn cycles_correct_if_install_fails_at_validation() {
     );
     assert_eq!(
         test.canister_execution_cost(id),
-        test.cycles_account_manager()
-            .execution_cost(NumInstructions::from(0), test.subnet_size())
+        test.cycles_account_manager().execution_cost(
+            NumInstructions::from(0),
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
+        )
     );
 }
 
@@ -5594,7 +5612,8 @@ fn cycles_correct_if_install_fails_at_start() {
         test.canister_execution_cost(id),
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST) + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -5632,7 +5651,8 @@ fn cycles_correct_if_install_fails_at_init() {
         test.cycles_account_manager().execution_cost(
             NumInstructions::from(3 * *DROP_MEMORY_GROW_CONST_COST + *UNREACHABLE_COST)
                 + wasm_compilation_cost(&wasm),
-            test.subnet_size()
+            test.subnet_size(),
+            test.canister_is_wasm64(id),
         ),
         Cycles::new(10)
     );
@@ -7350,9 +7370,11 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
     // for one upload so upload_chunk fails.
     let threshold = test.freezing_threshold(canister_id);
     let new_balance = threshold
-        + test
-            .cycles_account_manager()
-            .execution_cost(instructions, test.subnet_size())
+        + test.cycles_account_manager().execution_cost(
+            instructions,
+            test.subnet_size(),
+            test.canister_is_wasm64(canister_id),
+        )
         + Cycles::from(1_000_u128);
     let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
     test.canister_state_mut(canister_id)
@@ -7720,9 +7742,11 @@ fn upload_chunk_charges_canister_cycles() {
         chunk: vec![42; 10],
     }
     .encode();
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        test.canister_is_wasm64(canister_id),
+    );
     let _hash = test.subnet_message("upload_chunk", payload).unwrap();
 
     assert_eq!(
@@ -7743,9 +7767,11 @@ fn upload_chunk_charges_if_failing() {
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     // Expected charge is the same as if the upload succeeds.
-    let expected_charge = test
-        .cycles_account_manager()
-        .execution_cost(instructions, test.subnet_size());
+    let expected_charge = test.cycles_account_manager().execution_cost(
+        instructions,
+        test.subnet_size(),
+        test.canister_is_wasm64(canister_id),
+    );
 
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
@@ -7908,10 +7934,10 @@ fn check_update_call_canister_in_wasm64_mode_is_charged_correctly() {
     let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, true);
     let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, true);
 
-    // Balance should be lower in 64-bit mode.
-    assert_lt!(balance64, balance32);
-    // Execution cost should be higher in 64-bit mode.
-    assert_lt!(execution_cost32, execution_cost64);
+    // At the moment, charging differently for Wasm64 is not enabled.
+    // Charging for Wasm32 should be equivalent to charging for Wasm64.
+    assert_eq!(balance64, balance32);
+    assert_eq!(execution_cost32, execution_cost64);
 }
 
 #[test]
@@ -7919,8 +7945,8 @@ fn check_install_code_in_wasm64_mode_is_charged_correctly() {
     let (balance32, execution_cost32) = run_canister_in_wasm_mode(false, false);
     let (balance64, execution_cost64) = run_canister_in_wasm_mode(true, false);
 
-    // Balance should be lower in 64-bit mode.
-    assert_lt!(balance64, balance32);
-    // Execution cost should be higher in 64-bit mode.
-    assert_lt!(execution_cost32, execution_cost64);
+    // At the moment, charging differently for Wasm64 is not enabled.
+    // Charging for Wasm32 should be equivalent to charging for Wasm64.
+    assert_eq!(balance64, balance32);
+    assert_eq!(execution_cost32, execution_cost64);
 }

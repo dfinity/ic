@@ -33,7 +33,6 @@ use crate::{
     execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
-use ic_interfaces::execution_environment::HypervisorError::InsufficientCyclesBalance;
 
 #[cfg(test)]
 mod tests;
@@ -264,68 +263,26 @@ impl InstallCodeHelper {
                 .saturating_sub(instructions_left.get()),
         );
 
-        // In case the canister is Wasm64, we need to add the Wasm64 install surcharge.
-        // This basically equates to charging once more for the same instructions.
-        if self
+        // At the beginning of install/upgrade we have prepaid the execution cost
+        // as if the canister was executing in Wasm64 mode because we did not know
+        // what kind of canister it is. If the canister is not Wasm64, we need to
+        // refund the unused cycles, minding the type of execution.
+        let is_wasm64_execution = self
             .canister
             .execution_state
             .as_ref()
-            .map_or(false, |es| es.is_wasm64)
-        {
-            // We need to first refund all the cycles taken for instructions because thei were
-            // charged as if for Wasm32.
-            round.cycles_account_manager.refund_unused_execution_cycles(
-                &mut self.canister.system_state,
-                message_instruction_limit,
-                message_instruction_limit,
-                original.prepaid_execution_cycles,
-                round.counters.execution_refund_error,
-                original.subnet_size,
-                round.log,
-            );
+            .map_or(false, |es| es.is_wasm64);
 
-            // We then charge for the instructions again, but this time using the Wasm64 fees.
-            let mut cycles_account_manager = *round.cycles_account_manager;
-            cycles_account_manager.switch_to_wasm64_mode();
-            let mem_usage = self.canister.memory_usage();
-            let msg_mem_usage = self.canister.message_memory_usage();
-            let comp_allocation = self.canister.compute_allocation();
-            match cycles_account_manager.wasm64_install_or_upgrade_surcharge(
-                &mut self.canister.system_state,
-                mem_usage,
-                msg_mem_usage,
-                comp_allocation,
-                instructions_used,
-                original.subnet_size,
-                false,
-            ) {
-                Ok(_) => {}
-                Err(err) => {
-                    return finish_err(
-                        clean_canister,
-                        // We have already refunded, so on `finish_err` we don't need to refund again.
-                        NumInstructions::from(0),
-                        original,
-                        round,
-                        CanisterManagerError::Hypervisor(
-                            self.canister.canister_id(),
-                            InsufficientCyclesBalance(err),
-                        ),
-                        self.take_canister_log(),
-                    );
-                }
-            }
-        } else {
-            round.cycles_account_manager.refund_unused_execution_cycles(
-                &mut self.canister.system_state,
-                instructions_left,
-                message_instruction_limit,
-                original.prepaid_execution_cycles,
-                round.counters.execution_refund_error,
-                original.subnet_size,
-                round.log,
-            );
-        }
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            instructions_left,
+            message_instruction_limit,
+            original.prepaid_execution_cycles,
+            round.counters.execution_refund_error,
+            original.subnet_size,
+            is_wasm64_execution,
+            round.log,
+        );
 
         self.canister
             .system_state
@@ -988,6 +945,12 @@ pub(crate) fn finish_err(
         );
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
+
+    // This execution ended in an error. At the beginning we have prepaid assuming the
+    // install/upgrade was in Wasm64 mode. Therefore, we have to refund the unused cycles
+    // as if the canister was executing in Wasm64 mode.
+    let is_wasm64_execution = true;
+
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut new_canister.system_state,
         instructions_left,
@@ -995,6 +958,7 @@ pub(crate) fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        is_wasm64_execution,
         round.log,
     );
 

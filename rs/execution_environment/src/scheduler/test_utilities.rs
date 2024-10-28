@@ -197,9 +197,12 @@ impl SchedulerTest {
     }
 
     pub fn execution_cost(&self, num_instructions: NumInstructions) -> Cycles {
-        self.scheduler
-            .cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        const IS_WASM64_EXECUTION: bool = false;
+        self.scheduler.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            IS_WASM64_EXECUTION,
+        )
     }
 
     /// Creates a canister with the given balance and allocations.
@@ -1287,7 +1290,7 @@ impl TestWasmExecutorCore {
         let closure = WasmClosure::new(0, response_message_id.into());
         let prepayment_for_response_execution = self
             .cycles_account_manager
-            .prepayment_for_response_execution(self.subnet_size);
+            .prepayment_for_response_execution(self.subnet_size, system_state.is_wasm64_execution);
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);

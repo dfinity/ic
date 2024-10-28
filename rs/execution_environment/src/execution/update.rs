@@ -63,33 +63,30 @@ pub fn execute_update(
                     .as_ref()
                     .map_or(false, |es| es.is_wasm64);
 
-                let mut cycles_account_manager = *round.cycles_account_manager;
-                if is_wasm64_execution {
-                    cycles_account_manager.switch_to_wasm64_mode();
-                }
-
-                let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
-                    &mut canister.system_state,
-                    memory_usage,
-                    message_memory_usage,
-                    execution_parameters.compute_allocation,
-                    execution_parameters.instruction_limits.message(),
-                    subnet_size,
-                    reveal_top_up,
-                ) {
-                    Ok(cycles) => cycles,
-                    Err(err) => {
-                        return finish_call_with_error(
-                            UserError::new(ErrorCode::CanisterOutOfCycles, err),
-                            canister,
-                            call_or_task,
-                            NumInstructions::from(0),
-                            round.time,
-                            execution_parameters.subnet_type,
-                            round.log,
-                        );
-                    }
-                };
+                let prepaid_execution_cycles =
+                    match round.cycles_account_manager.prepay_execution_cycles(
+                        &mut canister.system_state,
+                        memory_usage,
+                        message_memory_usage,
+                        execution_parameters.compute_allocation,
+                        execution_parameters.instruction_limits.message(),
+                        subnet_size,
+                        reveal_top_up,
+                        is_wasm64_execution,
+                    ) {
+                        Ok(cycles) => cycles,
+                        Err(err) => {
+                            return finish_call_with_error(
+                                UserError::new(ErrorCode::CanisterOutOfCycles, err),
+                                canister,
+                                call_or_task,
+                                NumInstructions::from(0),
+                                round.time,
+                                execution_parameters.subnet_type,
+                                round.log,
+                            );
+                        }
+                    };
                 (canister, prepaid_execution_cycles, false)
             }
         };
@@ -255,19 +252,15 @@ fn finish_err(
         .as_ref()
         .map_or(false, |es| es.is_wasm64);
 
-    let mut cycles_account_manager = *round.cycles_account_manager;
-    if is_wasm64_execution {
-        cycles_account_manager.switch_to_wasm64_mode();
-    }
-
     let instruction_limit = original.execution_parameters.instruction_limits.message();
-    cycles_account_manager.refund_unused_execution_cycles(
+    round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         instructions_left,
         instruction_limit,
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        is_wasm64_execution,
         round.log,
     );
     let instructions_used = instruction_limit - instructions_left;
@@ -517,18 +510,14 @@ impl UpdateHelper {
             .as_ref()
             .map_or(false, |es| es.is_wasm64);
 
-        let mut cycles_account_manager = *round.cycles_account_manager;
-        if is_wasm64_execution {
-            cycles_account_manager.switch_to_wasm64_mode();
-        }
-
-        cycles_account_manager.refund_unused_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut self.canister.system_state,
             output.num_instructions_left,
             original.execution_parameters.instruction_limits.message(),
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            is_wasm64_execution,
             round.log,
         );
 

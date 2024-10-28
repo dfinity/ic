@@ -50,12 +50,7 @@ pub fn execute_replicated_query(
         .as_ref()
         .map_or(false, |es| es.is_wasm64);
 
-    let mut cycles_account_manager = *round.cycles_account_manager;
-    if is_wasm64_execution {
-        cycles_account_manager.switch_to_wasm64_mode();
-    }
-
-    let prepaid_execution_cycles = match cycles_account_manager.prepay_execution_cycles(
+    let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
         &mut canister.system_state,
         memory_usage,
         message_memory_usage,
@@ -63,6 +58,7 @@ pub fn execute_replicated_query(
         instruction_limit,
         subnet_size,
         reveal_top_up,
+        is_wasm64_execution,
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
@@ -79,13 +75,14 @@ pub fn execute_replicated_query(
     };
 
     if let WasmMethod::CompositeQuery(_) = &method {
-        cycles_account_manager.refund_unused_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
+            is_wasm64_execution,
             round.log,
         );
         let user_error = UserError::new(
@@ -104,13 +101,14 @@ pub fn execute_replicated_query(
     }
 
     if let Err(user_error) = validate_message(&canister, &method) {
-        cycles_account_manager.refund_unused_execution_cycles(
+        round.cycles_account_manager.refund_unused_execution_cycles(
             &mut canister.system_state,
             instruction_limit,
             instruction_limit,
             prepaid_execution_cycles,
             round.counters.execution_refund_error,
             subnet_size,
+            is_wasm64_execution,
             round.log,
         );
         return finish_call_with_error(
@@ -159,13 +157,14 @@ pub fn execute_replicated_query(
     let response =
         wasm_result_to_query_response(result, &canister, time, call_origin, log, req.take_cycles());
 
-    cycles_account_manager.refund_unused_execution_cycles(
+    round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,
         output.num_instructions_left,
         instruction_limit,
         prepaid_execution_cycles,
         round.counters.execution_refund_error,
         subnet_size,
+        is_wasm64_execution,
         round.log,
     );
 

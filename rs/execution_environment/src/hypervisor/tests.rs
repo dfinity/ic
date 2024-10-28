@@ -2131,7 +2131,11 @@ fn ic0_call_cycles_add_deducts_cycles() {
             MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
             test.subnet_size(),
         )
-        + mgr.execution_cost(MAX_NUM_INSTRUCTIONS, test.subnet_size());
+        + mgr.execution_cost(
+            MAX_NUM_INSTRUCTIONS,
+            test.subnet_size(),
+            test.canister_is_wasm64(canister_id),
+        );
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
@@ -5121,9 +5125,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_is_wasm64(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)
@@ -5152,9 +5158,11 @@ fn dts_abort_works_in_update_call() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         original_system_state.balance()
-            - test
-                .cycles_account_manager()
-                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+            - test.cycles_account_manager().execution_cost(
+                NumInstructions::from(100_000_000),
+                test.subnet_size(),
+                test.canister_is_wasm64(canister_id)
+            ),
     );
     assert_eq!(
         test.canister_state(canister_id)

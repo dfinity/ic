@@ -275,6 +275,21 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn canister_is_wasm64(&self, canister_id: CanisterId) -> bool {
+        // state(), then canister_state(), then execution_state() need to be Some().
+        self.state.as_ref().map_or(false, |state| {
+            state
+                .canister_state(&canister_id)
+                .as_ref()
+                .map_or(false, |canister| {
+                    canister
+                        .execution_state
+                        .as_ref()
+                        .map_or(false, |execution_state| execution_state.is_wasm64)
+                })
+        })
+    }
+
     pub fn xnet_messages(&self) -> &Vec<RequestOrResponse> {
         &self.xnet_messages
     }
@@ -417,13 +432,21 @@ impl ExecutionTest {
         self.cycles_account_manager()
             .convert_instructions_to_cycles(
                 cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+                false, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
             )
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
         let num_instructions = self.install_code_instruction_limits.message();
-        self.cycles_account_manager
-            .execution_cost(num_instructions, self.subnet_size())
+        // The install code message is always executed as if it were a Wasm64 message.
+        // In case the canister was a Wasm32 canister, the refund is calculated to take
+        // this into account.
+        let is_wasm64_execution = true;
+        self.cycles_account_manager.execution_cost(
+            num_instructions,
+            self.subnet_size(),
+            is_wasm64_execution,
+        )
     }
 
     pub fn subnet_available_memory(&self) -> SubnetAvailableMemory {
@@ -1451,11 +1474,19 @@ impl ExecutionTest {
             .executed_instructions
             .entry(canister_id)
             .or_insert(NumInstructions::new(0)) += limit - left;
+
+        let is_wasm64_execution = self.canister_is_wasm64(canister_id);
+
         // Ideally we would simply add `execution_cost(limit - left)`
         // but that leads to small precision errors because 1 Cycle = 0.4 Instructions.
-        let fixed_cost = mgr.execution_cost(NumInstructions::from(0), self.subnet_size());
-        let instruction_cost = mgr.execution_cost(limit, self.subnet_size())
-            - mgr.execution_cost(left, self.subnet_size());
+        let fixed_cost = mgr.execution_cost(
+            NumInstructions::from(0),
+            self.subnet_size(),
+            is_wasm64_execution,
+        );
+        let instruction_cost = mgr.execution_cost(limit, self.subnet_size(), is_wasm64_execution)
+            - mgr.execution_cost(left, self.subnet_size(), is_wasm64_execution);
+
         *self
             .execution_cost
             .entry(canister_id)

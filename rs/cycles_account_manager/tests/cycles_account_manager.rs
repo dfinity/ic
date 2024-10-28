@@ -24,6 +24,8 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
 
+const IS_WASM64_EXECUTION: bool = false;
+
 #[test]
 fn test_can_charge_application_subnets() {
     with_test_replica_logger(|log| {
@@ -262,6 +264,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             NumInstructions::from(1_000_000),
             subnet_size,
             false,
+            IS_WASM64_EXECUTION,
         )
         .unwrap();
     assert_eq!(system_state.balance(), initial_balance);
@@ -274,6 +277,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         cycles,
         &no_op_counter,
         subnet_size,
+        IS_WASM64_EXECUTION,
         &no_op_logger(),
     );
     assert_eq!(system_state.balance(), initial_balance);
@@ -700,6 +704,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
             NumInstructions::from(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
             false,
+            IS_WASM64_EXECUTION,
         )
         .unwrap();
     let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;

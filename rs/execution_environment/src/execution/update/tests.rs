@@ -180,9 +180,11 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_is_wasm64(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
@@ -284,9 +286,11 @@ fn dts_update_concurrent_cycles_change_fails() {
     // an upper bound on the additional freezing threshold.
     let additional_freezing_threshold = Cycles::new(500);
 
-    let max_execution_cost = test
-        .cycles_account_manager()
-        .execution_cost(NumInstructions::from(instruction_limit), test.subnet_size());
+    let max_execution_cost = test.cycles_account_manager().execution_cost(
+        NumInstructions::from(instruction_limit),
+        test.subnet_size(),
+        test.canister_is_wasm64(a_id),
+    );
 
     let call_charge = test.call_fee("update", &b)
         + max_execution_cost
