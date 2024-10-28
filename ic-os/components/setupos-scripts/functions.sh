@@ -68,6 +68,7 @@ function get_large_drives() {
 }
 
 function _kernel_cmdline_bool() {
+    local parm=
     local default="$1"
     local target_parameter="$2"
     local cmdline=()
@@ -78,8 +79,8 @@ function _kernel_cmdline_bool() {
     fi
 
     # Read the command line values, parsed as quoted strings.
-    while IFS= read -r -d ''; do
-        cmdline+=("$REPLY")
+    while IFS= read -r -d '' parm; do
+        cmdline+=("$parm")
     done < <(xargs printf '%s\0' <"${cmdline_file}")
 
     for parameter in "${cmdline[@]}"; do
