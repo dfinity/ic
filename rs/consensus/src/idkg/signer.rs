@@ -1551,7 +1551,7 @@ mod tests {
                 fake_schnorr_master_public_key_id(SchnorrAlgorithm::Ed25519)
             }
             MasterPublicKeyId::Schnorr(_) => fake_ecdsa_master_public_key_id(),
-            MasterPublicKeyId::VetKd(_) => fake_vetkd_master_public_key_id(),
+            MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
         };
         let message = create_signature_share(&key_id_wrong_scheme, NODE_2, id_2.clone());
         let msg_id_2 = message.message_id();
