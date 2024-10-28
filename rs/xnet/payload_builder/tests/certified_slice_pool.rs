@@ -131,19 +131,14 @@ proptest! {
             let (prefix, postfix) = unpacked.take_prefix(msg_limit, byte_limit).unwrap();
 
             // Ensure that any limits were respected.
-            if let Some(prefix) = prefix.as_ref() {
-                if let Some(msg_limit) = msg_limit {
-                    assert!(testing::slice_len(prefix) <= msg_limit);
-                }
-                if let Some(byte_limit) = byte_limit {
-                    assert!(prefix.count_bytes() <= byte_limit);
-                }
-                // TODO: Remove this and replace it with a comment explaining that this limit
-                // exists but it's unreasonable to change this test to use very large numbers.
-                if let Some(slice_end) = testing::slice_end(prefix) {
-                    assert!(slice_end <= testing::stream_begin(prefix) + StreamIndex::new(MAX_STREAM_MESSAGES as u64));
-                }
+            if let (Some(msg_limit), Some(prefix)) = (msg_limit, prefix.as_ref()) {
+                assert!(testing::slice_len(prefix) <= msg_limit);
             }
+            if let (Some(byte_limit), Some(prefix)) = (byte_limit, prefix.as_ref()) {
+                assert!(prefix.count_bytes() <= byte_limit);
+            }
+            // Testing the signal limit is pointless here because it requires very large streams
+            // that would make this test needlessly slow. There is a dedicated test for it.
 
             // And that a longer prefix would have gone over one the limits.
             let unpacked = UnpackedStreamSlice::try_from(certified_slice.clone()).unwrap();
