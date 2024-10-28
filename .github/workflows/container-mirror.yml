@@ -34,7 +34,7 @@ jobs:
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   mirror:
-    name: Mirror Images
+    name: Mirror Image
     runs-on: ubuntu-latest
     needs: get-images
     strategy:
@@ -45,7 +45,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Sync Containers
-        run: |
-          echo "Processing image ${{ matrix.image }} from repository ${{ matrix.repo }} with SHA256 ${{ matrix.sha256 }}"
+      - name: Login to GHCR
+        uses: docker/login-action@5f4866a30a54f16a52d2ecb4a3898e9e424939cf # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Setup GO
+        uses: actions/setup-go@v5
+
+      - name: Setup Crane
+        uses: imjasonh/setup-crane@v0.4
+
+      - name: Mirror Container
+        run: |
+          crane copy \
+            ${{ matrix.repo }}/${{ matrix.image }}@${{ matrix.sha256 }} \
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}@${{ matrix.sha256 }}
