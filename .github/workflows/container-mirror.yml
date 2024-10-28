@@ -54,10 +54,9 @@ jobs:
 
       - name: Setup Crane
         run: |
-          curl -L -o crane "https://github.com/michaelsauter/crane/releases/download/v3.6.0/crane_linux_amd64"
+          curl -fsL https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz | tar xz crane
           chmod +x crane
           sudo mv crane /usr/local/bin/crane
-          echo "${{ github.token }}" | crane auth login ghcr.io --username "dummy" --password-stdin
 
       - name: Mirror Container
         run: |
