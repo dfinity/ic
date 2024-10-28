@@ -2,6 +2,11 @@
 
 set -eExuo pipefail
 
+if [ "${CI_OVERRIDE_BUF_BREAKING:-false}" = "true" ]; then
+    echo "Skipping buf-breaking check because override requested."
+    exit 0
+fig
+
 MERGE_BASE=${MERGE_BASE_SHA:-HEAD}
 
 BUF="$(readlink "$buf_path")"
