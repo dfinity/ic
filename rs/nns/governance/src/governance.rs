@@ -5669,26 +5669,9 @@ impl Governance {
             // vote, with a voting power determined at the
             // time of the proposal (i.e., now).
             _ => {
-                let mut ballots = HashMap::<u64, Ballot>::new();
-                let mut total_power: u128 = 0;
-                // No neuron in the stable storage should have maturity.
-
-                self.neuron_store
-                    .with_voting_eligible_neurons(now_seconds, |iter| {
-                        for neuron in iter {
-                            let voting_power = neuron.voting_power(now_seconds);
-
-                            total_power += voting_power as u128;
-
-                            ballots.insert(
-                                neuron.id().id,
-                                Ballot {
-                                    vote: Vote::Unspecified as i32,
-                                    voting_power,
-                                },
-                            );
-                        }
-                    });
+                let (ballots, total_power) = self
+                    .neuron_store
+                    .create_ballots_for_standard_proposal(now_seconds);
 
                 if total_power >= (u64::MAX as u128) {
                     // The way the neurons are configured, the total voting

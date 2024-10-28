@@ -35,6 +35,7 @@ use std::{
 };
 
 pub mod metrics;
+use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -828,24 +829,59 @@ impl NeuronStore {
         self.filter_map_active_neurons(filter, |n| n.id())
     }
 
-    /// Returns an iterator of all voting-eligible neurons
-    pub fn with_voting_eligible_neurons<R, Callback>(
+    pub fn create_ballots_for_standard_proposal(
         &self,
         now_seconds: u64,
-        callback: Callback,
-    ) -> R
-    where
-        Callback: FnOnce(&mut dyn Iterator<Item = Neuron>) -> R,
-    {
-        // This should be safe to do without with_neuron because
-        // all voting_eligible neurons should be in the heap
-        self.with_active_neurons_iter(|iter| {
-            let filtered = iter.filter(|neuron| {
-                neuron.dissolve_delay_seconds(now_seconds)
-                    >= MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+    ) -> (HashMap<u64, Ballot>, u128) {
+        let callback = |iter| {};
+
+        let mut ballots = HashMap::<u64, Ballot>::new();
+        let mut total_power: u128 = 0;
+        if self.use_stable_memory_for_all_neurons {
+            with_stable_neuron_store(|stable_store| {
+                // Not including unneeded sections gives us greater than 20x instructions improvement
+                for neuron in stable_store.range_neurons_sections(.., NeuronSections::default()) {
+                    if neuron.is_inactive(now_seconds)
+                        || neuron.dissolve_delay_seconds(now_seconds)
+                            < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+                    {
+                        continue;
+                    }
+
+                    let voting_power = neuron.voting_power(now_seconds);
+                    total_power += voting_power as u128;
+                    ballots.insert(
+                        neuron.id().id,
+                        Ballot {
+                            vote: Vote::Unspecified as i32,
+                            voting_power,
+                        },
+                    );
+                }
+            })
+        } else {
+            self.with_active_neurons_iter(|iter| {
+                for neuron in iter {
+                    if neuron.is_inactive(now_seconds)
+                        || neuron.dissolve_delay_seconds(now_seconds)
+                            < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS
+                    {
+                        continue;
+                    }
+
+                    let voting_power = neuron.voting_power(now_seconds);
+                    total_power += voting_power as u128;
+                    ballots.insert(
+                        neuron.id().id,
+                        Ballot {
+                            vote: Vote::Unspecified as i32,
+                            voting_power,
+                        },
+                    );
+                }
             });
-            callback(&mut filtered.into_iter())
-        })
+        }
+        (ballots, total_power)
     }
 
     /// Returns the full neuron if the given principal is authorized - either it can vote for the
