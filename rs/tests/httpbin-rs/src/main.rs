@@ -32,11 +32,10 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use tower::Service;
 
-const DETERMINISTIC_HEADERS: [(&str, &str); 4] = [
-    ("Access-Control-Allow-Origin", "*"),
-    ("Access-Control-Allow-Credentials", "true"),
-    ("Connection", "close"),
-    ("Date", "Jan 1 1970 00:00:00 GMT"),
+const DETERMINISTIC_HEADERS: [(&str, &str); 3] = [
+    ("access-control-allow-origin", "*"),
+    ("access-control-allow-credentials", "true"),
+    ("date", "Jan 1 1970 00:00:00 GMT"),
 ];
 
 /// Returns a normal HTML response
