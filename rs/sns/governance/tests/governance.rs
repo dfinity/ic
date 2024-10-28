@@ -1714,7 +1714,7 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
 
 #[test]
 fn test_claim_swap_neurons_rejects_unauthorized_access() {
-    // Set up the test environment with the default sale canister id
+    // Set up the test environment with the default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
@@ -1741,13 +1741,13 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
         }
     );
 
-    // Get the configured sale canister id created by the test environment
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    // Get the configured swap canister id created by the test environment
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
 
     // Call the method with the authorized principal and assert the response is correct
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1761,7 +1761,7 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 
 #[test]
 fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
-    // Set up the test environment with default sale canister id
+    // Set up the test environment with default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
@@ -1776,10 +1776,10 @@ fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1823,10 +1823,10 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
         }])),
     };
 
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1843,7 +1843,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
 #[test]
 fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // To cause a failure, set the nervous_system_parameters::max_number_of_neurons to 0
@@ -1882,10 +1882,10 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1909,7 +1909,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
 
 #[test]
 fn test_claim_swap_neurons_succeeds() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     let direct_participant_neuron_recipe = NeuronRecipe {
@@ -1944,10 +1944,10 @@ fn test_claim_swap_neurons_succeeds() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Parse the result from the response
     let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
