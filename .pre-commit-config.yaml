@@ -61,7 +61,7 @@ repos:
 
   - id: buf-breaking
     name: Check no breaking changes were introduced
-    entry: bazel test --config=precommit //:buf-breaking
+    entry: bazel run //:buf-breaking
     language: script
     stages: [manual]
     pass_filenames: false
