@@ -3411,6 +3411,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
                 // making assertions.
                 .with_update_message_execution_fee(Cycles::zero())
                 .with_ten_update_instructions_execution_fee(Cycles::zero())
+                .with_ten_update_instructions_execution_fee_wasm64(Cycles::zero())
                 .build(),
         )
         .build();
