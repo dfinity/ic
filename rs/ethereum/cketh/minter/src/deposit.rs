@@ -167,7 +167,7 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
     last_block_number: BlockNumber,
     max_block_spread: u16,
 ) {
-    let scraping_state = match read_state(S::check_active) {
+    let scrape = match read_state(S::next_scrape) {
         Some(s) => s,
         None => {
             log!(
@@ -179,8 +179,8 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
         }
     };
     let block_range = BlockRangeInclusive::new(
-        scraping_state
-            .last_scraped_block_number()
+        scrape
+            .last_scraped_block_number
             .checked_increment()
             .unwrap_or(BlockNumber::MAX),
         last_block_number,
@@ -195,7 +195,7 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
     for block_range in block_range.into_chunks(max_block_spread) {
         match scrape_block_range::<S, P>(
             &rpc_client,
-            scraping_state.contract_address(),
+            scrape.contract_address,
             topics.clone(),
             block_range.clone(),
         )
