@@ -17,6 +17,7 @@ pub trait ConfidentialityFormatting<Input = OutputConfig> {
 /// A generic confidentiality formatter for various data types
 pub struct ConfidentialityFormatter<A, T> {
     access_resolver: A,
+    // used as marker, to avoid conflicting implementation of trait ConfidentialityFormatting for different types
     phantom: PhantomData<T>,
 }
 
