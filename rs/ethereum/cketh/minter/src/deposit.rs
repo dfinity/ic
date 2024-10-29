@@ -206,13 +206,12 @@ async fn scrape_until_block<S: LogScraping, P: LogParser>(
         "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
         S::display_id()
     );
-    let topics = read_state(S::event_topics);
     let rpc_client = read_state(EthRpcClient::from_state);
     for block_range in block_range.into_chunks(max_block_spread) {
         match scrape_block_range::<S, P>(
             &rpc_client,
             scrape.contract_address,
-            topics.clone(),
+            scrape.topics.clone(),
             block_range.clone(),
         )
         .await
