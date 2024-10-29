@@ -363,7 +363,10 @@ const EMPTY_PAYLOAD_BYTES: usize = 49;
 const NON_EMPTY_PAYLOAD_FIXED_BYTES: usize = 71;
 
 impl Payload {
-    /// Takes a slice prefix whose estimated size meets the given limits.
+    /// Takes a slice prefix whose estimated size meets the explicit limits below,
+    /// as well as an implicit limit on the number of messages which ensures that
+    /// the number of signals in the reverse stream stays bounded.
+    ///
     /// `byte_limit` applies to the total estimated size of both the payload and
     /// the resulting witness.
     ///
@@ -377,13 +380,23 @@ impl Payload {
         message_limit: Option<usize>,
         byte_limit: Option<usize>,
     ) -> CertifiedSliceResult<(Option<Self>, Option<Self>)> {
-        // `messages_end` may not exceed a certain `max_message_index` in order to cap the number
-        // of signals in the reverse stream. Calculate the maximum number of messages we can include
-        // in the slice such that this is respected.
+        // Consider an axis of stream indices along which we progress by inducting messages:
+        //
+        // -------|-------------|---------------------|-------------> stream index
+        //  stream_begin   messages_begin      max_message_index
+        //
+        // When inducting a stream slice, the signals start at `stream_begin`. In order to bound
+        // them, we can not go above an upper limit of `max_message_index`. Since the messages
+        // in the slice start at `messages_begin`, we can therefore induct a number of
+        // `max_messages_index - messages_begin` messages and still stay below the stated limit.
         let max_message_limit = {
             let messages_begin =
                 self.messages_begin().unwrap_or(self.header.begin()).get() as usize;
             let max_message_index = max_message_index(self.header.begin()).get() as usize;
+            // The use of `saturating_sub()` allows decreasing `max_message_index` since for this
+            // case we could have `max_message_index < messages_begin`. This will result in empty
+            // prefixes until `stream_begin` (and thus `max_message_index`) has progressed enough
+            // such that we can start producing signals (by inducting messages) again.
             max_message_index.saturating_sub(messages_begin)
         };
         let message_limit = message_limit.map_or(max_message_limit, |message_limit| {
