@@ -622,11 +622,7 @@ impl LocalTestRuntime {
         }
         let query_svc = self.query_handler.lock().unwrap().clone();
 
-        let result = match query_svc
-            .oneshot((query, None))
-            .await
-            .unwrap()
-        {
+        let result = match query_svc.oneshot((query, None)).await.unwrap() {
             Ok((result, _)) => result,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
