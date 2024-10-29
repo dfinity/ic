@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_binary")
 load("//bazel:defs.bzl", "rust_ic_bench", "rust_ic_test", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
@@ -105,6 +105,17 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "large_memory_demo",
+    srcs = ["bin/main.rs"],
+    compile_data = glob(["tests/test-data/**"]),
+    crate_name = "large_memory_demo",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    testonly = True,
 )
 
 rust_ic_test(
