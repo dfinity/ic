@@ -853,7 +853,9 @@ impl Neuron {
             known_neuron_data: self.known_neuron_data.clone(),
             neuron_type: self.neuron_type,
             visibility,
-            voting_power_refreshed_timestamp_seconds: Some(self.voting_power_refreshed_timestamp_seconds),
+            voting_power_refreshed_timestamp_seconds: Some(
+                self.voting_power_refreshed_timestamp_seconds,
+            ),
         }
     }
 
@@ -1086,7 +1088,8 @@ impl From<Neuron> for NeuronProto {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
-        let voting_power_refreshed_timestamp_seconds = Some(voting_power_refreshed_timestamp_seconds);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
 
         NeuronProto {
             id,
@@ -1292,7 +1295,8 @@ impl TryFrom<Neuron> for DecomposedNeuron {
         } = StoredDissolveStateAndAge::from(dissolve_state_and_age);
         let dissolve_state = dissolve_state.map(AbridgedNeuronDissolveState::from);
         let visibility = visibility.map(|visibility| visibility as i32);
-        let voting_power_refreshed_timestamp_seconds = Some(voting_power_refreshed_timestamp_seconds);
+        let voting_power_refreshed_timestamp_seconds =
+            Some(voting_power_refreshed_timestamp_seconds);
 
         let main = AbridgedNeuron {
             account,
