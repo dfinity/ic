@@ -3,8 +3,9 @@ use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::println;
+use ic_cdk::{api::time, println};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_timers::TimerId;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
@@ -12,6 +13,9 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
+};
+use ic_nervous_system_proto::pb::v1::{
+    GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
@@ -29,14 +33,23 @@ use ic_sns_root::{
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
-use std::{cell::RefCell, time::Duration};
+use std::{
+    cell::RefCell,
+    time::{Duration, SystemTime},
+};
 
 type CanisterRuntime = CdkRuntime;
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
-const POLL_FOR_NEW_ARCHIVES_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24); // one day
+
+const RUN_PERIODIC_TASKS_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24); // one day
+
+/// This guarantees that timers cannot be restarted more often than once every 7 intervals.
+const RESET_TIMERS_COOL_DOWN_INTERVAL: Duration = Duration::from_secs(60 * 60 * 24 * 7); // one week
 
 thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
+
+    static TIMER_ID: RefCell<Option<TimerId>> = RefCell::new(Default::default());
 }
 
 struct CanisterEnvironment {}
@@ -374,20 +387,93 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
+async fn run_periodic_tasks() {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        if let Some(ref mut timers) = state.timers {
+            timers.last_spawned_timestamp_seconds.replace(now_seconds());
+        };
+    });
+
+    let ledger_client = create_ledger_client();
+    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client).await
+}
+
+#[query]
+fn get_timers(arg: GetTimersRequest) -> GetTimersResponse {
+    let GetTimersRequest {} = arg;
+    let timers = STATE.with(|state| state.borrow().timers);
+    GetTimersResponse { timers }
+}
+
 fn init_timers() {
-    ic_cdk_timers::set_timer_interval(POLL_FOR_NEW_ARCHIVES_INTERVAL, || {
-        ic_cdk::spawn(poll_for_new_archive_canisters())
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        state.timers.replace(Timers {
+            last_reset_timestamp_seconds: Some(now_seconds()),
+            ..Default::default()
+        });
+    });
+
+    let new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
+        ic_cdk::spawn(run_periodic_tasks())
+    });
+    TIMER_ID.with(|saved_timer_id| {
+        let mut saved_timer_id = saved_timer_id.borrow_mut();
+        if let Some(saved_timer_id) = *saved_timer_id {
+            ic_cdk_timers::clear_timer(saved_timer_id);
+        }
+        saved_timer_id.replace(new_timer_id);
     });
 }
 
-async fn poll_for_new_archive_canisters() {
-    let ledger_client = create_ledger_client();
-    SnsRootCanister::poll_for_new_archive_canisters(&STATE, &ledger_client).await
+#[update]
+fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
+    let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
+
+    STATE.with(|state| {
+        let state = state.borrow();
+        if let Some(timers) = state.timers {
+            if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
+                assert!(
+                    now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                        >= reset_timers_cool_down_interval_seconds,
+                    "Reset has already been called within the past {:?} seconds",
+                    reset_timers_cool_down_interval_seconds
+                );
+            }
+        }
+    });
+
+    init_timers();
+
+    ResetTimersResponse {}
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
 fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
+}
+
+// =============================================================================
+// ===               Canister helper & boilerplate methods                   ===
+// =============================================================================
+
+fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
+}
+
+fn now_seconds() -> u64 {
+    Duration::from_nanos(now_nanoseconds()).as_secs()
 }
 
 fn main() {

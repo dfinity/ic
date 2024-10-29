@@ -303,13 +303,13 @@ fn test_disburse_maturity_succeeds_to_self() {
 
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.heartbeat();
+    env.gov_fixture.run_periodic_tasks_now();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
     env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.heartbeat();
+    env.gov_fixture.run_periodic_tasks_now();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -408,13 +408,13 @@ fn test_disburse_maturity_succeeds_to_other() {
 
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.heartbeat();
+    env.gov_fixture.run_periodic_tasks_now();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
     env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.heartbeat();
+    env.gov_fixture.run_periodic_tasks_now();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -506,8 +506,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
         let balance_before_disbursal = env
             .gov_fixture
             .get_account_balance(&destination_account, TargetLedger::Sns);
-        // Each call to heartbeat() "consumes" one entry of disburse_maturity_in_progress.
-        env.gov_fixture.heartbeat();
+        // Each call to run_periodic_tasks_now() "consumes" one disburse_maturity_in_progress entry.
+        env.gov_fixture.run_periodic_tasks_now();
         let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
         assert_eq!(
             neuron.disburse_maturity_in_progress.len(),
@@ -1714,7 +1714,7 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
 
 #[test]
 fn test_claim_swap_neurons_rejects_unauthorized_access() {
-    // Set up the test environment with the default sale canister id
+    // Set up the test environment with the default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Build the request, but leave it empty as it is not relevant to the test
@@ -1741,13 +1741,13 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
         }
     );
 
-    // Get the configured sale canister id created by the test environment
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    // Get the configured swap canister id created by the test environment
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
 
     // Call the method with the authorized principal and assert the response is correct
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1761,7 +1761,7 @@ fn test_claim_swap_neurons_rejects_unauthorized_access() {
 
 #[test]
 fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
-    // Set up the test environment with default sale canister id
+    // Set up the test environment with default swap canister id
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // Create a neuron id so the test can identify the correct item in the response
@@ -1776,10 +1776,10 @@ fn test_claim_swap_neurons_reports_invalid_neuron_recipes() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1823,10 +1823,10 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
         }])),
     };
 
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     assert_eq!(
         response,
@@ -1843,7 +1843,7 @@ fn test_claim_swap_neurons_reports_already_existing_neurons() {
 
 #[test]
 fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     // To cause a failure, set the nervous_system_parameters::max_number_of_neurons to 0
@@ -1882,10 +1882,10 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
     assert_eq!(
@@ -1909,7 +1909,7 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
 
 #[test]
 fn test_claim_swap_neurons_succeeds() {
-    // Set up the test environment with default sale canister id.
+    // Set up the test environment with default swap canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
     let direct_participant_neuron_recipe = NeuronRecipe {
@@ -1944,10 +1944,10 @@ fn test_claim_swap_neurons_succeeds() {
     };
 
     // Call the method
-    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let authorized_swap_principal = canister_fixture.get_swap_canister_id();
     let response = canister_fixture
         .governance
-        .claim_swap_neurons(request, authorized_sale_principal);
+        .claim_swap_neurons(request, authorized_swap_principal);
 
     // Parse the result from the response
     let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
@@ -2626,7 +2626,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         .create();
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
-    canister_fixture.heartbeat();
+    canister_fixture.run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
     let neuron = canister_fixture.get_neuron(&neuron_id);
@@ -2674,7 +2674,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
     canister_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 1);
-    canister_fixture.heartbeat();
+    canister_fixture.run_periodic_tasks_now();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
     let account_balance_after_disbursal =
@@ -2712,7 +2712,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .create();
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
-    canister_fixture.heartbeat();
+    canister_fixture.run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
@@ -2779,9 +2779,9 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
         .try_lock()
         .unwrap() = time_of_disbursement_maturity_modulation_basis_points;
 
-    // Advancing time and triggering a heartbeat should force a query of the new modulation
+    // Advancing time and triggering periodic tasks should force a query of the new modulation.
     canister_fixture.advance_time_by(2 * ONE_DAY_SECONDS);
-    canister_fixture.heartbeat();
+    canister_fixture.run_periodic_tasks_now();
     let current_basis_points = canister_fixture
         .get_maturity_modulation()
         .maturity_modulation
@@ -2799,9 +2799,9 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
 
     assert_eq!(account_balance_before_disbursal, 0);
 
-    // Advancing time and triggering a heartbeat should trigger the final disbursal
+    // Advancing time and triggering periodic tasks should trigger the final disbursal.
     canister_fixture.advance_time_by(5 * ONE_DAY_SECONDS + 1);
-    canister_fixture.heartbeat();
+    canister_fixture.run_periodic_tasks_now();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
     let account_balance_after_disbursal =

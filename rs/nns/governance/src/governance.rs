@@ -135,7 +135,7 @@ pub mod tla;
 #[cfg(feature = "tla")]
 pub use tla::{
     claim_neuron_desc, split_neuron_desc, tla_update_method, InstrumentationState, ToTla,
-    TLA_INSTRUMENTATION_STATE, TLA_TRACES,
+    TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -2089,15 +2089,11 @@ impl Governance {
 
     /// Unlocks a given neuron.
     fn unlock_neuron(&mut self, id: u64) {
-        match self.heap_data.in_flight_commands.remove(&id) {
-            None => {
-                println!(
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
-                    id
-                );
-            }
-            // This is the expected case.
-            Some(_) => (),
+        if self.heap_data.in_flight_commands.remove(&id).is_none() {
+            println!(
+                "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
+                id
+            );
         }
     }
 
@@ -5790,7 +5786,7 @@ impl Governance {
                                     neuron_store.get_followers_by_followee_and_topic(*k, topic),
                                 );
                                 // Default following doesn't apply to governance or SNS
-                                // decentralization sale proposals.
+                                // decentralization swap proposals.
                                 if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)

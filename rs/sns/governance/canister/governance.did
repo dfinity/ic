@@ -291,6 +291,17 @@ type Governance = record {
   neurons : vec record { text; Neuron };
   genesis_timestamp_seconds : nat64;
   target_version: opt Version;
+  timers : opt Timers;
+};
+
+type Timers = record {
+  requires_periodic_tasks : opt bool;
+  last_reset_timestamp_seconds : opt nat64;
+  last_spawned_timestamp_seconds : opt nat64;
+};
+
+type GetTimersResponse = record {
+  timers : opt Timers;
 };
 
 type GovernanceCachedMetrics = record {
@@ -740,4 +751,6 @@ service : (Governance) -> {
   list_proposals : (ListProposals) -> (ListProposalsResponse) query;
   manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   set_mode : (SetMode) -> (record {});
+  reset_timers : (record {}) -> (record {});
+  get_timers : (record {}) -> (GetTimersResponse) query;
 }
