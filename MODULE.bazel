@@ -815,3 +815,11 @@ http_file(
     sha256 = "454891cac2421f3f894759ec5e6b6e48fbb544d79197bc29b88d34b93d78a4f1",
     url = "https://download.dfinity.systems/ic/52ebccfba8855e23dcad9657a8d6e6be01df71f9/binaries/x86_64-linux/pocket-ic.gz",
 )
+
+# Patches
+
+http_file(
+    name = "rustix-patch",
+    sha256 = "ffe807170f06b579098f948eca42ba1ea1fd2cb7b8290c9d41101efe976337f7",
+    url = "https://github.com/nmattia/rustix/commit/330bcc07796f4b8e6443987fbb1b9be79c446bd2.diff",
+)

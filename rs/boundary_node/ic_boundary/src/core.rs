@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use std::{
     error::Error as StdError,
     net::{Ipv6Addr, SocketAddr},
