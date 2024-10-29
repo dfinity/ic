@@ -235,7 +235,8 @@ mod mint_transaction {
           log_index: 29, \
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
           value: 10_000_000_000_000_000, \
-          principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae \
+          principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, \
+          subaccount: None \
         }";
         assert_eq!(format!("{:?}", received_eth_event()), expected);
     }
@@ -249,7 +250,8 @@ mod mint_transaction {
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
           value: 5_000_000, \
           principal: hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe, \
-          contract_address: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238 \
+          contract_address: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238, \
+          subaccount: None \
         }";
         assert_eq!(format!("{:?}", received_erc20_event()), expected);
     }

@@ -97,6 +97,7 @@ impl fmt::Debug for ReceivedEthEvent {
             .field("from_address", &self.from_address)
             .field("value", &self.value)
             .field("principal", &format_args!("{}", self.principal))
+            .field("subaccount", &self.subaccount)
             .finish()
     }
 }
@@ -111,6 +112,7 @@ impl fmt::Debug for ReceivedErc20Event {
             .field("value", &self.value)
             .field("principal", &format_args!("{}", self.principal))
             .field("contract_address", &self.erc20_contract_address)
+            .field("subaccount", &self.subaccount)
             .finish()
     }
 }
@@ -286,7 +288,7 @@ type InternalLedgerSubaccount = CheckedAmountOf<InternalLedgerSubaccountTag>;
 ///
 /// Internally represented as a u256 to optimize cbor encoding for low values,
 /// which can be represented as a u32 or a u64.
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Decode, Encode)]
 pub struct LedgerSubaccount(#[n(0)] InternalLedgerSubaccount);
 
 impl LedgerSubaccount {
@@ -300,5 +302,11 @@ impl LedgerSubaccount {
 
     pub fn to_bytes(self) -> [u8; 32] {
         self.0.to_be_bytes()
+    }
+}
+
+impl Debug for LedgerSubaccount {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "LedgerSubaccount({:x?})", self.0.to_be_bytes())
     }
 }
